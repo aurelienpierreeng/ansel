@@ -6,35 +6,49 @@ composite into the pipe. This note is the map — what the parts are, which thre
 and where a realtime stroke's time goes. It was written from a full read of the module; every
 number below is derived from the code and cites it.
 
+**Re-verified against the tree on 2026-09-29, after #1418, #1430, #1431 and #1471.** Every
+`file.c:NNN` here resolves. Citations drift as the code moves, and this note has already
+shipped a finding that named the wrong struct and one whose count was stale — so re-measure
+before acting on any claim, and say so here when you do. Sections 1, 6 and 7 carry a note
+where their earlier version was wrong rather than being quietly corrected, because the *way*
+each was wrong is the more useful thing to know.
+
 ---
 
-## 1. The module is not the directory
+## 1. Eleven translation units, one per file
 
-`src/iop/CMakeLists.txt:223` compiles **seven** of the eleven `.c` files. The other four —
-`conf.c`, `coordinates.c`, `worker.c`, `layers.c` — are text-`#include`d into `drawlayer.c`
-(`drawlayer.c:160`, `:161`, `:1558`, `:1563`). The real translation unit is **7130 lines**.
+*This section used to be titled "the module is not the directory" and described four files
+text-`#include`d into `drawlayer.c`. #1431 removed that; the numbers below are 2026-09-29.*
 
-That matters for every reading of this code: a `static` in `worker.c` is in the same namespace
-as a `static` in `drawlayer.c`, the directory buys no encapsulation, and the file boundaries
-suggest an ownership split that the linker does not enforce. `_commit_dabs` at `worker.c:1157`
-resolving to `dt_drawlayer_commit_dabs` in `drawlayer.c` — across what looks like a module
-boundary — is only possible because of this.
+`src/iop/CMakeLists.txt` compiles **all eleven** `.c` files. There is no `#include` of a `.c`
+anywhere in the module, so a `static` really is private to its file and the directory buys the
+encapsulation its layout suggests.
+
+What that cost, and why it is worth keeping: as one unit the module was 7130 lines, a `static`
+in `worker.c` shared a namespace with one in `drawlayer.c`, and ten alias macros existed so
+pasted code could call a public function by a private-looking name (`_commit_dabs` for
+`dt_drawlayer_commit_dabs`). Compiled alone the four spliced files raised 819 errors, every one
+a header they had been borrowing from their host without naming it. Three headers could not be
+included first either: `coordinates.h` declared twelve functions over `dt_iop_module_t`,
+`dt_iop_roi_t` and `dt_drawlayer_brush_dab_t` and included **nothing**; `worker.h` named types
+it never pulled in; `runtime.h` held a `dt_drawlayer_cache_patch_t` by value without
+`cache.h`.
 
 Actual units, by role:
 
 | file | lines | role |
 |---|---|---|
-| `drawlayer.c` | 4254 | module API, GUI, the whole OpenCL composite, `process`/`process_cl` |
-| `worker.c` | 1665 | the `draw-back` thread, the ring, batching, the heartbeat |
-| `io.c` | 1151 | sidecar TIFF read/write |
-| `runtime.c` | 1001 | the event→schedule→action dispatcher |
-| `paint.c` | 981 | pointer samples → dabs (interpolation, spacing, smoothing) |
-| `brush.c` | 913 | the per-pixel rasterizer |
-| `widgets.c` | 860 | widget construction helpers |
-| `cache.c` | 642 | patch allocation over the pixelpipe cache arena |
-| `layers.c` | 484 | layer CRUD, the GUI-side canvas loader |
-| `conf.c` | 370 | preferences |
-| `coordinates.c` | 357 | coordinate spaces |
+| `drawlayer.c` | 4169 | module API, GUI, the whole OpenCL composite, `process`/`process_cl` |
+| `worker.c` | 1828 | the `draw-back` thread, the ring, batching, the heartbeat |
+| `brush.c` | 1196 | the per-pixel rasterizer |
+| `io.c` | 1101 | sidecar TIFF read/write |
+| `paint.c` | 994 | pointer samples → dabs (interpolation, spacing, smoothing) |
+| `runtime.c` | 973 | the event→schedule→action dispatcher |
+| `widgets.c` | 851 | widget construction helpers |
+| `layers.c` | 489 | layer CRUD, the GUI-side canvas loader |
+| `conf.c` | 375 | preferences, and the tablet-mapping widget↔key pairing |
+| `coordinates.c` | 366 | coordinate spaces |
+| `cache.c` | 246 | patch allocation over the pixelpipe cache arena |
 
 ---
 
@@ -59,7 +73,7 @@ flowchart LR
 
 **Ownership is not clean, and that is the module's central defect.** The same `base_patch` is
 written by the worker (`worker.c:961-970`), read by the pipeline across a whole `process()`
-(rdlock `drawlayer.c:1621` → released `runtime.c:975` via `:4238`/`:4117`), and replaced by the
+(rdlock `drawlayer.c:1621` → released `runtime.c:947` via `:4238`/`:4117`), and replaced by the
 GUI (`layers.c:199-213`). The entry's rwlock guards the *pixels*; nothing guards the *patch
 struct* that holds the lock.
 
@@ -209,7 +223,7 @@ Not fixed:
   heartbeat patch. Deduplicating means translating between them.
 - **`process()` composites the whole `roi_out` every frame** and never consults
   `cache_dirty_rect`, while `process_cl()` does. The win is smaller than it looks:
-  `dt_interpolation_resample` takes a 1:1 fast path (`interpolation.c:920-937`, reached
+  `dt_interpolation_resample` takes a 1:1 fast path (`pixel/interpolation.c:945-963`, reached
   because `source_roi.scale` is hardcoded to 1.0f) at the zoom levels people paint at, so
   only the alpha-over blend is full-frame there. It is worth most when zoomed *out*. A
   damage-limited CPU composite also cannot copy the GPU gate: that one depends on the output
@@ -219,36 +233,96 @@ Not fixed:
   `io.c` takes no lock anywhere and uses a fixed `<path>.tmp` name while being reachable from
   three threads.
 
-## 6. State is ten booleans, not a state machine
+## 6. State is twelve booleans, not a state machine
+
+*Re-measured 2026-09-29; the line numbers below are current, the previous ones had drifted
+off their targets entirely. Check them before quoting them — this section has been wrong once.*
 
 The logical state — idle / hovering / painting / draining / committing / loading / saving —
-is spread across at least ten independent booleans in five structs (`runtime.h:19`, `:43-45`,
-`:68`, `:76`, `:79`, `:228-230`) plus a 15-boolean schedule, with no enum and no asserted
-invariant. `realtime_active` is a stored copy of a pure function of three of them.
+is spread across **twelve** independent booleans in five structs, with no enum and no asserted
+invariant:
 
-`_build_runtime_schedule` (`runtime.c:411`) maps an event to that 15-boolean schedule; the
-dispatcher then executes the set bits. It recomputes its whole state twice per dispatch and
-pushes realtime mode twice.
+| struct | booleans | `runtime.h` |
+| --- | --- | --- |
+| `dt_drawlayer_session_state_t` | `pointer_valid`, `background_job_running` | `:20`, `:30` |
+| `dt_drawlayer_process_state_t` | `cache_valid`, `cache_dirty`, `base_patch_loaded_ref`, `last_composite_valid` | `:44`, `:45`, `:51`, `:69` |
+| `dt_drawlayer_stroke_state_t` | `last_dab_valid`, `finish_commit_pending` | `:77`, `:80` |
+| `dt_drawlayer_ui_state_t` | `brush_color_valid`, `brush_settings_valid` | `:124`, `:126` |
+| `dt_drawlayer_runtime_manager_t` | `realtime_active`, `painting_active` | `:255`, `:256` |
+
+Beside them sits a 15-boolean schedule, `dt_drawlayer_runtime_schedule_t` — declared in
+`runtime.c`, not the header. `_build_runtime_schedule` (`runtime.c:462`) maps an event onto
+it and the dispatcher executes the set bits. It recomputes its whole state twice per dispatch
+and pushes realtime mode twice.
+
+**`realtime_active` is NOT a cached pure function**, which an earlier version of this section
+claimed. It is computed from three inputs (`runtime.c:345`), then *overridden* to FALSE for
+four event kinds (`:356`), and written FALSE again from two commit-time sites outside that
+computation (`drawlayer.c:1878`, `:1894`). Replacing it with a predicate would lose both
+overrides. Note the pairing at those two sites — the flag and
+`dt_drawlayer_set_pipeline_realtime_mode(self, FALSE)` are set together, while four other
+places derive the pipeline mode *from* the flag (`runtime.c:434`, `:443`, `:679`, `:880`).
+Two spellings of one operation, and the shape this module keeps paying for.
+
+`brush_color_valid` deserves its own warning: it is set TRUE once (`drawlayer.c`, in
+`dt_drawlayer_sync_cached_brush_colors`) and **never cleared anywhere**. Nothing rebuilds the
+cached brush colours lazily, so every path that changes what they depend on must refresh them
+explicitly. Until #1471 the refresh happened only because refilling the HDR exposure slider
+woke `_widget_changed` on the panel paths that were not frozen — an accident the frozen path
+never had.
 
 ---
 
 ## 7. Dead weight
 
-Confirmed by whole-tree grep, not by inspection:
+*Drained across #1430, #1431 and #1471. What is left is at the bottom; the rest is kept as a
+record, because two of the original entries were WRONG and the way they were wrong is worth
+knowing.*
 
-- `dt_drawlayer_runtime_host_t.collect_inputs` / `.perform_action` are **never dereferenced**;
-  `drawlayer.c:135-136` `#define`s both to `NULL` and assigns them at **19 sites** (~250 lines).
-- **389 of `cache.c`'s 642 lines** are a second "process patch" cache tier with no callers
-  outside the file.
-- **Nine exported functions** have no caller anywhere (`worker.c:1592`, `:1630`, `:1636`,
-  `:1641`, `paint.c:847`, `:877`, `widgets.c:386`, `io.c:972`, `drawlayer.c:2662`).
-- `dt_drawlayer_brush_dab_t.wx`/`.wy`: written at three sites, read at none.
-- `drawlayer_process_scratch_t.flush_update_rgba`: declared and freed, never allocated or read.
-- `direct_copy` has exactly one assignment, `FALSE`, so its fast path is dead in both backends.
-- `_blend_layer_over_input_cl` takes **19 parameters** for one call site, three of which are
-  provably constant there.
-- `gui_init` is **334 lines** of stereotyped widget quartets; the 3×4 tablet-mapping grid at
-  `:3131` is already table-driven and proves the rest could be.
+**Removed:**
+
+- `dt_drawlayer_runtime_host_t.collect_inputs` / `.perform_action`, never dereferenced,
+  assigned at 19 sites (#1430). `runtime.h` keeps a comment where they were.
+- 389 of `cache.c`'s 642 lines — a second "process patch" cache tier with no caller outside
+  the file (#1430).
+- Three of the nine uncalled exported functions (#1430).
+- `drawlayer_process_scratch_t.flush_update_rgba`: a pointer, a size beside it and a free.
+  Nothing ever allocated it, so nothing read it and the free was on NULL (#1471).
+- `direct_copy`: one assignment in the whole tree, `FALSE`. The GPU fast branch was
+  unreachable, the `!direct_copy` term in the partial-composite predicate always true, and
+  the CPU path's `if(!source.direct_copy)` wrapped 25 lines that always ran (#1471).
+- `_blend_layer_over_input_cl`'s constant arguments, then its parameter list (#1471). See the
+  correction below.
+- `gui_init`'s 332 lines, now 72, split into three tab builders that each connect their own
+  widgets (#1471). The 3×4 tablet-mapping grid it was already table-driven for is now ONE
+  list — `dt_drawlayer_mapping_rows()` — walked by the builder, by `gui_update` and by
+  `sync_params_from_gui`, where each used to spell it out.
+- The runtime manager's `background_job_running`, written twice and read never. The
+  *session*'s identically-named field is the live one, which is why this survived: a grep for
+  the name finds eleven uses and looks busy (#1471).
+- Three `fill_*` widgets that had exactly create/pack/connect, whose handlers ignore the
+  button they are given (#1471).
+
+**Two entries in this list were wrong. Verify before acting on any of the rest.**
+
+- `dt_drawlayer_brush_dab_t.wx`/`.wy` "written at three sites, read at none" named **the wrong
+  struct**. The dab type has no such fields. The writes are to
+  `dt_drawlayer_paint_raw_input_t`, and they ARE read — `paint.c` quantises them into the dab
+  hash, and `worker.c` and `drawlayer.c` convert them to layer coordinates. Acting on this
+  entry would have deleted the pointer coordinates that place every dab.
+- `_blend_layer_over_input_cl` "takes 19 parameters, three provably constant" was 16 and two
+  by the time anyone reached it, because `direct_copy` was the third and had already gone.
+  Both remaining constants gated real code: `force_device_copy` selected an eager
+  `dt_opencl_copy_host_to_device()`, and `source_mem_override` had a branch plus **four**
+  guards written to work whether or not it was set. It now takes one named
+  `drawlayer_blend_cl_request_t`.
+
+**Still open:**
+
+- **Six exported functions have no caller anywhere**, tests included:
+  `dt_drawlayer_brush_transition_mass_primitive_eval`, `dt_drawlayer_brush_profile_prepare`,
+  `dt_drawlayer_brush_mass_primitive_eval`, `dt_drawlayer_io_background_layer_job_run`,
+  `dt_drawlayer_paint_runtime_get_stroke_seed`, `dt_drawlayer_worker_raw_inputs`.
 
 ---
 
