@@ -21,6 +21,7 @@
     Copyright (C) 2022 Martin Bařinka.
     Copyright (C) 2022 Philipp Lutz.
     Copyright (C) 2022 Victor Forsiuk.
+    Copyright (C) 2026 Guillaume Stutin.
     
     darktable is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -110,6 +111,11 @@ typedef struct dt_iop_dither_data_t
     float range[4];
     float damping;
   } random;
+  // What the quantization reads from the pipe, copied at commit so that the cache key, which
+  // hashes this struct (runtime_data_hash()), covers it: a JPEG and a 16-bit TIFF export differ
+  // only there.
+  dt_imageio_levels_t output_levels;
+  gboolean display_scaled;
 } dt_iop_dither_data_t;
 
 typedef struct dt_iop_dither_global_data_t
@@ -253,14 +259,13 @@ static inline void clipnan_pixel(float *const restrict out, const float *const r
 // clipnan_pixel proves to vectorize just fine, so don't bother implementing a separate SSE version
 #define clipnan_pixel_sse clipnan_pixel
 
-static inline __attribute__((always_inline)) int get_dither_parameters(const dt_iop_dither_data_t *const data, const dt_dev_pixelpipe_t *const pipe,
-                                 const dt_dev_pixelpipe_iop_t *const piece,
+static inline __attribute__((always_inline)) int get_dither_parameters(const dt_iop_dither_data_t *const data,
                                  const float scale, unsigned int *const restrict levels)
 {
   int graymode = -1;
   *levels = 65536;
   const int l1 = floorf(1.0f + dt_log2f(1.0f / scale));
-  const int bds = (pipe->type != DT_DEV_PIXELPIPE_EXPORT) ? l1 * l1 : 1;
+  const int bds = data->display_scaled ? l1 * l1 : 1;
 
   switch(data->dither_type)
   {
@@ -281,7 +286,7 @@ static inline __attribute__((always_inline)) int get_dither_parameters(const dt_
       *levels = 65536;
       break;
     case DITHER_FSAUTO:
-      switch(pipe->levels & IMAGEIO_CHANNEL_MASK)
+      switch(data->output_levels & IMAGEIO_CHANNEL_MASK)
       {
         case IMAGEIO_RGB:
           graymode = 0;
@@ -291,7 +296,7 @@ static inline __attribute__((always_inline)) int get_dither_parameters(const dt_
           break;
       }
 
-      switch(pipe->levels & IMAGEIO_PREC_MASK)
+      switch(data->output_levels & IMAGEIO_PREC_MASK)
       {
         case IMAGEIO_INT8:
           *levels = 256;
@@ -341,7 +346,7 @@ static void process_floyd_steinberg(struct dt_iop_module_t *self, const dt_dev_p
   float *const restrict out = (float *)ovoid;
 
   unsigned int levels = 1;
-  int graymode = get_dither_parameters(data, pipe, piece, scale, &levels);
+  int graymode = get_dither_parameters(data, scale, &levels);
   if(graymode < 0)
   {
     // No determinable quantization for this output: pass the buffer through UNTOUCHED.
@@ -594,12 +599,14 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
   memcpy(&(d->random.range), &(p->random.range), sizeof(p->random.range));
   d->random.radius = p->random.radius;
   d->random.damping = p->random.damping;
+  d->output_levels = pipe->levels;
+  d->display_scaled = (pipe->type != DT_DEV_PIXELPIPE_EXPORT);
 
   // Dithering quantizes to integer levels: on floating-point (or int32) outputs it is
   // meaningless whatever the dither type, so disable the node entirely. Its passthrough
   // paths used to clamp every float/EXR export to [0,1], destroying HDR values (e.g.
   // reconstructed highlights above the white point).
-  const int prec = pipe->levels & IMAGEIO_PREC_MASK;
+  const int prec = d->output_levels & IMAGEIO_PREC_MASK;
 
   if(prec == IMAGEIO_FLOAT || prec == IMAGEIO_INT32)
     piece->enabled = FALSE;
@@ -610,6 +617,12 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
     piece->enabled = FALSE;
   else if (d->dither_type != DITHER_RANDOM)
     piece->process_cl_ready = FALSE;
+}
+
+gboolean runtime_data_hash(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe,
+                           const dt_dev_pixelpipe_iop_t *piece)
+{
+  return TRUE;
 }
 
 void init_pipe(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece)
