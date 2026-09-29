@@ -846,6 +846,7 @@ int main(int argc, char *arg[])
   format->free_params(format, fdata);
   g_list_free(id_list);
   id_list = NULL;
+  dt_free(output_ext);
 
   if(icc_filename)
   {
