@@ -2902,63 +2902,18 @@ gboolean module_will_remove(dt_iop_module_t *self)
   return _confirm_delete_layer(self, TRUE);
 }
 
-/** @brief Build GUI widgets and initialize worker/caches. */
-void gui_init(dt_iop_module_t *self)
+
+
+
+/**
+ * @brief Build the Brush tab: mode, colour, geometry, thickness and texture.
+ *
+ * The largest of the three and entirely stereotyped -- a control, its tooltip, its range,
+ * its pack. It reads nothing of the module's own state; everything it builds is reached
+ * afterwards through g->controls.
+ */
+static void _build_brush_tab(dt_iop_module_t *self, dt_iop_drawlayer_gui_data_t *g, GtkWidget *brush_tab)
 {
-  IOP_GUI_ALLOC(drawlayer);
-  dt_iop_drawlayer_gui_data_t *g = (dt_iop_drawlayer_gui_data_t *)dt_iop_gui_data(self);
-  dt_iop_drawlayer_params_t *params = (dt_iop_drawlayer_params_t *)self->params;
-  dt_drawlayer_conf_ensure_defaults();
-  g->ui.widgets = dt_drawlayer_widgets_init();
-  dt_drawlayer_runtime_manager_init(&g->manager);
-  dt_drawlayer_process_state_init(&g->process);
-  dt_drawlayer_conf_load_color_history(g);
-  dt_drawlayer_sanitize_params(self, params);
-
-  dt_drawlayer_worker_init(self, &g->stroke.worker, &g->manager.painting_active,
-                           &g->stroke.finish_commit_pending, &g->stroke.stroke_sample_count,
-                           &g->stroke.current_stroke_batch);
-  g->session.background_job_running = FALSE;
-  g->session.last_view_x = 0.0f;
-  g->session.last_view_y = 0.0f;
-  g->session.last_view_scale = 1.0f;
-  if(self->dev)
-  {
-    g->session.last_view_x = dt_dev_viewport_center_x(self->dev);
-    g->session.last_view_y = dt_dev_viewport_center_y(self->dev);
-    g->session.last_view_scale = dt_dev_viewport_scaling(self->dev);
-  }
-
-  self->gui->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
-  if(self->gui->reset_button) gtk_widget_hide(self->gui->reset_button);
-
-  GtkWidget *history_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
-  g->controls.save_layer = gtk_button_new_with_label(_("save sidecar"));
-  gtk_box_pack_start(GTK_BOX(history_box), g->controls.save_layer, TRUE, TRUE, 0);
-  gtk_box_pack_start(GTK_BOX(self->gui->widget), history_box, FALSE, FALSE, 0);
-
-  GtkWidget *notebook = gtk_notebook_new();
-  g->controls.notebook = notebook;
-  gtk_widget_set_hexpand(notebook, TRUE);
-  gtk_box_pack_start(GTK_BOX(self->gui->widget), notebook, FALSE, FALSE, 0);
-  // image_colorpicker lives on the "Brush" tab; reset it if still active once the
-  // user switches away from that tab.
-  dt_ui_notebook_set_picker_owner(GTK_NOTEBOOK(notebook), self);
-
-  GtkWidget *brush_tab = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
-  GtkWidget *layer_tab = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
-  GtkWidget *input_tab = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
-  g->controls.brush_tab = brush_tab;
-  g->controls.layer_tab = layer_tab;
-  g->controls.input_tab = input_tab;
-
-  gtk_notebook_append_page(GTK_NOTEBOOK(notebook), brush_tab, gtk_label_new(_("Brush")));
-  gtk_notebook_append_page(GTK_NOTEBOOK(notebook), layer_tab, gtk_label_new(_("Layer")));
-  gtk_notebook_append_page(GTK_NOTEBOOK(notebook), input_tab, gtk_label_new(_("Input")));
-  gtk_container_child_set(GTK_CONTAINER(notebook), brush_tab, "tab-expand", TRUE, "tab-fill", TRUE, NULL);
-  gtk_container_child_set(GTK_CONTAINER(notebook), layer_tab, "tab-expand", TRUE, "tab-fill", TRUE, NULL);
-  gtk_container_child_set(GTK_CONTAINER(notebook), input_tab, "tab-expand", TRUE, "tab-fill", TRUE, NULL);
-
   g->controls.brush_mode = dt_bauhaus_combobox_new(dt_bauhaus_get_global(), DT_GUI_MODULE(self));
   dt_bauhaus_combobox_add(g->controls.brush_mode, _("paint"));
   dt_bauhaus_combobox_add(g->controls.brush_mode, _("erase"));
@@ -3066,6 +3021,37 @@ void gui_init(dt_iop_module_t *self)
   dt_bauhaus_slider_set_format(g->controls.sprinkle_coarseness, "%");
   gtk_box_pack_start(GTK_BOX(brush_tab), g->controls.sprinkle_coarseness, TRUE, TRUE, 0);
 
+  g_signal_connect(g->controls.brush_shape, "draw", G_CALLBACK(_brush_profile_draw), self);
+  g_signal_connect(g->controls.brush_shape, "button-press-event", G_CALLBACK(_brush_profile_button_press), self);
+  g_signal_connect(G_OBJECT(g->controls.brush_mode), "value-changed", G_CALLBACK(_widget_changed), self);
+  g_signal_connect(g->controls.color, "draw", G_CALLBACK(_color_picker_draw), self);
+  g_signal_connect(g->controls.color_swatch, "draw", G_CALLBACK(_color_swatch_draw), self);
+  g_signal_connect(g->controls.color_swatch, "button-press-event", G_CALLBACK(_color_swatch_button_press), self);
+  g_signal_connect(g->controls.color, "button-press-event", G_CALLBACK(_color_picker_button_press), self);
+  g_signal_connect(g->controls.color, "button-release-event", G_CALLBACK(_color_picker_button_release), self);
+  g_signal_connect(g->controls.color, "motion-notify-event", G_CALLBACK(_color_picker_motion), self);
+  g_signal_connect(G_OBJECT(g->controls.image_colorpicker_source), "value-changed", G_CALLBACK(_widget_changed), self);
+  g_signal_connect(G_OBJECT(g->controls.size), "value-changed", G_CALLBACK(_widget_changed), self);
+  g_signal_connect(G_OBJECT(g->controls.distance), "value-changed", G_CALLBACK(_widget_changed), self);
+  g_signal_connect(G_OBJECT(g->controls.smoothing), "value-changed", G_CALLBACK(_widget_changed), self);
+  g_signal_connect(G_OBJECT(g->controls.opacity), "value-changed", G_CALLBACK(_widget_changed), self);
+  g_signal_connect(G_OBJECT(g->controls.flow), "value-changed", G_CALLBACK(_widget_changed), self);
+  g_signal_connect(G_OBJECT(g->controls.sprinkles), "value-changed", G_CALLBACK(_widget_changed), self);
+  g_signal_connect(G_OBJECT(g->controls.sprinkle_size), "value-changed", G_CALLBACK(_widget_changed), self);
+  g_signal_connect(G_OBJECT(g->controls.sprinkle_coarseness), "value-changed", G_CALLBACK(_widget_changed), self);
+  g_signal_connect(G_OBJECT(g->controls.softness), "value-changed", G_CALLBACK(_widget_changed), self);
+  g_signal_connect(G_OBJECT(g->controls.hdr_exposure), "value-changed", G_CALLBACK(_widget_changed), self);
+}
+
+/**
+ * @brief Build the Layer tab: the Background choice, the layer list and its actions.
+ *
+ * The Background radios and the layer box pack into the same tab and were written a hundred
+ * lines apart, with the whole Brush tab between them; the previous commit moved them
+ * together so this one could lift them out.
+ */
+static void _build_layer_tab(dt_iop_module_t *self, dt_iop_drawlayer_gui_data_t *g, GtkWidget *layer_tab)
+{
   GtkWidget *preview_title = gtk_label_new(_("Background"));
   g->controls.preview_title = preview_title;
   gtk_widget_set_halign(preview_title, GTK_ALIGN_START);
@@ -3124,6 +3110,31 @@ void gui_init(dt_iop_module_t *self)
   gtk_box_pack_start(GTK_BOX(layer_box), g->controls.create_background, FALSE, FALSE, 0);
   gtk_box_pack_start(GTK_BOX(layer_tab), layer_box, FALSE, FALSE, 0);
 
+  g_signal_connect(G_OBJECT(g->controls.layer_select), "value-changed", G_CALLBACK(_layer_selected), self);
+  g_signal_connect(g->controls.preview_bg_image, "toggled", G_CALLBACK(_preview_bg_toggled), self);
+  g_signal_connect(g->controls.preview_bg_white, "toggled", G_CALLBACK(_preview_bg_toggled), self);
+  g_signal_connect(g->controls.preview_bg_grey, "toggled", G_CALLBACK(_preview_bg_toggled), self);
+  g_signal_connect(g->controls.preview_bg_black, "toggled", G_CALLBACK(_preview_bg_toggled), self);
+  g_signal_connect(g->controls.create_layer, "clicked", G_CALLBACK(_create_layer_clicked), self);
+  g_signal_connect(g->controls.rename_layer, "clicked", G_CALLBACK(_rename_layer_clicked), self);
+  g_signal_connect(g->controls.attach_layer, "clicked", G_CALLBACK(_attach_selected_layer_clicked), self);
+  g_signal_connect(g->controls.create_background, "clicked", G_CALLBACK(_create_background_clicked), self);
+  g_signal_connect(g->controls.delete_layer, "clicked", G_CALLBACK(_delete_layer_clicked), self);
+  g_signal_connect(g->controls.fill_white, "clicked", G_CALLBACK(_fill_white_clicked), self);
+  g_signal_connect(g->controls.fill_black, "clicked", G_CALLBACK(_fill_black_clicked), self);
+  g_signal_connect(g->controls.fill_transparent, "clicked", G_CALLBACK(_fill_transparent_clicked), self);
+}
+
+/**
+ * @brief Build the Input tab: the tablet-mapping grid and its profile combos.
+ *
+ * The grid is three input axes by four brush properties, and the two tables below are the
+ * only statement of which cell is which control. They stay inside this function along with
+ * the signal loop that reads them -- a table that escapes its builder is a table some other
+ * function starts spelling out by hand, which is what happened to gui_update.
+ */
+static void _build_input_tab(dt_iop_module_t *self, dt_iop_drawlayer_gui_data_t *g, GtkWidget *input_tab)
+{
   GtkWidget *mapping_title = gtk_label_new(_("tablet mapping"));
   gtk_widget_set_halign(mapping_title, GTK_ALIGN_START);
   GtkWidget *grid = gtk_grid_new();
@@ -3168,46 +3179,76 @@ void gui_init(dt_iop_module_t *self)
   gtk_box_pack_start(GTK_BOX(input_tab), mapping_title, FALSE, FALSE, 0);
   gtk_box_pack_start(GTK_BOX(input_tab), grid, FALSE, FALSE, 0);
 
-  g_signal_connect(g->controls.brush_shape, "draw", G_CALLBACK(_brush_profile_draw), self);
-  g_signal_connect(g->controls.brush_shape, "button-press-event", G_CALLBACK(_brush_profile_button_press), self);
-  g_signal_connect(G_OBJECT(g->controls.brush_mode), "value-changed", G_CALLBACK(_widget_changed), self);
-  g_signal_connect(g->controls.color, "draw", G_CALLBACK(_color_picker_draw), self);
-  g_signal_connect(g->controls.color_swatch, "draw", G_CALLBACK(_color_swatch_draw), self);
-  g_signal_connect(g->controls.color_swatch, "button-press-event", G_CALLBACK(_color_swatch_button_press), self);
-  g_signal_connect(g->controls.color, "button-press-event", G_CALLBACK(_color_picker_button_press), self);
-  g_signal_connect(g->controls.color, "button-release-event", G_CALLBACK(_color_picker_button_release), self);
-  g_signal_connect(g->controls.color, "motion-notify-event", G_CALLBACK(_color_picker_motion), self);
-  g_signal_connect(G_OBJECT(g->controls.image_colorpicker_source), "value-changed", G_CALLBACK(_widget_changed), self);
-  g_signal_connect(G_OBJECT(g->controls.size), "value-changed", G_CALLBACK(_widget_changed), self);
-  g_signal_connect(G_OBJECT(g->controls.distance), "value-changed", G_CALLBACK(_widget_changed), self);
-  g_signal_connect(G_OBJECT(g->controls.smoothing), "value-changed", G_CALLBACK(_widget_changed), self);
-  g_signal_connect(G_OBJECT(g->controls.opacity), "value-changed", G_CALLBACK(_widget_changed), self);
-  g_signal_connect(G_OBJECT(g->controls.flow), "value-changed", G_CALLBACK(_widget_changed), self);
-  g_signal_connect(G_OBJECT(g->controls.sprinkles), "value-changed", G_CALLBACK(_widget_changed), self);
-  g_signal_connect(G_OBJECT(g->controls.sprinkle_size), "value-changed", G_CALLBACK(_widget_changed), self);
-  g_signal_connect(G_OBJECT(g->controls.sprinkle_coarseness), "value-changed", G_CALLBACK(_widget_changed), self);
-  g_signal_connect(G_OBJECT(g->controls.softness), "value-changed", G_CALLBACK(_widget_changed), self);
-  g_signal_connect(G_OBJECT(g->controls.hdr_exposure), "value-changed", G_CALLBACK(_widget_changed), self);
-  g_signal_connect(G_OBJECT(g->controls.layer_select), "value-changed", G_CALLBACK(_layer_selected), self);
-  g_signal_connect(g->controls.preview_bg_image, "toggled", G_CALLBACK(_preview_bg_toggled), self);
-  g_signal_connect(g->controls.preview_bg_white, "toggled", G_CALLBACK(_preview_bg_toggled), self);
-  g_signal_connect(g->controls.preview_bg_grey, "toggled", G_CALLBACK(_preview_bg_toggled), self);
-  g_signal_connect(g->controls.preview_bg_black, "toggled", G_CALLBACK(_preview_bg_toggled), self);
-  g_signal_connect(g->controls.create_layer, "clicked", G_CALLBACK(_create_layer_clicked), self);
-  g_signal_connect(g->controls.rename_layer, "clicked", G_CALLBACK(_rename_layer_clicked), self);
-  g_signal_connect(g->controls.attach_layer, "clicked", G_CALLBACK(_attach_selected_layer_clicked), self);
-  g_signal_connect(g->controls.create_background, "clicked", G_CALLBACK(_create_background_clicked), self);
-  g_signal_connect(g->controls.save_layer, "clicked", G_CALLBACK(_save_layer_clicked), self);
-  g_signal_connect(g->controls.delete_layer, "clicked", G_CALLBACK(_delete_layer_clicked), self);
-  g_signal_connect(g->controls.fill_white, "clicked", G_CALLBACK(_fill_white_clicked), self);
-  g_signal_connect(g->controls.fill_black, "clicked", G_CALLBACK(_fill_black_clicked), self);
-  g_signal_connect(g->controls.fill_transparent, "clicked", G_CALLBACK(_fill_transparent_clicked), self);
-
   for(int r = 0; r < 3; r++)
   {
     for(int c = 0; c < 4; c++) g_signal_connect(*targets[r][c], "toggled", G_CALLBACK(_widget_changed), self);
     g_signal_connect(G_OBJECT(*profiles[r]), "value-changed", G_CALLBACK(_widget_changed), self);
   }
+}
+/** @brief Build GUI widgets and initialize worker/caches. */
+void gui_init(dt_iop_module_t *self)
+{
+  IOP_GUI_ALLOC(drawlayer);
+  dt_iop_drawlayer_gui_data_t *g = (dt_iop_drawlayer_gui_data_t *)dt_iop_gui_data(self);
+  dt_iop_drawlayer_params_t *params = (dt_iop_drawlayer_params_t *)self->params;
+  dt_drawlayer_conf_ensure_defaults();
+  g->ui.widgets = dt_drawlayer_widgets_init();
+  dt_drawlayer_runtime_manager_init(&g->manager);
+  dt_drawlayer_process_state_init(&g->process);
+  dt_drawlayer_conf_load_color_history(g);
+  dt_drawlayer_sanitize_params(self, params);
+
+  dt_drawlayer_worker_init(self, &g->stroke.worker, &g->manager.painting_active,
+                           &g->stroke.finish_commit_pending, &g->stroke.stroke_sample_count,
+                           &g->stroke.current_stroke_batch);
+  g->session.background_job_running = FALSE;
+  g->session.last_view_x = 0.0f;
+  g->session.last_view_y = 0.0f;
+  g->session.last_view_scale = 1.0f;
+  if(self->dev)
+  {
+    g->session.last_view_x = dt_dev_viewport_center_x(self->dev);
+    g->session.last_view_y = dt_dev_viewport_center_y(self->dev);
+    g->session.last_view_scale = dt_dev_viewport_scaling(self->dev);
+  }
+
+  self->gui->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
+  if(self->gui->reset_button) gtk_widget_hide(self->gui->reset_button);
+
+  GtkWidget *history_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
+  g->controls.save_layer = gtk_button_new_with_label(_("save sidecar"));
+  gtk_box_pack_start(GTK_BOX(history_box), g->controls.save_layer, TRUE, TRUE, 0);
+  gtk_box_pack_start(GTK_BOX(self->gui->widget), history_box, FALSE, FALSE, 0);
+
+  GtkWidget *notebook = gtk_notebook_new();
+  g->controls.notebook = notebook;
+  gtk_widget_set_hexpand(notebook, TRUE);
+  gtk_box_pack_start(GTK_BOX(self->gui->widget), notebook, FALSE, FALSE, 0);
+  // image_colorpicker lives on the "Brush" tab; reset it if still active once the
+  // user switches away from that tab.
+  dt_ui_notebook_set_picker_owner(GTK_NOTEBOOK(notebook), self);
+
+  GtkWidget *brush_tab = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
+  GtkWidget *layer_tab = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
+  GtkWidget *input_tab = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
+  g->controls.brush_tab = brush_tab;
+  g->controls.layer_tab = layer_tab;
+  g->controls.input_tab = input_tab;
+
+  gtk_notebook_append_page(GTK_NOTEBOOK(notebook), brush_tab, gtk_label_new(_("Brush")));
+  gtk_notebook_append_page(GTK_NOTEBOOK(notebook), layer_tab, gtk_label_new(_("Layer")));
+  gtk_notebook_append_page(GTK_NOTEBOOK(notebook), input_tab, gtk_label_new(_("Input")));
+  gtk_container_child_set(GTK_CONTAINER(notebook), brush_tab, "tab-expand", TRUE, "tab-fill", TRUE, NULL);
+  gtk_container_child_set(GTK_CONTAINER(notebook), layer_tab, "tab-expand", TRUE, "tab-fill", TRUE, NULL);
+  gtk_container_child_set(GTK_CONTAINER(notebook), input_tab, "tab-expand", TRUE, "tab-fill", TRUE, NULL);
+
+  _build_brush_tab(self, g, brush_tab);
+
+  _build_layer_tab(self, g, layer_tab);
+
+  _build_input_tab(self, g, input_tab);
+
+  g_signal_connect(g->controls.save_layer, "clicked", G_CALLBACK(_save_layer_clicked), self);
 
   DT_DEBUG_CONTROL_SIGNAL_CONNECT(dt_control_signal_get_global(), DT_SIGNAL_DEVELOP_UI_PIPE_FINISHED,
                                   G_CALLBACK(_develop_ui_pipe_finished_callback), self);
