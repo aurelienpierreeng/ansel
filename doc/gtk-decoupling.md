@@ -27,9 +27,18 @@ So the target is not "zero toolkit hits everywhere". It is:
 
 | | GTK/GDK | cairo/pango |
 |---|---|---|
-| `src/pixel`, `src/caches`, `src/database`, `src/metadata`, `src/history`, `src/system`, `src/common` | **zero, enforced** | zero except where it renders pixels |
+| `src/pixel`, `src/caches`, `src/database` | **zero, enforced** | zero except where it renders pixels |
+| `src/metadata`, `src/history`, `src/system`, `src/common`, `src/colorprofiles` | **not zero yet, but ratcheted** | zero except where it renders pixels |
 | `src/develop`, `src/imageio`, `src/iop` | **zero in the operator half** | allowed in the panel half and in genuine rasterisers |
 | `src/gui`, `src/views`, `src/libs`, `src/widgets` | unrestricted | unrestricted |
+
+> **Corrected 2026-09-29.** That row said all seven were "zero, enforced". Neither half held:
+> four of them were absent from the loop in `tools/check_module_boundaries.sh` — it iterated
+> `develop iop imageio pixel caches database` and nothing else — and measured on the day this
+> was corrected they are **`common` 11, `system` 3, `metadata` 2, `history` 1** (and
+> `colorprofiles` 2, `math` 0). Only `pixel`, `caches` and `database` were at zero, and only
+> those three were enforced. All twelve are in the loop now, each pinned at what it actually
+> scores, so the numbers can come down but not back up. See `doc/ci.md`.
 
 ## 1. Measured shape, 2026-08-20
 

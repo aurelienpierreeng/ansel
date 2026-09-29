@@ -98,6 +98,44 @@ done < <(grep -Hn '^[ \t]*#[ \t]*include[ \t]*"gui/' src/widgets/*.c src/widgets
 #
 # xprofile_lock is counted separately because it is the sharper of the two: a caller that
 # holds the module's lock is a caller that can deadlock it or use a handle it frees.
+# A counter that CANNOT report anything but zero is not a gate, and it looks exactly like a
+# gate that is holding. Every count below is of things OUTSIDE a module; a zero means "the
+# boundary holds" only if the thing being counted still exists to be found. When a token is
+# renamed or a directory moves, the count silently becomes structurally 0 and the ratchet goes
+# on printing a win it is no longer measuring.
+#
+# So each fragile counter now states what it depends on. These fail the gate rather than warn,
+# for the same reason a FALLING count fails it: the author who moved the thing is the one who
+# can repoint the counter, and nobody else will ever notice.
+canary_findings=0
+
+# The token must still appear SOMEWHERE (normally inside the module that owns it), or the
+# counter has lost its target.
+require_token() {
+  local label="$1" pattern="$2" where="$3"
+  if ! grep -rqE "${pattern}" ${where} --include='*.c' --include='*.h' --include='*.cc' 2>/dev/null; then
+    echo "GATE BLIND: ${label}"
+    echo "  '${pattern}' matches nothing under ${where}, so the count outside it can only ever"
+    echo "  be 0. Repoint the counter at what replaced it, or delete it deliberately."
+    canary_findings=$((canary_findings + 1))
+    return 1
+  fi
+  return 0
+}
+
+# The path must exist. os.walk and grep -r both yield nothing, silently, for a missing one.
+require_path() {
+  local label="$1" path="$2"
+  if [ ! -d "${path}" ]; then
+    echo "GATE BLIND: ${label}"
+    echo "  ${path} does not exist, so its count is 0 by construction. A module that moved needs"
+    echo "  its counter moved with it."
+    canary_findings=$((canary_findings + 1))
+    return 1
+  fi
+  return 0
+}
+
 accessor_baseline=0
 lock_baseline=0
 
@@ -105,7 +143,17 @@ accessor_now=$(grep -rn 'dt_colorspaces_get_global()' src/ --include='*.c' --inc
                2>/dev/null | grep -cv '^src/colorprofiles/')
 # Acquisitions, not mentions: one number per caller-held region, so it reads as
 # "4 places outside the module still take its lock" rather than counting unlocks twice.
-lock_now=$(grep -rnE 'pthread_rwlock_(rd|wr|tryrd|trywr)lock[^;]*xprofile_lock' \
+#
+# This counter was DEAD. It searched for `xprofile_lock`, a name that has not existed since the
+# module's locks became file-statics: they are `_transforms_lock` and `_settings_lock` in
+# colorprofiles/colorspaces.c. The regex matched nothing anywhere, inside the module or out,
+# so `lock_now` was 0 because the token was gone -- and with lock_baseline=0 that read as the
+# boundary holding. src/colorprofiles/README.md:149 already recorded it as dead; the gate did
+# not know.
+require_token "colorprofiles lock counter" \
+              'pthread_rwlock_(rd|wr|tryrd|trywr)lock[^;]*_(transforms|settings)_lock' \
+              src/colorprofiles/
+lock_now=$(grep -rnE 'pthread_rwlock_(rd|wr|tryrd|trywr)lock[^;]*_(transforms|settings)_lock' \
            src/ --include='*.c' --include='*.h' --include='*.cc' \
            2>/dev/null | grep -cv '^src/colorprofiles/')
 
@@ -162,8 +210,16 @@ opencl_state_now=$(grep -rn 'darktable\.opencl\|dt_opencl_get_global' src/ --inc
 # A member of dt_opencl_t that is really another module's: `struct dt_<x>_cl_global_t *` on it.
 # The struct lives in the .c now -- that is the point of the check -- so look for it there,
 # and in the header too, so that re-exporting it does not make the count silently zero.
+#
+# The range anchor used to be the exact line `typedef struct dt_opencl_t`, with nothing after
+# it. That is one reformat away from matching nothing: put the brace on the same line, as most
+# formatters do, and the range never opens, the grep sees an empty stream, and the count is 0
+# for the rest of time. Allow the brace either way, and assert the range still opens.
+require_token "opencl parked-bundle counter" \
+              '^typedef struct dt_opencl_t[[:space:]]*\{?[[:space:]]*$' \
+              src/common/
 opencl_parked_now=$(cat src/common/opencl.c src/common/opencl.h 2>/dev/null \
-                    | sed -n '/^typedef struct dt_opencl_t$/,/^} dt_opencl_t;/p' \
+                    | sed -n '/^typedef struct dt_opencl_t[[:space:]]*{\?[[:space:]]*$/,/^}[[:space:]]*dt_opencl_t;/p' \
                     | grep -c '_cl_global_t \*')
 
 echo "opencl:        ${opencl_state_now} external references to the module's state (baseline ${opencl_state_baseline}),"
@@ -416,6 +472,8 @@ fi
 # is written down, not because ground was won here.
 masks_include_baseline=18
 masks_gui_include_baseline=11
+masks_types_include_baseline=4
+masks_group_include_baseline=4
 # 75 -> 73 when the shape manager's "Add shape ..." menu took a shape's id and kind from
 # dt_masks_form_get_info() instead of reading them off the form. 73 -> 68 when retouch's ROI
 # planning and its CPU/OpenCL shape loops read group members through rt_pipe_member_form() /
@@ -447,6 +505,16 @@ masks_include_now=$(grep -rn '^[ \t]*#[ \t]*include[ \t]*"develop/masks\.h"' \
 masks_gui_include_now=$(grep -rn '^[ \t]*#[ \t]*include[ \t]*"develop/masks_gui\.h"' \
                         src/ --include='*.c' --include='*.h' --include='*.cc' 2>/dev/null \
                         | grep -cv '^src/develop/masks/')
+# The module publishes FOUR headers in src/develop/, not two. masks_types.h and masks_group.h
+# were included from outside and counted by nothing, so that part of the surface could grow
+# without moving any number here. Measured when this was added: 4 and 4.
+masks_types_include_now=$(grep -rn '^[ \t]*#[ \t]*include[ \t]*"develop/masks_types\.h"' \
+                          src/ --include='*.c' --include='*.h' --include='*.cc' 2>/dev/null \
+                          | grep -cv '^src/develop/masks/')
+masks_group_include_now=$(grep -rn '^[ \t]*#[ \t]*include[ \t]*"develop/masks_group\.h"' \
+                          src/ --include='*.c' --include='*.h' --include='*.cc' 2>/dev/null \
+                          | grep -cv '^src/develop/masks/')
+
 masks_member_now=$(grep -rnE "\->(${masks_members})\b" src/ --include='*.c' --include='*.cc' 2>/dev/null \
                    | grep -v '^src/develop/masks/' | masks_strip | wc -l)
 masks_write_now=$(grep -rnE "\->(${masks_members})[[:space:]]*(=[^=]|\|=|&=|\+=|-=)" \
@@ -468,6 +536,8 @@ masks_row_now=$(grep -rnE '\bdt_masks_form_group_t\b' \
 
 echo "masks:         ${masks_include_now} include masks.h, ${masks_gui_include_now} include masks_gui.h" \
      "(baselines ${masks_include_baseline}, ${masks_gui_include_baseline}),"
+echo "               ${masks_types_include_now} include masks_types.h, ${masks_group_include_now} include masks_group.h" \
+     "(baselines ${masks_types_include_baseline}, ${masks_group_include_baseline}),"
 echo "               ${masks_member_now} external struct-member reads, ${masks_write_now} of them writes" \
      "(baselines ${masks_member_baseline}, ${masks_write_baseline}),"
 echo "               ${masks_alloc_now} external allocations, ${masks_forms_now} direct ->forms touches" \
@@ -489,6 +559,8 @@ masks_check() { # name now baseline
 }
 masks_check "masks.h includers"    "${masks_include_now}"     "${masks_include_baseline}"
 masks_check "masks_gui.h includers" "${masks_gui_include_now}" "${masks_gui_include_baseline}"
+masks_check "masks_types.h includers" "${masks_types_include_now}" "${masks_types_include_baseline}"
+masks_check "masks_group.h includers" "${masks_group_include_now}" "${masks_group_include_baseline}"
 masks_check "struct-member reads"  "${masks_member_now}"      "${masks_member_baseline}"
 masks_check "struct-member writes" "${masks_write_now}"       "${masks_write_baseline}"
 masks_check "external allocations" "${masks_alloc_now}"       "${masks_alloc_baseline}"
@@ -537,6 +609,18 @@ toolkit_imageio_baseline=12
 toolkit_pixel_baseline=0
 toolkit_caches_baseline=0
 toolkit_database_baseline=0
+# doc/gtk-decoupling.md listed src/metadata, src/history, src/system and src/common among the
+# modules at "zero, enforced". Neither half was true: they were absent from the loop below, and
+# measured on the day this was written they are 2, 1, 3 and 11 -- not zero. Adding them at what
+# they actually score is what makes the claim true going forward; the numbers come down from
+# here, and the ratchet is what stops them going back up. colorprofiles and math are here for
+# the same reason, at 2 and 0.
+toolkit_metadata_baseline=2
+toolkit_history_baseline=1
+toolkit_system_baseline=3
+toolkit_common_baseline=11
+toolkit_colorprofiles_baseline=2
+toolkit_math_baseline=0
 
 # Comments are stripped first: a file that only MENTIONS GTK in prose is toolkit-free, and the
 # doc comments in this tree talk about GTK constantly.
@@ -566,7 +650,10 @@ PYEOF
 }
 
 toolkit_findings=0
-for module in develop iop imageio pixel caches database; do
+for module in develop iop imageio pixel caches database metadata history system common colorprofiles math; do
+  # A module that moved would otherwise score 0 here: os.walk on a path that does not exist
+  # yields nothing and raises nothing, which is indistinguishable from a clean scan.
+  require_path "toolkit counter for ${module}/" "src/${module}" || continue
   now=$(count_toolkit "src/${module}")
   eval "base=\${toolkit_${module}_baseline}"
   printf 'toolkit:       %-9s %3d files name a toolkit type (baseline %d).\n' "${module}/" "${now}" "${base}"
@@ -583,9 +670,15 @@ for module in develop iop imageio pixel caches database; do
 done
 findings=$((findings + toolkit_findings))
 
+# A blind counter is a finding in its own right, and a louder one than a count that moved: a
+# count that moved is a fact about the code, while a counter that cannot move is a fact about
+# this script, and it will go on reporting a win nobody is measuring until somebody looks.
+findings=$((findings + canary_findings))
+
 if [ "${findings}" -gt 0 ]; then
   exit 1
 fi
 
 echo "OK: src/system is closed, src/widgets does not reach into gui/; colorprofiles, opencl, caches, database, metadata and history held; masks did not leak further; the pixel engine's toolkit surface did not grow."
+echo "    (every counter above proved its target still exists -- see require_token/require_path.)"
 exit 0
