@@ -10,6 +10,7 @@
     Copyright (C) 2022 Martin Bařinka.
     Copyright (C) 2025 Alynx Zhou.
     Copyright (C) 2026 Aurélien PIERRE.
+    Copyright (C) 2026 Guillaume Stutin.
     
     darktable is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -81,6 +82,18 @@ void tiling_callback_blendop(struct dt_iop_module_t *self, const struct dt_dev_p
 
 void tiling_callback(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_t *pipe,
                      const struct dt_dev_pixelpipe_iop_t *piece, struct dt_develop_tiling_t *tiling);
+
+/**
+ * @brief Whether process_tiling() can run this piece in less memory than process() would.
+ *
+ * @details default_process_tiling() falls back to process() when the module's own working set
+ * is too close to its input plus its output for tiles to save anything. The answer to
+ * dt_tiling_piece_fits_host_memory() only matters when this is TRUE.
+ *
+ * @param in_bpp bytes per pixel of the buffer process_tiling() would receive
+ */
+gboolean dt_tiling_piece_can_save_memory(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_t *pipe,
+                                         const struct dt_dev_pixelpipe_iop_t *piece, const int in_bpp);
 
 int dt_tiling_piece_fits_host_memory(const size_t width, const size_t height, const unsigned bpp,
                                      const float factor, const size_t overhead);

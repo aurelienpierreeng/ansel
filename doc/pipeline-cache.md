@@ -914,6 +914,35 @@ Diagnose this class with `-d dev -d perf -d pipecache`: the ``processed `Module'
 say which modules each pipe actually ran, and a burst of `LRU … removed` lines right after one of
 them names the allocation that emptied the cache.
 
+### ...nor when the tiler would fall back to `process()`
+
+*Found `1fb2281865`, 2026-09-29.*
+
+A tileable module chooses nothing either when `default_process_tiling()` would not tile it: when
+the module's own factor is under 2.2 with a small overhead, tiles save nothing over its input plus
+its output, and both tiling paths fall back to `process()`. That is most pointwise modules. The
+probe is therefore asked only when `dt_tiling_piece_can_save_memory()` is TRUE too, and that
+function and both tiling paths share one test (`_tiling_saves_memory()`, `develop/tiling.c`). It
+reads the module's OWN factor: the probe is handed the factor aggregated with blending, 3.5 for any
+module whose blending is not disabled, colorin included, and blending is never tiled.
+
+Measured on a CPU export of a 6959x4639 raw inside `systemd-run -p MemoryMax=5G` (a 2560 MiB
+cache), with a trace in the probe. Asked for every tileable module, it answered "does not fit" from
+demosaic to colorout, each time after evicting all it could (the cache left at 985 MiB: the
+module's input and output), and every one of those modules but demosaic then fell back to
+`process()`. Asked only where tiling can save memory, it runs once, for demosaic, which tiles as
+before; the run takes the same time (24.3 s against 24.1 s) and the pixels do not move (they
+differ between the two by what two runs of one binary differ by: the dither is random).
+
+Still open: the probe's total, `factor × roi × bpp`, counts the input and output buffers the
+factor includes, and the pipe has already allocated both when it asks. In that run it asked for
+1724 MiB with 1575 MiB free, 985 MiB of the cache being those two buffers; the 740 MiB it lacked
+would have fitted. Discounting them would change which modules tile, so it wants its own
+measurement.
+
+"`with tiling`" on a processed line means `process_tiling()` was called. It can still fall back
+(an allocation failing, too many tiles), and `-d tiling` says when it does.
+
 ### The cache gives memory back on kernel pressure, not only on low available RAM
 
 *Found `18f6f8f2c5`, 2026-09-12.*
