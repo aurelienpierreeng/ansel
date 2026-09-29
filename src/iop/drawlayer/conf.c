@@ -307,6 +307,35 @@ void dt_drawlayer_conf_sync_color_picker(dt_iop_module_t *self)
   if(g->controls.color_swatch) gtk_widget_queue_draw(g->controls.color_swatch);
 }
 
+
+void dt_drawlayer_conf_mapping_rows(dt_iop_drawlayer_gui_data_t *g,
+                                    dt_drawlayer_mapping_row_t rows[DT_DRAWLAYER_MAPPING_ROWS])
+{
+  if(IS_NULL_PTR(g) || IS_NULL_PTR(rows)) return;
+
+  rows[0] = (dt_drawlayer_mapping_row_t){
+    .targets = { { &g->controls.map_pressure_size, DRAWLAYER_CONF_MAP_PRESSURE_SIZE },
+                 { &g->controls.map_pressure_opacity, DRAWLAYER_CONF_MAP_PRESSURE_OPACITY },
+                 { &g->controls.map_pressure_flow, DRAWLAYER_CONF_MAP_PRESSURE_FLOW },
+                 { &g->controls.map_pressure_softness, DRAWLAYER_CONF_MAP_PRESSURE_SOFTNESS } },
+    .profile = { &g->controls.pressure_profile, DRAWLAYER_CONF_PRESSURE_PROFILE },
+  };
+  rows[1] = (dt_drawlayer_mapping_row_t){
+    .targets = { { &g->controls.map_tilt_size, DRAWLAYER_CONF_MAP_TILT_SIZE },
+                 { &g->controls.map_tilt_opacity, DRAWLAYER_CONF_MAP_TILT_OPACITY },
+                 { &g->controls.map_tilt_flow, DRAWLAYER_CONF_MAP_TILT_FLOW },
+                 { &g->controls.map_tilt_softness, DRAWLAYER_CONF_MAP_TILT_SOFTNESS } },
+    .profile = { &g->controls.tilt_profile, DRAWLAYER_CONF_TILT_PROFILE },
+  };
+  rows[2] = (dt_drawlayer_mapping_row_t){
+    .targets = { { &g->controls.map_accel_size, DRAWLAYER_CONF_MAP_ACCEL_SIZE },
+                 { &g->controls.map_accel_opacity, DRAWLAYER_CONF_MAP_ACCEL_OPACITY },
+                 { &g->controls.map_accel_flow, DRAWLAYER_CONF_MAP_ACCEL_FLOW },
+                 { &g->controls.map_accel_softness, DRAWLAYER_CONF_MAP_ACCEL_SOFTNESS } },
+    .profile = { &g->controls.accel_profile, DRAWLAYER_CONF_ACCEL_PROFILE },
+  };
+}
+
 /** @brief Sync active GUI widget values back into persistent config keys. */
 void dt_drawlayer_conf_sync_params_from_gui(dt_iop_module_t *self, const gboolean record_history)
 {
@@ -331,22 +360,16 @@ void dt_drawlayer_conf_sync_params_from_gui(dt_iop_module_t *self, const gboolea
     dt_conf_set_int(DRAWLAYER_CONF_PICK_SOURCE, dt_bauhaus_combobox_get(g->controls.image_colorpicker_source));
   dt_conf_set_float(DRAWLAYER_CONF_HDR_EV, dt_bauhaus_slider_get(g->controls.hdr_exposure));
 
-  dt_conf_set_bool(DRAWLAYER_CONF_MAP_PRESSURE_SIZE, gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(g->controls.map_pressure_size)));
-  dt_conf_set_bool(DRAWLAYER_CONF_MAP_PRESSURE_OPACITY, gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(g->controls.map_pressure_opacity)));
-  dt_conf_set_bool(DRAWLAYER_CONF_MAP_PRESSURE_FLOW, gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(g->controls.map_pressure_flow)));
-  dt_conf_set_bool(DRAWLAYER_CONF_MAP_PRESSURE_SOFTNESS, gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(g->controls.map_pressure_softness)));
-
-  dt_conf_set_bool(DRAWLAYER_CONF_MAP_TILT_SIZE, gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(g->controls.map_tilt_size)));
-  dt_conf_set_bool(DRAWLAYER_CONF_MAP_TILT_OPACITY, gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(g->controls.map_tilt_opacity)));
-  dt_conf_set_bool(DRAWLAYER_CONF_MAP_TILT_FLOW, gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(g->controls.map_tilt_flow)));
-  dt_conf_set_bool(DRAWLAYER_CONF_MAP_TILT_SOFTNESS, gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(g->controls.map_tilt_softness)));
-
-  dt_conf_set_bool(DRAWLAYER_CONF_MAP_ACCEL_SIZE, gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(g->controls.map_accel_size)));
-  dt_conf_set_bool(DRAWLAYER_CONF_MAP_ACCEL_OPACITY, gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(g->controls.map_accel_opacity)));
-  dt_conf_set_bool(DRAWLAYER_CONF_MAP_ACCEL_FLOW, gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(g->controls.map_accel_flow)));
-  dt_conf_set_bool(DRAWLAYER_CONF_MAP_ACCEL_SOFTNESS, gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(g->controls.map_accel_softness)));
-
-  if(g->controls.pressure_profile) dt_conf_set_int(DRAWLAYER_CONF_PRESSURE_PROFILE, dt_bauhaus_combobox_get(g->controls.pressure_profile));
-  if(g->controls.tilt_profile) dt_conf_set_int(DRAWLAYER_CONF_TILT_PROFILE, dt_bauhaus_combobox_get(g->controls.tilt_profile));
-  if(g->controls.accel_profile) dt_conf_set_int(DRAWLAYER_CONF_ACCEL_PROFILE, dt_bauhaus_combobox_get(g->controls.accel_profile));
+  /* The targets are read unguarded and the profiles behind a NULL check, exactly as the
+   * fifteen unrolled lines this replaced did. */
+  dt_drawlayer_mapping_row_t mapping[DT_DRAWLAYER_MAPPING_ROWS];
+  dt_drawlayer_conf_mapping_rows(g, mapping);
+  for(int r = 0; r < DT_DRAWLAYER_MAPPING_ROWS; r++)
+  {
+    for(int c = 0; c < DT_DRAWLAYER_MAPPING_TARGETS; c++)
+      dt_conf_set_bool(mapping[r].targets[c].conf_key,
+                       gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(*mapping[r].targets[c].widget)));
+    if(*mapping[r].profile.widget)
+      dt_conf_set_int(mapping[r].profile.conf_key, dt_bauhaus_combobox_get(*mapping[r].profile.widget));
+  }
 }

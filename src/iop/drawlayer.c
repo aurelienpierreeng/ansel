@@ -3143,12 +3143,8 @@ static void _build_input_tab(dt_iop_module_t *self, dt_iop_drawlayer_gui_data_t 
 
   const char *labels[4] = { _("size"), _("opacity"), _("flow"), _("hardness") };
   const char *rows[3] = { _("pressure"), _("tilt"), _("acceleration") };
-  GtkWidget **targets[3][4] = {
-    { &g->controls.map_pressure_size, &g->controls.map_pressure_opacity, &g->controls.map_pressure_flow, &g->controls.map_pressure_softness },
-    { &g->controls.map_tilt_size, &g->controls.map_tilt_opacity, &g->controls.map_tilt_flow, &g->controls.map_tilt_softness },
-    { &g->controls.map_accel_size, &g->controls.map_accel_opacity, &g->controls.map_accel_flow, &g->controls.map_accel_softness },
-  };
-  GtkWidget **profiles[3] = { &g->controls.pressure_profile, &g->controls.tilt_profile, &g->controls.accel_profile };
+  dt_drawlayer_mapping_row_t mapping[DT_DRAWLAYER_MAPPING_ROWS];
+  dt_drawlayer_conf_mapping_rows(g, mapping);
 
   for(int c = 0; c < 4; c++)
   {
@@ -3163,17 +3159,17 @@ static void _build_input_tab(dt_iop_module_t *self, dt_iop_drawlayer_gui_data_t 
     gtk_grid_attach(GTK_GRID(grid), gtk_label_new(rows[r]), 0, r + 1, 1, 1);
     for(int c = 0; c < 4; c++)
     {
-      *targets[r][c] = gtk_check_button_new();
-      gtk_grid_attach(GTK_GRID(grid), *targets[r][c], c + 1, r + 1, 1, 1);
+      *mapping[r].targets[c].widget = gtk_check_button_new();
+      gtk_grid_attach(GTK_GRID(grid), *mapping[r].targets[c].widget, c + 1, r + 1, 1, 1);
     }
-    *profiles[r] = dt_bauhaus_combobox_new(dt_bauhaus_get_global(), DT_GUI_MODULE(self));
-    dt_bauhaus_combobox_add(*profiles[r], _("linear"));
-    dt_bauhaus_combobox_add(*profiles[r], _("quadratic"));
-    dt_bauhaus_combobox_add(*profiles[r], _("square root"));
-    dt_bauhaus_combobox_add(*profiles[r], _("inverse linear"));
-    dt_bauhaus_combobox_add(*profiles[r], _("inverse square root"));
-    dt_bauhaus_combobox_add(*profiles[r], _("inverse quadratic"));
-    gtk_grid_attach(GTK_GRID(grid), *profiles[r], 5, r + 1, 1, 1);
+    *mapping[r].profile.widget = dt_bauhaus_combobox_new(dt_bauhaus_get_global(), DT_GUI_MODULE(self));
+    dt_bauhaus_combobox_add(*mapping[r].profile.widget, _("linear"));
+    dt_bauhaus_combobox_add(*mapping[r].profile.widget, _("quadratic"));
+    dt_bauhaus_combobox_add(*mapping[r].profile.widget, _("square root"));
+    dt_bauhaus_combobox_add(*mapping[r].profile.widget, _("inverse linear"));
+    dt_bauhaus_combobox_add(*mapping[r].profile.widget, _("inverse square root"));
+    dt_bauhaus_combobox_add(*mapping[r].profile.widget, _("inverse quadratic"));
+    gtk_grid_attach(GTK_GRID(grid), *mapping[r].profile.widget, 5, r + 1, 1, 1);
   }
 
   gtk_box_pack_start(GTK_BOX(input_tab), mapping_title, FALSE, FALSE, 0);
@@ -3181,8 +3177,8 @@ static void _build_input_tab(dt_iop_module_t *self, dt_iop_drawlayer_gui_data_t 
 
   for(int r = 0; r < 3; r++)
   {
-    for(int c = 0; c < 4; c++) g_signal_connect(*targets[r][c], "toggled", G_CALLBACK(_widget_changed), self);
-    g_signal_connect(G_OBJECT(*profiles[r]), "value-changed", G_CALLBACK(_widget_changed), self);
+    for(int c = 0; c < DT_DRAWLAYER_MAPPING_TARGETS; c++) g_signal_connect(*mapping[r].targets[c].widget, "toggled", G_CALLBACK(_widget_changed), self);
+    g_signal_connect(G_OBJECT(*mapping[r].profile.widget), "value-changed", G_CALLBACK(_widget_changed), self);
   }
 }
 /** @brief Build GUI widgets and initialize worker/caches. */
@@ -3290,50 +3286,20 @@ void gui_update(dt_iop_module_t *self)
   _sync_brush_profile_preview_widget(self);
   if(g->controls.color) gtk_widget_queue_draw(g->controls.color);
 
-  if(GTK_IS_TOGGLE_BUTTON(g->controls.map_pressure_size))
-    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->controls.map_pressure_size),
-                                 dt_conf_get_bool(DRAWLAYER_CONF_MAP_PRESSURE_SIZE));
-  if(GTK_IS_TOGGLE_BUTTON(g->controls.map_pressure_opacity))
-    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->controls.map_pressure_opacity),
-                                 dt_conf_get_bool(DRAWLAYER_CONF_MAP_PRESSURE_OPACITY));
-  if(GTK_IS_TOGGLE_BUTTON(g->controls.map_pressure_flow))
-    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->controls.map_pressure_flow),
-                                 dt_conf_get_bool(DRAWLAYER_CONF_MAP_PRESSURE_FLOW));
-  if(GTK_IS_TOGGLE_BUTTON(g->controls.map_pressure_softness))
-    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->controls.map_pressure_softness),
-                                 dt_conf_get_bool(DRAWLAYER_CONF_MAP_PRESSURE_SOFTNESS));
-
-  if(GTK_IS_TOGGLE_BUTTON(g->controls.map_tilt_size))
-    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->controls.map_tilt_size),
-                                 dt_conf_get_bool(DRAWLAYER_CONF_MAP_TILT_SIZE));
-  if(GTK_IS_TOGGLE_BUTTON(g->controls.map_tilt_opacity))
-    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->controls.map_tilt_opacity),
-                                 dt_conf_get_bool(DRAWLAYER_CONF_MAP_TILT_OPACITY));
-  if(GTK_IS_TOGGLE_BUTTON(g->controls.map_tilt_flow))
-    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->controls.map_tilt_flow),
-                                 dt_conf_get_bool(DRAWLAYER_CONF_MAP_TILT_FLOW));
-  if(GTK_IS_TOGGLE_BUTTON(g->controls.map_tilt_softness))
-    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->controls.map_tilt_softness),
-                                 dt_conf_get_bool(DRAWLAYER_CONF_MAP_TILT_SOFTNESS));
-
-  if(GTK_IS_TOGGLE_BUTTON(g->controls.map_accel_size))
-    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->controls.map_accel_size),
-                                 dt_conf_get_bool(DRAWLAYER_CONF_MAP_ACCEL_SIZE));
-  if(GTK_IS_TOGGLE_BUTTON(g->controls.map_accel_opacity))
-    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->controls.map_accel_opacity),
-                                 dt_conf_get_bool(DRAWLAYER_CONF_MAP_ACCEL_OPACITY));
-  if(GTK_IS_TOGGLE_BUTTON(g->controls.map_accel_flow))
-    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->controls.map_accel_flow),
-                                 dt_conf_get_bool(DRAWLAYER_CONF_MAP_ACCEL_FLOW));
-  if(GTK_IS_TOGGLE_BUTTON(g->controls.map_accel_softness))
-    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->controls.map_accel_softness),
-                                 dt_conf_get_bool(DRAWLAYER_CONF_MAP_ACCEL_SOFTNESS));
-
-  if(g->controls.pressure_profile)
-    dt_bauhaus_combobox_set(g->controls.pressure_profile, dt_drawlayer_conf_mapping_profile(DRAWLAYER_CONF_PRESSURE_PROFILE));
-  if(g->controls.tilt_profile) dt_bauhaus_combobox_set(g->controls.tilt_profile, dt_drawlayer_conf_mapping_profile(DRAWLAYER_CONF_TILT_PROFILE));
-  if(g->controls.accel_profile)
-    dt_bauhaus_combobox_set(g->controls.accel_profile, dt_drawlayer_conf_mapping_profile(DRAWLAYER_CONF_ACCEL_PROFILE));
+  dt_drawlayer_mapping_row_t mapping[DT_DRAWLAYER_MAPPING_ROWS];
+  dt_drawlayer_conf_mapping_rows(g, mapping);
+  for(int r = 0; r < DT_DRAWLAYER_MAPPING_ROWS; r++)
+  {
+    for(int c = 0; c < DT_DRAWLAYER_MAPPING_TARGETS; c++)
+    {
+      GtkWidget *target = *mapping[r].targets[c].widget;
+      if(GTK_IS_TOGGLE_BUTTON(target))
+        gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(target), dt_conf_get_bool(mapping[r].targets[c].conf_key));
+    }
+    if(*mapping[r].profile.widget)
+      dt_bauhaus_combobox_set(*mapping[r].profile.widget,
+                              dt_drawlayer_conf_mapping_profile(mapping[r].profile.conf_key));
+  }
 
   _sync_mode_sensitive_widgets(self);
   _sync_preview_bg_buttons(self);
