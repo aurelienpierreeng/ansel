@@ -1,9 +1,11 @@
 # `darktable_t` globals — usage evaluation and dependency-injection migration plan
 
-> **Verified against `f37105c227` on 2026-09-29.** That pass found 15 claim(s) in this file
-> that were wrong of the tree and 11 that had gone stale; the ones corrected since carry a note
-> saying what they used to say. Anything not yet corrected is flagged inline. Re-measure before
-> acting on a claim older than the code you are changing, and re-date this line when you do.
+> **Corrected against `2959bd4ec1` on 2026-09-29.** The audit before that found 15 claims in
+> this file wrong of the tree and 11 stale; every one of them was in §3b and §4, which
+> described the migration mid-flight and had not been updated as it landed. Both sections are
+> now a record of the finished state, with the commit that closed each member. §1 and §2 are
+> the untouched **baseline** and are meant to read as history. Re-measure before acting on a
+> claim older than the code you are changing, and re-date this line when you do.
 
 Goal (2026-08): the `darktable` global must be dispatched **once** to high-level callers
 (views, main loops, job entry points); all internal modules inherit what they need through
@@ -33,7 +35,8 @@ kept as the baseline, not refreshed: §3b is where the tree's current state live
 
 Then: `collection` 97/27, `undo` 91/16, `selection` 88/24, `mipmap_cache` 70/19,
 `plugin_threadsafe` 52/7, `lib` 45/11, `num_openmp_threads` 38/20 (accessor exists),
-`conf` 37/3 (fully encapsulated — the model outcome), the app-lifetime constants below.
+`conf` 37/3 (very nearly encapsulated — the model outcome; one handle-taking call survives,
+see §3b), the app-lifetime constants below.
 
 ## 2. Structural observations
 
@@ -42,7 +45,8 @@ Then: `collection` 97/27, `undo` 91/16, `selection` 88/24, `mipmap_cache` 70/19,
   done; only the *handle source* is still the global. That is ~1,900 references of nearly
   mechanical work.
 - **`conf` shows what "done" looks like** for a genuinely global-by-nature service: 37 refs
-  in 3 files, every consumer goes through `dt_conf_get_*()` free functions with no handle.
+  in 3 files, every consumer going through `dt_conf_get_*()` free functions with no handle.
+  One call still takes the handle (`common/opencl.c:1011`), which is the whole remaining gap.
 - **`gui` and `control` are bundles of ~3 sub-services each**, not single dependencies:
   `gui` = the `ui` handle (348 refs — 178 of them just `dt_ui_main_window()`/`dt_ui_center()`)
   + the write-once `accels` registry (177) + scroll/DPI/mouse state (~200). `control` =
@@ -59,140 +63,142 @@ Then: `collection` 97/27, `undo` 91/16, `selection` 88/24, `mipmap_cache` 70/19,
 
 - **A — thread through existing args** (`dev`/`pipe`/`self`/`module`): the real injection.
 - **B — orchestrator-implemented accessor** (declared by the owning lib, implemented in
-  `darktable.c`; precedent: `dt_pixelpipe_cache_get_global()`,
-  `dt_get_num_openmp_threads()`): interim step that already frees lib headers from
-  darktable.h.
+  `darktable.c`; the surviving precedent is `dt_get_num_openmp_threads()`, at
+  `darktable.c:520`): interim step that already frees lib headers from darktable.h. Most of
+  the accessors this plan created have since been **deleted** by Strategy C — B is a staging
+  post, and a row that stops there has not finished.
 - **C — relocate ownership into the subsystem**: a file-static the subsystem sets at init,
   reached only through its own API. This is the end state for anything the application does
   not need to name; `src/colorprofiles` is the worked example (§3b).
 
-## 3b. Progress (updated as the migration lands)
+## 3b. Outcome (the migration has landed)
 
-Done (started on `refactor/strip-darktable-h`, continued on the branches after it):
+**The plan in §4 is done.** Measured on `2959bd4ec1` (2026-09-29), matched as
+`\bdarktable\.<member>\b` with comments and string literals stripped: **~5,400 → 467**
+references tree-wide, and **462 of those 467 are a translation unit reading the member it
+owns**, or `darktable.c` itself, which allocates the struct.
 
-| Member | Result | Note |
+Five cross-module references remain in the whole tree:
+
+| Site | Member | Why it is still there |
 |---|---|---|
-| the 9 path constants | 0 refs outside `file_location.c` | interned `dt_loc_datadir()` family |
-| `utc_tz`, `origin_gdt` | 0 outside `datetime.c` | `dt_datetime_utc_tz()`, `dt_datetime_origin()` |
-| `unmuted`, `unmuted_signal_dbg*` | 0 outside `darktable.c` | `dt_get_debug_flags()`, `dt_get_signal_debug{,_acts}()` |
-| `dtresources`, `start_wtime` | 0 outside `darktable.c` | `dt_get_total_mem()`, `dt_get_start_wtime()`, existing mem getters |
-| `num_openmp_threads` | 0 | `dt_get_num_openmp_threads()` (end state: it is a constant) |
-| `develop` **in `iop/`** | 289 → 0 | `self->dev` |
-| `image_cache`, `mipmap_cache`, `selection`, `undo` | 0 | `dt_*_get_global()` accessors (interim, Strategy B) |
-| `collection` | 0 | idem; `libs/tools/filter.c` still reads `->params`/`->tagid` directly — wrap in named API later |
-| `db` | 0 | two accessors: `dt_database_get_sqlite3_global()` (353 sites) + `dt_database_get_global()` (56) |
-| `signals` | 0 | `dt_control_signal_get_global()` — **end state**, not interim (see below) |
-| `develop` **in `develop/blend_gui.c`** | 52 → 0 | `module->dev`/`self->dev`, `data->module->dev`; 4 context-less helpers gained a dev parameter |
-| `gui` | 786 → 0 outside its owner | split by consumer: `dt_gui_main_window()`/`dt_gui_center_widget()` (148 sites), `dt_gui_get_ui()` (125), `dt_gui_get_accels()` (110), `dt_gui_get_global()` (197). The four sub-accessors are implemented in `gui/application.c`, which owns the struct; `dt_gui_get_global()` is in `darktable.c` with the other whole-member accessors |
-| `lib`, `imageio`, `l10n`, `dbus`, `points`, `noiseprofile_parser` | 0 | `dt_*_get_global()` — end state (process-wide singletons). Fixed a latent break: `common/points.h`'s inlines dereferenced the global without including darktable.h |
-| `opencl` | 0 **outside `common/opencl.c`** | `dt_opencl_get_global()`; external `->inited` reads use `dt_opencl_is_inited()`. The owner TU keeps direct access — see below |
-| `color_profiles` | **member deleted from `darktable_t`** | ownership relocated instead of wrapped: the single `dt_colorspaces_t` is file-static in `colorprofiles/colorspaces.c`, and `dt_colorspaces_get_global()` is `static` there. `dt_colorspaces_t` is named by no header outside `src/colorprofiles/` — see below |
-| `develop` **everywhere else** | 4 refs left tree-wide, from 962 | `dt_dev_get_global()` (296 sites) where no carrier exists, `self->dev`/`module->dev` where one does. The 4 are `control/control.c` reading `develop->progress` to draw the progress bar |
-| `control` | 0 outside `control/control.c` | `dt_control_get_global()` (122 sites) |
-| `bauhaus`, `pixelpipe_cache` | 0 | `dt_bauhaus_get_global()` (348), `dt_pixelpipe_cache_get_global()` (294) — end state for both, see the §3b correction below for the cache |
-| `view_manager` | 0 outside the dispatch points | `dt_view_manager_get_global()` (133). The direct reads left are `control/control.c` (13) and `gui/application.c` (3), i.e. the two event dispatchers |
-| `iop` (module SO list) | 0 outside `develop/imageop.c` | that TU loads and unloads the list, so it is the owner |
-| `guides`, `themes`, `iop_order_list/rules`, `capabilities` | 0 | getters (`dt_gui_get_themes()`, …) |
-| process-wide mutexes | 2 refs left | `exiv2_threadsafe` is the only one with direct external callers, both in `common/exif.cc`'s RAII `Lock`. `plugin_threadsafe`, `capabilities_threadsafe`, `readFile_mutex`, `pipeline_threadsafe` and `database_threadsafe` have none |
+| `control/control.c:641,645` (4) | `develop` | the progress bar reads `develop->progress.{total,completed}`; a carrier would mean giving `dt_control_t` a dev |
+| `common/opencl.c:1011` (1) | `conf` | `dt_conf_save(darktable.conf)` on OpenCL shutdown — the one `dt_conf_*` call that still takes the handle |
 
-Member references tree-wide (excluding `darktable.c` and include lines): **~5,400 → ~440** —
-and 395 of those 440 are a translation unit reading the member it owns (`control/control.c`
-135, `common/opencl.c` 125, `gui/application.c` 65, `common/conf.c` 32,
-`common/file_location.c` 25, `develop/imageop.c` 13). 25 are live cross-references; the rest
-occur in comments.
+`control/control.c` (16) and `gui/application.c` (3) also read `view_manager` directly. Those
+are **deliberate**: they are the two event dispatchers, which is the one place the target
+architecture allows resolving the current view.
 
-**Where `develop` now stands.** The carrier-based conversion is done everywhere a carrier
-exists (`iop/` via `self->dev`, the masks subsystem, `blend_gui.c`), and everywhere else goes
-through `dt_dev_get_global()`. `libs/` and `views/` call that accessor rather than a carrier
-on purpose: they are the **dispatch points** the target architecture allows — a view or a
-top-level panel may resolve the current develop instance; what must not happen is a leaf
-module reaching for it. `dt_lib_module_t` carries no dev, so giving panels one would mean
-adding it at lib-init — worth doing only if the goal is to make panels testable against a
-non-global develop, not as global-count reduction.
+### What Strategy C actually removed from `darktable_t`
 
-**Scope rule applied to subsystem-owned singletons**: the harm this migration targets is
-*distant* modules reaching into application state. A subsystem reading its own singleton
-(`common/opencl.c` → `darktable.opencl`, `control/control.c` → `darktable.control`,
-`common/conf.c` → `darktable.conf`, `gui/application.c` → `darktable.gui`) is a smaller,
-different problem, and its correct fix is **relocating ownership** into the subsystem (a
-file-static set at init by the subsystem itself), not an accessor indirection. Those
-owner-internal references are therefore deliberately left.
+The §4 table's closing note — "`color_profiles` is so far the only member whose state was
+actually relocated" — was true when written and has not been true since 2026-08-10. Fifteen
+members have left the struct entirely:
 
-`src/colorprofiles` is the worked example of that relocation, and shows what it buys. The
-accessor stage (`dt_colorspaces_get_global()`, public) left the profile list, its rwlock and
-its cached `cmsHTRANSFORM`s one dereference from anywhere; relocating the instance to a
-file-static in `colorprofiles/colorspaces.c` and making the accessor `static` is what forced
-every consumer onto an API, and the API is where the invariants could finally be stated —
-metadata crosses as value copies with no lock, pixel data crosses under
-`dt_colorspaces_lock_profiles()`/`_unlock_profiles()` with the transform never leaving the
-module. Several of the bugs closed on the way (use-after-free on the cached display
-transforms, torn reads of the display/soft-proof settings, an unsynchronised append to the
-derived-profile memo) were reachable *only* because the state was shared, and none of them
-was visible while it was. `tools/check_module_boundaries.sh` keeps both counts — external
-`dt_colorspaces_get_global()` calls, external `xprofile_lock` acquisitions — at zero.
+| Member(s) | Landed in | Where the state lives now |
+|---|---|---|
+| `opencl` | `9595da5396` (2026-08-10) | `static dt_opencl_t *_opencl` — `common/opencl.c:131`. `dt_opencl_get_global()` is **gone**, not interim: the API answers questions instead of handing out the struct |
+| `image_cache`, `mipmap_cache`, `pixelpipe_cache` | `c889e94dc6`, `157ac60b8f` (2026-08-10) | file-statics in `caches/image_cache.c:81`, `caches/mipmap_cache.c:133`, `caches/pixelpipe_cache.c:99`. All three accessors gone; the API takes no handle — `dt_image_cache_get(imgid, mode)`, `dt_dev_pixelpipe_cache_flush(id)` |
+| `db` | `44c7c0d2ad` (2026-08-10) | the member is still declared but has **zero** code references; `dt_database_get_global()` is gone, only `dt_database_get_sqlite3_global()` survives |
+| `collection`, `selection` | `3b967590a7` (2026-08-25) | `common/collection.c:136`, `common/selection.c:78` — and created by the GUI that uses them, not by every process |
+| `guides` | `abe99e8f43` (2026-08-25) | `static GList *_guides` — `gui/guides.c:47`; even the accessor is file-static |
+| `noiseprofile_parser` | `c11f789610` (2026-08-25) | deleted with the eager startup parse; `dt_noiseprofile_get_matching()` parses on first use |
+| `color_profiles` | see `doc/colorprofiles.md` | `static dt_colorspaces_t` in `colorprofiles/colorspaces.c`; `dt_colorspaces_get_global()` is `static` there and named by nothing outside |
+| `plugin_threadsafe`, `readFile_mutex`, `exiv2_threadsafe`, `database_threadsafe` | `8726c61a2d`, `db6eacb8dd` (2026-08-27) | **deleted, not relocated** — each was found to have no process-wide consumer left. `readFile()` is thread-safe; `database_threadsafe` moved inside `src/database` |
+| `utc_tz`, `origin_gdt` | earlier | `common/datetime.c` |
 
-**Refinement learned while migrating**: not every member should end up threaded through
-arguments. Three categories have emerged, and classifying a member *before* touching it
-avoids double churn:
+Five CI ratchets hold those closures at zero, each its own section of
+`tools/check_module_boundaries.sh`: **3.** colorprofiles, **4.** `common/opencl`,
+**5.** `src/caches`, **6.** `src/database`, **7.** `src/metadata`, **8.** `src/history`.
+Section **9.** is the one that is *not* closed yet — `src/develop/masks`, see
+`doc/masks-history.md`.
+
+### What is still on the struct, and why
+
+`darktable.h:172-231` still declares: `num_openmp_threads`, `unmuted`,
+`unmuted_signal_dbg{,_acts}`, `iop`, `iop_order_list`, `iop_order_rules`, `capabilities`,
+`conf`, `develop`, `lib`, `view_manager`, `control`, `signals`, `gui`, `bauhaus`, `db`,
+`points`, `imageio`, `dbus`, `undo`, `l10n`, the two remaining mutexes, the nine paths,
+`start_wtime`, `themes`, `dtresources`, `main_message`.
+
+Every one of them is read by its owner TU and by `darktable.c`, and by nothing else. Under
+the **scope rule** below that is the end state for most of them: the harm this migration
+targeted is *distant* modules reaching into application state, and a subsystem reading its
+own singleton is a different, smaller problem. Relocating the rest would be tidiness, not
+decoupling — with one exception worth doing: `control` (127 self-refs) and `gui` (50) are the
+two largest, and both are bundles of ~3 sub-services rather than single dependencies, so
+relocating either is a split, not a move.
+
+**Scope rule**: a subsystem reading its own singleton (`common/conf.c` → `darktable.conf`,
+`control/control.c` → `darktable.control`, `gui/application.c` → `darktable.gui`,
+`develop/imageop.c` → `darktable.iop`) is deliberately left. Its correct fix is relocating
+ownership into the subsystem, not an accessor indirection — and the five rows above show what
+that costs and what it buys.
+
+**Where `develop` stands.** The carrier-based conversion is done everywhere a carrier exists
+(`iop/` via `self->dev`, the masks subsystem, `blend_gui.c`); everywhere else goes through
+`dt_dev_get_global()`. `libs/` and `views/` call that accessor rather than a carrier on
+purpose: they are the **dispatch points** the target architecture allows. What must not
+happen is a leaf module reaching for it.
+
+### The three categories, and how to classify the next member
+
+Not every member should end up threaded through arguments. Classifying one *before* touching
+it is what avoids double churn:
 
 1. **App-lifetime constants** (paths, timezone, debug mask, thread count) — getters are the
-   final answer; threading them would add parameters carrying a value that cannot differ.
-2. **Process-wide buses with no per-call context** (`signals`, and `conf` already) — an
-   accessor/free-function API is the final answer for the same reason.
-3. **Service handles with a natural carrier** (`develop` → `self->dev`) — these are the real injection targets, and for
-   them the interim accessor is *churn*: convert them straight to the carrier instead.
+   final answer; threading them adds parameters carrying a value that cannot differ.
+2. **Process-wide buses with no per-call context** (`signals`, `conf`) — an accessor or
+   free-function API is the final answer, same reason.
+3. **Service handles with a natural carrier** (`develop` → `self->dev`) — the real injection
+   targets, and for them the interim accessor is *churn*: convert straight to the carrier.
 
-**Correction — `pixelpipe_cache` is category 2, not category 3.** §4 below ordered it for
-Strategy A (carry the handle on `dt_dev_pixelpipe_t`, which is indeed threaded everywhere).
-Examining the semantics instead of the reference counts shows that would advertise ownership
-that does not exist:
+**`pixelpipe_cache` is category 2, not category 3**, and §4 ordered it wrong. One cache serves
+**all** pipes, lookups are keyed by a global content hash rather than by pipe, and consumers
+legitimately operate across pipes or with no pipe at all — `iop/toneequal.c`'s
+`invalidate_luminance_cache()` releases an entry from a function holding only the module
+pointer. Carrying the handle on `dt_dev_pixelpipe_t` would have advertised ownership that does
+not exist. It ended as a file-static behind a handle-free API: `dt_dev_pixelpipe_cache_flush()`
+now takes `(const int id)` alone.
 
-- one cache serves **all** pipes — `dt_dev_pixelpipe_cache_flush(cache, id)` takes the owning
-  pipe id as a *parameter* precisely because entries from many pipes share one cache, and
-  lookups are keyed by a global content hash rather than by pipe;
-- consumers legitimately operate across pipes, or with no pipe at all: `iop/toneequal.c`'s
-  `invalidate_luminance_cache()` releases an entry held in GUI state from a function that has
-  only the module pointer, and the GUI peek path reads entries produced by a *different* pipe
-  than the caller's.
+**Generalisation**: decide a member's category from its *ownership semantics*, not from where
+a convenient carrier happens to be threaded.
 
-Cross-pipe callers would have to pick an arbitrary pipe just to reach the shared object, which
-is worse than an accessor because it misleads. `dt_pixelpipe_cache_get_global()` is therefore
-its **end state**. Generalisation: decide a member's category from its *ownership semantics*,
-not from where a convenient carrier happens to be threaded.
+### What the relocation bought, beyond the count
 
-## 4. Recommended order
+`src/colorprofiles` is the worked example. The accessor stage left the profile list, its
+rwlock and its cached `cmsHTRANSFORM`s one dereference from anywhere; relocating the instance
+to a file-static and making the accessor `static` is what forced every consumer onto an API,
+and the API is where the invariants could finally be stated. Several of the bugs closed on the
+way — use-after-free on the cached display transforms, torn reads of the display/soft-proof
+settings, an unsynchronised append to the derived-profile memo — were reachable *only* because
+the state was shared, and none of them was visible while it was.
 
-Every row below has had its **call sites** converted — no distant module names any of these
-members any more, bar `common/exif.cc`'s two acquisitions of `exiv2_threadsafe` in row 14
-(§3b is the record of what each became). What is still open is the second half,
-**Strategy C**: `color_profiles` is so far the only member whose state was actually
-relocated out of `darktable_t`; `opencl`, `control`, `gui`, `conf`, `view_manager` and the
-mutexes still live on the application struct, read directly by their owner TU. So rows
-marked `B→C` or `C` below have landed their B half only.
+## 4. The order it was done in, and the why worth keeping
 
-The table is kept for the *why*, which is what the next member of `darktable_t` needs: row 5
-is why a handle with no carrier at its call sites cannot take Strategy A, row 7 is why a
-cross-pipe singleton must not pretend to be pipe-owned. Files/refs/risk are the baseline
-estimates the order was planned from.
+Every row has landed. The table is kept for the reasoning, which is what the next member of
+`darktable_t` needs: row 5 is why a handle with no carrier at its call sites cannot take
+Strategy A, row 7 is why a cross-pipe singleton must not pretend to be pipe-owned. Files,
+refs and risk are the **baseline** estimates the order was planned from, not current numbers.
 
 | Order | Item | Strategy | Files | Refs | Risk |
 |---|---|---|---:|---:|---|
 | 0 | path constants, `utc_tz`/`origin_gdt`, `start_wtime`, `dtresources`, startup lists | getters | ~25 | ~370 | none |
-| 0b | `unmuted*` | accessor; landed as `dt_get_debug_flags()` in `common/logging.h`, tested as `dt_get_debug_flags() & DT_DEBUG_XXX` | 44 | 240 | none |
+| 0b | `unmuted*` | accessor; landed as `dt_get_debug_flags()` in `common/logging.h` | 44 | 240 | none |
 | 1 | `develop` in `iop/` | A (`self->dev`) | 54 | ~330 | very low |
-| 2 | `image_cache`, `undo`, `selection`, `mipmap_cache` | B→C | 98 | ~470 | low |
-| 3 | `collection` | B→C | 27 | 97 | low-med (import jobs mutate from workers) |
-| 4 | `db` | B (`dt_database_get_global()` collapses 353 sites) | 58 | 423 | medium (transaction rwlock semantics untouched) |
-| ~~5~~ | `bauhaus` | **DONE via accessor** — Strategy A infeasible: 71 of the constructor call sites pass `DT_GUI_MODULE(NULL)`, so there is no module to carry the handle. Note `widgets/bauhaus.c` itself had zero global refs (already fully parameterized). Follow-up, still open: ~110 theme-field reads (`graph_fg` 36, `pango_font_desc` 25, `quad_width` 18, …) want `dt_bauhaus_theme_*()` getters | 67 | 354 | — |
+| 2 | `image_cache`, `undo`, `selection`, `mipmap_cache` | B→**C done** (all but `undo`) | 98 | ~470 | low |
+| 3 | `collection` | B→**C done** | 27 | 97 | low-med (import jobs mutate from workers) |
+| 4 | `db` | B, then **C**: connection sealed inside `src/database` | 58 | 423 | medium |
+| ~~5~~ | `bauhaus` | accessor — Strategy A infeasible: 71 constructor call sites pass `DT_GUI_MODULE(NULL)`, so there is no module to carry the handle. `widgets/bauhaus.c` itself had zero global refs. **Still open**: ~110 theme-field reads want `dt_bauhaus_theme_*()` getters | 67 | 354 | — |
 | 6 | `signals` | B interim + context-sourced macros where `self` exists | 90 | 424 | medium (worker-thread raises) |
-| ~~7~~ | `pixelpipe_cache` | **DONE via accessor** — Strategy A rejected, see the §3b correction (cross-pipe singleton) | 28 | 282 | — |
+| ~~7~~ | `pixelpipe_cache` | **C** — Strategy A rejected, see above (cross-pipe singleton) | 28 | 282 | — |
 | 8 | `develop` outside `iop/` | A (darkroom keeps its refs: it IS a dispatch point) | 45 | ~630 | medium |
-| 9 | `opencl` | B for now (`dt_opencl_get_global()`) + `dt_opencl_is_inited()` for the `inited` flag; C — relocating the instance into `common/opencl.c` — is still open | 21 | 211 | medium |
-| 10 | `color_profiles` | C, and it went further than planned: the member is deleted, not wrapped. The display/soft-proof settings and `xprofile_lock` did move together, but into a file-static instance behind a CRUDE-metadata / lock-and-apply API, so no caller names the state at all | 18 | 124 | med-high |
-| 11 | `gui` | B, split by consumer rather than by sub-service: four narrow accessors (window, center widget, `ui`, `accels`) carry most sites, `dt_gui_get_global()` the remainder | 113 | 934 | low per-site, high volume |
-| 12 | `control` | B (`dt_control_get_global()`). The planned 3-way split (log-toast / progress / pointer) was not needed to close the call sites and has not been done | 36 | 291 | high (job-system core) |
-| 13 | `view_manager` — fix upward references from libs/ and common/ only | B (`dt_view_manager_get_global()`); `control/control.c` and `gui/application.c` keep direct reads, being the event dispatchers | ~16 | ~90 | low |
-| 14 | process-wide mutexes (`plugin_threadsafe`, `exiv2_threadsafe`, `readFile_mutex`, …) | relocate to owning TU as file-static + `dt_<x>_lock()` accessors — threading a process-global mutex through args only makes it easier to pass the wrong one | ~15 | ~80 | low |
+| 9 | `opencl` | B, then **C**: instance relocated into `common/opencl.c`, accessor deleted | 21 | 211 | medium |
+| 10 | `color_profiles` | **C**, and further than planned: the member is deleted, not wrapped | 18 | 124 | med-high |
+| 11 | `gui` | B, split by consumer: four narrow accessors (window, center widget, `ui`, `accels`) carry most sites, `dt_gui_get_global()` the remainder. **C not done** | 113 | 934 | low per-site, high volume |
+| 12 | `control` | B (`dt_control_get_global()`). The planned 3-way split (log-toast / progress / pointer) was not needed to close the call sites and has not been done. **C not done** | 36 | 291 | high (job-system core) |
+| 13 | `view_manager` | B; `control/control.c` and `gui/application.c` keep direct reads, being the event dispatchers | ~16 | ~90 | low |
+| 14 | process-wide mutexes | **deleted rather than relocated** — each was found to have no process-wide consumer left | ~15 | ~80 | low |
 
 ## 5. App-lifetime constants: getters, not parameters
 
@@ -202,8 +208,9 @@ signatures for a value that provably cannot differ between callers:
 - The 9 path members (`datadir`, `sharedir`, `moduledir`, `localedir`, `tmpdir`, `configdir`,
   `cachedir`, `kerneldir`, `progname`) are read only by `common/file_location.c`, which owns
   their init. The 8 directories have interned getters there — `dt_loc_datadir()`,
-  `dt_loc_sharedir()`, … in `common/file_location.h`; `progname` has none and is read only by
-  `darktable.c`. The older `char*,size_t` copy-outs (`dt_loc_get_datadir()`, …) still exist
+  `dt_loc_sharedir()`, … in `common/file_location.h`; `progname` has none and is *written*
+  once, at `darktable.c:911`, and read nowhere at all — the `progname` identifiers in
+  `apps/*/main.c` are unrelated `usage()` parameters. The older `char*,size_t` copy-outs (`dt_loc_get_datadir()`, …) still exist
   and still have most of the callers: an interned getter is the one to reach for in new code,
   but the copy-out is not deprecated and both return the same string.
 - `utc_tz`/`origin_gdt` → `dt_datetime_utc_tz()`/`dt_datetime_origin()` in `common/datetime.c`
