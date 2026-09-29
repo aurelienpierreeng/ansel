@@ -6,6 +6,7 @@
     Copyright (C) 2021 Ralf Brown.
     Copyright (C) 2022 Martin Bařinka.
     Copyright (C) 2023, 2025-2026 Aurélien PIERRE.
+    Copyright (C) 2026 Guillaume Stutin.
     
     darktable is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -309,6 +310,9 @@ static void rcd_demosaic(const dt_dev_pixelpipe_iop_t *piece, float *const restr
 
     float (*rgb)[RCD_TILESIZE * RCD_TILESIZE] =
       (void *)dt_pixelpipe_cache_alloc_align_float_cache((size_t)3 * RCD_TILESIZE * RCD_TILESIZE, 0);
+    // same for rgb: full tiles read elements no tile ever writes, and a recycled allocation holds
+    // whatever the last user left there
+    memset(rgb, 0, sizeof(float) * 3 * RCD_TILESIZE * RCD_TILESIZE);
 
     // No overlapping use so re-use same buffer
     float *lpf = PQ_Dir;
