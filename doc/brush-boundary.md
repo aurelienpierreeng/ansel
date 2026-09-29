@@ -1,7 +1,19 @@
 # The brush and polygon boundary: one geometry, two consumers
 
-Status: the brush landed in #1381 (issues #1352, #1360); the polygon, and the shared boundary
-pass, on `polygon-boundary`. Measured with `tests/masks/masks_geometry.c`; every number below
+> **Verified against `f37105c227` on 2026-09-29.** That pass found 4 claim(s) in this file
+> that were wrong of the tree and 4 that had gone stale; the ones corrected since carry a note
+> saying what they used to say. Anything not yet corrected is flagged inline. Re-measure before
+> acting on a claim older than the code you are changing, and re-date this line when you do.
+
+Status: **all landed on master** (verified `f37105c227`, 2026-09-29). The brush came in #1381
+(issues #1352, #1360); the polygon and the shared boundary pass followed in #1383 and after
+(`ee75df0d12`, `13164d17c5`, `0df01f6443`, `e3ecf4b242`, `2162fd259a`, all ancestors of HEAD).
+`dt_masks_outline_boundary_skips()` is the one shared pass, defined in
+`develop/masks/masks_outline.c` and called from both `brush.c` and `polygon.c`.
+
+*This line said the polygon work was "on `polygon-boundary`" until 2026-09-29. That branch no
+longer exists — `git rev-parse --verify polygon-boundary` fails — so the status read as
+"unmerged, do not rely on it" for work that had been on master for three weeks.* Measured with `tests/masks/masks_geometry.c`; every number below
 comes from that corpus or from the reporters' own files.
 
 ## What a brush is

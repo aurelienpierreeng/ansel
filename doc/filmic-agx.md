@@ -1,5 +1,10 @@
 # Filmic RGB "AgX" rendering — design report
 
+> **Verified against `f37105c227` on 2026-09-29.** That pass found 5 claim(s) in this file
+> that were wrong of the tree and 6 that had gone stale; the ones corrected since carry a note
+> saying what they used to say. Anything not yet corrected is flagged inline. Re-measure before
+> acting on a claim older than the code you are changing, and re-date this line when you do.
+
 Status: implemented (CPU + OpenCL), shipped 2026-07; the design is closed.
 Code: `src/iop/filmicrgb.c` (`filmic_agx*`, `filmic_agx_prepare_bracket`, perceptual
 sigmoid curve type), `data/kernels/filmic.cl` (sigmoid evaluator + `filmic_agx`

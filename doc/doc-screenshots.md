@@ -1,5 +1,10 @@
 # Documentation screenshots (`--doc`)
 
+> **Verified against `f37105c227` on 2026-09-29.** That pass found 4 claim(s) in this file
+> that were wrong of the tree and 6 that had gone stale; the ones corrected since carry a note
+> saying what they used to say. Anything not yet corrected is flagged inline. Re-measure before
+> acting on a claim older than the code you are changing, and re-date this line when you do.
+
 Refreshing the manual's illustrations used to mean taking a full-screen capture and cropping
 each widget out of it by hand, once per language. This mode lets the application draw the
 widgets itself, straight into the documentation tree, with the language code already in the

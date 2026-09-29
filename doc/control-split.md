@@ -1,5 +1,10 @@
 # Decomposing `src/control` — the god-header, the thread pool, and the GTK half
 
+> **Verified against `f37105c227` on 2026-09-29.** That pass found 13 claim(s) in this file
+> that were wrong of the tree and 33 that had gone stale; the ones corrected since carry a note
+> saying what they used to say. Anything not yet corrected is flagged inline. Re-measure before
+> acting on a claim older than the code you are changing, and re-date this line when you do.
+
 Measured 2026-08-15 by five parallel censuses (struct fields, scheduler, signal bus, header
 fan-in, upward reach), each attacked by a checker. `src/control` is 8168 lines over 19 files and
 carries **38 of the tree's 184 layering violations** — 21% of the debt in 2% of the code.
@@ -51,7 +56,7 @@ consumers for one `dt_control_log()` at line 298.
 destroyed: `global_mutex` leaks on every GUI run, `image_mutex` is referenced by nothing
 tree-wide. Headless initialises **two** (`darktable.c:1549-1550`) then locks six zeroed ones on
 reachable paths (`ansel-cli --import` → `film_jobs.c:96` → `progress.c:279`). One live
-use-after-free: `dt_control_draw_busy_msg` reads `darktable.main_message` unlocked at four
+use-after-free — **since fixed, see below**: `dt_control_draw_busy_msg` read `darktable.main_message` unlocked at four
 external sites (`gui/dtgtk/thumbnail.c:745`, `preview_window.c:148`, `views/slideshow.c:492`,
 `views/studio_capture.c:858`) while the pipeline worker `dt_free`s it per module per frame
 (`pixelpipe_hb.c:975` → `darktable.c:750-756`).

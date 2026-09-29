@@ -1,5 +1,10 @@
 # Decomposing `src/develop` — pipeline / params-history / GUI
 
+> **Verified against `f37105c227` on 2026-09-29.** That pass found 12 claim(s) in this file
+> that were wrong of the tree and 39 that had gone stale; the ones corrected since carry a note
+> saying what they used to say. Anything not yet corrected is flagged inline. Re-measure before
+> acting on a claim older than the code you are changing, and re-date this line when you do.
+
 Measured 2026-08-12 on `refactor/history-presentation`, by per-file symbol density, the
 include graph, and five parallel deep-reads of the entanglement knots (each finding cited
 by line number below; the full structured survey is in the PR discussion). This is the

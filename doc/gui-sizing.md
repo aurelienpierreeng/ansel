@@ -1,5 +1,10 @@
 # GUI sizing without a full pixel-less pipeline — analysis and plan
 
+> **Verified against `f37105c227` on 2026-09-29.** That pass found 2 claim(s) in this file
+> that were wrong of the tree and 9 that had gone stale; the ones corrected since carry a note
+> saying what they used to say. Anything not yet corrected is flagged inline. Re-measure before
+> acting on a claim older than the code you are changing, and re-date this line when you do.
+
 Written while fixing #1157, whose root cause is entangled with the virtual pipe's cost.
 
 **Status: superseded by what was actually built.** The maintainer picked option C, and

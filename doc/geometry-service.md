@@ -1,5 +1,10 @@
 # The geometry service — transforms as data, no virtual pipe
 
+> **Verified against `f37105c227` on 2026-09-29.** That pass found 9 claim(s) in this file
+> that were wrong of the tree and 10 that had gone stale; the ones corrected since carry a note
+> saying what they used to say. Anything not yet corrected is flagged inline. Re-measure before
+> acting on a claim older than the code you are changing, and re-date this line when you do.
+
 Decision record and tranche plan. The maintainer chose option C of `doc/gui-sizing.md`
 (on the #1162 branch; its measurements are restated here where needed): replace
 `dev->virtual_pipe` — a full pixel-less clone of all ~95 IOP modules plus history, resynced

@@ -1,5 +1,10 @@
 # Splitting `common/exif.cc`
 
+> **Verified against `f37105c227` on 2026-09-29.** That pass found 9 claim(s) in this file
+> that were wrong of the tree and 5 that had gone stale; the ones corrected since carry a note
+> saying what they used to say. Anything not yet corrected is flagged inline. Re-measure before
+> acting on a claim older than the code you are changing, and re-date this line when you do.
+
 Done. `common/exif.cc` (4775 lines) is now `metadata/exif.cc` (2225) and
 `common/xmp_sidecar.cc` (2683), with `metadata/exif_internal.h` holding what genuinely
 spans both.

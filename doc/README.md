@@ -51,6 +51,24 @@ Files carrying findings migrated from CLAUDE.md on 2026-09-29, each verified aga
 `masks-gui.md`, `masks-history.md`, `iop-notes.md`, `gtk-patterns.md`, `accelerators.md`,
 `collection.md`, `export.md`.
 
+## Which files have been verified, and which have not
+
+A file is only trustworthy to the extent someone has checked it against the code. As of
+**2026-09-29, against `f37105c227`**:
+
+- **Migrated and verified** (17 files) — written during the CLAUDE.md migration, every
+  falsifiable claim checked, then independently audited. That audit found six further wrong
+  claims, corrected in `9f91c0ceb8`: `accelerators.md`, `architecture-rules.md`, `collection.md`, `colorprofiles.md`, `export.md`, `gtk-patterns.md`, `highlights-reconstruction.md`, `image-mipmap-cache.md`, `interpolation.md`, `iop-notes.md`, `masks-geometry.md`, `masks-gui.md`, `masks-history.md`, `pipeline-cache.md`, `pipeline-history.md`, `preferences.md`, `raw-roi-cfa.md`.
+- **Pre-existing and verified** (15 files) — swept on 2026-09-29. The sweep found **106 wrong
+  claims, 58 of them HIGH severity**, across these files: `brush-boundary.md`, `color.md`, `control-split.md`, `darkroom-redraw.md`, `develop-split.md`, `doc-screenshots.md`, `drawlayer.md`, `exif-split.md`, `exiv2.md`, `filmic-agx.md`, `geometry-service.md`, `globals-migration.md`, `gui-sizing.md`, `history-split.md`, `image-type-detection.md`. Each now carries a header with its
+  own counts; the corrected ones say what they used to say.
+- **NOT YET VERIFIED** (25 files) — never checked against the tree by anyone. Treat every claim
+  in them as unconfirmed: `gtk-decoupling.md`, `gui.md`, `include-graph.md`, `include-hygiene-roadmap.md`, `lensfun-cost.md`, `lock-audit.md`, `masks-enclosure-p2.md`, `masks_history_dedup.md`, `nightly-distribution.md`, `opencl-math-accuracy.md`, `overlay-raster.md`, `rawdenoiseai.md`, `removal-undo.md`, `reorganisation.md`, `resizing-scaling.md`, `retouch-result-memo.md`, `selection.md`, `sentry.md`, `static-iop.md`, `studio-capture.md`, `supervisor.md`, `telemetry.md`, `thumbnail_color_management.md`, `thumbtable.md`, `xmp-crawler.md`.
+
+The single most valuable check is whether anything a file marks OPEN, TODO or "not yet fixed"
+has in fact been fixed. A stale OPEN sends a reader to re-derive a landed fix, and that is the
+specific failure that cost the most in CLAUDE.md.
+
 ## Working on the codebase structure
 
 `reorganisation.md` is the entry point: the module map (what each `src/` directory is for, and

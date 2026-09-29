@@ -1,5 +1,10 @@
 # Exiv2 in Ansel
 
+> **Verified against `f37105c227` on 2026-09-29.** That pass found 4 claim(s) in this file
+> that were wrong of the tree and 7 that had gone stale; the ones corrected since carry a note
+> saying what they used to say. Anything not yet corrected is flagged inline. Re-measure before
+> acting on a claim older than the code you are changing, and re-date this line when you do.
+
 Ansel builds its own Exiv2, from the `src/external/exiv2` submodule, pinned at **v0.27.7**
 and linked **statically** into `lib_ansel`. This is the default on every platform.
 

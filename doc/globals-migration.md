@@ -1,5 +1,10 @@
 # `darktable_t` globals — usage evaluation and dependency-injection migration plan
 
+> **Verified against `f37105c227` on 2026-09-29.** That pass found 15 claim(s) in this file
+> that were wrong of the tree and 11 that had gone stale; the ones corrected since carry a note
+> saying what they used to say. Anything not yet corrected is flagged inline. Re-measure before
+> acting on a claim older than the code you are changing, and re-date this line when you do.
+
 Goal (2026-08): the `darktable` global must be dispatched **once** to high-level callers
 (views, main loops, job entry points); all internal modules inherit what they need through
 **function input arguments**.

@@ -1,5 +1,10 @@
 # Splitting history out of `develop/` — point 3, fork (b)
 
+> **Verified against `f37105c227` on 2026-09-29.** That pass found 8 claim(s) in this file
+> that were wrong of the tree and 8 that had gone stale; the ones corrected since carry a note
+> saying what they used to say. Anything not yet corrected is flagged inline. Re-measure before
+> acting on a claim older than the code you are changing, and re-date this line when you do.
+
 Measured on `refactor/history-presentation`, after that branch removed the *accidental*
 upward edges (`control/`, `views/`, `libs/`, `widgets/`). What is left is `develop/` only,
 and this is the plan for it.

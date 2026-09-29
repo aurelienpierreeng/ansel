@@ -1,5 +1,10 @@
 # The drawlayer module
 
+> **Verified against `f37105c227` on 2026-09-29.** That pass found 9 claim(s) in this file
+> that were wrong of the tree and 17 that had gone stale; the ones corrected since carry a note
+> saying what they used to say. Anything not yet corrected is flagged inline. Re-measure before
+> acting on a claim older than the code you are changing, and re-date this line when you do.
+
 `src/iop/drawlayer.c` plus `src/iop/drawlayer/` is a painting layer: a full-resolution RGBA
 canvas per layer, a brush that stamps dabs into it, a sidecar TIFF that stores it, and a
 composite into the pipe. This note is the map — what the parts are, which thread owns what,

@@ -1,5 +1,10 @@
 # Color and color spaces
 
+> **Verified against `f37105c227` on 2026-09-29.** That pass found 2 claim(s) in this file
+> that were wrong of the tree and 5 that had gone stale; the ones corrected since carry a note
+> saying what they used to say. Anything not yet corrected is flagged inline. Re-measure before
+> acting on a claim older than the code you are changing, and re-date this line when you do.
+
 [TOC]
 
 Along the pipeline, we use different color spaces, depending on what we want to represent and how we want to manipulate pixels. Color spaces are chosen for their properties regarding the task to achieve, and it should not be assumed that, because a GUI slider works in Ych or Lch (for example), the pixel operation will (or should) run in those spaces.

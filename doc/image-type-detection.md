@@ -1,5 +1,10 @@
 # Image type detection & the early-pipeline contract
 
+> **Verified against `f37105c227` on 2026-09-29.** That pass found 7 claim(s) in this file
+> that were wrong of the tree and 9 that had gone stale; the ones corrected since carry a note
+> saying what they used to say. Anything not yet corrected is flagged inline. Re-measure before
+> acting on a claim older than the code you are changing, and re-date this line when you do.
+
 ## Why this exists
 
 The "type" of an input image — what early decoding it needs (demosaic? black/white
@@ -109,9 +114,15 @@ overlapping conditions, **no filename-extension sniffing**:
   matrix correction (issue #729).
 
 - `dt_image_is_hdr(img)` / `dt_image_is_ldr(img)` — flag-only tests of `DT_IMAGE_HDR` /
-  `DT_IMAGE_LDR`. The filename sniffing they used to do is gone; the flags are now set from the
-  **decoded buffer datatype** (see below), so they report what was actually loaded rather than what
-  the extension suggested. Kept as API so callers don't open-code the bitmask test. A float
+  `DT_IMAGE_LDR`. The filename sniffing they used to do is gone.
+
+  > **Correction, 2026-09-29.** This said the flags "are now set from the **decoded buffer
+  > datatype**". Read `dt_image_is_hdr()` in `common/image.c` today and it is a plain
+  > `(img->flags & DT_IMAGE_HDR) != 0` — a flag test, with nothing deriving that flag from the
+  > decoded datatype at the point these predicates are called. Whatever set it did so earlier,
+  > and the Roadmap below marks the stage that was supposed to establish it as "(done)". Treat
+  > the datatype-derived guarantee as NOT in force until someone re-establishes it; the
+  > predicates report whatever last wrote the flag. Kept as API so callers don't open-code the bitmask test. A float
   *mosaiced* raw is flagged both `RAW` and `HDR`, so the class decision tests raw colorimetry
   *before* HDR (see the decision order above).
 
