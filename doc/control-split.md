@@ -185,15 +185,14 @@ looking.
 
 **The signal bus is dead in every headless run, and now says so.** `darktable.c:1540` reads
 `darktable.signals = init_gui ? dt_control_signal_init() : NULL;` (commit `b2f672b75d`, "signals:
-only the GUI gets the signal system"), so headless has no bus to raise on and
-`dt_control_signal_raise` returns at `signal.c:373` on `IS_NULL_PTR(ctlsig)` — before the
-`!dt_control_running()` gate at :375, which was the *only* thing stopping it when this was
-written. Either way the bus never fires headless: the structural reason the four notify/handler
-seams had to be invented. Both gates still return *before* `va_start`, so the four
-ownership-transferring
-signals leak their `GList`/`gchar*` on every drop (`caches/image_cache.c:542` leaks one node per
-`dt_image_cache_write_release()` in every CLI export). Fixing the gate position is cheap; flipping
-the bus live headless is a behaviour change for 52 signals and belongs in its own PR.
+only the GUI gets the signal system"), so headless has no bus to raise on. The second gate,
+`dt_control_running()`, is false there too: `running` is set by `dt_control_jobs_init()`
+(`jobs.c:649`), which only `dt_control_init()` calls, and only under `init_gui`. Either way the
+bus never fires headless — the structural reason the four notify/handler seams had to be
+invented. A dropped signal still has its arguments collected, and the four that take ownership
+of a `GList`/`gchar*` run their destructor on them (`_signal_release_unsent()`), so the list
+`dt_image_cache_write_release()` hands the bus in every CLI export is freed. Flipping the bus
+live headless is a behaviour change for 52 signals and belongs in its own PR.
 
 **`log_busy` gates the cursor** — `dt_control_commit_cursor` early-returns on it
 (`control.c:330`), `dt_control_expose` picks the progress cursor from it (`control.c:581-588`).
