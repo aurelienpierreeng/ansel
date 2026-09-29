@@ -38,8 +38,40 @@ on:
   workflow_dispatch:
 
 jobs:
-  Win64:
+  # The cron fires whether master moved or not. Before this job, every night on an unchanged
+  # head rebuilt the installer and then failed to publish it, the release already holding that
+  # commit's package. The release is asked first; tools/nightly_published.sh matches the commit
+  # hash in the asset names. A manual dispatch builds anyway, since rebuilding on purpose is
+  # what someone dispatching wants.
+  published:
     if: github.repository == 'aurelienpierreeng/ansel' || github.event_name == 'workflow_dispatch'
+    name: Is this commit already published
+    runs-on: ubuntu-latest
+    outputs:
+      build: ${{ steps.check.outputs.build }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.ref_name }}
+          fetch-depth: 1
+          submodules: false
+      - name: Ask the release
+        id: check
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          EVENT: ${{ github.event_name }}
+        run: |
+          if [ "${EVENT}" != "workflow_dispatch" ] && tools/nightly_published.sh \
+            'ansel-@VERSION@-win64.exe'; then
+            echo "already published for this commit, not rebuilt"
+            echo "build=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "build=true" >> "$GITHUB_OUTPUT"
+          fi
+
+  Win64:
+    needs: published
+    if: ${{ needs.published.outputs.build == 'true' }}
     name: Nightly Ansel Win64 build
     runs-on: windows-latest
     strategy:
@@ -133,7 +165,7 @@ jobs:
 
   upload_to_release:
     runs-on: ubuntu-latest
-    needs: Win64
+    needs: [published, Win64]
     env:
       REPO: "https://github.com/aurelienpierreeng/ansel"
       ROOM: "!SgRYbzspwqwwUgSQHC:matrix.org"
@@ -153,6 +185,20 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: ansel.stable.win64
+      # GitHub stores an asset name reduced to [A-Za-z0-9._-], so the `~' a version string
+      # carries is filed as `.'. tip decides what to REPLACE by comparing its local filenames
+      # with the release's assets, so a file still spelled with `~' never matches the asset it
+      # should replace: tip uploads it as new and GitHub answers 422 already_exists. Renaming
+      # here hands tip the name the release will use, so a dispatched rebuild of a published
+      # commit replaces its package instead of failing.
+      - name: Name the packages the way the release will
+        run: |
+          for f in ansel-*.exe; do
+            [ -e "${f}" ] || continue
+            case "${f}" in
+              *'~'*) mv -- "${f}" "${f//\~/.}" ;;
+            esac
+          done
       - name: Update nightly release
         uses: aurelienpierreeng/tip@master
         with:

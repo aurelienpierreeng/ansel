@@ -194,6 +194,24 @@ Measured on 2026-09-15: the step died on the arm64 name and took a perfectly goo
 it. The rename is also the one place that knows this spelling, so the Matrix notification uses
 the names verbatim instead of converting them again.
 
+**Only the architectures the release lacks for this commit are built.** The cron fires whether
+master moved or not, and every night on an unchanged head used to rebuild both DMGs, after which
+`tip` *replaced* the identical packages already in the release — `f484018567` was built and
+republished four nights running, the Intel half at up to six hours each. A first job,
+`published`, asks `tools/nightly_published.sh` for each architecture's asset and hands the build
+job the filtered matrix, so the matrix itself is defined there as JSON. The decision is per
+architecture: an Intel job killed at the ceiling leaves the arm64 DMG published, and the next
+night rebuilds Intel alone. When nothing is left, the build job is skipped (an empty matrix is an
+error to GitHub, not a no-op) and so is publishing, which would otherwise fail on finding no DMG.
+A manual dispatch skips the question and builds everything.
+
+The Linux and Windows nightlies ask the same question through a `published` job of their own,
+all or nothing since each builds one package. On an unchanged head they used to rebuild and then
+fail to publish: their files carry the `~` of the version string, so `tip` did not recognise the
+asset already there and GitHub refused the duplicate with `422 already_exists`. Both now also
+rename `~` to `.` before `tip`, as macOS does, so a manual dispatch on a published commit
+replaces the package instead of failing.
+
 ## Secrets and settings to create
 
 All on the `ansel` repository. Every one is optional in the sense that its step is
