@@ -16,6 +16,7 @@
     Copyright (C) 2021-2022 Hanno Schwalm.
     Copyright (C) 2022 Martin Bařinka.
     Copyright (C) 2024 Alynx Zhou.
+    Copyright (C) 2026 Guillaume Stutin.
     
     darktable is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -110,6 +111,14 @@ static inline int _align_close(int n, int a)
 static inline int _maximum_number_tiles()
 {
   return 10000;
+}
+
+/* Below this, a tiled run keeps the whole input and output plus tiles of both: process() is no
+ * worse, and default_process_tiling() falls back to it. */
+static inline gboolean _tiling_saves_memory(const dt_develop_tiling_t *tiling, const dt_iop_roi_t *roi_in,
+                                            const int max_bpp)
+{
+  return tiling->factor >= 2.2f || tiling->overhead >= 0.2f * roi_in->width * roi_in->height * max_bpp;
 }
 
 static inline void _print_roi(const dt_iop_roi_t *roi, const char *label)
@@ -259,10 +268,7 @@ static int _default_process_tiling_ptp(struct dt_iop_module_t *self, const struc
   dt_develop_tiling_t tiling = { 0 };
   self->tiling_callback(self, pipe, piece, &tiling);
 
-  /* tiling really does not make sense in these cases. standard process() is not better or worse than we are
-   */
-  if((tiling.factor < 2.2f)
-     && (tiling.overhead < 0.2f * roi_in->width * roi_in->height * max_bpp))
+  if(!_tiling_saves_memory(&tiling, roi_in, max_bpp))
   {
     dt_print(DT_DEBUG_TILING, "[default_process_tiling_ptp] no need to use tiling for module '%s' as no real "
                            "memory saving to be expected\n", self->op);
@@ -520,9 +526,7 @@ static int _default_process_tiling_roi(struct dt_iop_module_t *self, const struc
   dt_develop_tiling_t tiling = { 0 };
   self->tiling_callback(self, pipe, piece, &tiling);
 
-  /* tiling really does not make sense in these cases. standard process() is not better or worse than we are
-   */
-  if((tiling.factor < 2.2f && tiling.overhead < 0.2f * roi_in->width * roi_in->height * max_bpp))
+  if(!_tiling_saves_memory(&tiling, roi_in, max_bpp))
   {
     dt_print(DT_DEBUG_TILING, "[default_process_tiling_roi] no need to use tiling for module '%s' as no memory saving is expected\n",
              self->op);
@@ -1460,6 +1464,19 @@ void default_tiling_callback(struct dt_iop_module_t *self, const struct dt_dev_p
   }
 
   return;
+}
+
+gboolean dt_tiling_piece_can_save_memory(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_t *pipe,
+                                         const struct dt_dev_pixelpipe_iop_t *piece, const int in_bpp)
+{
+  // a module bringing its own process_tiling() decides for itself
+  if(self->process_tiling != default_process_tiling) return TRUE;
+
+  // the module's own requirement, as default_process_tiling() reads it: not the one aggregated
+  // with blending, which is never tiled
+  dt_develop_tiling_t tiling = { 0 };
+  self->tiling_callback(self, pipe, piece, &tiling);
+  return _tiling_saves_memory(&tiling, &piece->roi_in, _max(in_bpp, piece->dsc_out.bpp));
 }
 
 int dt_tiling_piece_fits_host_memory(const size_t width, const size_t height, const unsigned bpp,
