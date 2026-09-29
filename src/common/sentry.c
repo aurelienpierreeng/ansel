@@ -1,6 +1,7 @@
 /*
     This file is part of Ansel,
     Copyright (C) 2026 Aurélien PIERRE.
+    Copyright (C) 2026 Guillaume Stutin.
 
     Ansel is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -676,11 +677,19 @@ void dt_sentry_shutdown(void)
 
 #else // !HAVE_SENTRY
 
+/* Every function sentry.h declares has a twin here. No CI configuration builds OpenCL without
+ * Sentry, so a twin missing for a function only OpenCL code calls fails no CI build, and fails a
+ * packager's link. */
+
 void dt_sentry_init(const gboolean have_gui)
 {
 }
 
 void dt_sentry_shutdown(void)
+{
+}
+
+void dt_sentry_add_crash_observer(dt_sentry_crash_observer_t observer)
 {
 }
 
