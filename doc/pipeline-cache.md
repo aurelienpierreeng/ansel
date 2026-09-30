@@ -881,7 +881,7 @@ image, with the same history, produce the same value?
 
 ### What a module reads from the pipe belongs in its key
 
-*Found `d407c82954`, 2026-09-29.*
+*Found `540130f59d`, 2026-09-29.*
 
 The key of a piece covers its parameters, not the pipe state its processing reads. Dither read
 two things there: the precision and channels of the output format, `pipe->levels`, which its
@@ -1156,7 +1156,7 @@ What goes: an identical re-export no longer finds its final output.
 
 ### An arena allocation is not zeroed: a module must not read what it did not write
 
-*Found `1fb2281865`, 2026-09-29. RCD and `lens` re-measured against `26735701f6`, 2026-09-30.*
+*Found `1fb2281865`, 2026-09-29. RCD and `lens` re-measured against `119b6c8cd1`, 2026-09-30.*
 
 `dt_pixelpipe_cache_alloc_align_*()` hands out arena memory. Fresh pages read zero; a recycled
 allocation holds whatever its last user left. A module reading elements it never wrote is

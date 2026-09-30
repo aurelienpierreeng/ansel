@@ -99,7 +99,7 @@ bug; "it only misbehaves with lens correction enabled" is the right one.
 
 ### RCD's own tiles need a 10-pixel border, the image edge included
 
-*Found `26735701f6`, 2026-09-30.*
+*Found `119b6c8cd1`, 2026-09-30.*
 
 RCD (`iop/demosaic/rcd.c`) demosaics in 112x112 tiles of its own and keeps each tile's interior.
 Step 1.2 cannot compute `VH_Dir` in a tile's outer 4 rows and columns, yet step 3.1 reads it one
