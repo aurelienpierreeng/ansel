@@ -121,6 +121,10 @@ typedef void (*dt_control_running_jobs_foreach_callback_t)(const char *descripti
 void dt_control_running_jobs_foreach(struct dt_control_t *control,
                                      dt_control_running_jobs_foreach_callback_t callback, void *data);
 
+/** How many jobs wait for a worker: those of the queues, and the one a reserved worker has not
+ * taken yet. Once dt_control_running() is false, none of them will run. */
+int32_t dt_control_queued_jobs_count(struct dt_control_t *control);
+
 int dt_control_add_job(struct dt_control_t *control, dt_job_queue_t queue_id, dt_job_t *job);
 int32_t dt_control_add_job_res(struct dt_control_t *s, dt_job_t *job, int32_t res);
 

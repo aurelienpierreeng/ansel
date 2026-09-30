@@ -68,9 +68,11 @@ progress (`dt_control_progress_foreach()`, `control/progress.c:411`), what they 
 doing: `exporting 3 / 20 to disk`. It cannot be closed and it goes away with the last job. A quit
 that is over within the second shows nothing.
 
-Under *Details*, collapsed by default, a list names the running jobs, one row each, from
+Under *Details*, folded by default, a list names the running jobs, one row each, from
 `dt_control_running_jobs_foreach()` (`control/jobs.c:549`), in two columns, *Type* and
-*Description*. The queued jobs are not listed: a quit drops them. The list sits in the recessed
+*Description*. The queued jobs are not listed but counted, from `dt_control_queued_jobs_count()`
+(`control/jobs.c:571`), in a line under the list that says they were not started and are dropped;
+the line shows only when there are some. The list sits in the recessed
 frame of Ansel's other lists (`.dt_recessed_scroll`), dark behind a tree view the theme leaves
 transparent, and scrolls past 300 px (at 96 dpi). It is rebuilt only when what it lists changes. A
 job's kind is the queue it was added to: *Image operation*, *Thumbnail*, *Background task*,
@@ -83,8 +85,8 @@ worker's running job is held nowhere else, so `dt_control_run_job_res()` records
 Measured on top of `cc1400c7b9`, with the method of *What it costs* and the quit 5 s after
 launch, on a version of the list that also counted the queued jobs: at 1.03 s into the wait it
 read three running thumbnails (`get image 2`, `3`, `4`), then 19 queued `save xmp` jobs of the
-import and 16 queued thumbnails. The list as it stands, running jobs only, was compiled and not
-run.
+import and 16 queued thumbnails. The details as they stand, the running jobs listed and the queued
+ones counted, were compiled and not run.
 
 **A job that needs the GUI thread gets it.** Two waits in the tree block a worker until the GUI
 thread has run something for it: a synchronous signal raised from a worker (`control/signal.c`,
@@ -152,14 +154,14 @@ of jobs still running. Two things had to hold for it to reach 0 on its own.
 **A quit wakes every thread that is waiting.** A worker reads `running` at the top of its loop,
 finds no job, then waits on the condition. A quit landing between the two used to broadcast to
 nobody; the worker slept until the kicker's next turn. The workers now re-read `running` under
-`cond_mutex` — the mutex it is cleared under — right before waiting (`control/jobs.c:607`,
-`:662`), so the quit either finds them waiting or stops them from starting to.
+`cond_mutex` — the mutex it is cleared under — right before waiting (`control/jobs.c:622`,
+`:677`), so the quit either finds them waiting or stops them from starting to.
 
 **The kicker does not sleep through a quit.** It used to `sleep(2)` between two broadcasts, and
 `dt_control_shutdown()` joined it first: every quit waited for what was left of those two
 seconds. Measured on an idle lighttable before the change, quits requested 0.5 s apart took 0.90,
 0.37, 1.86, 1.39 and 0.89 s — a sawtooth of period 2 s. The kicker now spends its two seconds in
-`pthread_cond_timedwait()` on the workers' condition (`control/jobs.c:617`): the quit's broadcast
+`pthread_cond_timedwait()` on the workers' condition (`control/jobs.c:632`): the quit's broadcast
 ends the wait, any other broadcast resumes it against the same deadline, so the kicks keep their
 pace. The same five quits take 0.32 to 0.35 s.
 
@@ -169,11 +171,12 @@ needs the queue test under `cond_mutex`, which is PR 13 of `control-split.md`.
 
 ## Open
 
-- **Queued jobs are dropped, silently.** A second export queued behind the first never runs if
+- **Queued jobs are dropped.** A second export queued behind the first never runs if
   the user quits, and neither do the sidecar writes an import leaves queued: in the measurement
   above, 41 of the 60 `save xmp` jobs had run, counted by their `[run_job-]` lines, and the 19
-  others never did. The window lists the running jobs only. Whether a quit should run some queues
-  to their end is a decision nobody has taken.
+  others never did. The window says how many, under its list, once it is up; a quit over within
+  the second drops them unseen, and nowhere does it say which. Whether a quit should run some
+  queues to their end is a decision nobody has taken.
 - **A thumbnail being rendered cannot be abandoned.** The 1.4 – 7.6 s above are spent finishing
   four images nobody will look at. `dt_dev_pixelpipe_has_shutdown()` is what a pipeline polls,
   and nothing raises it for a thumbnail pipe at quit.
