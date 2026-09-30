@@ -1194,6 +1194,19 @@ two poisons leave its output bit-identical. RCD's image border had the same faul
 pixels' alpha was never written on the CPU (`rcd_ppg_border()`), and in OpenCL
 `border_interpolate` wrote an uninitialised `w`.
 
+*Found on top of `4306d5f952`, 2026-10-01.* In OpenCL, the three `lens_distort_*` kernels sample
+alpha along with green and used to write it out whether or not a mask was displayed: their alpha
+was the input's, resampled, where the CPU writes 0. Not a read of unwritten memory, but a GPU output
+that is not the CPU's. On a NIKON Z 6 raw (6064x4040 out), `lens`'s input alpha is 0 everywhere, so
+nothing showed. Overwriting the input's alpha with ±5.7e7 just before the kernel (read back with
+`dt_opencl_copy_device_to_host()` in `process_cl()`, written with
+`dt_opencl_write_host_to_device()`) put nonzero alpha on 23.9 M (bilinear) and all 24.5 M
+(bicubic, mitchell) of the 24.5 M output pixels. The kernels now take the mask-display flag and
+write 0 outside it: with the same poison their output is bit-identical to the unpoisoned one, and
+with the flag forced on it is bit-identical to the old kernels', poisoned or not. The exported
+image is the same in every case, `colorin` rewriting alpha. Where nothing moves (the copy and
+`lens_vignette`), `lens` carries its input's alpha, on the CPU and in OpenCL alike.
+
 To look for others: poison with a large FINITE value. NaN is absorbed by `fmaxf()` and by
 comparisons, and `-d nan` fills only the output buffer and checks only its RGB channels. In OpenCL,
 fill each buffer after allocation from a host buffer holding the poison
