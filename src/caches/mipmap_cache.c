@@ -683,16 +683,25 @@ void dt_mipmap_cache_allocate_dynamic(void *data, dt_cache_entry_t *entry)
               imgid, mip, jpg.width, jpg.height);
 
 finish:
-    if(f && io_error)
+    dt_free_align(blob);
+
+    /* Closed BEFORE the unlink, not after. On Windows DeleteFileW refuses a file that any handle
+     * still has open without FILE_SHARE_DELETE, which the CRT's fopen never sets -- so with the
+     * order reversed the removal always failed, silently, and a corrupt or truncated entry could
+     * never be cleared: it was re-read, re-rejected and re-logged on every start, for good. */
+    if(f)
+    {
+      fclose(f);
+      f = NULL;
+    }
+
+    if(io_error)
     {
       // Delete the file, we will regenerate it
       g_unlink(filename);
       fprintf(stderr, "[mipmap_cache] failed to open thumbnail for image %" PRIu32 " from `%s'. Reason: %s\n",
               imgid, filename, error);
     }
-
-    dt_free_align(blob);
-    if(f) fclose(f);
   }
 
   // cost is just flat one for the buffer, as the buffers might have different sizes,
@@ -719,6 +728,104 @@ static void dt_mipmap_cache_unlink_ondisk_thumbnail(void *data, int32_t imgid, d
   }
 }
 
+/** @brief Is there anything in this entry worth putting on disk?
+ *
+ * Three ways an entry can hold bytes that must not become a cached thumbnail, and the old test --
+ * `width > 8 && height > 8` -- caught only the third:
+ *
+ * - **It was never generated.** A fresh entry is initialised to the mip's full dimensions over an
+ *   uninitialised dt_alloc_align() block, with GENERATE set (dt_mipmap_cache_update_buffer_addresses()).
+ *   Those dimensions are far above 8, so the size test passes and the JPEG encoder is handed
+ *   whatever the allocator returned. Such an entry is left in the cache deliberately, by the abort
+ *   path in _generate_blocking(): every widget resize or image change in the async surface fetcher
+ *   raises the shutdown atomic, and the render that was in flight restores the original dimensions
+ *   and keeps GENERATE. So this is the common case, not a corner: scrolling a filmstrip leaves them
+ *   behind, and eviction or dt_cache_cleanup() at exit used to write each one out as a thumbnail of
+ *   uninitialised heap.
+ * - **It was invalidated.** Handled by the caller: an invalidated entry unlinks its file and writes
+ *   nothing, which is the `else` that used to be missing.
+ * - **It is a skull.** The 8x8 dead image _paint_skulls() leaves behind when a render failed.
+ *
+ * @param dsc the entry's descriptor, already unpoisoned.
+ */
+static gboolean _entry_holds_a_thumbnail(const struct dt_mipmap_buffer_dsc *dsc)
+{
+  if(dsc->flags & DT_MIPMAP_BUFFER_DSC_FLAG_GENERATE) return FALSE;
+  return dsc->width > 8 && dsc->height > 8;
+}
+
+/** @brief Is there room on the filesystem holding @p dirname for one more thumbnail?
+ *
+ * Answered for the DIRECTORY, before anything is created in it -- the probe used to run on the
+ * output file, which meant opening (and so truncating) it first, and a check made after the file
+ * exists cannot prevent anything.
+ *
+ * A probe that cannot answer returns TRUE. It used to abort the write, which on a path statvfs()
+ * could not resolve -- a UNC share, a redirected %LOCALAPPDATA%, a drive mounted as a folder --
+ * silently killed every thumbnail write there. An unanswerable question is not a failure: go ahead
+ * and let the write itself fail if it must.
+ */
+static gboolean _disk_has_room_for_a_thumbnail(const char *dirname)
+{
+  struct statvfs vfsbuf;
+  if(statvfs(dirname, &vfsbuf)) return TRUE;
+
+  const int64_t free_mb = (((int64_t)vfsbuf.f_frsize * (int64_t)vfsbuf.f_bavail) >> 20);
+  if(free_mb < 100)
+  {
+    fprintf(stderr, "[mipmap_cache] not writing to the disk cache: only %" PRId64 " MB free on `%s'\n",
+            free_mb, dirname);
+    return FALSE;
+  }
+  return TRUE;
+}
+
+/** @brief Serialise one generated thumbnail into the on-disk cache. */
+static void _write_thumbnail_to_disk_cache(struct dt_mipmap_buffer_dsc *dsc, const int32_t imgid,
+                                           const dt_mipmap_size_t mip)
+{
+  gchar cache_path[DT_PATH_MAX] = { 0 };
+  dt_mipmap_get_cache_dir(cache_path, mip);
+  if(g_mkdir_with_parents(cache_path, 0750)) return;
+
+  if(!_disk_has_room_for_a_thumbnail(cache_path)) return;
+
+  char filename[DT_PATH_MAX] = { 0 };
+  dt_mipmap_get_cache_filename(filename, mip, imgid);
+
+  const uint8_t *exif = NULL;
+  int exif_len = 0;
+  if(dsc->color_space == DT_COLORSPACE_SRGB)
+  {
+    exif = dt_mipmap_cache_exif_data_srgb;
+    exif_len = dt_mipmap_cache_exif_data_srgb_length;
+  }
+  else if(dsc->color_space == DT_COLORSPACE_ADOBERGB)
+  {
+    exif = dt_mipmap_cache_exif_data_adobergb;
+    exif_len = dt_mipmap_cache_exif_data_adobergb_length;
+  }
+
+  /* dt_imageio_jpeg_write() opens, writes and closes the file itself, and returns non-zero on
+   * failure -- which is the only answer needed here. It used to be called with the same path
+   * already open on a FILE * of ours, opened "wb" purely to test writability: that truncated the
+   * file before the space check ran, held a second handle on it for the whole write, and left the
+   * g_unlink() below unable to remove anything on Windows, where DeleteFileW refuses a file with an
+   * open handle that lacks FILE_SHARE_DELETE -- which the CRT's fopen never sets. */
+  const int cache_quality = _settings_get().cache_quality;
+  if(dt_imageio_jpeg_write(filename, _get_buffer_from_dsc(dsc), dsc->width, dsc->height,
+                           MIN(100, MAX(10, cache_quality)), exif, exif_len))
+  {
+    g_unlink(filename);
+    fprintf(stderr, "[mipmap_cache] failed to write image %i at size %i to the disk cache at `%s'\n", imgid,
+            mip, filename);
+    return;
+  }
+
+  _cache_print(DT_DEBUG_CACHE, "[mipmap_cache] image %i for size %i was written to cache at %s\n", imgid, mip,
+               filename);
+}
+
 void dt_mipmap_cache_deallocate_dynamic(void *data, dt_cache_entry_t *entry)
 {
   dt_mipmap_cache_t *cache = (dt_mipmap_cache_t *)data;
@@ -726,82 +833,40 @@ void dt_mipmap_cache_deallocate_dynamic(void *data, dt_cache_entry_t *entry)
 
   if(dt_supervisor_active())
     dt_supervisor_mipmap(DT_SV_DELETE, get_imgid(entry->key), (int)mip);
+
   if(mip < DT_MIPMAP_F)
   {
     const int32_t imgid = get_imgid(entry->key);
-    gboolean write_to_disk;
-    _write_mipmap_to_disk(imgid, NULL, NULL, NULL, NULL, NULL, &write_to_disk);
-
     struct dt_mipmap_buffer_dsc *dsc = _get_dsc_from_entry(entry);
-    // don't write skulls:
-    if(dsc->width > 8 && dsc->height > 8)
+
+    if(dsc->flags & DT_MIPMAP_BUFFER_DSC_FLAG_INVALIDATE)
     {
-      if(dsc->flags & DT_MIPMAP_BUFFER_DSC_FLAG_INVALIDATE)
-      {
-        dt_mipmap_cache_unlink_ondisk_thumbnail(data, get_imgid(entry->key), mip);
-      }
-      if(cache->cachedir[0] && write_to_disk && mip < DT_MIPMAP_F)
-      {
-        // serialize to disk
-        gchar cache_path[DT_PATH_MAX];
-        dt_mipmap_get_cache_dir(cache_path, mip);
-        const int mkd = g_mkdir_with_parents(cache_path, 0750);
-
-        if(!mkd)
-        {
-          char filename[DT_PATH_MAX] = {0};
-          dt_mipmap_get_cache_filename(filename, mip, get_imgid(entry->key));
-          // Don't write existing files as both performance and quality (lossy jpg) suffer
-          // FIXME: actually, yes, we write existing files too. See FIXME above.
-          FILE *f = NULL;
-          if((f = g_fopen(filename, "wb"))) // !g_file_test(filename, G_FILE_TEST_EXISTS)
-          {
-            // first check the disk isn't full
-            struct statvfs vfsbuf;
-            if (!statvfs(filename, &vfsbuf))
-            {
-              const int64_t free_mb = ((vfsbuf.f_frsize * vfsbuf.f_bavail) >> 20);
-              if (free_mb < 100)
-              {
-                fprintf(stderr, "Aborting image write as only %" PRId64 " MB free to write %s\n", free_mb, filename);
-                goto write_error;
-              }
-            }
-            else
-            {
-              fprintf(stderr, "Aborting image write since couldn't determine free space available to write %s\n", filename);
-              goto write_error;
-            }
-
-            const int cache_quality = _settings_get().cache_quality;
-            const uint8_t *exif = NULL;
-            int exif_len = 0;
-            if(dsc->color_space == DT_COLORSPACE_SRGB)
-            {
-              exif = dt_mipmap_cache_exif_data_srgb;
-              exif_len = dt_mipmap_cache_exif_data_srgb_length;
-            }
-            else if(dsc->color_space == DT_COLORSPACE_ADOBERGB)
-            {
-              exif = dt_mipmap_cache_exif_data_adobergb;
-              exif_len = dt_mipmap_cache_exif_data_adobergb_length;
-            }
-            if(dt_imageio_jpeg_write(filename, _get_buffer_from_dsc(dsc), dsc->width, dsc->height,
-                                     MIN(100, MAX(10, cache_quality)), exif, exif_len))
-            {
-write_error:
-              g_unlink(filename);
-            }
-            else
-            {
-              _cache_print(DT_DEBUG_CACHE, "[mipmap_cache] image %i for size %i was written to cache at %s\n", imgid, mip, filename);
-            }
-          }
-          if(f) fclose(f);
-        }
-      }
+      /* Whoever dropped this entry said its pixels no longer describe the image, so the file on
+       * disk goes and nothing here may replace it. These two used to run in sequence with no
+       * `else`: the unlink was immediately followed by a write of the very buffer that had just
+       * been declared stale. dt_mipmap_cache_remove_at_size() survived that only because it
+       * unlinks a second time afterwards; with flush_disk FALSE nothing did, and dropping an entry
+       * the caller wanted gone persisted it instead. */
+      dt_mipmap_cache_unlink_ondisk_thumbnail(data, imgid, mip);
+    }
+    else if(_entry_holds_a_thumbnail(dsc))
+    {
+      gboolean write_to_disk = FALSE;
+      _write_mipmap_to_disk(imgid, NULL, NULL, NULL, NULL, NULL, &write_to_disk);
+      if(cache->cachedir[0] && write_to_disk) _write_thumbnail_to_disk_cache(dsc, imgid, mip);
+    }
+    else
+    {
+      /* Logged rather than silent: this is the branch that used to write uninitialised heap, and
+       * "how often does an aborted render leave an entry behind" is a question only a real session
+       * can answer. `-d cache` now says so. */
+      _cache_print(DT_DEBUG_CACHE,
+                   "[mipmap_cache] image %i at mip size %i is not written to the disk cache: %s\n", imgid,
+                   mip,
+                   (dsc->flags & DT_MIPMAP_BUFFER_DSC_FLAG_GENERATE) ? "never generated" : "a skull");
     }
   }
+
   dt_free_align(entry->data);
   entry->data = NULL;
 }

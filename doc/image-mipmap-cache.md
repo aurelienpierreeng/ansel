@@ -12,6 +12,56 @@
 > that is recorded rather than quietly corrected: how a claim was wrong is usually the more
 > useful thing to know.
 
+## What the eviction write persists, and how it handles its files
+
+> **Established 2026-09-30 against `aac2ee1321`.**
+
+`dt_mipmap_cache_deallocate_dynamic()` is the only place a thumbnail reaches the disk cache — on LRU
+eviction and, for everything still resident, from `dt_cache_cleanup()` at exit. Four things about it
+were wrong, and each one is a way to end up with a cached file that should not exist or cannot be
+removed.
+
+**The write predicate is about the entry's state, not its size.** It used to be `dsc->width > 8 &&
+dsc->height > 8` and nothing else, which caught the skull and missed the other two cases:
+
+- **An entry that was never generated** carries `DT_MIPMAP_BUFFER_DSC_FLAG_GENERATE` over an
+  uninitialised `dt_alloc_align()` block, at the mip's full dimensions — so the size test passed and
+  the JPEG encoder was handed whatever the allocator returned. This is the common case, not a corner:
+  `_generate_blocking()` deliberately leaves such an entry behind whenever the `shutdown` atomic is
+  raised mid-render, and the async surface fetcher raises it on every widget resize or image change.
+  Scrolling a filmstrip produced them; eviction and exit wrote each one out as a thumbnail of
+  uninitialised heap, which the next session then loaded as valid.
+- **An invalidated entry** (`..._FLAG_INVALIDATE`) unlinked its file and then, with no `else` between
+  the two branches, immediately wrote the very buffer that had just been declared stale.
+  `dt_mipmap_cache_remove_at_size()` survived that only by accident — it unlinks a *second* time
+  after `dt_cache_remove()` returns — so with `flush_disk` FALSE the stale thumbnail was persisted.
+
+**`g_unlink()` must come after `fclose()`, in both halves.** On Windows `DeleteFileW` refuses a file
+that any handle still holds open without `FILE_SHARE_DELETE`, which the CRT's `fopen` never sets. The
+read path unlinked a file it had judged corrupt while its own read handle was open, and the write
+path's error branch unlinked while holding a handle of its own — so on Windows a bad disk-cache entry
+could never be cleared: it was re-read, re-rejected and re-logged on every start, permanently. This
+is invisible on POSIX, where unlinking an open file is ordinary.
+
+**The output file was opened twice.** `dt_imageio_jpeg_write()` opens, writes and closes the path
+itself; the caller also opened it `"wb"` purely to test writability, which truncated it before the
+free-space check ran and held a second handle across the whole write. That outer open is gone — the
+function's return value is the only answer needed.
+
+**A free-space probe that cannot answer must not veto the write.** It ran `statvfs()` on the output
+file (so the file had to exist first, which is why the redundant open was there) and treated an
+unanswerable probe as "no room". `src/win/statvfs.c` built a drive root out of `path[0]`, which is
+right for `C:\...` and wrong for a UNC share, a redirected `%LOCALAPPDATA%` or a drive mounted as a
+folder — and there *every* thumbnail write failed silently. The probe now runs on the directory
+before anything is created, returns TRUE when it cannot answer, and the Windows shim uses
+`GetDiskFreeSpaceExW`, which takes any path. That shim reports its counts in bytes with
+`f_frsize == 1`: every consumer computes `f_frsize * f_bavail`, which is satisfied exactly, but the
+true cluster geometry is gone — do not add a consumer that wants it without a second query.
+
+The skip is logged under `-d cache` ("is not written to the disk cache: never generated | a skull"),
+because how often an aborted render leaves an entry behind is a question only a real session
+answers.
+
 ## Mipmap invalidation is explicit, not hash-driven
 
 *Found `22f623c0be`, 2026-06-25.*
