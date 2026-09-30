@@ -237,6 +237,12 @@ void dt_conf_cleanup(dt_conf_t *cf);
 /** @brief Write @p cf back to its file. Overridden keys keep their stored value. */
 void dt_conf_save(dt_conf_t *cf);
 
+/** @brief Write the current settings to disk now, without naming the singleton.
+ *
+ * Settings are only in memory until this runs: dt_conf_set_*() writes the table, nothing else. Call
+ * it whenever losing the user's settings would matter -- it is a few kilobytes of text. */
+void dt_conf_flush(void);
+
 /**
  * @brief Does @p key have a value?
  *

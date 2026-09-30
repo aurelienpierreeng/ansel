@@ -140,6 +140,22 @@ void dt_mipmap_cache_get_settings(dt_mipmap_cache_settings_t *settings);
  *        which is only sensible in a test.
  */
 void dt_mipmap_cache_init(const dt_mipmap_cache_settings_t *settings, const gboolean verbose);
+
+/** @brief Write every resident thumbnail to the on-disk cache and drop it from RAM, leaving the
+ * cache itself alive and usable.
+ *
+ * A thumbnail reaches the disk cache only when its entry is released -- on LRU eviction, or from
+ * dt_cache_cleanup() at the tail of dt_mipmap_cache_cleanup(). That made the whole session's
+ * thumbnail work depend on reaching the end of dt_cleanup(): anything that failed or was killed in
+ * between lost the lot, which is what "it recomputes every thumbnail at each start" reports
+ * describe (#1481). Call this as early in a shutdown as the caller can, so the work is banked
+ * before the parts that can fail.
+ *
+ * Entries another thread still holds are skipped rather than waited for, so this is safe to call
+ * with workers running and makes no guarantee of emptying the cache -- whatever it skips, or
+ * whatever is generated afterwards, is still written by dt_mipmap_cache_cleanup().
+ */
+void dt_mipmap_cache_flush_to_disk(void);
 void dt_mipmap_cache_cleanup(void);
 void dt_mipmap_cache_print(void);
 
