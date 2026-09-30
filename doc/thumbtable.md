@@ -128,11 +128,38 @@ of `thumbtable.c`):
 - a **hash** (`table->list`, keyed by imgid) of the thumbnails that are actually *materialised* —
   i.e. have a widget attached to the content widget.
 
-Only thumbnails inside (or near) the current viewport are materialised; scrolling attaches and
-detaches widgets dynamically, because attaching many thousands of children — and especially
-detaching them — is prohibitively slow in GTK. Allocation and freeing always go through
+Only thumbnails inside (or near) the current viewport are materialised. `dt_thumbtable_update()`
+attaches the visible range (`min_row_id`..`max_row_id`); `_evict_thumbnails()` destroys every
+thumbnail further than one such range from it. Allocation and freeing always go through
 `table->list`; the LUT only tracks references into it. `table->lock` guards the dynamically-sized
 iterations so background signals and the GUI thread never mutate the lists concurrently.
+
+**The bound is a stack budget, not only a speed concern** (established 2026-09-30 against
+`73980c3cf0`, from a Windows crash backtrace and the GTK 3.24.52 DLL shipped in the nightly). GTK
+restyles an appended child in `gtk_css_node_ensure_style()`, which recurses through every
+*previous sibling* once appending has invalidated them all: one 144-byte frame per child already
+attached. `ansel.exe` reserves 1 MiB for the main thread (lld's default; `setrlimit` in
+`resource_limits.c` does nothing there), and the crash overflowed it at 6995 children — 6995 × 144 =
+1 007 280 bytes, leaving ~40 KiB for the rest of the stack. Before that date this section claimed
+scrolling already detached widgets, and the header of `thumbtable.c` that the hash was "limited to
+840 elements" and "garbage-collected": nothing destroyed a thumbnail short of a collection reset, so
+paging through ~7000 images with Page Down kept all 7000 attached.
+
+**Eviction runs in an idle, after the new page is drawn, with a synchronous cap at four ranges.**
+Measured 2026-09-30 on Linux against `220e4b0137`, 3000 JPEGs, 12 per row
+(108 per page), cold thumbnail cache, paging driven by an `LD_PRELOAD` shim that steps the vertical
+adjustment one page at a time and times the first `after-paint` of the frame clock once the new rows
+are populated:
+
+- destroying a thumbnail costs ~1.7 ms, almost all of it in `gtk_container_remove()` tearing its
+  widget tree down (interposed and timed); creating one costs ~3.5 ms;
+- evicting inside `dt_thumbtable_update()` put that on the page's latency: median 0.62 s from
+  scroll to paint, against **0.37–0.39 s** once deferred to an idle (`G_PRIORITY_LOW + 10`, after
+  the `G_PRIORITY_LOW` update and the frame clock's paint);
+- with one page every 60 ms (Page Down held), that idle **never** ran between two updates: only the
+  cap bounds the widget count then. At six ranges it peaked at 684 children and froze up to 1.76 s
+  per eviction burst; at four, 468 children and 0.93 s. Paging one page every 800 ms never reaches
+  the cap (336 children at most).
 
 ## Thumbnail highlight
 
