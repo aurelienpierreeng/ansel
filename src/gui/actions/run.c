@@ -1,6 +1,7 @@
 /*
     This file is part of the Ansel project.
     Copyright (C) 2023-2026 Aurélien PIERRE.
+    Copyright (C) 2026 Guillaume Stutin.
     
     Ansel is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -64,6 +65,13 @@ static gboolean crawl_xmp_changes(GtkAccelGroup *group, GObject *acceleratable, 
   return TRUE;
 }
 
+// A quit cancels nothing (see doc/shutdown.md): without the second test, the closing window would
+// wait for the whole collection. Either way, the thumbnail being rendered is finished.
+static gboolean _preload_should_stop(dt_job_t *job)
+{
+  return dt_control_job_get_state(job) == DT_JOB_STATE_CANCELLED || !dt_control_running();
+}
+
 static int32_t preload_image_cache(dt_job_t *job)
 {
   // Retrieve the maximum mipmap size to generate from job parameters
@@ -76,7 +84,7 @@ static int32_t preload_image_cache(dt_job_t *job)
   float imgs = (float)dt_selection_get_length(dt_selection_get_global()) * (max_mipmap_size + 1);
   GList *img = g_list_first(selection);
 
-  while(img && dt_control_job_get_state(job) != DT_JOB_STATE_CANCELLED)
+  while(img && !_preload_should_stop(job))
   {
     const int32_t imgid = GPOINTER_TO_INT(img->data);
 
@@ -84,7 +92,7 @@ static int32_t preload_image_cache(dt_job_t *job)
     // because the mipmap code has a mechanism that downscales
     // higher resolution thumbnails if present, rather
     // than recomputing a pipe from scratch.
-    for(int k = max_mipmap_size; k >= DT_MIPMAP_0 && dt_control_job_get_state(job) != DT_JOB_STATE_CANCELLED; k--)
+    for(int k = max_mipmap_size; k >= DT_MIPMAP_0 && !_preload_should_stop(job); k--)
     {
       char filename[DT_PATH_MAX] = { 0 };
       dt_mipmap_get_cache_filename(filename, k, imgid);

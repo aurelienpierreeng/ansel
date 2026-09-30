@@ -61,6 +61,7 @@
     Copyright (C) 2022 Miloš Komarčević.
     Copyright (C) 2023 Luca Zulberti.
     Copyright (C) 2026 Miguel Moquillon.
+    Copyright (C) 2026 Guillaume Stutin.
 
     darktable is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -2020,6 +2021,13 @@ static void _prerender_free(void *p)
   g_free(pr);
 }
 
+// A quit cancels nothing (see doc/shutdown.md): without the second test, the closing window would
+// wait for every imgid. Either way, the thumbnail being rendered is finished.
+static gboolean _prerender_should_stop(dt_job_t *job)
+{
+  return dt_control_job_get_state(job) == DT_JOB_STATE_CANCELLED || !dt_control_running();
+}
+
 // Fill the on-disk mipmap cache for every imgid, largest size first (smaller sizes are then
 // downscaled from it rather than recomputed). Mirrors the "preload" job in gui/actions/run.c,
 // but works on an explicit imgid list so it never touches the user's selection.
@@ -2031,10 +2039,10 @@ static int32_t _prerender_job(dt_job_t *job)
   const float total = (n > 0) ? (float)(n * (max + 1)) : 1.0f;
   int done = 0;
 
-  for(GList *l = p->imgids; l && dt_control_job_get_state(job) != DT_JOB_STATE_CANCELLED; l = g_list_next(l))
+  for(GList *l = p->imgids; l && !_prerender_should_stop(job); l = g_list_next(l))
   {
     const int32_t imgid = GPOINTER_TO_INT(l->data);
-    for(int k = max; k >= DT_MIPMAP_0 && dt_control_job_get_state(job) != DT_JOB_STATE_CANCELLED; k--)
+    for(int k = max; k >= DT_MIPMAP_0 && !_prerender_should_stop(job); k--)
     {
       char filename[DT_PATH_MAX] = { 0 };
       dt_mipmap_get_cache_filename(filename, k, imgid);

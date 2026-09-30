@@ -23,6 +23,18 @@ for the running jobs, for as long as they run: a thumbnail pipeline goes to its 
 of N images goes to its last image, since `dt_control_export_job_run()` loops on the job's
 cancelled state alone (`control/jobs/control_jobs.c:1413`) and nothing sets it.
 
+The two thumbnail-preloading jobs are the exception: *Preload selected thumbnails in cache*
+(`preload_image_cache()`, `gui/actions/run.c`) and the collections module's *pre-render
+thumbnails* (`_prerender_job()`, `libs/collect.c`) stop at the next thumbnail once
+`dt_control_running()` reads false, as they do when cancelled. The thumbnail being rendered is
+finished and written to disc; the rest of the list is not started. Measured 2026-10-01 on top of
+`3c35ec6042`, with `-d control`, a quit by hand during a preload: before the change, the closing
+wait lasted **60.51 s**, and ended with the preload's `[run_job-]` line. After it, with nothing
+else running, **4.54 s**, the preload returning 4.47 s into the wait — the thumbnail it was on.
+Of the 295 selected images, 259 still had no size-0 thumbnail on disc afterwards (the selection
+read from `selected_images`, each image's file tested in the cache directory), so the job had
+not reached the end of its list.
+
 ## What it costs
 
 The quit is requested by calling `dt_control_quit()` on the GUI thread, from an idle source armed
