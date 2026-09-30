@@ -64,6 +64,15 @@ void dt_loc_init_sharedir(const char* application_directory);
 void dt_loc_init_tmp_dir(const char *tmpdir);
 /** init user config dir */
 void dt_loc_init_user_config_dir(const char *configdir);
+/** @brief Resolve the default user cache directory the way dt_loc_init_user_cache_dir() does,
+ * without setting any global and without honouring --cachedir.
+ *
+ * For the two callers that need the path BEFORE dt_loc_init() has run -- the Windows log
+ * redirection in main() and the usage text that prints where that log goes. Everything else must
+ * read dt_loc_cachedir(), which is this unless the user passed --cachedir.
+ *
+ * @return a newly allocated path; release with dt_free(). */
+gchar *dt_loc_default_user_cache_dir(void);
 /** init user cache dir */
 void dt_loc_init_user_cache_dir(const char *cachedir);
 /** init OpenCL kernels dir */

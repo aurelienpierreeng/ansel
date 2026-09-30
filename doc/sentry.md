@@ -283,6 +283,45 @@ Tip: run with `-d control` to see `[sentry] crash reporting initialized` and con
 active. The local crash database is at `~/.cache/ansel/sentry-native/`; a pending `*.envelope` there
 means a captured crash that has not been uploaded yet (it will be, on the next launch).
 
+## Getting a log out of a Windows user {#windows-log}
+
+> **Established 2026-09-30 against `aac2ee1321`.**
+
+`ansel.exe` is linked as a GUI-subsystem binary: it owns no console, so everything written to
+stdout or stderr is discarded unless the caller arranged otherwise. `main()`
+(`src/apps/ansel/main.c`) therefore redirects both into
+
+```
+%LOCALAPPDATA%\ansel\cache\ansel-log.txt
+```
+
+**A plain run does write that file.** That matters because for a long time we assumed no log
+existed on Windows at all, and asked users for `-d` runs that produced strictly less:
+
+- **`-d` used to cancel the redirection.** The flag list that skips it is for arguments that print
+  one thing and exit (`--help`, `-h`, `/?`, `--version`); `-d` and `--debug` were in it, so the
+  flags that *produce* output sent every channel nowhere — no console, no file (#1472). They are
+  out of that list now and must not go back in.
+- **The file used to live somewhere the OS deletes.** It was under `g_get_user_cache_dir()`, which
+  on Windows is `FOLDERID_InternetCache` — the shell folder still labelled "Temporary Internet
+  Files" — cleared by Storage Sense (on by default on Windows 11) and by Disk Cleanup, and hidden
+  from a user who goes looking (#1473). Both the log and the thumbnail disk cache were affected;
+  see [`image-mipmap-cache.md`](image-mipmap-cache.md).
+
+So, to triage a Windows report:
+
+1. Ask for `%LOCALAPPDATA%\ansel\cache\ansel-log.txt` from a **normal** run. Pasting that path
+   into Explorer works; browsing to it does not, the folder chain being hidden.
+2. For a debug run, `-d` alone is now enough. A caller who wants the output on a handle of their
+   own can still redirect — `ansel.exe -d cache -d memory > C:\ansel.txt 2>&1` — because the
+   redirection stands down as soon as stdout or stderr is a file or a pipe.
+3. The file is opened `"a"` and is never rotated, so it spans sessions. Ask for the tail, or for
+   the size first.
+
+A build older than `aac2ee1321` has neither fix: for those, the log is under
+`%LOCALAPPDATA%\Microsoft\Windows\INetCache\ansel\`, if Windows has not removed it yet, and a
+`-d` run has no output anywhere.
+
 ## Fetching and fixing an issue
 
 To turn a Sentry issue into a fix without clicking through the web UI, use
