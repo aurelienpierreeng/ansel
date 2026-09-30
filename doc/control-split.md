@@ -145,7 +145,7 @@ control section.
 | **10** | Lifecycle symmetry: one init/cleanup pair, every mutex initialised and destroyed on both paths, matched allocator (`calloc` at `darktable.c:897` vs `dt_free` at `:2006`), teardown reordered above `dt_control_signal_cleanup`. Delete `proxy.hinter` and the ignored `s` parameter (−21 accessor sites). | clean `rm -rf build && ninja install`, **staged** binary, ASAN | **≈168** |
 | **11** | **`('control', 1)` in `tools/include_graph.py`.** One line. | the printed summary, not the argument | **≈149** |
 | **12** | Seal: `control/control_private.h` holds the struct, `control.h` publishes an opaque typedef and seven functions; ratchet in `check_module_boundaries.sh` — `control_private_baseline=0`, `control_fields_baseline=45`, `control_upcalls_baseline=16`, `toolkit_control_baseline=5`, all measured today. | plant a `dt_control_get_global()->running` in `libs/`, confirm the gate fails | **≈149** |
-| **13** | The scheduler's synchronisation, alone: the *queue* predicate and its wait under one mutex, then **delete the kicker** (`jobs.c:584-607`) that exists to cover for it, broadcast inside the lock in `dt_control_shutdown` (`control.c:481-482`), drain `job_res[]`, rename `dt_control_flush_jobs_queue` to what it does. The `running` half is in place (2026-09-30): the workers re-read it under `cond_mutex` before waiting, and the kicker waits on the condition instead of sleeping, so a quit no longer waits for either — see `shutdown.md`. | enqueue from 8 threads, no job queued > 50 ms; 100 start/quit cycles, no hang | **≈149** |
+| **13** | The scheduler's synchronisation, alone: the *queue* predicate and its wait under one mutex, then **delete the kicker** (`jobs.c:625-647`) that exists to cover for it, broadcast inside the lock in `dt_control_shutdown` (`control.c:481-482`), drain `job_res[]`, rename `dt_control_flush_jobs_queue` to what it does. The `running` half is in place (2026-09-30): the workers re-read it under `cond_mutex` before waiting, and the kicker waits on the condition instead of sleeping, so a quit no longer waits for either — see `shutdown.md`. | enqueue from 8 threads, no job queued > 50 ms; 100 start/quit cycles, no hang | **≈149** |
 
 ## Traps
 
@@ -187,7 +187,7 @@ looking.
 `darktable.signals = init_gui ? dt_control_signal_init() : NULL;` (commit `b2f672b75d`, "signals:
 only the GUI gets the signal system"), so headless has no bus to raise on. The second gate,
 `dt_control_running()`, was the *only* thing stopping it when this was written, and is false
-there too: `running` is set by `dt_control_jobs_init()` (`jobs.c:674`), which only
+there too: `running` is set by `dt_control_jobs_init()` (`jobs.c:715`), which only
 `dt_control_init()` calls, and only under `init_gui` (2026-09-29). Either way the bus never
 fires headless — the structural reason the four notify/handler seams had to be invented. A
 dropped signal still has its arguments collected, and the four that take ownership of a
