@@ -74,7 +74,7 @@ All of this lives in `src/common/sentry.c` / `sentry.h`. The public API is three
 | Function | When | What it does |
 |---|---|---|
 | `dt_sentry_init(have_gui)` | end of `dt_init()` | honors `sentry/enabled`, then `sentry_init()` |
-| `dt_sentry_shutdown()` | start of `dt_cleanup()` | records the clean session, flushes, `sentry_close()` |
+| `dt_sentry_shutdown()` | end of `dt_cleanup()`, just before `dt_conf_cleanup()` | records the clean session, flushes, `sentry_close()` |
 | `dt_sentry_backtrace_captured()` | from the signal handler | tells the local gdb fallback to stand down |
 
 ### Consent (opt-in)

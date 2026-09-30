@@ -891,6 +891,20 @@ void dt_mipmap_cache_init(const dt_mipmap_cache_settings_t *settings, const gboo
       = _get_entry_size(4 * sizeof(float) * cache->max_width[DT_MIPMAP_F] * cache->max_height[DT_MIPMAP_F]);
 }
 
+void dt_mipmap_cache_flush_to_disk(void)
+{
+  dt_mipmap_cache_t *cache = _mipmap_cache;
+  if(IS_NULL_PTR(cache)) return;
+
+  /* A fill ratio of 0 evicts every entry no other thread holds. The eviction walk is reused because
+   * it already skips held entries and runs the cleanup callback, which writes the thumbnail. Only
+   * mip_thumbs: DT_MIPMAP_F and DT_MIPMAP_FULL are never written to disk. */
+  const size_t reclaimed = dt_cache_gc(&cache->mip_thumbs.cache, 0.0f);
+
+  _cache_print(DT_DEBUG_CACHE, "[mipmap_cache] flushed to disk: %.2f MB banked\n",
+               reclaimed / (1024.0 * 1024.0));
+}
+
 void dt_mipmap_cache_cleanup(void)
 {
   dt_mipmap_cache_t *cache = _mipmap_cache;

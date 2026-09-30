@@ -23,6 +23,8 @@
     Copyright (C) 2022 Hanno Schwalm.
     Copyright (C) 2022 Martin Bařinka.
     Copyright (C) 2025 Alynx Zhou.
+    Copyright (C) 2026 Aurélien PIERRE.
+    Copyright (C) 2026 Guillaume Stutin.
     
     darktable is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -234,8 +236,11 @@ void dt_conf_init(dt_conf_t *cf, const char *filename, GSList *override_entries)
 /** @brief Free everything @p cf owns. No dt_conf_*() call is valid afterwards. */
 void dt_conf_cleanup(dt_conf_t *cf);
 
-/** @brief Write @p cf back to its file. Overridden keys keep their stored value. */
-void dt_conf_save(dt_conf_t *cf);
+/** @brief Write the settings to their file now. Overridden keys keep their stored value.
+ *
+ * dt_conf_set_*() writes the in-memory table only: a change is on disk once this, or
+ * dt_conf_cleanup(), has run. */
+void dt_conf_flush(void);
 
 /**
  * @brief Does @p key have a value?

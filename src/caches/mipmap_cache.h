@@ -10,7 +10,7 @@
     Copyright (C) 2021 Ralf Brown.
     Copyright (C) 2022 Martin Bařinka.
     Copyright (C) 2025 Alynx Zhou.
-    Copyright (C) 2025 Aurélien PIERRE.
+    Copyright (C) 2025-2026 Aurélien PIERRE.
     Copyright (C) 2026 Guillaume Stutin.
     
     darktable is free software: you can redistribute it and/or modify
@@ -149,6 +149,16 @@ void dt_mipmap_cache_get_settings(dt_mipmap_cache_settings_t *settings);
  *        which is only sensible in a test.
  */
 void dt_mipmap_cache_init(const dt_mipmap_cache_settings_t *settings, const gboolean verbose);
+
+/** @brief Write the resident thumbnails to the disk cache and drop them from RAM; the cache stays
+ * usable.
+ *
+ * A thumbnail reaches the disk cache only when its entry is released: on LRU eviction, or in
+ * dt_mipmap_cache_cleanup(). Call this before the part of a shutdown that can fail. Entries another
+ * thread holds are skipped, not waited for; they, and whatever is generated afterwards, are written
+ * by dt_mipmap_cache_cleanup().
+ */
+void dt_mipmap_cache_flush_to_disk(void);
 void dt_mipmap_cache_cleanup(void);
 void dt_mipmap_cache_print(void);
 

@@ -7,6 +7,8 @@
     Copyright (C) 2014-2016 Roman Lebedev.
     Copyright (C) 2020 Pascal Obry.
     Copyright (C) 2022 Martin Bařinka.
+    Copyright (C) 2026 Aurélien PIERRE.
+    Copyright (C) 2026 Guillaume Stutin.
     
     darktable is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -128,9 +130,9 @@ int32_t dt_cache_remove(dt_cache_t *cache, const uint32_t key);
 int dt_cache_seed(dt_cache_t *cache, const uint32_t key, const void *data, size_t data_size, size_t cost);
 // removes from the tip of the lru list, until the fill ratio of the hashtable
 // goes below the given parameter, in terms of the user defined cost measure.
-// will never lock and never fail, but sometimes not free memory (in case all
-// is locked)
-void dt_cache_gc(dt_cache_t *cache, const float fill_ratio);
+// takes cache->lock; skips the entries another thread holds rather than waiting
+// for them, so it may free less than asked. returns the cost reclaimed.
+size_t dt_cache_gc(dt_cache_t *cache, const float fill_ratio);
 
 // iterate over all currently contained data blocks.
 // not thread safe! only use this for init/cleanup!

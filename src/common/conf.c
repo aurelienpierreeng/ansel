@@ -24,7 +24,8 @@
     Copyright (C) 2021 Ralf Brown.
     Copyright (C) 2022 Hanno Schwalm.
     Copyright (C) 2022 Martin Bařinka.
-    Copyright (C) 2025 Aurélien PIERRE.
+    Copyright (C) 2025-2026 Aurélien PIERRE.
+    Copyright (C) 2026 Guillaume Stutin.
     
     darktable is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -951,8 +952,14 @@ static void dt_conf_print(const gchar *key, const gchar *val, FILE *f)
   fprintf(f, "%s=%s\n", key, val);
 }
 
-void dt_conf_save(dt_conf_t *cf)
+/** @brief Write the whole table to @p cf->filename.
+ *
+ * cf->mutex is held for the walk, since every dt_conf_set_*() writes the table under it.
+ */
+static void _conf_save(dt_conf_t *cf)
 {
+  dt_pthread_mutex_lock(&cf->mutex);
+
   FILE *f = g_fopen(cf->filename, "wb");
   if(!IS_NULL_PTR(f))
   {
@@ -970,10 +977,17 @@ void dt_conf_save(dt_conf_t *cf)
     sorted = NULL;
     fclose(f);
   }
+
+  dt_pthread_mutex_unlock(&cf->mutex);
 }
+void dt_conf_flush(void)
+{
+  _conf_save(darktable.conf);
+}
+
 void dt_conf_cleanup(dt_conf_t *cf)
 {
-  dt_conf_save(cf);
+  _conf_save(cf);
   g_hash_table_unref(cf->table);
   g_hash_table_unref(cf->override_entries);
   // Released last: every string here was handed out by dt_conf_get_string_const() at some

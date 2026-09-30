@@ -17,7 +17,7 @@
     Copyright (C) 2017 Rikard Öxler.
     Copyright (C) 2019-2021 Aldric Renaudin.
     Copyright (C) 2019 Alexis Mousset.
-    Copyright (C) 2019-2020, 2022-2023, 2025 Aurélien PIERRE.
+    Copyright (C) 2019-2020, 2022-2023, 2025-2026 Aurélien PIERRE.
     Copyright (C) 2019-2020 Heiko Bauke.
     Copyright (C) 2019 jakubfi.
     Copyright (C) 2019 luzpaz.
@@ -37,6 +37,7 @@
     Copyright (C) 2022 Martin Bařinka.
     Copyright (C) 2022 Victor Forsiuk.
     Copyright (C) 2023 Luca Zulberti.
+    Copyright (C) 2026 Guillaume Stutin.
     
     darktable is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -799,6 +800,9 @@ void dt_gui_preferences_show()
 
   if(restart_required)
     dt_control_log(_("Ansel needs to be restarted for settings to take effect"));
+
+  // On disk now rather than at exit, so that a process that dies later keeps these settings.
+  dt_conf_flush();
 
   DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_PREFERENCES_CHANGE);
 }
