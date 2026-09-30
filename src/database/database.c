@@ -3290,6 +3290,22 @@ start:
 
   _db_print("[sql] Opened database: '%s'\n", dbfilename_data);
 
+  /* Wait for a lock instead of failing on it. Nothing installed a busy timeout or a busy handler
+   * anywhere in this tree, so every sqlite3_step() returned SQLITE_BUSY the instant another
+   * *process* held the database file's lock -- a second Ansel, a backup agent, an indexer, an
+   * antivirus scanning library.db. Our own threads do not collide (one connection,
+   * SQLITE_CONFIG_SERIALIZED above), so this is entirely about the rest of the machine.
+   *
+   * A returned BUSY is not reported as such by most call sites: they test for SQLITE_ROW or
+   * SQLITE_DONE and treat anything else as "no data", which is how a momentary lock became
+   * "this image does not exist" and cost an image its thumbnail for the session (#1475).
+   *
+   * Five seconds, and it is a ceiling rather than a cost: the wait ends as soon as the lock is
+   * released. A value large enough to outlast a scanner's pass on one file is the point; a
+   * request that really cannot be served in five seconds is a broken setup, and then failing is
+   * the right answer. */
+  sqlite3_busy_timeout(db->handle, 5000);
+
   // some sqlite3 config
   sqlite3_exec(db->handle, "PRAGMA synchronous = OFF", NULL, NULL, NULL);
   sqlite3_exec(db->handle, "PRAGMA journal_mode = MEMORY", NULL, NULL, NULL);
