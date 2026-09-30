@@ -185,7 +185,12 @@ typedef enum dt_mipmap_buffer_dsc_flags
 {
   DT_MIPMAP_BUFFER_DSC_FLAG_NONE = 0,
   DT_MIPMAP_BUFFER_DSC_FLAG_GENERATE = 1 << 0,
-  DT_MIPMAP_BUFFER_DSC_FLAG_INVALIDATE = 1 << 1
+  DT_MIPMAP_BUFFER_DSC_FLAG_INVALIDATE = 1 << 1,
+  /* One generation attempt has already failed for this entry. Read together with GENERATE it gives
+   * the three states a failed thumbnail can be in: GENERATE|RETRIED is "failed once, try again on
+   * the next request", RETRIED alone is "failed twice, this is a skull and we have stopped", and
+   * neither is a thumbnail that generated normally. */
+  DT_MIPMAP_BUFFER_DSC_FLAG_RETRIED = 1 << 2
 } dt_mipmap_buffer_dsc_flags;
 
 // the embedded Exif data to tag thumbnails as sRGB or AdobeRGB
@@ -1058,6 +1063,22 @@ static void _generate_blocking(dt_cache_entry_t *entry, dt_mipmap_buffer_t *buf,
   const float original_iscale = dsc->iscale;
   const dt_colorspaces_color_profile_type_t original_color_space = dsc->color_space;
 
+  /* Retrying after a failure. The failed attempt left the skull's 8x8 in the descriptor, and
+   * _init_8() opens with `if(size >= DT_MIPMAP_F || *width < 16 || *height < 16) return;` -- so
+   * re-entering with those dimensions does nothing at all, silently, and the retry would be a
+   * guaranteed second failure. Put back what the allocator asked for
+   * (dt_mipmap_cache_update_buffer_addresses() sets exactly these). */
+  if((dsc->flags & DT_MIPMAP_BUFFER_DSC_FLAG_GENERATE)
+     && (dsc->flags & DT_MIPMAP_BUFFER_DSC_FLAG_RETRIED)
+     && mip <= DT_MIPMAP_F
+     && !IS_NULL_PTR(_mipmap_cache))
+  {
+    dsc->width = _mipmap_cache->max_width[mip];
+    dsc->height = _mipmap_cache->max_height[mip];
+    dsc->iscale = 1.0f;
+    dsc->color_space = DT_COLORSPACE_NONE;
+  }
+
   if(!(dsc->flags & DT_MIPMAP_BUFFER_DSC_FLAG_GENERATE))
   {
     // Already in cache, no I/O needed
@@ -1137,9 +1158,39 @@ static void _generate_blocking(dt_cache_entry_t *entry, dt_mipmap_buffer_t *buf,
     return;
   }
 
+  /* _init_8() and _init_f() report a failure as a zero-sized image. Until now that was latched on
+   * the spot: GENERATE was cleared unconditionally, so every later request took the "already in
+   * cache" path and got the skull back, and dt_view_image_get_surface() reports an 8x8 buffer as
+   * DT_VIEW_SURFACE_OK, so the widget committed it and never asked again. One transient fault -- a
+   * momentary database lock, a network share reconnecting -- therefore cost an image its thumbnail
+   * for the whole session, clearable only through "Purge selected thumbnails from cache" (#1474).
+   *
+   * One retry is granted instead. Bounded on purpose: an image that is genuinely unreadable must not
+   * re-run a full pipeline on every redraw, so it costs at most two attempts per cache entry. The
+   * skull is still published for this request either way -- the caller needs something to draw. */
+  const gboolean failed = (dsc->width == 0 || dsc->height == 0);
+
+  if(failed && !(dsc->flags & DT_MIPMAP_BUFFER_DSC_FLAG_RETRIED))
+  {
+    dsc->flags |= DT_MIPMAP_BUFFER_DSC_FLAG_RETRIED;   // GENERATE deliberately left set
+    _paint_skulls(buf, dsc, imgid, mip);
+    _validate_buffer(buf, dsc, imgid, mip);
+    _cache_print(DT_DEBUG_CACHE,
+                 "[mipmap_cache] image %d at mip size %d failed to generate; the next request will try"
+                 " again\n",
+                 imgid, mip);
+    return;
+  }
+
   dsc->flags &= ~DT_MIPMAP_BUFFER_DSC_FLAG_GENERATE;
+  if(!failed) dsc->flags &= ~DT_MIPMAP_BUFFER_DSC_FLAG_RETRIED;
   _paint_skulls(buf, dsc, imgid, mip);
   _validate_buffer(buf, dsc, imgid, mip);
+
+  if(failed)
+    _cache_print(DT_DEBUG_CACHE,
+                 "[mipmap_cache] image %d at mip size %d failed to generate twice; keeping the skull\n",
+                 imgid, mip);
 
   _cache_print(DT_DEBUG_CACHE, "[mipmap_cache] image %d at mip size %d got a new cache entry (%ix%i / %ix%i) at %p\n", imgid, mip, 
     buf->width, buf->height, dsc->width, dsc->height, buf->buf);
@@ -1571,6 +1622,21 @@ static void _init_8(uint8_t *buf, uint32_t *width, uint32_t *height, float *isca
       dt_mipmap_buffer_t tmp;
       dt_mipmap_cache_get(&tmp, imgid, k, DT_MIPMAP_TESTLOCK, 'r');
       if(IS_NULL_PTR(tmp.buf)) continue;
+
+      /* A skull is not a thumbnail. This loop only tested for a non-NULL buffer, and a failed
+       * entry has one: the 8x8 dead image. It was therefore upscaled into the smaller mip and
+       * stored as a valid thumbnail, so ONE failed render spread to every size below it -- and the
+       * result, being larger than 8x8, then cleared the "don't write skulls" guard on eviction and
+       * reached the disk cache, where it survived restarts (#1474). */
+      if(tmp.width <= 8 && tmp.height <= 8)
+      {
+        _cache_print(DT_DEBUG_CACHE,
+                     "[mipmap_cache] image %d: mip size %d is a skull, not using it as a source for"
+                     " mip size %d\n",
+                     imgid, k, size);
+        dt_mipmap_cache_release(&tmp);
+        continue;
+      }
 
       *color_space = tmp.color_space;
       // downsample
