@@ -19,6 +19,7 @@
     Copyright (C) 2022 Hanno Schwalm.
     Copyright (C) 2022 paolodepetrillo.
     Copyright (C) 2023 Luca Zulberti.
+    Copyright (C) 2026 Guillaume Stutin.
     
     darktable is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -2119,10 +2120,12 @@ static inline bool _lens_read_map(global const float *pi, const int width,
   return true;
 }
 
-static inline float4 _lens_finish(float4 pixel, const int monochrome)
+static inline float4 _lens_finish(float4 pixel, const int monochrome, const int mask_display)
 {
   pixel = all(isfinite(pixel.xyz)) ? pixel : (float4)0.0f;
   if(monochrome) pixel.x = pixel.z = pixel.y;
+  // Alpha carries the mask only while it is displayed; elsewhere it is 0, as on the CPU.
+  if(!mask_display) pixel.w = 0.0f;
   return pixel;
 }
 
@@ -2179,7 +2182,7 @@ kernel void
 lens_distort_bilinear (read_only image2d_t in, write_only image2d_t out, const int width, const int height,
                const int iwidth, const int iheight, const int roi_in_x, const int roi_in_y,
                const int roi_out_x, const int roi_out_y, const ls_eval_t p,
-               const int do_nan_checks, const int monochrome)
+               const int do_nan_checks, const int monochrome, const int mask_display)
 {
   const int x = get_global_id(0);
   const int y = get_global_id(1);
@@ -2195,14 +2198,14 @@ lens_distort_bilinear (read_only image2d_t in, write_only image2d_t out, const i
   float4 pixel = _lens_sample_bilinear(in, ppi, iwidth, iheight, roi_in_x, roi_in_y);
   if(p.enabled & LS_EVAL_ENABLE_VIGNETTING)
     pixel = _lens_devignette(pixel, p, ppi, roi_out_x, roi_out_y, x, y);
-  write_imagef (out, (int2)(x, y), _lens_finish(pixel, monochrome));
+  write_imagef (out, (int2)(x, y), _lens_finish(pixel, monochrome, mask_display));
 }
 
 kernel void
 lens_distort_bicubic (read_only image2d_t in, write_only image2d_t out, const int width, const int height,
                const int iwidth, const int iheight, const int roi_in_x, const int roi_in_y,
                const int roi_out_x, const int roi_out_y, const ls_eval_t p,
-               const int do_nan_checks, const int monochrome)
+               const int do_nan_checks, const int monochrome, const int mask_display)
 {
   const int x = get_global_id(0);
   const int y = get_global_id(1);
@@ -2218,14 +2221,14 @@ lens_distort_bicubic (read_only image2d_t in, write_only image2d_t out, const in
   float4 pixel = _lens_sample_bicubic(in, ppi, iwidth, iheight, roi_in_x, roi_in_y);
   if(p.enabled & LS_EVAL_ENABLE_VIGNETTING)
     pixel = _lens_devignette(pixel, p, ppi, roi_out_x, roi_out_y, x, y);
-  write_imagef (out, (int2)(x, y), _lens_finish(pixel, monochrome));
+  write_imagef (out, (int2)(x, y), _lens_finish(pixel, monochrome, mask_display));
 }
 
 kernel void
 lens_distort_mitchell (read_only image2d_t in, write_only image2d_t out, const int width, const int height,
                const int iwidth, const int iheight, const int roi_in_x, const int roi_in_y,
                const int roi_out_x, const int roi_out_y, const ls_eval_t p,
-               const int do_nan_checks, const int monochrome)
+               const int do_nan_checks, const int monochrome, const int mask_display)
 {
   const int x = get_global_id(0);
   const int y = get_global_id(1);
@@ -2241,7 +2244,7 @@ lens_distort_mitchell (read_only image2d_t in, write_only image2d_t out, const i
   float4 pixel = _lens_sample_mitchell(in, ppi, iwidth, iheight, roi_in_x, roi_in_y);
   if(p.enabled & LS_EVAL_ENABLE_VIGNETTING)
     pixel = _lens_devignette(pixel, p, ppi, roi_out_x, roi_out_y, x, y);
-  write_imagef (out, (int2)(x, y), _lens_finish(pixel, monochrome));
+  write_imagef (out, (int2)(x, y), _lens_finish(pixel, monochrome, mask_display));
 }
 
 
