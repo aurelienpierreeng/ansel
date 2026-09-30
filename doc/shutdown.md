@@ -54,7 +54,7 @@ out.
 
 `dt_control_shutdown()` does not go straight to `pthread_join()`. It first calls the handler
 installed with `dt_control_set_shutdown_wait_handler()` (`control/control.h:323`), which returns
-once `dt_control_workers_alive()` (`control/jobs.c:533`) reads 0 — after which the joins return
+once `dt_control_workers_alive()` (`control/jobs.c:544`) reads 0 — after which the joins return
 at once. The GUI registers `dt_gui_closing_wait()` (`gui/closing.c`) next to its other handlers
 (`gui/application.c:1412`); a headless run registers nothing, and its joins block as they always
 did. `control/` reaches the GUI through that pointer and includes nothing of it.
@@ -67,6 +67,21 @@ its work before closing* — with the number of jobs still running and, for thos
 progress (`dt_control_progress_foreach()`, `control/progress.c:411`), what they say they are
 doing: `exporting 3 / 20 to disk`. It cannot be closed and it goes away with the last job. A quit
 that is over within the second shows nothing.
+
+Under *Details*, collapsed by default, the window lists the jobs themselves, from
+`dt_control_jobs_foreach()` (`control/jobs.c:549`): the running ones one by one, the queued ones
+counted by kind, under a header that says they will not run. A job's kind is the queue it was added
+to: *Image operation*, *Thumbnail*, *Background task*, *Export* (prints share that queue),
+*Maintenance*, and *Darkroom rendering* for the reserved worker. Beside a running job stands the
+description it was created with, written for the debug log in English, and translated only where
+it is also a catalog string, as the generic image jobs' are. A reserved worker's running job is
+held nowhere else, so `dt_control_run_job_res()` records it in `_job_res_running[]`, under
+`res_mutex`, for as long as it runs.
+
+Measured on top of `cc1400c7b9`, with the method of *What it costs* and the quit 5 s after launch, a trace of
+the grid's rows at 1.03 s into the wait read: running, three *Thumbnail* (`get image 2`, `3`, `4`);
+queued, 19 *Image operation* and 16 *Thumbnail*. The 19 were `save xmp` jobs of the import: of
+the 60 it queued, 41 had run, counted by their `[run_job-]` lines.
 
 **A job that needs the GUI thread gets it.** Two waits in the tree block a worker until the GUI
 thread has run something for it: a synchronous signal raised from a worker (`control/signal.c`,
@@ -125,14 +140,14 @@ of jobs still running. Two things had to hold for it to reach 0 on its own.
 **A quit wakes every thread that is waiting.** A worker reads `running` at the top of its loop,
 finds no job, then waits on the condition. A quit landing between the two used to broadcast to
 nobody; the worker slept until the kicker's next turn. The workers now re-read `running` under
-`cond_mutex` — the mutex it is cleared under — right before waiting (`control/jobs.c:574`,
-`:629`), so the quit either finds them waiting or stops them from starting to.
+`cond_mutex` — the mutex it is cleared under — right before waiting (`control/jobs.c:615`,
+`:670`), so the quit either finds them waiting or stops them from starting to.
 
 **The kicker does not sleep through a quit.** It used to `sleep(2)` between two broadcasts, and
 `dt_control_shutdown()` joined it first: every quit waited for what was left of those two
 seconds. Measured on an idle lighttable before the change, quits requested 0.5 s apart took 0.90,
 0.37, 1.86, 1.39 and 0.89 s — a sawtooth of period 2 s. The kicker now spends its two seconds in
-`pthread_cond_timedwait()` on the workers' condition (`control/jobs.c:584`): the quit's broadcast
+`pthread_cond_timedwait()` on the workers' condition (`control/jobs.c:625`): the quit's broadcast
 ends the wait, any other broadcast resumes it against the same deadline, so the kicks keep their
 pace. The same five quits take 0.32 to 0.35 s.
 
@@ -142,9 +157,11 @@ needs the queue test under `cond_mutex`, which is PR 13 of `control-split.md`.
 
 ## Open
 
-- **Queued jobs are dropped, silently.** A second export queued behind the first never runs if
-  the user quits; nothing says so, in the window or elsewhere. Whether a quit should run the
-  export queue to its end, and only it, is a decision nobody has taken.
+- **Queued jobs are dropped.** A second export queued behind the first never runs if the user
+  quits, and neither do the sidecar writes an import leaves queued: 19 of 60 in the measurement
+  above. The window's details say so, once the window is up; a quit over within the second drops
+  them unseen. Whether a quit should run some queues to their end is a decision
+  nobody has taken.
 - **A thumbnail being rendered cannot be abandoned.** The 1.4 – 7.6 s above are spent finishing
   four images nobody will look at. `dt_dev_pixelpipe_has_shutdown()` is what a pipeline polls,
   and nothing raises it for a thumbnail pipe at quit.

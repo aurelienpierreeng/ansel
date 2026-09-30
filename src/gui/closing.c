@@ -24,6 +24,7 @@
 #include "control/progress.h"
 #include "system/macros.h"
 #include "system/mem_alloc.h"
+#include "widgets/container.h"
 #include "widgets/widget_settings.h"
 
 #include <glib/gi18n.h>
@@ -37,15 +38,34 @@
 #define DT_CLOSING_NOTICE_DELAY (G_USEC_PER_SEC)
 // How often the workers are counted, and the window brought up to date, in milliseconds.
 #define DT_CLOSING_POLL_INTERVAL 100
+// The details name a job's kind after the queue it was added to. The reserved worker, which only
+// the darkroom uses, comes after the queues.
+#define DT_CLOSING_KIND_DARKROOM DT_JOB_QUEUE_MAX
+#define DT_CLOSING_KINDS (DT_JOB_QUEUE_MAX + 1)
 
 typedef struct dt_closing_t
 {
   GMainLoop *loop;
   gint64 start;
   GtkWidget *window;
-  GtkWidget *count; // how many jobs are still running
-  GtkWidget *names; // what the ones that publish a progress say they are doing
+  GtkWidget *count;   // how many jobs are still running
+  GtkWidget *names;   // what the ones that publish a progress say they are doing
+  GtkWidget *details; // the expander that lists the jobs, hidden while there are none
+  GtkWidget *grid;    // its content
+  gchar *listed;      // what the grid shows, so that it is rebuilt only when that changes
 } dt_closing_t;
+
+typedef struct dt_closing_job_t
+{
+  int kind;
+  gchar *description; // translated when the catalog knows it
+} dt_closing_job_t;
+
+typedef struct dt_closing_jobs_t
+{
+  GArray *running;              // of dt_closing_job_t, in the order the scheduler reports them
+  int queued[DT_CLOSING_KINDS]; // how many jobs of each kind wait for a worker
+} dt_closing_jobs_t;
 
 static void _closing_window_new(dt_closing_t *closing)
 {
@@ -95,6 +115,19 @@ static void _closing_window_new(dt_closing_t *closing)
   gtk_label_set_xalign(GTK_LABEL(hint), 0.0);
   gtk_box_pack_start(GTK_BOX(text), hint, FALSE, FALSE, 0);
 
+  closing->details = gtk_expander_new(_("Details"));
+  gtk_expander_set_resize_toplevel(GTK_EXPANDER(closing->details), TRUE);
+  gtk_widget_set_no_show_all(closing->details, TRUE);
+  gtk_box_pack_start(GTK_BOX(text), closing->details, FALSE, FALSE, 0);
+
+  closing->grid = gtk_grid_new();
+  gtk_grid_set_column_spacing(GTK_GRID(closing->grid), DT_PIXEL_APPLY_DPI(12));
+  gtk_grid_set_row_spacing(GTK_GRID(closing->grid), DT_PIXEL_APPLY_DPI(2));
+  gtk_widget_set_margin_top(closing->grid, DT_PIXEL_APPLY_DPI(6));
+  gtk_container_add(GTK_CONTAINER(closing->details), closing->grid);
+  // Shown by hand: the expander's no_show_all keeps show_all from reaching it.
+  gtk_widget_show(closing->grid);
+
   gtk_widget_show_all(closing->window);
 
   // A quit does not always come from the application in front: the Dock's Quit, or Cmd+Q
@@ -111,6 +144,122 @@ static void _closing_append_name(const gchar *message, void *data)
   GString *names = (GString *)data;
   if(names->len > 0) g_string_append_c(names, '\n');
   g_string_append(names, message);
+}
+
+static const char *_closing_kind_name(const int kind)
+{
+  switch(kind)
+  {
+    case DT_JOB_QUEUE_USER_FG:
+      return C_("job type", "Image operation");
+    case DT_JOB_QUEUE_SYSTEM_FG:
+      return C_("job type", "Thumbnail");
+    case DT_JOB_QUEUE_USER_BG:
+      return C_("job type", "Background task");
+    case DT_JOB_QUEUE_USER_EXPORT: // prints share this queue: their description says so
+      return C_("job type", "Export");
+    case DT_JOB_QUEUE_SYSTEM_BG:
+      return C_("job type", "Maintenance");
+    default:
+      return C_("job type", "Darkroom rendering");
+  }
+}
+
+static void _closing_job_clear(gpointer data)
+{
+  dt_closing_job_t *job = (dt_closing_job_t *)data;
+  dt_free(job->description);
+}
+
+static void _closing_collect_job(const char *description, const dt_job_queue_t queue, const gboolean reserved,
+                                 const gboolean running, void *data)
+{
+  dt_closing_jobs_t *jobs = (dt_closing_jobs_t *)data;
+  const int kind = reserved ? DT_CLOSING_KIND_DARKROOM : (int)queue;
+  if(!running)
+  {
+    jobs->queued[kind]++;
+    return;
+  }
+  // Descriptions are written for the debug log, in English. Some are also the catalog's
+  // strings, those the generic image jobs show on their progress bar.
+  const dt_closing_job_t job = { .kind = kind, .description = g_strdup(_(description)) };
+  g_array_append_val(jobs->running, job);
+}
+
+static void _closing_grid_header(GtkWidget *grid, const int row, const char *text)
+{
+  GtkWidget *label = gtk_label_new(NULL);
+  gchar *markup = g_markup_printf_escaped("<b>%s</b>", text);
+  gtk_label_set_markup(GTK_LABEL(label), markup);
+  dt_free(markup);
+  gtk_label_set_xalign(GTK_LABEL(label), 0.0);
+  if(row > 0) gtk_widget_set_margin_top(label, DT_PIXEL_APPLY_DPI(6));
+  gtk_grid_attach(GTK_GRID(grid), label, 0, row, 2, 1);
+}
+
+static void _closing_grid_row(GtkWidget *grid, const int row, const char *kind, const char *detail)
+{
+  GtkWidget *label = gtk_label_new(kind);
+  gtk_label_set_xalign(GTK_LABEL(label), 0.0);
+  gtk_grid_attach(GTK_GRID(grid), label, 0, row, 1, 1);
+
+  label = gtk_label_new(detail);
+  gtk_label_set_xalign(GTK_LABEL(label), 0.0);
+  gtk_label_set_ellipsize(GTK_LABEL(label), PANGO_ELLIPSIZE_END);
+  gtk_label_set_max_width_chars(GTK_LABEL(label), 40);
+  gtk_grid_attach(GTK_GRID(grid), label, 1, row, 1, 1);
+}
+
+// The running jobs one by one, the queued ones counted by kind: a lighttable may queue hundreds
+// of thumbnails. Jobs still queued at a quit never start, and the header says so.
+static void _closing_details_update(dt_closing_t *closing)
+{
+  dt_closing_jobs_t jobs = { .running = g_array_new(FALSE, FALSE, sizeof(dt_closing_job_t)) };
+  g_array_set_clear_func(jobs.running, _closing_job_clear);
+  dt_control_jobs_foreach(dt_control_get_global(), _closing_collect_job, &jobs);
+
+  GString *listed = g_string_new(NULL);
+  for(guint i = 0; i < jobs.running->len; i++)
+  {
+    const dt_closing_job_t *job = &g_array_index(jobs.running, dt_closing_job_t, i);
+    g_string_append_printf(listed, "%d\t%s\n", job->kind, job->description);
+  }
+  int queued = 0;
+  for(int kind = 0; kind < DT_CLOSING_KINDS; kind++)
+  {
+    g_string_append_printf(listed, "%d ", jobs.queued[kind]);
+    queued += jobs.queued[kind];
+  }
+
+  if(g_strcmp0(listed->str, closing->listed) != 0)
+  {
+    dt_gui_container_destroy_children(GTK_CONTAINER(closing->grid));
+    int row = 0;
+    if(jobs.running->len > 0) _closing_grid_header(closing->grid, row++, _("Running"));
+    for(guint i = 0; i < jobs.running->len; i++)
+    {
+      const dt_closing_job_t *job = &g_array_index(jobs.running, dt_closing_job_t, i);
+      _closing_grid_row(closing->grid, row++, _closing_kind_name(job->kind), job->description);
+    }
+    if(queued > 0) _closing_grid_header(closing->grid, row++, _("Queued, will not run"));
+    for(int kind = 0; kind < DT_CLOSING_KINDS; kind++)
+    {
+      if(jobs.queued[kind] == 0) continue;
+      gchar *count = g_strdup_printf(ngettext("%d task", "%d tasks", jobs.queued[kind]), jobs.queued[kind]);
+      _closing_grid_row(closing->grid, row++, _closing_kind_name(kind), count);
+      dt_free(count);
+    }
+    gtk_widget_show_all(closing->grid);
+    gtk_widget_set_visible(closing->details, row > 0);
+
+    dt_free(closing->listed);
+    closing->listed = g_string_free(listed, FALSE);
+  }
+  else
+    g_string_free(listed, TRUE);
+
+  g_array_free(jobs.running, TRUE);
 }
 
 static gboolean _closing_poll(gpointer user_data)
@@ -138,6 +287,8 @@ static gboolean _closing_poll(gpointer user_data)
   gtk_label_set_text(GTK_LABEL(closing->names), names->str);
   gtk_widget_set_visible(closing->names, names->len > 0);
   g_string_free(names, TRUE);
+
+  _closing_details_update(closing);
 
   return G_SOURCE_CONTINUE;
 }
@@ -169,6 +320,7 @@ void dt_gui_closing_wait(void)
   // Off the screen at the drain of the main context that dt_cleanup() does right after
   // dt_control_shutdown(), whose joins no longer wait for anything.
   if(!IS_NULL_PTR(closing.window)) gtk_widget_destroy(closing.window);
+  dt_free(closing.listed);
 }
 
 // clang-format off

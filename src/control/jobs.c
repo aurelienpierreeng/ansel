@@ -204,6 +204,11 @@ void dt_control_job_wait(_dt_job_t *job)
   }
 }
 
+// The job each reserved worker runs, from the moment it takes it off job_res[] until it disposes
+// of it. Guarded by res_mutex. Nothing else refers to it meanwhile, and dt_control_jobs_foreach()
+// reports it.
+static _dt_job_t *_job_res_running[DT_CTL_WORKER_RESERVED] = { NULL };
+
 static int32_t dt_control_run_job_res(dt_control_t *control, int32_t res)
 {
   if(((unsigned int)res) >= DT_CTL_WORKER_RESERVED) return -1;
@@ -214,6 +219,7 @@ static int32_t dt_control_run_job_res(dt_control_t *control, int32_t res)
   {
     job = control->job_res[res];
     control->job_res[res] = NULL; // this job belongs to us now, the queue may not touch it any longer
+    _job_res_running[res] = job;
   }
   control->new_res[res] = 0;
   dt_pthread_mutex_unlock(&control->res_mutex);
@@ -237,6 +243,11 @@ static int32_t dt_control_run_job_res(dt_control_t *control, int32_t res)
     dt_print(DT_DEBUG_CONTROL, "\n");
   }
   dt_pthread_mutex_unlock(&job->wait_mutex);
+
+  dt_pthread_mutex_lock(&control->res_mutex);
+  _job_res_running[res] = NULL;
+  dt_pthread_mutex_unlock(&control->res_mutex);
+
   dt_control_job_dispose(job);
   return 0;
 }
@@ -533,6 +544,36 @@ static gint _workers_alive = 0;
 int32_t dt_control_workers_alive(void)
 {
   return g_atomic_int_get(&_workers_alive);
+}
+
+void dt_control_jobs_foreach(dt_control_t *control, dt_control_jobs_foreach_callback_t callback, void *data)
+{
+  // A job is disposed only after it has left these arrays and lists, which it leaves under the
+  // mutex held around them here: its description outlives the callback.
+  dt_pthread_mutex_lock(&control->queue_mutex);
+  for(int k = 0; k < control->num_threads; k++)
+  {
+    const _dt_job_t *job = control->job[k];
+    if(!IS_NULL_PTR(job)) callback(job->description, job->queue, FALSE, TRUE, data);
+  }
+  for(int i = 0; i < DT_JOB_QUEUE_MAX; i++)
+    for(const GList *iter = control->queues[i]; iter; iter = g_list_next(iter))
+    {
+      const _dt_job_t *job = (const _dt_job_t *)iter->data;
+      callback(job->description, job->queue, FALSE, FALSE, data);
+    }
+  dt_pthread_mutex_unlock(&control->queue_mutex);
+
+  dt_pthread_mutex_lock(&control->res_mutex);
+  for(int k = 0; k < DT_CTL_WORKER_RESERVED; k++)
+  {
+    const _dt_job_t *running = _job_res_running[k];
+    if(!IS_NULL_PTR(running)) callback(running->description, running->queue, TRUE, TRUE, data);
+    const _dt_job_t *queued = control->job_res[k];
+    if(control->new_res[k] && !IS_NULL_PTR(queued))
+      callback(queued->description, queued->queue, TRUE, FALSE, data);
+  }
+  dt_pthread_mutex_unlock(&control->res_mutex);
 }
 
 int32_t dt_control_get_threadid()
