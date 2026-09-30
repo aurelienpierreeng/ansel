@@ -233,6 +233,60 @@ flagged is not written again at eviction; the next session renders it.
   sessions, and the first one byte-identical to `2fadf8a366`'s; an entry read from disk and then
   overwritten through `dt_mipmap_cache_swap_at_size()` was written back with the new pixels.
 
+## A failed thumbnail is retried once, and a skull is never a source
+
+> **Established 2026-09-30 against `aac2ee1321`; re-measured 2026-10-25 on top of the eviction
+> rewrite and the embedded-JPEG mode snapshot (`8f8b83d8bf`).**
+
+`_init_8()` and `_init_f()` report a failure as a zero-sized image. If `_generate_blocking()`
+cleared `DT_MIPMAP_BUFFER_DSC_FLAG_GENERATE` on it, the failure would be latched on the spot: every
+later request takes the "already in cache, no I/O needed" branch and gets the 8×8 skull back, and
+`dt_view_image_get_surface()` reports an 8×8 buffer as `DT_VIEW_SURFACE_OK` — so the widget
+commits it and never asks again. One transient fault would cost an image its thumbnail for the
+whole session, clearable only through "Purge selected thumbnails from cache".
+
+**The retry is bounded, and the descriptor must be restored before it runs.** `GENERATE|RETRIED`
+means "failed once, try again on the next request"; `RETRIED` alone means "failed twice, stopped".
+The trap: a failed attempt leaves the skull's 8×8 in `dsc->width`/`height`, and `_init_8()` opens
+with `if(size >= DT_MIPMAP_F || dsc->width < 16 || dsc->height < 16) return DT_IMAGEIO_OK;` — so
+re-entering with those dimensions does nothing at all, silently, and the skull would be kept as a
+thumbnail that generated. `_generate_blocking()` puts back what
+`dt_mipmap_cache_update_buffer_addresses()` asks for first.
+
+**A skull is not a downsample source.** `_init_8()` fills a size from the first larger size present
+in RAM. An entry still flagged `GENERATE` is not returned to that `DT_MIPMAP_TESTLOCK` get, but one
+that failed twice is — with the dead image as its buffer. The smaller mips would be filled from it
+and marked as generated **without ever attempting their own generation**.
+
+> **An earlier account of this failure was wrong, and the measurement is the reason to record it.**
+> It said the propagated skull, "being larger than 8×8, then cleared the 'don't write skulls' guard
+> on eviction and reached the disk cache, where it survived restarts". It does not.
+> `dt_iop_flip_and_zoom_8()` never upscales, so the copy comes out 8×8 as well
+> (`generate mip size 1 for image 1 from mip size 2 (8x8->8x8)`) and the guard holds — measured on
+> `aac2ee1321` with a corrupt source: 2 mips filled from the skull, 0 JPEGs written. The harm is the
+> latching of the smaller sizes, not disk contamination.
+
+Reproducing this needs a failure that happens **after** the downsample loop, which rules out the
+obvious repro: `!input_exists` returns early, above the loop. Replace an imported file's contents
+with random bytes instead, and set `lighttable/embedded_jpg=0` — otherwise `use_embedded_jpg` is
+TRUE for an unaltered image and the loop is skipped entirely.
+
+Measured that way (a 200 kB random-bytes NEF, `ansel-generate-cache --min-mip 0 --max-mip 2
+-d cache`, `--disable-opencl`, fresh `--configdir`, `--cachedir` and `--library`):
+
+|                                  | `8f8b83d8bf` | with the retry |
+|----------------------------------|-------------:|---------------:|
+| `could not process thumbnail`    |            1 |              3 |
+| `will try again`                 |            — |              4 |
+| `generate mip size … from mip size` |         2 |              0 |
+| JPEGs on disk                    |            0 |              0 |
+
+Without the retry, one generation is attempted and the two smaller sizes are filled from its skull;
+with it, each size attempts its own. The skull check in the downsample loop did not fire in this run:
+every failed size still carries `GENERATE`, so the `DT_MIPMAP_TESTLOCK` get skips it. It is there
+for a size that has failed twice, which `ansel-generate-cache` does not reach — it asks once per
+size.
+
 ## Mipmap invalidation is explicit, not hash-driven
 
 *Found `22f623c0be`, 2026-06-25.*
