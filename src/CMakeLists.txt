@@ -250,6 +250,7 @@ FILE(GLOB SOURCE_FILES
   "gui/dtgtk/filmstrip.c"
   "gui/guides.c"
   "gui/application.c"
+  "gui/closing.c"
   "gui/splash.c"
   "gui/hist_dialog.c"
   "gui/preferences.c"

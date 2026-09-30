@@ -8585,6 +8585,21 @@ msgstr "Ansel - Chercher des accélérateurs"
 msgid "closing Ansel..."
 msgstr "quitter Ansel..."
 
+#: ../src/gui/closing.c:79
+msgid "Ansel is finishing its work before closing"
+msgstr "Ansel termine son travail avant de se fermer"
+
+#: ../src/gui/closing.c:94
+msgid "This window closes by itself as soon as it is done."
+msgstr "Cette fenêtre se ferme d'elle-même dès que c'est terminé."
+
+#: ../src/gui/closing.c:132
+#, c-format
+msgid "%d task is still running"
+msgid_plural "%d tasks are still running"
+msgstr[0] "%d tâche est encore en cours"
+msgstr[1] "%d tâches sont encore en cours"
+
 #. font name can only use period as decimal separator
 #. but printf format strings use comma for some locales, so replace comma with
 #. period

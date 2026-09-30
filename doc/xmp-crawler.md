@@ -102,7 +102,8 @@ one job whose purpose is to find out whether the sidecars are in sync must not d
 ## Stopping
 
 **Nothing cancels a running job when Ansel quits.** `dt_control_quit()` and
-`dt_control_shutdown()` only clear `running`, then `pthread_join()` the workers. So a job that
+`dt_control_shutdown()` only clear `running`, then wait for the workers and join them (the wait
+is `shutdown.md`'s subject). So a job that
 consults `dt_control_job_get_state()` alone — as `preload_image_cache()` does — never reacts to
 a quit, and the quit waits for it: 1.1 s on a live share, the mount timeout *per folder* on one
 that has gone away. The crawl checks `dt_control_running()` as well, before each image, between

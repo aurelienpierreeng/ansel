@@ -8078,6 +8078,21 @@ msgstr ""
 msgid "closing Ansel..."
 msgstr ""
 
+#: ../src/gui/closing.c:79
+msgid "Ansel is finishing its work before closing"
+msgstr ""
+
+#: ../src/gui/closing.c:94
+msgid "This window closes by itself as soon as it is done."
+msgstr ""
+
+#: ../src/gui/closing.c:132
+#, c-format
+msgid "%d task is still running"
+msgid_plural "%d tasks are still running"
+msgstr[0] ""
+msgstr[1] ""
+
 #. font name can only use period as decimal separator
 #. but printf format strings use comma for some locales, so replace comma with period
 #: ../src/gui/gtk.c:2044

@@ -61,7 +61,7 @@ Release *and* Debug, red in `build-nofeatures`.
 
 **Four edges point at `develop/`, and that is what costs this refactor by name.**
 `control.c → develop/develop.h` — transitive fan-in **195**, dragged in for two field reads
-(`darktable.develop->progress.{total,completed}`, `control.c:641,645` — the last two
+(`darktable.develop->progress.{total,completed}`, `control.c:656,660` — the last two
 cross-module `darktable.develop` references in the tree, see `doc/globals-migration.md`);
 `control_jobs.c:93` and
 `import_jobs.c:23 → develop/history_merge.h` for one enum and one batch-state type;
@@ -77,11 +77,11 @@ does at scale. The `common/ -> control/` count is **17 (2026-09-29)**.
 **Cross-thread state shares the struct.** Nine mutexes declared, eight initialised, seven
 destroyed: `global_mutex` leaks on every GUI run, `image_mutex` is referenced by nothing
 tree-wide. Headless initialises **two** then locks six zeroed ones on reachable paths
-(`ansel-cli --import` → `film_jobs.c:96` → `progress.c:279`).
+(`ansel-cli --import` → `film_jobs.c:96` → `progress.c:280`).
 
 **`global_mutex` is live and must not be deleted** (corrects PR3 below, which listed it for
 deletion). It is initialised at `control.c:114` and guards the four mouse-over / keyboard-over id
-accessors at `control.c:988-1024` — `dt_control_{get,set}_mouse_over_id()` and their keyboard
+accessors at `control.c:1003-1039` — `dt_control_{get,set}_mouse_over_id()` and their keyboard
 twins. What it needs is a `destroy`, not a delete. Genuinely dead by contrast, and safe to
 delete: `button_type`, `history_start`, `last_expose_time`, `image_mutex` — each has its
 declaration and no reader. (`grep global_mutex` also hits `common/global_mutexes.h` includes in
@@ -89,7 +89,7 @@ six unrelated files; those are a different thing.)
 
 One live
 use-after-free — **since fixed**: `darktable.c:581` now holds a `static dt_pthread_mutex_t
-_main_message_lock` and `:583` publishes `dt_get_main_message_copy()`, which `control.c:542`
+_main_message_lock` and `:583` publishes `dt_get_main_message_copy()`, which `control.c:557`
 calls. Before that, `dt_control_draw_busy_msg` read `darktable.main_message` unlocked at four
 external sites (`gui/dtgtk/thumbnail.c:745`, `preview_window.c:148`, `views/slideshow.c:492`,
 `views/studio_capture.c:858`) while the pipeline worker `dt_free`s it per module per frame
@@ -136,7 +136,7 @@ control section.
 | ~~**1**~~ ✅ | **Landed.** Fixed `tools/header_consumers.py` (it stripped `//` before string literals, so a URL ate its closing quote — 7550 of 9491 chars blanked on `gui/actions/help.c`, reported as using *nothing* from `control.h` while calling six of its symbols; `strip_noise` is now ONE pass and carries that measurement inline). Added `control/user_message.h` (`<glib.h>` only, layer 3, 7 declarations at :56-69), `control.h` includes it at :55, and the message-only includers were repointed — 37 direct includers today. No rename, no field touched, no CMake edit (`src/CMakeLists.txt:266` globs `control/*.h`). | re-run the tool on `help.c`; `check_unused_includes.sh`; four configs incl. `build-nofeatures` | **184** |
 | ~~**2**~~ ✅ | **Landed.** `control/redraw.h:47-59` — the five `SIGNAL_RAISE` one-liners; `control.h:56` includes it; 11 direct includers today. Same shape. | as PR1 | **184** |
 | **3** ◐ | **Half landed**: `control/input.h` exists (5 includers) and **no `src/iop/` file dereferences `dt_control_t`** — but the gate was never added, `cursor.h` was not split out, and no field was deleted. Remaining: extend `dt_control_pointer_input_t` (the struct is `control.h:73-90`, the getter `:109`) with the button fields it lacks; convert the raw readers; `views/darkroom.c`'s drag-anchor writes become darkroom state. Delete `button_type`, `history_start`, `last_expose_time`, `image_mutex` — **but NOT `global_mutex`, which is live** (see above). Add the gate. | crop/clipping/vignette drags by hand — live state machines, see traps | **183** |
-| **4** | Progress vtable → `dt_progress_handlers_t { void *ctx; … }`, installed and retracted as one call; `control.h` still includes `libs/lib.h`. Fixes `libs/backgroundjobs.c:162-166` (nulls 5 of 6 slots) and `progress.c:344-359` (cancel destroys the mutex it holds — user-triggerable on a queued job). | cancel a not-yet-started import under ASAN | **184** |
+| **4** | Progress vtable → `dt_progress_handlers_t { void *ctx; … }`, installed and retracted as one call; `control.h` still includes `libs/lib.h`. Fixes `libs/backgroundjobs.c:162-166` (nulls 5 of 6 slots) and `progress.c:345-360` (cancel destroys the mutex it holds — user-triggerable on a queued job). | cancel a not-yet-started import under ASAN | **184** |
 | **5** | **Delete the `libs/lib.h` edge — `control.h:58` today, not :56.** Whole content: the 6 `dt_view_t` files plus a resolver for `common/folder_survey.c` (layer 1 — adding the include there would *raise* the ratchet). Delete `dt_ctl_switch_mode_to_by_view` (still zero callers, still the sole `dt_view_t` user in the header). | per-file table in the PR body; `build-nofeatures` | **183** |
 | **6** | `control.c`'s GUI half → `gui/` (expose, busy paint, event router, view-switch shims, log/toast rendering). `develop->progress.*` inverts through the existing `develop/pipeline_notify.h`; `control.c:58 darktable.h` goes — note that is no longer free, since `control.c` dereferences `darktable.control->` throughout (127 sites) and `darktable.view_manager` (16). The `main_message` UAF is already closed, separately. | `-d control`; thumbnail + slideshow expose during a darkroom render | **180** |
 | **7** | `crawler.c` splits at line 571: scanner (570 lines, 0 GTK) → a module of its own; dialog (585 lines) → `gui/dialogs/`. **Not `database/` any more**: the scanner runs as a background job and names `control/control.h` and `control/jobs.h`, so it sits at layer 3 like the dialog it leaves. It also enumerates directories, which 17 other files in the tree do by hand — `xmp-crawler.md` argues the inventory is the module, and the scanner its first caller. | crawler run on a scratch library | **179** |
@@ -145,7 +145,7 @@ control section.
 | **10** | Lifecycle symmetry: one init/cleanup pair, every mutex initialised and destroyed on both paths, matched allocator (`calloc` at `darktable.c:897` vs `dt_free` at `:2006`), teardown reordered above `dt_control_signal_cleanup`. Delete `proxy.hinter` and the ignored `s` parameter (−21 accessor sites). | clean `rm -rf build && ninja install`, **staged** binary, ASAN | **≈168** |
 | **11** | **`('control', 1)` in `tools/include_graph.py`.** One line. | the printed summary, not the argument | **≈149** |
 | **12** | Seal: `control/control_private.h` holds the struct, `control.h` publishes an opaque typedef and seven functions; ratchet in `check_module_boundaries.sh` — `control_private_baseline=0`, `control_fields_baseline=45`, `control_upcalls_baseline=16`, `toolkit_control_baseline=5`, all measured today. | plant a `dt_control_get_global()->running` in `libs/`, confirm the gate fails | **≈149** |
-| **13** | The scheduler's synchronisation, alone: predicate and wait under one mutex, **delete the `sleep(2)` kicker** (`jobs.c:571-583`), broadcast inside the lock in `dt_control_shutdown` (`control.c:455-456`), drain `job_res[]`, rename `dt_control_flush_jobs_queue` to what it does. | enqueue from 8 threads, no job queued > 50 ms; 100 start/quit cycles, no hang | **≈149** |
+| **13** | The scheduler's synchronisation, alone: the *queue* predicate and its wait under one mutex, then **delete the kicker** (`jobs.c:584-607`) that exists to cover for it, broadcast inside the lock in `dt_control_shutdown` (`control.c:481-482`), drain `job_res[]`, rename `dt_control_flush_jobs_queue` to what it does. The `running` half is in place (2026-09-30): the workers re-read it under `cond_mutex` before waiting, and the kicker waits on the condition instead of sleeping, so a quit no longer waits for either — see `shutdown.md`. | enqueue from 8 threads, no job queued > 50 ms; 100 start/quit cycles, no hang | **≈149** |
 
 ## Traps
 
@@ -161,7 +161,7 @@ lands"). Delete it in PR10 *with* the allocator pairing fixed, never as a standa
 struct is `control.h:204-303` and opens `int32_t width, height;` (:207), `pthread_t gui_thread;`
 (:208), `double button_x, button_y;`, `int history_start;`, then the over-ids. (An earlier draft
 named `tabborder` first; there is no such member and there has not been one — the only
-`tabborder` in the tree is a comment at `gui/application.c:1429` recording its removal.) The
+`tabborder` in the tree is a comment at `gui/application.c:1431` recording its removal.) The
 window-geometry concern that PR6 sends to `gui/` is the move that shifts a stale plugin's read —
 which is why PR3's gate lands first.
 
@@ -187,7 +187,7 @@ looking.
 `darktable.signals = init_gui ? dt_control_signal_init() : NULL;` (commit `b2f672b75d`, "signals:
 only the GUI gets the signal system"), so headless has no bus to raise on. The second gate,
 `dt_control_running()`, was the *only* thing stopping it when this was written, and is false
-there too: `running` is set by `dt_control_jobs_init()` (`jobs.c:649`), which only
+there too: `running` is set by `dt_control_jobs_init()` (`jobs.c:674`), which only
 `dt_control_init()` calls, and only under `init_gui` (2026-09-29). Either way the bus never
 fires headless — the structural reason the four notify/handler seams had to be invented. A
 dropped signal still has its arguments collected, and the four that take ownership of a
@@ -196,7 +196,7 @@ list `dt_image_cache_write_release()` hands the bus in every CLI export is freed
 bus live headless is a behaviour change for 52 signals and belongs in its own PR.
 
 **`log_busy` gates the cursor** — `dt_control_commit_cursor` early-returns on it
-(`control.c:330`), `dt_control_expose` picks the progress cursor from it (`control.c:581-588`).
+(`control.c:346`), `dt_control_expose` picks the progress cursor from it (`control.c:644-651`).
 PR1 moves the counter, PR6 moves the cursor; the arbitration must become an explicit call or the
 watch cursor silently stops appearing during `iop-autoset`. And **`dt_control_log` is not a
 no-op headless**, despite the comment at `darktable.c:737-738`: it writes the ring and arms
