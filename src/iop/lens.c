@@ -1603,6 +1603,7 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
   const int roi_in_y = roi_in->y;
   const int roi_out_x = roi_out->x;
   const int roi_out_y = roi_out->y;
+  const int mask_display = (pipe->mask_display & DT_DEV_PIXELPIPE_DISPLAY_MASK) != 0;
 
   const float orig_w = roi_in->scale * piece->buf_in.width, orig_h = roi_in->scale * piece->buf_in.height;
 
@@ -1688,6 +1689,7 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
     dt_opencl_set_kernel_arg(devid, ldkernel, 10, sizeof(ls_eval_t), (void *)&p);
     dt_opencl_set_kernel_arg(devid, ldkernel, 11, sizeof(int), (void *)&(d->do_nan_checks));
     dt_opencl_set_kernel_arg(devid, ldkernel, 12, sizeof(int), (void *)&(raw_monochrome));
+    dt_opencl_set_kernel_arg(devid, ldkernel, 13, sizeof(int), (void *)&mask_display);
     err = dt_opencl_enqueue_kernel_2d(devid, ldkernel, osizes);
     if(err != CL_SUCCESS) goto error;
   }
