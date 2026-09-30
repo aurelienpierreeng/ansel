@@ -24,7 +24,6 @@
 #include "control/progress.h"
 #include "system/macros.h"
 #include "system/mem_alloc.h"
-#include "widgets/container.h"
 #include "widgets/widget_settings.h"
 
 #include <glib/gi18n.h>
@@ -42,6 +41,20 @@
 // the darkroom uses, comes after the queues.
 #define DT_CLOSING_KIND_DARKROOM DT_JOB_QUEUE_MAX
 #define DT_CLOSING_KINDS (DT_JOB_QUEUE_MAX + 1)
+// The rows of the details that can be unfolded: the two sections, and under the queued one, one row
+// per kind, whose id is the kind itself. A job's row has none.
+#define DT_CLOSING_ROW_RUNNING DT_CLOSING_KINDS
+#define DT_CLOSING_ROW_QUEUED (DT_CLOSING_KINDS + 1)
+#define DT_CLOSING_ROW_JOB (-1)
+
+enum
+{
+  DT_CLOSING_COL_KIND,   // a job's kind, or a section's title
+  DT_CLOSING_COL_DETAIL, // a job's description, or how many jobs a row holds
+  DT_CLOSING_COL_WEIGHT, // bold for the sections
+  DT_CLOSING_COL_ROW,    // which foldable row this is, to keep it unfolded across rebuilds
+  DT_CLOSING_COLS
+};
 
 typedef struct dt_closing_t
 {
@@ -50,9 +63,10 @@ typedef struct dt_closing_t
   GtkWidget *window;
   GtkWidget *count;   // how many jobs are still running
   GtkWidget *names;   // what the ones that publish a progress say they are doing
-  GtkWidget *details; // the expander that lists the jobs, hidden while there are none
-  GtkWidget *grid;    // its content
-  gchar *listed;      // what the grid shows, so that it is rebuilt only when that changes
+  GtkWidget *details;  // the expander that lists the jobs, hidden while there are none
+  GtkWidget *view;     // the tree inside it
+  GtkTreeStore *store; // the tree's rows, owned by the view
+  gchar *listed;       // what the tree shows, so that it is rebuilt only when that changes
 } dt_closing_t;
 
 typedef struct dt_closing_job_t
@@ -63,9 +77,14 @@ typedef struct dt_closing_job_t
 
 typedef struct dt_closing_jobs_t
 {
-  GArray *running;              // of dt_closing_job_t, in the order the scheduler reports them
-  int queued[DT_CLOSING_KINDS]; // how many jobs of each kind wait for a worker
+  GArray *running; // of dt_closing_job_t, in the order the scheduler reports them
+  GArray *queued;  // likewise, for those that wait for a worker
 } dt_closing_jobs_t;
+
+static gboolean _closing_refuse_delete(GtkWidget *widget, GdkEvent *event, gpointer user_data)
+{
+  return TRUE;
+}
 
 static void _closing_window_new(dt_closing_t *closing)
 {
@@ -79,9 +98,16 @@ static void _closing_window_new(dt_closing_t *closing)
   gtk_window_set_title(GTK_WINDOW(closing->window), _("closing Ansel..."));
   gtk_window_set_position(GTK_WINDOW(closing->window), GTK_WIN_POS_CENTER);
   gtk_window_set_resizable(GTK_WINDOW(closing->window), FALSE);
-  // Closing this window would stop nothing, so it offers no button to. The grab of
-  // dt_gui_closing_wait() is what discards a delete-event sent some other way.
+  // Closing this window would stop nothing, so it offers no button to, and refuses a
+  // delete-event sent some other way (Alt+F4, a task bar).
   gtk_window_set_deletable(GTK_WINDOW(closing->window), FALSE);
+  g_signal_connect(closing->window, "delete-event", G_CALLBACK(_closing_refuse_delete), NULL);
+  // A window group of its own. The grab of dt_gui_closing_wait() is held in the default group,
+  // the one every other window of ours is in; in there, it would take this window's clicks too,
+  // and the details could not be unfolded.
+  GtkWindowGroup *group = gtk_window_group_new();
+  gtk_window_group_add_window(group, GTK_WINDOW(closing->window));
+  g_object_unref(group);
 
   GtkWidget *box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_PIXEL_APPLY_DPI(12));
   gtk_container_set_border_width(GTK_CONTAINER(box), DT_PIXEL_APPLY_DPI(16));
@@ -120,13 +146,36 @@ static void _closing_window_new(dt_closing_t *closing)
   gtk_widget_set_no_show_all(closing->details, TRUE);
   gtk_box_pack_start(GTK_BOX(text), closing->details, FALSE, FALSE, 0);
 
-  closing->grid = gtk_grid_new();
-  gtk_grid_set_column_spacing(GTK_GRID(closing->grid), DT_PIXEL_APPLY_DPI(12));
-  gtk_grid_set_row_spacing(GTK_GRID(closing->grid), DT_PIXEL_APPLY_DPI(2));
-  gtk_widget_set_margin_top(closing->grid, DT_PIXEL_APPLY_DPI(6));
-  gtk_container_add(GTK_CONTAINER(closing->details), closing->grid);
-  // Shown by hand: the expander's no_show_all keeps show_all from reaching it.
-  gtk_widget_show(closing->grid);
+  closing->store = gtk_tree_store_new(DT_CLOSING_COLS, G_TYPE_STRING, G_TYPE_STRING, G_TYPE_INT, G_TYPE_INT);
+  closing->view = gtk_tree_view_new_with_model(GTK_TREE_MODEL(closing->store));
+  g_object_unref(closing->store);
+  gtk_tree_view_set_enable_search(GTK_TREE_VIEW(closing->view), FALSE);
+  gtk_tree_selection_set_mode(gtk_tree_view_get_selection(GTK_TREE_VIEW(closing->view)), GTK_SELECTION_NONE);
+
+  GtkCellRenderer *renderer = gtk_cell_renderer_text_new();
+  GtkTreeViewColumn *column = gtk_tree_view_column_new_with_attributes(
+      C_("closing jobs", "Type"), renderer, "text", DT_CLOSING_COL_KIND, "weight", DT_CLOSING_COL_WEIGHT, NULL);
+  gtk_tree_view_append_column(GTK_TREE_VIEW(closing->view), column);
+
+  renderer = gtk_cell_renderer_text_new();
+  g_object_set(renderer, "ellipsize", PANGO_ELLIPSIZE_END, NULL);
+  column = gtk_tree_view_column_new_with_attributes(C_("closing jobs", "Description"), renderer, "text",
+                                                    DT_CLOSING_COL_DETAIL, "weight", DT_CLOSING_COL_WEIGHT, NULL);
+  gtk_tree_view_column_set_expand(column, TRUE);
+  gtk_tree_view_append_column(GTK_TREE_VIEW(closing->view), column);
+
+  // As tall as its rows up to a point, then it scrolls: a lighttable may queue hundreds of jobs.
+  GtkWidget *scroll = gtk_scrolled_window_new(NULL, NULL);
+  gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(scroll), GTK_POLICY_NEVER, GTK_POLICY_AUTOMATIC);
+  gtk_scrolled_window_set_shadow_type(GTK_SCROLLED_WINDOW(scroll), GTK_SHADOW_ETCHED_IN);
+  gtk_scrolled_window_set_min_content_width(GTK_SCROLLED_WINDOW(scroll), DT_PIXEL_APPLY_DPI(420));
+  gtk_scrolled_window_set_max_content_height(GTK_SCROLLED_WINDOW(scroll), DT_PIXEL_APPLY_DPI(300));
+  gtk_scrolled_window_set_propagate_natural_height(GTK_SCROLLED_WINDOW(scroll), TRUE);
+  gtk_widget_set_margin_top(scroll, DT_PIXEL_APPLY_DPI(6));
+  gtk_container_add(GTK_CONTAINER(scroll), closing->view);
+  gtk_container_add(GTK_CONTAINER(closing->details), scroll);
+  // Shown by hand: the expander's no_show_all keeps show_all from reaching them.
+  gtk_widget_show_all(scroll);
 
   gtk_widget_show_all(closing->window);
 
@@ -175,83 +224,132 @@ static void _closing_collect_job(const char *description, const dt_job_queue_t q
                                  const gboolean running, void *data)
 {
   dt_closing_jobs_t *jobs = (dt_closing_jobs_t *)data;
-  const int kind = reserved ? DT_CLOSING_KIND_DARKROOM : (int)queue;
-  if(!running)
-  {
-    jobs->queued[kind]++;
-    return;
-  }
   // Descriptions are written for the debug log, in English. Some are also the catalog's
   // strings, those the generic image jobs show on their progress bar.
-  const dt_closing_job_t job = { .kind = kind, .description = g_strdup(_(description)) };
-  g_array_append_val(jobs->running, job);
+  const dt_closing_job_t job = { .kind = reserved ? DT_CLOSING_KIND_DARKROOM : (int)queue,
+                                 .description = g_strdup(_(description)) };
+  g_array_append_val(running ? jobs->running : jobs->queued, job);
 }
 
-static void _closing_grid_header(GtkWidget *grid, const int row, const char *text)
+static gchar *_closing_count(const int count)
 {
-  GtkWidget *label = gtk_label_new(NULL);
-  gchar *markup = g_markup_printf_escaped("<b>%s</b>", text);
-  gtk_label_set_markup(GTK_LABEL(label), markup);
-  dt_free(markup);
-  gtk_label_set_xalign(GTK_LABEL(label), 0.0);
-  if(row > 0) gtk_widget_set_margin_top(label, DT_PIXEL_APPLY_DPI(6));
-  gtk_grid_attach(GTK_GRID(grid), label, 0, row, 2, 1);
+  return g_strdup_printf(ngettext("%d task", "%d tasks", count), count);
 }
 
-static void _closing_grid_row(GtkWidget *grid, const int row, const char *kind, const char *detail)
+static void _closing_append(GtkTreeStore *store, GtkTreeIter *iter, GtkTreeIter *parent, const char *kind,
+                            const char *detail, const int weight, const int row)
 {
-  GtkWidget *label = gtk_label_new(kind);
-  gtk_label_set_xalign(GTK_LABEL(label), 0.0);
-  gtk_grid_attach(GTK_GRID(grid), label, 0, row, 1, 1);
-
-  label = gtk_label_new(detail);
-  gtk_label_set_xalign(GTK_LABEL(label), 0.0);
-  gtk_label_set_ellipsize(GTK_LABEL(label), PANGO_ELLIPSIZE_END);
-  gtk_label_set_max_width_chars(GTK_LABEL(label), 40);
-  gtk_grid_attach(GTK_GRID(grid), label, 1, row, 1, 1);
+  gtk_tree_store_insert_with_values(store, iter, parent, -1, DT_CLOSING_COL_KIND, kind, DT_CLOSING_COL_DETAIL,
+                                    detail, DT_CLOSING_COL_WEIGHT, weight, DT_CLOSING_COL_ROW, row, -1);
 }
 
-// The running jobs one by one, the queued ones counted by kind: a lighttable may queue hundreds
-// of thumbnails. Jobs still queued at a quit never start, and the header says so.
+// Unfolds the row at iter if `unfold` and the mask has it, then says whether it is unfolded, as its
+// bit in a mask of DT_CLOSING_COL_ROW. A job's row has no bit.
+static guint _closing_foldable_row(const dt_closing_t *closing, GtkTreeIter *iter, const gboolean unfold,
+                                   const guint mask)
+{
+  int row = DT_CLOSING_ROW_JOB;
+  gtk_tree_model_get(GTK_TREE_MODEL(closing->store), iter, DT_CLOSING_COL_ROW, &row, -1);
+  if(row < 0) return 0;
+
+  const guint bit = 1u << row;
+  GtkTreePath *path = gtk_tree_model_get_path(GTK_TREE_MODEL(closing->store), iter);
+  if(unfold && (mask & bit)) gtk_tree_view_expand_row(GTK_TREE_VIEW(closing->view), path, FALSE);
+  const guint unfolded = gtk_tree_view_row_expanded(GTK_TREE_VIEW(closing->view), path) ? bit : 0;
+  gtk_tree_path_free(path);
+  return unfolded;
+}
+
+// Which rows are unfolded, as a mask of their DT_CLOSING_COL_ROW, after unfolding those of `mask`
+// if `unfold`. Only the sections and the rows right under them have children.
+static guint _closing_foldable_rows(const dt_closing_t *closing, const gboolean unfold, const guint mask)
+{
+  GtkTreeModel *model = GTK_TREE_MODEL(closing->store);
+  guint unfolded = 0;
+  GtkTreeIter section, child;
+  for(gboolean s = gtk_tree_model_get_iter_first(model, &section); s; s = gtk_tree_model_iter_next(model, &section))
+  {
+    unfolded |= _closing_foldable_row(closing, &section, unfold, mask);
+    for(gboolean c = gtk_tree_model_iter_children(model, &child, &section); c;
+        c = gtk_tree_model_iter_next(model, &child))
+      unfolded |= _closing_foldable_row(closing, &child, unfold, mask);
+  }
+  return unfolded;
+}
+
+// The running jobs, then the queued ones by kind, each kind folded on its jobs: a lighttable may
+// queue hundreds of thumbnails. Jobs still queued at a quit never start, and the section says so.
 static void _closing_details_update(dt_closing_t *closing)
 {
-  dt_closing_jobs_t jobs = { .running = g_array_new(FALSE, FALSE, sizeof(dt_closing_job_t)) };
+  dt_closing_jobs_t jobs = { .running = g_array_new(FALSE, FALSE, sizeof(dt_closing_job_t)),
+                             .queued = g_array_new(FALSE, FALSE, sizeof(dt_closing_job_t)) };
   g_array_set_clear_func(jobs.running, _closing_job_clear);
+  g_array_set_clear_func(jobs.queued, _closing_job_clear);
   dt_control_jobs_foreach(dt_control_get_global(), _closing_collect_job, &jobs);
 
   GString *listed = g_string_new(NULL);
   for(guint i = 0; i < jobs.running->len; i++)
   {
     const dt_closing_job_t *job = &g_array_index(jobs.running, dt_closing_job_t, i);
-    g_string_append_printf(listed, "%d\t%s\n", job->kind, job->description);
+    g_string_append_printf(listed, "r%d\t%s\n", job->kind, job->description);
   }
-  int queued = 0;
-  for(int kind = 0; kind < DT_CLOSING_KINDS; kind++)
+  for(guint i = 0; i < jobs.queued->len; i++)
   {
-    g_string_append_printf(listed, "%d ", jobs.queued[kind]);
-    queued += jobs.queued[kind];
+    const dt_closing_job_t *job = &g_array_index(jobs.queued, dt_closing_job_t, i);
+    g_string_append_printf(listed, "q%d\t%s\n", job->kind, job->description);
   }
 
   if(g_strcmp0(listed->str, closing->listed) != 0)
   {
-    dt_gui_container_destroy_children(GTK_CONTAINER(closing->grid));
-    int row = 0;
-    if(jobs.running->len > 0) _closing_grid_header(closing->grid, row++, _("Running"));
-    for(guint i = 0; i < jobs.running->len; i++)
+    // The first listing opens both sections and leaves the kinds folded; the next ones keep
+    // what the user folded or unfolded.
+    const guint unfolded = IS_NULL_PTR(closing->listed)
+                               ? (1u << DT_CLOSING_ROW_RUNNING) | (1u << DT_CLOSING_ROW_QUEUED)
+                               : _closing_foldable_rows(closing, FALSE, 0);
+    gtk_tree_store_clear(closing->store);
+
+    GtkTreeIter section, kind_row, row;
+    if(jobs.running->len > 0)
     {
-      const dt_closing_job_t *job = &g_array_index(jobs.running, dt_closing_job_t, i);
-      _closing_grid_row(closing->grid, row++, _closing_kind_name(job->kind), job->description);
-    }
-    if(queued > 0) _closing_grid_header(closing->grid, row++, _("Queued, will not run"));
-    for(int kind = 0; kind < DT_CLOSING_KINDS; kind++)
-    {
-      if(jobs.queued[kind] == 0) continue;
-      gchar *count = g_strdup_printf(ngettext("%d task", "%d tasks", jobs.queued[kind]), jobs.queued[kind]);
-      _closing_grid_row(closing->grid, row++, _closing_kind_name(kind), count);
+      gchar *count = _closing_count(jobs.running->len);
+      _closing_append(closing->store, &section, NULL, _("Running"), count, PANGO_WEIGHT_BOLD,
+                      DT_CLOSING_ROW_RUNNING);
       dt_free(count);
+      for(guint i = 0; i < jobs.running->len; i++)
+      {
+        const dt_closing_job_t *job = &g_array_index(jobs.running, dt_closing_job_t, i);
+        _closing_append(closing->store, &row, &section, _closing_kind_name(job->kind), job->description,
+                        PANGO_WEIGHT_NORMAL, DT_CLOSING_ROW_JOB);
+      }
     }
-    gtk_widget_show_all(closing->grid);
-    gtk_widget_set_visible(closing->details, row > 0);
+    if(jobs.queued->len > 0)
+    {
+      gchar *count = _closing_count(jobs.queued->len);
+      _closing_append(closing->store, &section, NULL, _("Queued, will not run"), count, PANGO_WEIGHT_BOLD,
+                      DT_CLOSING_ROW_QUEUED);
+      dt_free(count);
+      for(int kind = 0; kind < DT_CLOSING_KINDS; kind++)
+      {
+        int of_kind = 0;
+        for(guint i = 0; i < jobs.queued->len; i++)
+          if(g_array_index(jobs.queued, dt_closing_job_t, i).kind == kind) of_kind++;
+        if(of_kind == 0) continue;
+
+        count = _closing_count(of_kind);
+        _closing_append(closing->store, &kind_row, &section, _closing_kind_name(kind), count, PANGO_WEIGHT_NORMAL,
+                        kind);
+        dt_free(count);
+        for(guint i = 0; i < jobs.queued->len; i++)
+        {
+          const dt_closing_job_t *job = &g_array_index(jobs.queued, dt_closing_job_t, i);
+          if(job->kind == kind)
+            _closing_append(closing->store, &row, &kind_row, "", job->description, PANGO_WEIGHT_NORMAL,
+                            DT_CLOSING_ROW_JOB);
+        }
+      }
+    }
+    _closing_foldable_rows(closing, TRUE, unfolded);
+    gtk_widget_set_visible(closing->details, jobs.running->len + jobs.queued->len > 0);
 
     dt_free(closing->listed);
     closing->listed = g_string_free(listed, FALSE);
@@ -260,6 +358,7 @@ static void _closing_details_update(dt_closing_t *closing)
     g_string_free(listed, TRUE);
 
   g_array_free(jobs.running, TRUE);
+  g_array_free(jobs.queued, TRUE);
 }
 
 static gboolean _closing_poll(gpointer user_data)
@@ -299,9 +398,10 @@ void dt_gui_closing_wait(void)
 
   // The main window is hidden and its view left, but the windows it may have left on screen are
   // not, and nothing behind them is in a state to answer. The grab takes every input event
-  // away from them, close buttons included, for as long as this loop turns. Its widget is
-  // realised, since GTK delivers events to realised widgets only, but never shown: mapped, it
-  // would be a window on screen -- on macOS, an NSWindow of its own.
+  // away from them, close buttons included, for as long as this loop turns. It holds the
+  // default window group, theirs; the closing window has one of its own, and escapes it. Its
+  // widget is realised, since GTK delivers events to realised widgets only, but never shown:
+  // mapped, it would be a window on screen -- on macOS, an NSWindow of its own.
   GtkWidget *grab = gtk_invisible_new();
   gtk_widget_realize(grab);
   gtk_grab_add(grab);

@@ -68,20 +68,25 @@ progress (`dt_control_progress_foreach()`, `control/progress.c:411`), what they 
 doing: `exporting 3 / 20 to disk`. It cannot be closed and it goes away with the last job. A quit
 that is over within the second shows nothing.
 
-Under *Details*, collapsed by default, the window lists the jobs themselves, from
-`dt_control_jobs_foreach()` (`control/jobs.c:549`): the running ones one by one, the queued ones
-counted by kind, under a header that says they will not run. A job's kind is the queue it was added
-to: *Image operation*, *Thumbnail*, *Background task*, *Export* (prints share that queue),
-*Maintenance*, and *Darkroom rendering* for the reserved worker. Beside a running job stands the
-description it was created with, written for the debug log in English, and translated only where
-it is also a catalog string, as the generic image jobs' are. A reserved worker's running job is
-held nowhere else, so `dt_control_run_job_res()` records it in `_job_res_running[]`, under
-`res_mutex`, for as long as it runs.
+Under *Details*, collapsed by default, a tree lists the jobs themselves, from
+`dt_control_jobs_foreach()` (`control/jobs.c:549`), in two columns, *Type* and *Description*. The
+first section holds the running jobs, one row each. The second, whose title says they will not
+run, holds the queued ones, one row per kind with its count, each folded on its jobs: a
+lighttable may queue hundreds of thumbnails. Past 300 px (at 96 dpi) the tree scrolls. It is
+rebuilt only when what it lists changes, and a rebuild restores which rows the user had folded or
+unfolded. A job's kind is the queue it was added to: *Image operation*, *Thumbnail*, *Background
+task*, *Export* (prints share that queue), *Maintenance*, and *Darkroom rendering* for the
+reserved worker. Its description is the one it was created with, written for the debug log in
+English, and translated only where it is also a catalog string, as the generic image jobs' are. A
+reserved worker's running job is held nowhere else, so `dt_control_run_job_res()` records it in
+`_job_res_running[]`, under `res_mutex`, for as long as it runs.
 
-Measured on top of `cc1400c7b9`, with the method of *What it costs* and the quit 5 s after launch, a trace of
-the grid's rows at 1.03 s into the wait read: running, three *Thumbnail* (`get image 2`, `3`, `4`);
-queued, 19 *Image operation* and 16 *Thumbnail*. The 19 were `save xmp` jobs of the import: of
-the 60 it queued, 41 had run, counted by their `[run_job-]` lines.
+Measured on top of `cc1400c7b9`, with the method of *What it costs* and the quit 5 s after
+launch, a trace of the listed rows at 1.03 s into the wait read: running, three *Thumbnail* (`get
+image 2`, `3`, `4`); queued, 19 *Image operation* and 16 *Thumbnail*. The 19 were `save xmp` jobs
+of the import: of the 60 it queued, 41 had run, counted by their `[run_job-]` lines. With the tree,
+three quits at 4.5, 5 and 6 s listed it the same way, and an *Image operation* row unfolded by
+hand stayed unfolded through the rebuilds that followed the end of each running thumbnail.
 
 **A job that needs the GUI thread gets it.** Two waits in the tree block a worker until the GUI
 thread has run something for it: a synchronous signal raised from a worker (`control/signal.c`,
@@ -97,6 +102,15 @@ answer while the GUI thread was blocked. `dt_gui_closing_wait()` holds a GTK gra
 widget for as long as it waits, so they still cannot: input events and `delete-event` alike go
 to the grab. The widget is realised, because GTK delivers events to realised widgets only, and
 never shown, because a mapped one is a window on screen.
+
+A grab holds a window group, and every window of ours is in the default one. The closing window is
+given a group of its own, so the grab leaves its clicks alone and its details can be unfolded; in
+return nothing discards its `delete-event` any more, so a handler refuses it. Checked on
+`53ae424a69` and on the change, with synthetic events passed to `gtk_main_do_event()`, where grabs
+apply, from an `LD_PRELOAD`ed shim: before the change, a click on the expander left it folded;
+after it, three quits out of three unfolded it, the closing window survived a `delete-event`, and
+a window opened before the quit got neither a click nor a `delete-event` during the wait, though
+both reached it just before.
 
 Sources already queued on the main context — idles posted by the jobs, timers — are dispatched
 during the wait, with the view left and `running` cleared. That is the state in which

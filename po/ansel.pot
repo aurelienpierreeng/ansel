@@ -8074,68 +8074,78 @@ msgstr ""
 msgid "Ansel - Search accelerators"
 msgstr ""
 
-#: ../src/gui/closing.c:79 ../src/gui/gtk.c:458
+#: ../src/gui/closing.c:98 ../src/gui/gtk.c:458
 msgid "closing Ansel..."
 msgstr ""
 
-#: ../src/gui/closing.c:99
+#: ../src/gui/closing.c:125
 msgid "Ansel is finishing its work before closing"
 msgstr ""
 
-#: ../src/gui/closing.c:114
+#: ../src/gui/closing.c:140
 msgid "This window closes by itself as soon as it is done."
 msgstr ""
 
-#: ../src/gui/closing.c:118
+#: ../src/gui/closing.c:144
 msgid "Details"
 msgstr ""
 
-#: ../src/gui/closing.c:154
+#: ../src/gui/closing.c:157
+msgctxt "closing jobs"
+msgid "Type"
+msgstr ""
+
+#: ../src/gui/closing.c:162
+msgctxt "closing jobs"
+msgid "Description"
+msgstr ""
+
+#: ../src/gui/closing.c:203
 msgctxt "job type"
 msgid "Image operation"
 msgstr ""
 
-#: ../src/gui/closing.c:156
+#: ../src/gui/closing.c:205
 msgctxt "job type"
 msgid "Thumbnail"
 msgstr ""
 
-#: ../src/gui/closing.c:158
+#: ../src/gui/closing.c:207
 msgctxt "job type"
 msgid "Background task"
 msgstr ""
 
-#: ../src/gui/closing.c:160
+#: ../src/gui/closing.c:209
 msgctxt "job type"
 msgid "Export"
 msgstr ""
 
-#: ../src/gui/closing.c:162
+#: ../src/gui/closing.c:211
 msgctxt "job type"
 msgid "Maintenance"
 msgstr ""
 
-#: ../src/gui/closing.c:164
+#: ../src/gui/closing.c:213
 msgctxt "job type"
 msgid "Darkroom rendering"
 msgstr ""
 
-#: ../src/gui/closing.c:239
-msgid "Running"
-msgstr ""
-
-#: ../src/gui/closing.c:245
-msgid "Queued, will not run"
-msgstr ""
-
-#: ../src/gui/closing.c:249
+#: ../src/gui/closing.c:236
 #, c-format
 msgid "%d task"
 msgid_plural "%d tasks"
 msgstr[0] ""
 msgstr[1] ""
 
-#: ../src/gui/closing.c:281
+#: ../src/gui/closing.c:315
+msgid "Running"
+msgstr ""
+
+#: ../src/gui/closing.c:328
+msgid "Queued, will not run"
+msgstr ""
+
+#: ../src/gui/closing.c:380
 #, c-format
 msgid "%d task is still running"
 msgid_plural "%d tasks are still running"
