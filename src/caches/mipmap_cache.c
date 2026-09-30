@@ -1182,6 +1182,21 @@ void dt_mipmap_cache_get_with_caller_and_shutdown(dt_mipmap_buffer_t *buf,
   {
     // simple case: blocking get
     dt_cache_entry_t *entry =  dt_cache_get_with_caller(&_get_cache(cache, mip)->cache, key, mode, file, line);
+
+    /* NULL means the payload could not be allocated, and these are the biggest allocations in the
+     * application -- up to one full mip buffer each -- so this is the likeliest cache in the tree to
+     * hit it. It used to go straight into _generate_blocking(), which reads entry->data on its first
+     * line: an out-of-memory condition was answered with a NULL dereference. Report it the way every
+     * consumer of this function already understands, a NULL buf->buf, and let the caller decide. */
+    if(IS_NULL_PTR(entry))
+    {
+      buf->cache_entry = NULL;
+      _invalidate_buffer(buf);
+      fprintf(stderr, "[mipmap_cache] could not allocate a cache entry for image %d at mip size %d\n",
+              imgid, mip);
+      return;
+    }
+
     buf->cache_entry = entry;
     __sync_fetch_and_add(&(_get_cache(cache, mip)->stats_fetches), 1);
     _generate_blocking(entry, buf, imgid, mip, shutdown);
