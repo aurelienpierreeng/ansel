@@ -1470,7 +1470,7 @@ gboolean dt_tiling_piece_can_save_memory(struct dt_iop_module_t *self, const str
                                          const struct dt_dev_pixelpipe_iop_t *piece, const int in_bpp)
 {
   // a module bringing its own process_tiling() decides for itself
-  if(self->process_tiling != default_process_tiling) return TRUE;
+  if(self->process_tiling != &default_process_tiling) return TRUE;
 
   // the module's own requirement, as default_process_tiling() reads it: not the one aggregated
   // with blending, which is never tiled

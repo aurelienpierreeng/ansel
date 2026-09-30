@@ -294,6 +294,8 @@ static inline __attribute__((always_inline)) int get_dither_parameters(const dt_
         case IMAGEIO_GRAY:
           graymode = 1;
           break;
+        default: // no channel layout: graymode stays -1 and the buffer passes through
+          break;
       }
 
       switch(data->output_levels & IMAGEIO_PREC_MASK)
@@ -619,8 +621,9 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
     piece->process_cl_ready = FALSE;
 }
 
-gboolean runtime_data_hash(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe,
-                           const dt_dev_pixelpipe_iop_t *piece)
+gboolean runtime_data_hash(struct dt_iop_module_t *self __attribute__((unused)),
+                           dt_dev_pixelpipe_t *pipe __attribute__((unused)),
+                           const dt_dev_pixelpipe_iop_t *piece __attribute__((unused)))
 {
   return TRUE;
 }
