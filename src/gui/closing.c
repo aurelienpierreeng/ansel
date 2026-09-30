@@ -56,9 +56,11 @@ typedef struct dt_closing_t
   GtkWidget *window;
   GtkWidget *count;    // how many jobs are still running
   GtkWidget *names;    // what the ones that publish a progress say they are doing
-  GtkWidget *details;  // the expander that lists the running jobs, hidden while there are none
+  GtkWidget *details;  // the expander that lists the running jobs, hidden while there is nothing in it
   GtkListStore *store; // its rows, owned by the view inside it
   gchar *listed;       // what the list shows, so that it is rebuilt only when that changes
+  GtkWidget *dropped;  // under the list, how many queued jobs the quit drops
+  int32_t queued;      // what it says, -1 before it says anything
 } dt_closing_t;
 
 typedef struct dt_closing_job_t
@@ -158,11 +160,20 @@ static void _closing_window_new(dt_closing_t *closing)
   gtk_scrolled_window_set_min_content_width(GTK_SCROLLED_WINDOW(scroll), DT_PIXEL_APPLY_DPI(420));
   gtk_scrolled_window_set_max_content_height(GTK_SCROLLED_WINDOW(scroll), DT_PIXEL_APPLY_DPI(300));
   gtk_scrolled_window_set_propagate_natural_height(GTK_SCROLLED_WINDOW(scroll), TRUE);
-  gtk_widget_set_margin_top(scroll, DT_PIXEL_APPLY_DPI(6));
   gtk_container_add(GTK_CONTAINER(scroll), view);
-  gtk_container_add(GTK_CONTAINER(closing->details), scroll);
-  // Shown by hand: the expander's no_show_all keeps show_all from reaching them.
-  gtk_widget_show_all(scroll);
+
+  closing->dropped = gtk_label_new(NULL);
+  gtk_label_set_xalign(GTK_LABEL(closing->dropped), 0.0);
+  gtk_widget_set_no_show_all(closing->dropped, TRUE);
+
+  GtkWidget *content = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_PIXEL_APPLY_DPI(6));
+  gtk_widget_set_margin_top(content, DT_PIXEL_APPLY_DPI(6));
+  gtk_box_pack_start(GTK_BOX(content), scroll, FALSE, FALSE, 0);
+  gtk_box_pack_start(GTK_BOX(content), closing->dropped, FALSE, FALSE, 0);
+  gtk_container_add(GTK_CONTAINER(closing->details), content);
+  // Shown by hand: the expander's no_show_all keeps show_all from reaching them. The count of
+  // dropped jobs keeps its own, and shows only when there are some.
+  gtk_widget_show_all(content);
 
   gtk_widget_show_all(closing->window);
 
@@ -218,7 +229,8 @@ static void _closing_collect_job(const char *description, const dt_job_queue_t q
   g_array_append_val(running, job);
 }
 
-// One row per running job. The queued ones are left out: a quit drops them, unrun.
+// One row per running job. The queued ones are only counted, under the list: a quit drops them,
+// unrun.
 static void _closing_details_update(dt_closing_t *closing)
 {
   GArray *running = g_array_new(FALSE, FALSE, sizeof(dt_closing_job_t));
@@ -241,14 +253,25 @@ static void _closing_details_update(dt_closing_t *closing)
       gtk_list_store_insert_with_values(closing->store, NULL, -1, DT_CLOSING_COL_KIND, _closing_kind_name(job->kind),
                                         DT_CLOSING_COL_DESCRIPTION, job->description, -1);
     }
-    gtk_widget_set_visible(closing->details, running->len > 0);
-
     dt_free(closing->listed);
     closing->listed = g_string_free(listed, FALSE);
   }
   else
     g_string_free(listed, TRUE);
 
+  const int32_t queued = dt_control_queued_jobs_count(dt_control_get_global());
+  if(queued != closing->queued)
+  {
+    gchar *dropped = g_strdup_printf(ngettext("%d other task, not started, is dropped",
+                                              "%d other tasks, not started, are dropped", queued),
+                                     queued);
+    gtk_label_set_text(GTK_LABEL(closing->dropped), dropped);
+    dt_free(dropped);
+    gtk_widget_set_visible(closing->dropped, queued > 0);
+    closing->queued = queued;
+  }
+
+  gtk_widget_set_visible(closing->details, running->len > 0 || queued > 0);
   g_array_free(running, TRUE);
 }
 
@@ -297,7 +320,7 @@ void dt_gui_closing_wait(void)
   gtk_widget_realize(grab);
   gtk_grab_add(grab);
 
-  dt_closing_t closing = { .loop = g_main_loop_new(NULL, FALSE), .start = g_get_monotonic_time() };
+  dt_closing_t closing = { .loop = g_main_loop_new(NULL, FALSE), .start = g_get_monotonic_time(), .queued = -1 };
   g_timeout_add(DT_CLOSING_POLL_INTERVAL, _closing_poll, &closing);
   g_main_loop_run(closing.loop);
   g_main_loop_unref(closing.loop);

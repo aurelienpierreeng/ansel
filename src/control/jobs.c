@@ -568,6 +568,21 @@ void dt_control_running_jobs_foreach(dt_control_t *control, dt_control_running_j
   dt_pthread_mutex_unlock(&control->res_mutex);
 }
 
+int32_t dt_control_queued_jobs_count(dt_control_t *control)
+{
+  size_t count = 0;
+  dt_pthread_mutex_lock(&control->queue_mutex);
+  for(int i = 0; i < DT_JOB_QUEUE_MAX; i++) count += control->queue_length[i];
+  dt_pthread_mutex_unlock(&control->queue_mutex);
+
+  dt_pthread_mutex_lock(&control->res_mutex);
+  for(int k = 0; k < DT_CTL_WORKER_RESERVED; k++)
+    if(control->new_res[k] && !IS_NULL_PTR(control->job_res[k])) count++;
+  dt_pthread_mutex_unlock(&control->res_mutex);
+
+  return (int32_t)count;
+}
+
 int32_t dt_control_get_threadid()
 {
   if(threadid > -1) return threadid;
