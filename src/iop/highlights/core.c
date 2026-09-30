@@ -964,6 +964,26 @@ cl_int _selfdome_stage_cl(const int devid, void *gd_void, cl_mem estimate, cl_me
       if(cl_err != CL_SUCCESS) goto out;
     }
   }
+  else
+  {
+    // hl_dome_blend reads refine[0] whatever the gate, so at gate 0 the buffer still has to
+    // exist and hold 0. Left NULL it reaches the kernel as a null pointer, and what reading
+    // through one does is the driver's choice: Apple's answers 0, which is the right value by
+    // accident, and radeonsi under rusticl loses the GPU context and aborts the process.
+    refine_dev = dt_opencl_alloc_device_buffer(devid, sizeof(float) * 2);
+    if(!refine_dev)
+    {
+      cl_err = DT_OPENCL_DEFAULT_ERROR;
+      goto out;
+    }
+    const int setk = global_data->kernel_hl_set_scalar;
+    const float zero = 0.f;
+    dt_opencl_set_kernel_arg(devid, setk, 0, sizeof(cl_mem), &refine_dev);
+    dt_opencl_set_kernel_arg(devid, setk, 1, sizeof(float), &zero);
+    size_t one[3] = { 1, 1, 1 };
+    cl_err = dt_opencl_enqueue_kernel_2d(devid, setk, one);
+    if(cl_err != CL_SUCCESS) goto out;
+  }
 
   // debug dump (HL_REG_DUMP=<file path>): save this region's brightness plane + hole mask
   // to the given file for offline replay through the HL_DOMECL_TEST self-test (the path is
