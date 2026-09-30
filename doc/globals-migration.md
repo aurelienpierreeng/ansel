@@ -78,12 +78,14 @@ see §3b), the app-lifetime constants below.
 references tree-wide, and **462 of those 467 are a translation unit reading the member it
 owns**, or `darktable.c` itself, which allocates the struct.
 
-Five cross-module references remain in the whole tree:
+Five cross-module references remained then. Four remain since `conf` closed (2026-10-26, on top
+of `f6f82cbf45`): `common/opencl.c:1011` saved the settings with `dt_conf_save(darktable.conf)`,
+the one `dt_conf_*` call that took the handle; it calls `dt_conf_flush()` now, which takes none,
+and the save is private to `common/conf.c`.
 
 | Site | Member | Why it is still there |
 |---|---|---|
 | `control/control.c:656,660` (4) | `develop` | the progress bar reads `develop->progress.{total,completed}`; a carrier would mean giving `dt_control_t` a dev |
-| `common/opencl.c:1011` (1) | `conf` | `dt_conf_save(darktable.conf)` on OpenCL shutdown — the one `dt_conf_*` call that still takes the handle |
 
 `control/control.c` (16) and `gui/application.c` (3) also read `view_manager` directly. Those
 are **deliberate**: they are the two event dispatchers, which is the one place the target

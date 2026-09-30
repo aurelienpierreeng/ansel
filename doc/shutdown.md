@@ -95,9 +95,51 @@ Twelve further start-and-quit cycles, the quit 2.0 to 5.3 s after launch in step
 that it lands at every stage of the startup jobs, all exited with status 0, in 0.23 to 1.84 s.
 
 **Not measured:** a quit during an export, which cannot be started without the GUI. That it runs
-to the last image is read from the loop above, not timed. Nor the network flushes at the top of
-`dt_cleanup()` (`dt_sentry_shutdown()`, `dt_telemetry_shutdown()`), which a self-build compiles
-out.
+to the last image is read from the loop above, not timed. Nor the network flushes of
+`dt_cleanup()` (`dt_telemetry_shutdown()` at its top, `dt_sentry_shutdown()` at its end), which a
+self-build compiles out.
+
+## What reaches the disk before the teardown
+
+*Measured 2026-10-26 on top of `f6f82cbf45`.*
+
+Right after its last question to the user, before it leaves the view and joins the workers,
+`dt_cleanup()` writes two things:
+
+- the settings, with `dt_conf_flush()` (see `preferences.md`, *When the settings reach the disk*);
+- the thumbnails resident in RAM, with `dt_mipmap_cache_flush_to_disk()`: `dt_cache_gc()` at
+  fill ratio 0 on `mip_thumbs`, whose cleanup callback writes each entry that was not read from
+  its file.
+
+A crash later in the teardown no longer loses them. Both are written once more at the end of
+`dt_cleanup()`, by `dt_conf_cleanup()` and `dt_mipmap_cache_cleanup()`: the settings the teardown
+itself sets, and the thumbnails the flush skipped. It skips an entry another thread holds, so a
+thumbnail still rendering at the quit reaches the disk only at the end.
+
+`dt_sentry_shutdown()` runs just before `dt_conf_cleanup()`, so the crash handler stays installed
+for the whole teardown. It has to precede `dt_conf_cleanup()`: it writes the clean-session counter
+and the session duration through `dt_conf_set_*()`.
+
+Measured with a shim like the one above that pages through the lighttable and then quits, probes
+timing the flush and counting what the cleanup callback did with each entry; Xephyr at
+1920×1080, default 1000 MB thumbnail budget:
+
+| At the quit | In RAM | Flush | Written by the flush | Left for the end |
+|---|---|---|---|---|
+| 400 JPEG, 4 per row, empty disk cache | 400, 124 MB | 259 ms | 400 | 0 |
+| 400 JPEG, 2 per row, empty disk cache | 400, 494 MB | 817 ms | 400 | 0 |
+| the same, quit 0.2 s after the last page | 400, 494 MB | 776 ms | 400 | 0 |
+| the same, thumbnails read from the disk cache | 400, 494 MB | 64 ms | 0 | 0 |
+| 60 NEF with a history, quit while rendering | 12, 14.8 MB | 30 ms | 8 | 4 |
+
+The flush holds the `mip_thumbs` cache lock throughout, about 1.65 ms per MB written. The work is
+moved, not added: in the four JPEG rows the end-of-teardown cleanup wrote nothing. No thread
+waited on that lock during a flush (a probe logged every wait over 2 ms): after the quit, workers
+take no new job.
+
+The disk cache directory, `mipmaps-<hash>.d`, is named after the SHA-1 of the library database's
+real path (`caches/mipmap_cache.c:308`): a copy of a configdir does not find the thumbnails of the
+original, and renders them all again.
 
 ## The wait is spent in the main loop
 

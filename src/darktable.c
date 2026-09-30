@@ -1868,11 +1868,6 @@ void dt_cleanup()
 {
   const int init_gui = (!IS_NULL_PTR(darktable.gui));
 
-  // Flush crash reporting and mark this session as a clean exit. Done early so
-  // events are sent while the rest of the app is still up; the clean-session
-  // counter it writes is persisted later by dt_conf_cleanup().
-  dt_sentry_shutdown();
-
   // Stop the update check first: it is the one that may still post to the GUI thread.
   dt_updates_shutdown();
 
@@ -1901,6 +1896,12 @@ void dt_cleanup()
 #endif
 
   // anything that asks user for input should be placed before this line
+
+  /* Everything below this line can fail: the settings and the thumbnails resident in RAM go to
+   * disk now. dt_conf_cleanup() and dt_mipmap_cache_cleanup() write again at the end what the
+   * teardown itself sets and the thumbnails another thread still held. */
+  dt_conf_flush();
+  dt_mipmap_cache_flush_to_disk();
 
   if(init_gui)
   {
@@ -1973,6 +1974,11 @@ void dt_cleanup()
   dt_gui_throttle_cleanup();
   // Needs conf alive: a clean exit with OpenCL running is what clears the driver-crash streak.
   dt_opencl_clear_driver_crash_streak();
+
+  /* Last, so that the crash handler covers the whole teardown, but before dt_conf_cleanup(),
+   * which saves the session counters this writes through dt_conf_set_*(). */
+  dt_sentry_shutdown();
+
   dt_conf_cleanup(darktable.conf);
   dt_free(darktable.conf);
   dt_points_cleanup(darktable.points);

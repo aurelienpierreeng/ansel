@@ -1008,7 +1008,7 @@ static int dt_opencl_device_init(dt_opencl_t *cl, const int dev, cl_device_id *d
   if(newdevice) // so far the device seems to be ok. Make sure to write&export the conf database to
   {
     dt_opencl_write_device_config(dev);
-    dt_conf_save(darktable.conf);
+    dt_conf_flush();
   }
 
   // now load all darktable cl kernels.

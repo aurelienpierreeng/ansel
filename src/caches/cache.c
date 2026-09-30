@@ -6,12 +6,13 @@
     Copyright (C) 2012-2014, 2016 Tobias Ellinghaus.
     Copyright (C) 2013-2016 Roman Lebedev.
     Copyright (C) 2019 Andreas Schneider.
-    Copyright (C) 2019, 2023, 2025 Aurélien PIERRE.
+    Copyright (C) 2019, 2023, 2025-2026 Aurélien PIERRE.
     Copyright (C) 2020 Heiko Bauke.
     Copyright (C) 2020-2021 Pascal Obry.
     Copyright (C) 2021 Ralf Brown.
     Copyright (C) 2022 Martin Bařinka.
     Copyright (C) 2024 Alynx Zhou.
+    Copyright (C) 2026 Guillaume Stutin.
     
     darktable is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -41,6 +42,8 @@
 #include <string.h>
 
 // this implements a concurrent LRU cache
+
+static void _cache_gc_locked(dt_cache_t *cache, const float fill_ratio);
 
 void dt_cache_init(
     dt_cache_t *cache,
@@ -206,7 +209,7 @@ restart:
   if(cache->cost > 0.8f * cache->cost_quota)
   {
     // need to roll back all the way to get a consistent lock state:
-    dt_cache_gc(cache, 0.8f);
+    _cache_gc_locked(cache, 0.8f);
   }
 
   // here dies your 32-bit system:
@@ -319,8 +322,19 @@ restart:
   return 0;
 }
 
+size_t dt_cache_gc(dt_cache_t *cache, const float fill_ratio)
+{
+  dt_pthread_mutex_lock(&cache->lock);
+  const size_t before = cache->cost;
+  _cache_gc_locked(cache, fill_ratio);
+  const size_t reclaimed = before - cache->cost;
+  dt_pthread_mutex_unlock(&cache->lock);
+  return reclaimed;
+}
+
 // best-effort garbage collection. never blocks, never fails. well, sometimes it just doesn't free anything.
-void dt_cache_gc(dt_cache_t *cache, const float fill_ratio)
+// The caller holds cache->lock.
+static void _cache_gc_locked(dt_cache_t *cache, const float fill_ratio)
 {
   GList *l = cache->lru;
   while(l)
@@ -410,7 +424,7 @@ int dt_cache_seed(dt_cache_t *cache, const uint32_t key, const void *data, size_
   }
 
   if(cache->cost > 0.8f * cache->cost_quota)
-    dt_cache_gc(cache, 0.8f);
+    _cache_gc_locked(cache, 0.8f);
 
   dt_cache_entry_t *entry = (dt_cache_entry_t *)g_slice_alloc(sizeof(dt_cache_entry_t));
   entry->data = 0;
