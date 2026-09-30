@@ -8581,78 +8581,63 @@ msgstr "Chercher pas touches :"
 msgid "Ansel - Search accelerators"
 msgstr "Ansel - Chercher des accélérateurs"
 
-#: ../src/gui/closing.c:98 ../src/gui/gtk.c:458
+#: ../src/gui/closing.c:84 ../src/gui/gtk.c:458
 msgid "closing Ansel..."
 msgstr "quitter Ansel..."
 
-#: ../src/gui/closing.c:125
+#: ../src/gui/closing.c:111
 msgid "Ansel is finishing its work before closing"
 msgstr "Ansel termine son travail avant de se fermer"
 
-#: ../src/gui/closing.c:140
+#: ../src/gui/closing.c:126
 msgid "This window closes by itself as soon as it is done."
 msgstr "Cette fenêtre se ferme d'elle-même dès que c'est terminé."
 
-#: ../src/gui/closing.c:144
+#: ../src/gui/closing.c:130
 msgid "Details"
 msgstr "Détails"
 
-#: ../src/gui/closing.c:157
+#: ../src/gui/closing.c:142
 msgctxt "closing jobs"
 msgid "Type"
 msgstr "Type"
 
-#: ../src/gui/closing.c:162
+#: ../src/gui/closing.c:148
 msgctxt "closing jobs"
 msgid "Description"
 msgstr "Description"
 
-#: ../src/gui/closing.c:203
+#: ../src/gui/closing.c:190
 msgctxt "job type"
 msgid "Image operation"
 msgstr "Opération sur les images"
 
-#: ../src/gui/closing.c:205
+#: ../src/gui/closing.c:192
 msgctxt "job type"
 msgid "Thumbnail"
 msgstr "Miniature"
 
-#: ../src/gui/closing.c:207
+#: ../src/gui/closing.c:194
 msgctxt "job type"
 msgid "Background task"
 msgstr "Tâche de fond"
 
-#: ../src/gui/closing.c:209
+#: ../src/gui/closing.c:196
 msgctxt "job type"
 msgid "Export"
 msgstr "Export"
 
-#: ../src/gui/closing.c:211
+#: ../src/gui/closing.c:198
 msgctxt "job type"
 msgid "Maintenance"
 msgstr "Maintenance"
 
-#: ../src/gui/closing.c:213
+#: ../src/gui/closing.c:200
 msgctxt "job type"
 msgid "Darkroom rendering"
 msgstr "Rendu de la chambre noire"
 
-#: ../src/gui/closing.c:236
-#, c-format
-msgid "%d task"
-msgid_plural "%d tasks"
-msgstr[0] "%d tâche"
-msgstr[1] "%d tâches"
-
-#: ../src/gui/closing.c:315
-msgid "Running"
-msgstr "En cours"
-
-#: ../src/gui/closing.c:328
-msgid "Queued, will not run"
-msgstr "En attente, ne seront pas lancées"
-
-#: ../src/gui/closing.c:380
+#: ../src/gui/closing.c:271
 #, c-format
 msgid "%d task is still running"
 msgid_plural "%d tasks are still running"

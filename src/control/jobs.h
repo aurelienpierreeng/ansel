@@ -108,18 +108,18 @@ void dt_control_jobs_cleanup(struct dt_control_t *control);
  * dt_control_shutdown() do not block. */
 int32_t dt_control_workers_alive(void);
 
-/** Called once per job by dt_control_jobs_foreach(): the description given to
+/** Called once per running job by dt_control_running_jobs_foreach(): the description given to
  * dt_control_job_create(), the queue the job was added to (meaningless when it went to a reserved
- * worker instead), whether it did, and whether it is running or still queued. */
-typedef void (*dt_control_jobs_foreach_callback_t)(const char *description, dt_job_queue_t queue,
-                                                   gboolean reserved, gboolean running, void *data);
+ * worker instead), and whether it did. */
+typedef void (*dt_control_running_jobs_foreach_callback_t)(const char *description, dt_job_queue_t queue,
+                                                           gboolean reserved, void *data);
 
-/** Report every job running on a worker or waiting for one.
+/** Report every job a worker is running. The queued ones are not reported.
  *
  * The callback runs under the scheduler's mutexes: it must not call back into it, and should
  * return quickly. */
-void dt_control_jobs_foreach(struct dt_control_t *control, dt_control_jobs_foreach_callback_t callback,
-                             void *data);
+void dt_control_running_jobs_foreach(struct dt_control_t *control,
+                                     dt_control_running_jobs_foreach_callback_t callback, void *data);
 
 int dt_control_add_job(struct dt_control_t *control, dt_job_queue_t queue_id, dt_job_t *job);
 int32_t dt_control_add_job_res(struct dt_control_t *s, dt_job_t *job, int32_t res);
