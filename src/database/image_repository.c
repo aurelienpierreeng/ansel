@@ -214,6 +214,24 @@ static void _image_write_history_hash(const dt_image_t *img)
 }
 
 
+/* A transient failure must not be answered as "there is no such image". The caller is the image
+ * cache's allocate callback, which keeps whatever this leaves behind: an entry whose id is still
+ * UNKNOWN_IMAGE is invalid for the rest of its life in the cache, dt_image_cache_get() answers NULL
+ * for that imgid from then on, and the first consumer to notice is the thumbnail path -- which reads
+ * a NULL image as "the file is not available" and caches an 8x8 skull that nothing retries (#1475,
+ * #1474). One momentary lock therefore cost an image its thumbnail for the whole session.
+ *
+ * So the outcomes are told apart. SQLITE_DONE is the row genuinely not being there, which is an
+ * ORDINARY event -- it happens on every removal, and on the lighttable re-reading a thumbnail just
+ * after -- and it used to print an error line claiming a failure. Anything else is a real error and
+ * says so, with sqlite's own code.
+ *
+ * BUSY and LOCKED are retried here on top of the connection's busy timeout, because the two cover
+ * different things: the timeout waits out another PROCESS holding the file lock, while LOCKED can
+ * come from a table lock within our own connection, which the timeout does not wait on at all.
+ */
+#define DT_IMAGE_LOAD_RETRIES 3
+
 gboolean dt_image_repository_load(const int32_t imgid, dt_image_t *img)
 {
   if(IS_NULL_PTR(img)) return FALSE;
@@ -223,19 +241,48 @@ gboolean dt_image_repository_load(const int32_t imgid, dt_image_t *img)
   dt_pthread_mutex_lock(&_image_stmt_mutex);
 
   sqlite3_stmt *stmt = _image_get_stmt();
-  sqlite3_reset(stmt);
-  sqlite3_clear_bindings(stmt);
-  DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, imgid);
-  if(sqlite3_step(stmt) == SQLITE_ROW)
+  int rc = SQLITE_OK;
+
+  for(int attempt = 0; attempt < DT_IMAGE_LOAD_RETRIES; attempt++)
   {
-    dt_image_from_stmt(img, stmt);
-    found = TRUE;
+    sqlite3_reset(stmt);
+    sqlite3_clear_bindings(stmt);
+    DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, imgid);
+    rc = sqlite3_step(stmt);
+
+    if(rc == SQLITE_ROW)
+    {
+      dt_image_from_stmt(img, stmt);
+      found = TRUE;
+      break;
+    }
+
+    if(rc != SQLITE_BUSY && rc != SQLITE_LOCKED) break;
+
+    fprintf(stderr,
+            "[image_repository_load] image %" PRId32 ": database busy (%s), retrying (%d/%d)\n", imgid,
+            sqlite3_errstr(rc), attempt + 1, DT_IMAGE_LOAD_RETRIES);
+    g_usleep(20000);
   }
-  else
+
+  if(!found && rc == SQLITE_DONE)
   {
-    img->id = -1;
-    fprintf(stderr, "[image_repository_load] failed to open image %" PRId32 " from database: %s\n", imgid,
-            sqlite3_errmsg(dt_database_get_sqlite3_global()));
+    /* The row really is gone, so say so: this is what makes dt_image_cache_get() answer NULL, and
+     * dt_image_cache_get_reload() invalidate an entry whose image has been removed under it. Not
+     * logged as an error -- it is the ordinary outcome of a removal, and of the lighttable reading
+     * a thumbnail just afterwards. */
+    img->id = UNKNOWN_IMAGE;
+  }
+  else if(!found)
+  {
+    /* A real error, and deliberately NOT written into img. On the allocate path dt_image_init() has
+     * already left UNKNOWN_IMAGE there, so nothing is lost; on the reload path
+     * (dt_image_cache_get_reload(), which reloads in place with no re-init) the entry still holds
+     * the last values that DID come from the database, and keeping them is strictly better than
+     * invalidating a live image because a lock was held for a moment. */
+    fprintf(stderr,
+            "[image_repository_load] image %" PRId32 ": database error %s (%s) -- NOT a missing image\n",
+            imgid, sqlite3_errstr(rc), sqlite3_errmsg(dt_database_get_sqlite3_global()));
   }
 
   dt_pthread_mutex_unlock(&_image_stmt_mutex);
