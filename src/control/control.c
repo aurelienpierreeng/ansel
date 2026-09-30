@@ -452,11 +452,13 @@ int dt_control_running()
 void dt_control_quit()
 {
   dt_gui_gtk_quit();
-  // thread safe quit, 1st pass:
+  // thread safe quit, 1st pass. The broadcast sends the idle workers and the kicker home now,
+  // so that what is still alive when dt_control_shutdown() comes is what is still working.
   dt_pthread_mutex_lock(&darktable.control->cond_mutex);
   dt_pthread_mutex_lock(&darktable.control->run_mutex);
   darktable.control->running = 0;
   dt_pthread_mutex_unlock(&darktable.control->run_mutex);
+  pthread_cond_broadcast(&darktable.control->cond);
   dt_pthread_mutex_unlock(&darktable.control->cond_mutex);
 
   if(gtk_main_level() > 0) gtk_main_quit();
