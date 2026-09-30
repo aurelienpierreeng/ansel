@@ -69,7 +69,9 @@ typedef struct dt_closing_job_t
   gchar *description; // translated when the catalog knows it
 } dt_closing_job_t;
 
-static gboolean _closing_refuse_delete(GtkWidget *widget, GdkEvent *event, gpointer user_data)
+static gboolean _closing_refuse_delete(GtkWidget *widget __attribute__((unused)),
+                                       GdkEvent *event __attribute__((unused)),
+                                       gpointer user_data __attribute__((unused)))
 {
   return TRUE;
 }
