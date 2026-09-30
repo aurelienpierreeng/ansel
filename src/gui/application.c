@@ -56,7 +56,7 @@
     Copyright (C) 2023 Luca Zulberti.
     Copyright (C) 2023 Maurizio Paglia.
     Copyright (C) 2025 Alynx Zhou.
-    Copyright (C) 2025 Guillaume Stutin.
+    Copyright (C) 2025-2026 Guillaume Stutin.
     
     darktable is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -96,6 +96,7 @@
 #include "common/startup_progress.h"
 #include "gui/dtgtk/thumbtable.h"
 #include "gui/splash.h"
+#include "gui/closing.h"
 
 #include "common/conf.h"
 #include "control/control.h"
@@ -1408,6 +1409,7 @@ int dt_gui_gtk_init(dt_gui_gtk_t *gui)
 
   dt_thumbnail_notify_set_handler(_gui_refresh_thumbnail);
   dt_startup_progress_set_handler(_gui_startup_progress);
+  dt_control_set_shutdown_wait_handler(dt_gui_closing_wait);
   dt_film_gui_register_handlers();
   dt_collection_gui_register_handlers();
   dt_folder_survey_gui_register_handlers();

@@ -526,6 +526,15 @@ int dt_control_add_job(dt_control_t *control, dt_job_queue_t queue_id, _dt_job_t
 
 static __thread int threadid = -1;
 
+// Threads of this file -- pool, reserved and kicker -- that have started and not returned yet.
+// dt_control_shutdown() joins every one of them, so this is what that join still waits for.
+static gint _workers_alive = 0;
+
+int32_t dt_control_workers_alive(void)
+{
+  return g_atomic_int_get(&_workers_alive);
+}
+
 int32_t dt_control_get_threadid()
 {
   if(threadid > -1) return threadid;
@@ -551,6 +560,7 @@ static void *dt_control_work_res(void *ptr)
   dt_pthread_setname(name);
   dt_free(params);
   int32_t threadid_res = dt_control_get_threadid_res();
+  g_atomic_int_inc(&_workers_alive);
   while(dt_control_running())
   {
     // dt_print(DT_DEBUG_CONTROL, "[control_work] %d\n", threadid_res);
@@ -567,6 +577,7 @@ static void *dt_control_work_res(void *ptr)
       pthread_setcancelstate(old, &tmp);
     }
   }
+  g_atomic_int_add(&_workers_alive, -1);
   return NULL;
 }
 
@@ -574,6 +585,7 @@ static void *dt_control_worker_kicker(void *ptr)
 {
   dt_control_t *control = (dt_control_t *)ptr;
   dt_pthread_setname("kicker");
+  g_atomic_int_inc(&_workers_alive);
   dt_pthread_mutex_lock(&control->cond_mutex);
   while(dt_control_running())
   {
@@ -589,6 +601,7 @@ static void *dt_control_worker_kicker(void *ptr)
     pthread_cond_broadcast(&control->cond);
   }
   dt_pthread_mutex_unlock(&control->cond_mutex);
+  g_atomic_int_add(&_workers_alive, -1);
   return NULL;
 }
 
@@ -605,6 +618,7 @@ static void *dt_control_work(void *ptr)
   dt_pthread_setname(name);
   dt_free(params);
   // int32_t threadid = dt_control_get_threadid();
+  g_atomic_int_inc(&_workers_alive);
   while(dt_control_running())
   {
     // dt_print(DT_DEBUG_CONTROL, "[control_work] %d\n", threadid);
@@ -616,6 +630,7 @@ static void *dt_control_work(void *ptr)
       dt_pthread_mutex_unlock(&control->cond_mutex);
     }
   }
+  g_atomic_int_add(&_workers_alive, -1);
   return NULL;
 }
 

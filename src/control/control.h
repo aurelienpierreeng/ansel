@@ -311,6 +311,17 @@ void dt_control_init(dt_control_t *s);
  * Implemented by the orchestrator (darktable.c). */
 struct dt_control_t *dt_control_get_global(void);
 
+/** \brief How dt_control_shutdown() spends the time the running jobs still need.
+ *
+ * A worker is joined when the job it is running returns, and that join blocks its caller. The
+ * handler is called first and returns once dt_control_workers_alive() reads 0, keeping a main
+ * loop turning until then. With none registered -- any headless run -- the joins just block.
+ */
+typedef void (*dt_control_shutdown_wait_t)(void);
+
+/** Install the handler dt_control_shutdown() waits in. NULL removes it. */
+void dt_control_set_shutdown_wait_handler(dt_control_shutdown_wait_t handler);
+
 // join all worker threads.
 void dt_control_shutdown(dt_control_t *s);
 void dt_control_cleanup(dt_control_t *s);

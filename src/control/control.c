@@ -464,6 +464,14 @@ void dt_control_quit()
   if(gtk_main_level() > 0) gtk_main_quit();
 }
 
+// Set once at GUI startup, never cleared. NULL in every headless run.
+static dt_control_shutdown_wait_t _shutdown_wait = NULL;
+
+void dt_control_set_shutdown_wait_handler(dt_control_shutdown_wait_t handler)
+{
+  _shutdown_wait = handler;
+}
+
 void dt_control_shutdown(dt_control_t *s)
 {
   dt_pthread_mutex_lock(&s->cond_mutex);
@@ -472,6 +480,11 @@ void dt_control_shutdown(dt_control_t *s)
   dt_pthread_mutex_unlock(&s->run_mutex);
   dt_pthread_mutex_unlock(&s->cond_mutex);
   pthread_cond_broadcast(&s->cond);
+
+  // The joins below last as long as the jobs still running. Whoever owns a main loop spends
+  // that time in it: it can then say what is going on, and a job waiting for the GUI thread
+  // -- a synchronous signal, a dialog -- gets its answer instead of waiting for it forever.
+  if(_shutdown_wait) _shutdown_wait();
 
   /* then wait for kick_on_workers_thread */
   pthread_join(s->kick_on_workers_thread, NULL);

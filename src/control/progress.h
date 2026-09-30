@@ -3,6 +3,7 @@
     Copyright (C) 2014, 2016-2017 Tobias Ellinghaus.
     Copyright (C) 2020 Pascal Obry.
     Copyright (C) 2022 Martin Bařinka.
+    Copyright (C) 2026 Guillaume Stutin.
     
     darktable is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -60,6 +61,14 @@ double dt_control_progress_get_progress(dt_progress_t *progress);
 const gchar *dt_control_progress_get_message(dt_progress_t *progress);
 /** update the message. */
 void dt_control_progress_set_message(struct dt_control_t *control, dt_progress_t *progress, const char *message);
+
+/** what one progress object says, handed to dt_control_progress_foreach()'s callback. `message'
+ * is only valid during the call. */
+typedef void (*dt_progress_foreach_callback_t)(const gchar *message, void *data);
+/** call back for every progress object alive, oldest first. Runs under the locks of the
+ * progress system: the callback must not call back into it. */
+void dt_control_progress_foreach(struct dt_control_t *control, dt_progress_foreach_callback_t callback,
+                                 void *data);
 
 /** these functions are to be used by lib/backgroundjobs.c only. */
 void dt_control_progress_set_gui_data(dt_progress_t *progress, void *data);

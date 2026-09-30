@@ -132,6 +132,7 @@ were killed and how. When you write a finding down, write down the number and th
 | [`doc/drawlayer.md`](doc/drawlayer.md) | the drawlayer module in full |
 | [`doc/retouch-result-memo.md`](doc/retouch-result-memo.md) | retouch's per-shape memo |
 | [`doc/gtk-patterns.md`](doc/gtk-patterns.md) | layout, focus, repaint and threading patterns |
+| [`doc/shutdown.md`](doc/shutdown.md) | what a quit waits for, and the window that says so |
 | [`doc/darkroom-redraw.md`](doc/darkroom-redraw.md) | the centre repaint path, priced |
 | [`doc/thumbtable.md`](doc/thumbtable.md) | the thumbnail grid |
 | [`doc/accelerators.md`](doc/accelerators.md) | keyboard shortcuts end to end |

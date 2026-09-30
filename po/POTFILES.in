@@ -165,6 +165,7 @@ src/gui/dtgtk/thumbtable.c
 src/apps/ansel-generate-cache/main.c
 src/widgets/accelerators.c
 src/gui/application.c
+src/gui/closing.c
 src/widgets/gtkentry.c
 src/gui/guides.c
 src/gui/hist_dialog.c

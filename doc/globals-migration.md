@@ -82,7 +82,7 @@ Five cross-module references remain in the whole tree:
 
 | Site | Member | Why it is still there |
 |---|---|---|
-| `control/control.c:641,645` (4) | `develop` | the progress bar reads `develop->progress.{total,completed}`; a carrier would mean giving `dt_control_t` a dev |
+| `control/control.c:656,660` (4) | `develop` | the progress bar reads `develop->progress.{total,completed}`; a carrier would mean giving `dt_control_t` a dev |
 | `common/opencl.c:1011` (1) | `conf` | `dt_conf_save(darktable.conf)` on OpenCL shutdown — the one `dt_conf_*` call that still takes the handle |
 
 `control/control.c` (16) and `gui/application.c` (3) also read `view_manager` directly. Those

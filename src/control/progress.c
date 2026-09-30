@@ -8,6 +8,7 @@
     Copyright (C) 2022-2023 Aurélien PIERRE.
     Copyright (C) 2022 Martin Bařinka.
     Copyright (C) 2025 Hubert Figuière.
+    Copyright (C) 2026 Guillaume Stutin.
     
     darktable is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -404,6 +405,19 @@ void dt_control_progress_set_message(dt_control_t *control, dt_progress_t *progr
   if(!IS_NULL_PTR(control->progress_system.proxy.module))
     control->progress_system.proxy.message_updated(control->progress_system.proxy.module, progress->gui_data,
                                                    message);
+  dt_pthread_mutex_unlock(&control->progress_system.mutex);
+}
+
+void dt_control_progress_foreach(dt_control_t *control, dt_progress_foreach_callback_t callback, void *data)
+{
+  dt_pthread_mutex_lock(&control->progress_system.mutex);
+  for(GList *iter = control->progress_system.list; iter; iter = g_list_next(iter))
+  {
+    dt_progress_t *progress = (dt_progress_t *)iter->data;
+    dt_pthread_mutex_lock(&progress->mutex);
+    callback(progress->message, data);
+    dt_pthread_mutex_unlock(&progress->mutex);
+  }
   dt_pthread_mutex_unlock(&control->progress_system.mutex);
 }
 
