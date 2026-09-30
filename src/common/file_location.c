@@ -235,9 +235,37 @@ void dt_loc_init_tmp_dir(const char *tmpdir)
   dt_check_opendir("ansel.tmpdir", darktable.tmpdir);
 }
 
+gchar *dt_loc_default_user_cache_dir(void)
+{
+  /* XDG first, on every platform: it is what a caller setting it expects, and GLib honours it on
+   * Windows too. Absolute only -- the specification says a relative path in one of these variables
+   * is invalid and must be ignored, and taking one literally would put the cache somewhere that
+   * depends on the working directory. */
+  const gchar *xdg = g_getenv("XDG_CACHE_HOME");
+  if(!IS_NULL_PTR(xdg) && xdg[0] && g_path_is_absolute(xdg)) return g_build_filename(xdg, "ansel", NULL);
+
+#ifdef _WIN32
+  /* NOT g_get_user_cache_dir(): on Windows that is FOLDERID_InternetCache -- the shell folder
+   * still labelled "Temporary Internet Files" -- which the OS clears on its own (Storage Sense is
+   * on by default on Windows 11, Disk Cleanup targets it), so a thumbnail cache written there is
+   * deleted behind the user's back and a log file written there is unfindable and transient. It is
+   * also a shell-managed container folder, not a general-purpose per-user cache.
+   *
+   * %LOCALAPPDATA% is read directly rather than through g_get_user_data_dir(), which resolves to
+   * the same folder but takes XDG_DATA_HOME first: that variable says where DATA goes and must not
+   * steer the cache. g_get_user_data_dir() is the fallback for the case where the variable is
+   * missing, which is a broken environment rather than a supported one. */
+  const gchar *local_app_data = g_getenv("LOCALAPPDATA");
+  if(IS_NULL_PTR(local_app_data) || !local_app_data[0]) local_app_data = g_get_user_data_dir();
+  return g_build_filename(local_app_data, "ansel", "cache", NULL);
+#else
+  return g_build_filename(g_get_user_cache_dir(), "ansel", NULL);
+#endif
+}
+
 void dt_loc_init_user_cache_dir(const char *cachedir)
 {
-  char *default_cache_dir = g_build_filename(g_get_user_cache_dir(), "ansel", NULL);
+  char *default_cache_dir = dt_loc_default_user_cache_dir();
   darktable.cachedir = dt_loc_init_generic(cachedir, NULL, default_cache_dir);
   dt_check_opendir("ansel.cachedir", darktable.cachedir);
   dt_free(default_cache_dir);
