@@ -140,8 +140,8 @@ static gboolean _thumbtable_clone_lut(dt_thumbtable_t *dst)
  *  - as an array of fixed length, in table->lut.
  *
  * The hash table is used to keep track of allocated objects to update, redraw and free.
- * Its length is limited to 840 elements or whatever is visible inside viewport
- * at current scroll level. It's garbage-collected.
+ * It holds the visible range of rowids plus as many again on each side:
+ * _evict_thumbnails() destroys whatever lies further away.
  *
  * The LUT is used to speed up lookups for thumbnails at known, bounded positions in sequential
  * order (position in collection = (rowid - 1) in SQLite result = order in GUI = index in the LUT).
@@ -785,6 +785,54 @@ void _resize_thumbnails(dt_thumbtable_t *table)
   }
 }
 
+// Destroy the thumbnails whose rowid lies outside [keep_min, keep_max). Each is a child of
+// table->grid, and GTK restyles an appended child by recursing through all its previous siblings:
+// unbounded, paging through a large collection overflows the main-thread stack (1 MiB on Windows).
+static void _evict_thumbnails(dt_thumbtable_t *table, const int keep_min, const int keep_max)
+{
+  if(keep_max <= keep_min) return; // no visible range: nothing tells what to keep
+
+  const double start = dt_get_wtime();
+  GList *evicted = NULL;
+
+  dt_pthread_mutex_lock(&table->lock);
+  GHashTableIter iter;
+  gpointer value = NULL;
+  g_hash_table_iter_init(&iter, table->list);
+  while(g_hash_table_iter_next(&iter, NULL, &value))
+  {
+    dt_thumbnail_t *thumb = (dt_thumbnail_t *)value;
+    if(thumb->rowid >= keep_min && thumb->rowid < keep_max) continue;
+    g_hash_table_iter_remove(&iter);
+    evicted = g_list_prepend(evicted, thumb);
+    table->thumb_nb--;
+  }
+  dt_pthread_mutex_unlock(&table->lock);
+
+  // dt_thumbnail_destroy() takes table->lock, and clears the LUT slots still pointing to the thumbnail
+  const guint count = g_list_length(evicted);
+  for(GList *l = evicted; l; l = g_list_next(l))
+  {
+    dt_thumbnail_t *thumb = (dt_thumbnail_t *)l->data;
+    gtk_widget_hide(thumb->widget);
+    dt_thumbnail_destroy(thumb);
+  }
+  g_list_free(evicted);
+
+  dt_print(DT_DEBUG_LIGHTTABLE, "Evicted %u thumbs outside of %i and %i in %0.04f sec\n", count, keep_min,
+           keep_max, dt_get_wtime() - start);
+}
+
+static gboolean _evict_idle(gpointer user_data)
+{
+  dt_thumbtable_t *table = (dt_thumbtable_t *)user_data;
+  table->evict_idle_id = 0;
+
+  const int span = table->max_row_id - table->min_row_id;
+  _evict_thumbnails(table, table->min_row_id - span, table->max_row_id + span);
+  return G_SOURCE_REMOVE;
+}
+
 
 void dt_thumbtable_update(dt_thumbtable_t *table)
 {
@@ -814,6 +862,14 @@ void dt_thumbtable_update(dt_thumbtable_t *table)
   table->thumbs_inited = TRUE;
 
   dt_pthread_mutex_unlock(&table->lock);
+
+  // Destroying a thumbnail costs half of creating one, so it waits until this page is drawn. The idle
+  // starves while Page Down is held: past 4 visible ranges, evict now to keep the stack bounded.
+  const int span = table->max_row_id - table->min_row_id;
+  if((int)table->thumb_nb > 4 * span)
+    _evict_thumbnails(table, table->min_row_id - span, table->max_row_id + span);
+  else if(!table->evict_idle_id)
+    table->evict_idle_id = g_idle_add_full(G_PRIORITY_LOW + 10, _evict_idle, table, NULL);
 
   const char *const name = gtk_widget_get_name(table->grid);
   dt_print(DT_DEBUG_LIGHTTABLE, "[%s] Populated %d thumbs between %i and %i in %0.04f sec \n",
@@ -2008,6 +2064,7 @@ dt_thumbtable_t *dt_thumbtable_new(dt_thumbtable_mode_t mode)
   table->draw_group_borders = dt_conf_get_bool("plugins/lighttable/group_borders");
   table->idle_update_id = 0;
   table->focus_idle_id = 0;
+  table->evict_idle_id = 0;
   table->last_parent_width = 0;
   table->last_parent_height = 0;
   table->last_h_scrollbar_height = -1;
@@ -2185,6 +2242,11 @@ void dt_thumbtable_cleanup(dt_thumbtable_t *table)
     g_source_remove(table->focus_idle_id);
     table->focus_idle_id = 0;
   }
+  if(table->evict_idle_id)
+  {
+    g_source_remove(table->evict_idle_id);
+    table->evict_idle_id = 0;
+  }
 
   DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(dt_control_signal_get_global(), G_CALLBACK(_dt_collection_changed_callback), table);
   DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(dt_control_signal_get_global(), G_CALLBACK(_dt_selection_changed_callback), table);
@@ -2218,6 +2280,11 @@ void dt_thumbtable_stop(dt_thumbtable_t *table)
   {
     g_source_remove(table->focus_idle_id);
     table->focus_idle_id = 0;
+  }
+  if(table->evict_idle_id)
+  {
+    g_source_remove(table->evict_idle_id);
+    table->evict_idle_id = 0;
   }
 
   table->reset_collection = TRUE;
