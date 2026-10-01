@@ -21,7 +21,7 @@
 #include "common/glib_utils.h"     // dt_string_replace
 #include "system/macros.h"         // IS_NULL_PTR
 #include "system/mem_alloc.h"      // dt_free
-#include "widgets/widget_style.h"  // dt_gui_add_class, dt_capitalize_label
+#include "widgets/widget_style.h"  // dt_gui_add_class
 
 #include "system/macros.h"   // IS_NULL_PTR
 #include "widgets/widget_settings.h"   // DT_PIXEL_APPLY_DPI
@@ -109,25 +109,19 @@ void dt_ui_section_label_set(GtkWidget *label)
   dt_gui_add_class(label, "dt_section_label"); // make sure that we can style these easily
 }
 
-/** A section heading. Capitalised: grammar says sentences start with a capital, and typography
- * says it makes the structure of the text easier to pick out. */
+/** A section heading. The text comes capitalised: grammar says sentences start with a capital,
+ * and typography says it makes the structure of the text easier to pick out. */
 GtkWidget *dt_ui_section_label_new(const gchar *str)
 {
-  gchar *str_cpy = g_strdup(str);
-  dt_capitalize_label(str_cpy);
-  GtkWidget *label = gtk_label_new(str_cpy);
-  dt_free(str_cpy);
+  GtkWidget *label = gtk_label_new(str);
   dt_ui_section_label_set(label);
   return label;
 }
 
-/** A plain label: start-aligned, capitalised, ellipsized. */
+/** A plain label: start-aligned, ellipsized. */
 GtkWidget *dt_ui_label_new(const gchar *str)
 {
-  gchar *str_cpy = g_strdup(str);
-  dt_capitalize_label(str_cpy);
-  GtkWidget *label = gtk_label_new(str_cpy);
-  dt_free(str_cpy);
+  GtkWidget *label = gtk_label_new(str);
   gtk_widget_set_halign(label, GTK_ALIGN_START);
   gtk_label_set_xalign (GTK_LABEL(label), 0.0f);
   gtk_label_set_ellipsize(GTK_LABEL(label), PANGO_ELLIPSIZE_END);

@@ -190,7 +190,9 @@ GtkWidget *dt_bauhaus_slider_from_params(dt_iop_module_t *self, const char *para
       }
       else
       {
+        // A field with no $DESCRIPTION shows its own name, ASCII by construction, starting with a capital.
         gchar *str = dt_util_str_replace(f->header.field_name, "_", " ");
+        str[0] = g_ascii_toupper(str[0]);
 
         dt_bauhaus_widget_set_label(slider, str);
 
@@ -243,6 +245,7 @@ GtkWidget *dt_bauhaus_combobox_from_params(dt_iop_module_t *self, const char *pa
     else
     {
       str = dt_util_str_replace(f->header.field_name, "_", " ");
+      str[0] = g_ascii_toupper(str[0]);
 
       dt_bauhaus_widget_set_label(combobox, str);
 
@@ -928,7 +931,6 @@ static void _iop_panel_label(dt_iop_module_t *module)
   gtk_widget_set_name(lab, "iop-panel-label");
 
   char *module_name = dt_history_item_get_label(module);
-  dt_capitalize_label(module_name);
   gtk_label_set_markup_with_mnemonic(GTK_LABEL(lab), module_name);
   dt_free(module_name);
 
@@ -946,7 +948,6 @@ static void _iop_panel_label(dt_iop_module_t *module)
   }
 
   gchar *clean_name = delete_underscore(module->name());
-  dt_capitalize_label(clean_name);
 
   mod->instance_name
       = g_strdup_printf("%s/%s", clean_name, (module->multi_name[0] != '\0') ? module->multi_name : "0");
@@ -1031,7 +1032,6 @@ void dt_iop_gui_init(dt_iop_module_t *module)
   if(!dt_iop_is_hidden(module) && !(module->flags() & IOP_FLAGS_DEPRECATED))
   {
     gchar *clean_name = delete_underscore(module->name());
-    dt_capitalize_label(clean_name);
 
     // slash is not allowed in module names because that makes accel pathes fail
     assert(g_strrstr(clean_name, "/") == NULL);

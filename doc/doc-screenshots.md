@@ -119,13 +119,13 @@ Left panel        = content/interface/left-panel.png
 Main window       = content/interface/overview.jpg
 ```
 
-**Copy the key from the tree, not from the module panel.** The lookup is a plain
-`g_hash_table_lookup` on the label string, so it is case-sensitive, and a darkroom module's
-label in this tree is `module->common_fields.name` — `delete_underscore(module->name())`,
-**uncapitalised** (`develop/imageop.c:579`). The name you read on the module's own header in
-the darkroom is a different string: `imageop_gui.c:930-931` runs it through
-`dt_capitalize_label()` for display. So `Exposure = …` silently matches nothing while
-`exposure = …` works. A module with several instances is keyed `name (multi_name)`
+**Copy the key from the tree.** The lookup is a plain `g_hash_table_lookup` on the label
+string, so it is case-sensitive, and a darkroom module's label in this tree is
+`module->common_fields.name` — `delete_underscore(module->name())` (`develop/imageop.c:579`).
+Module names carry their capital in the source since 2026-10-01 (checked against
+`a4eac9fe11` plus the capitalisation branch), so the tree and the module's header read the same
+`Exposure`; a map written before then keys modules in lowercase, and those lines now match
+nothing. A module with several instances is keyed `name (multi_name)`
 (`darktable.c:861-863`), which is why the instances get separate file names.
 
 The value carries the documentation's **own** extension, and that is the point: a tree that

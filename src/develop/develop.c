@@ -1663,7 +1663,6 @@ gchar *dt_history_item_get_name(const struct dt_iop_module_t *module)
     label = g_strdup_printf("%s %s", clean_name, module->multi_name);
     dt_free(clean_name);
   }
-  dt_capitalize_label(label);
   return label;
 }
 

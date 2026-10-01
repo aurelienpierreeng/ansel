@@ -702,7 +702,6 @@ static void dt_lib_init_module(void *m)
     // Else: add accel pathes
 
     gchar *clean_name = delete_underscore(module->name(module));
-    dt_capitalize_label(clean_name);
 
     // slash is not allowed in module names because that makes accel pathes fail
     assert(g_strrstr(clean_name, "/") == NULL);
@@ -758,7 +757,6 @@ void dt_lib_unload_module(dt_lib_module_t *module)
   if(dt_gui_get_global() && dt_gui_get_accels() && module->views)
   {
     gchar *clean_name = delete_underscore(module->name(module));
-    dt_capitalize_label(clean_name);
 
     const char **views = module->views(module);
     for(const char **view = views; view && *view; ++view)
@@ -1089,7 +1087,6 @@ GtkWidget *dt_lib_gui_get_expander(dt_lib_module_t *module)
   GtkWidget *label_evb = gtk_event_box_new();
   gtk_container_add(GTK_CONTAINER(label_evb), label);
   gchar *mname = g_markup_escape_text(module->name(module), -1);
-  dt_capitalize_label(mname);
   gtk_label_set_markup(GTK_LABEL(label), mname);
   dt_free(mname);
   gtk_label_set_ellipsize(GTK_LABEL(label), PANGO_ELLIPSIZE_END);
@@ -1335,10 +1332,7 @@ gboolean dt_handle_dialog_enter(GtkWidget *widget, GdkEventKey *event, gpointer 
 
 GtkWidget *dt_action_button_new(dt_lib_module_t *self, const gchar *label, gpointer callback, gpointer data, const gchar *tooltip, guint accel_key, GdkModifierType mods)
 {
-  gchar *label_copy = g_strdup(label);
-  dt_capitalize_label(label_copy);
-  GtkWidget *button = gtk_button_new_with_label(label_copy);
-  dt_free(label_copy);
+  GtkWidget *button = gtk_button_new_with_label(label);
 
   gtk_widget_set_valign(GTK_WIDGET(button), GTK_ALIGN_CENTER);
   gtk_widget_set_halign(GTK_WIDGET(button), GTK_ALIGN_CENTER);

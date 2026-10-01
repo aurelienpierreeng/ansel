@@ -54,7 +54,6 @@ static gchar *_hm_clean_module_name(const dt_iop_module_t *mod)
 {
   const char *raw = (mod && mod->name) ? mod->name() : (mod ? mod->op : "");
   gchar *clean = delete_underscore(raw ? raw : "");
-  dt_capitalize_label(clean);
   return clean;
 }
 
@@ -1293,8 +1292,8 @@ gboolean _hm_show_merge_report_popup(dt_develop_t *dev_dest, dt_develop_t *dev_s
   if(IS_NULL_PTR(window)) return FALSE;
 
   /* The "before" rows. Derived here, from the pre-merge module map the backend kept, rather
-   * than handed over ready-made: they are display strings, built with dt_capitalize_label()
-   * and friends, and the backend has no business holding those. */
+   * than handed over ready-made: they are display strings, module names and instance labels,
+   * and the backend has no business holding those. */
   GPtrArray *orig_styles = NULL;
   GPtrArray *orig_labels
       = _hm_collect_labels_from_history_map((GHashTable *)orig_ids, mod_list_ids, &orig_styles);

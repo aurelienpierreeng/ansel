@@ -782,7 +782,6 @@ static dt_ioporder_graph_node_t *_ioporder_create_graph_node(dt_iop_module_t *mo
   gtk_widget_set_hexpand(event_box, FALSE);
   gtk_widget_set_halign(event_box, GTK_ALIGN_START);
 
-  dt_capitalize_label(module_name);
   gtk_label_set_text(GTK_LABEL(label), module_name);
   gtk_widget_set_halign(label, GTK_ALIGN_START);
   gtk_widget_set_valign(label, GTK_ALIGN_CENTER);
@@ -894,7 +893,6 @@ static dt_ioporder_graph_node_t *_ioporder_create_endpoint_node(const char *labe
   gtk_widget_set_margin_end(body, DT_PIXEL_APPLY_DPI(12));
   gtk_widget_set_name(body, "ioporder-endpoint");
 
-  dt_capitalize_label(node->endpoint_label);
   gtk_label_set_text(GTK_LABEL(title), node->endpoint_label);
   gtk_widget_set_halign(title, GTK_ALIGN_CENTER);
   gtk_widget_set_valign(title, GTK_ALIGN_CENTER);

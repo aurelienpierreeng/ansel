@@ -1507,7 +1507,6 @@ void dt_bauhaus_widget_set_label(GtkWidget *widget, const char *label)
   if(label)
   {
     g_strlcpy(w->label, label, sizeof(w->label));
-    dt_capitalize_label(w->label);
   }
 
   if(w->module)
@@ -1529,7 +1528,6 @@ void dt_bauhaus_widget_set_label(GtkWidget *widget, const char *label)
       assert(g_strrstr(label, "/") == NULL);
 
       gchar *plugin_name = g_strdup_printf("%s/%s", m->name, w->label);
-      dt_capitalize_label(plugin_name);
 
       gchar *scope = g_strdup_printf("%s/Modules", m->view);
       dt_accels_new_darkroom_action(_action_request_focus, widget, widget, scope, plugin_name, 0, 0,

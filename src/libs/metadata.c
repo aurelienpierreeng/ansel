@@ -753,7 +753,14 @@ void gui_init(dt_lib_module_t *self)
   {
     if(dt_metadata_get_type_by_display_order(i) == DT_METADATA_TYPE_INTERNAL)
       continue;
-    GtkWidget *label = dt_ui_label_new(_(dt_metadata_get_name_by_display_order(i)));
+    // The metadata names double as keys, so they stay lowercase there: the label starts with a capital.
+    const char *name = _(dt_metadata_get_name_by_display_order(i));
+    const gsize first = *name ? g_utf8_next_char(name) - name : 0;
+    gchar *head = g_utf8_strup(name, first);
+    gchar *capitalised = g_strconcat(head, name + first, NULL);
+    GtkWidget *label = dt_ui_label_new(capitalised);
+    dt_free(head);
+    dt_free(capitalised);
     GtkWidget *labelev = gtk_event_box_new();
     gtk_widget_add_events(labelev, GDK_BUTTON_PRESS_MASK);
     gtk_container_add(GTK_CONTAINER(labelev), label);

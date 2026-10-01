@@ -137,12 +137,19 @@ void init_collection_line(gpointer instance,
   {
     char label[2048] = { 0 };
     pretty_print_collection(collection, label, sizeof(label));
-    dt_capitalize_label(label);
+
+    // The label opens on a property name and goes on with the rule's value, both data: it starts
+    // with a capital here.
+    const gsize first = *label ? g_utf8_next_char(label) - label : 0;
+    gchar *head = g_utf8_strup(label, first);
+    gchar *capitalised = g_strconcat(head, label + first, NULL);
+    dt_free(head);
 
     // Update the menu entry label for current collection name. Escape it: a collection value
     // can contain markup-significant characters (e.g. the < > operators in date/numeric rules).
     GtkWidget *child = gtk_bin_get_child(GTK_BIN(widget));
-    gchar *escaped = g_markup_escape_text(label, -1);
+    gchar *escaped = g_markup_escape_text(capitalised, -1);
+    dt_free(capitalised);
     gtk_label_set_markup(GTK_LABEL(child), escaped);
     g_free(escaped);
   }
