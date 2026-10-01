@@ -140,9 +140,9 @@ void init_collection_line(gpointer instance,
 
     // The label opens on a property name and goes on with the rule's value, both data: it starts
     // with a capital here.
-    const gsize first = *label ? g_utf8_next_char(label) - label : 0;
-    gchar *head = g_utf8_strup(label, first);
-    gchar *capitalised = g_strconcat(head, label + first, NULL);
+    const gsize first = label[0] ? g_utf8_next_char(&label[0]) - &label[0] : 0;
+    gchar *head = g_utf8_strup(&label[0], first);
+    gchar *capitalised = g_strconcat(head, &label[first], NULL);
     dt_free(head);
 
     // Update the menu entry label for current collection name. Escape it: a collection value

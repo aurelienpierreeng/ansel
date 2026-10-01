@@ -844,19 +844,19 @@ static gboolean _gui_multiinstance_callback(GtkButton *button, GdkEventButton *e
   GtkWidget *item;
 
   item = gtk_menu_item_new_with_label(_("new instance"));
-  // gtk_widget_set_tooltip_text(item, _("Add a new instance of this module to the pipe"));
+  // gtk_widget_set_tooltip_text(item, _("add a new instance of this module to the pipe"));
   g_signal_connect(G_OBJECT(item), "activate", G_CALLBACK(_gui_copy_callback), module);
   gtk_widget_set_sensitive(item, module->gui->multi_show_new);
   gtk_menu_shell_append(menu, item);
 
   item = gtk_menu_item_new_with_label(_("duplicate instance"));
-  // gtk_widget_set_tooltip_text(item, _("Add a copy of this instance to the pipe"));
+  // gtk_widget_set_tooltip_text(item, _("add a copy of this instance to the pipe"));
   g_signal_connect(G_OBJECT(item), "activate", G_CALLBACK(_gui_duplicate_callback), module);
   gtk_widget_set_sensitive(item, module->gui->multi_show_new);
   gtk_menu_shell_append(menu, item);
 
   item = gtk_menu_item_new_with_label(_("delete"));
-  // gtk_widget_set_tooltip_text(item, _("Delete this instance"));
+  // gtk_widget_set_tooltip_text(item, _("delete this instance"));
   g_signal_connect(G_OBJECT(item), "activate", G_CALLBACK(_gui_delete_callback), module);
   gtk_widget_set_sensitive(item, module->gui->multi_show_close);
   gtk_menu_shell_append(menu, item);

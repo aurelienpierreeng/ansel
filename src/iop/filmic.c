@@ -1070,7 +1070,7 @@ void compute_curve_lut(dt_iop_filmic_params_t *p, float *table, float *table_tem
       d->latitude_max = white_log;
     }
 
-    //dt_control_log(_("Filmic curve using 4 nodes - highlights lost"));
+    //dt_control_log(_("filmic curve using 4 nodes - highlights lost"));
 
   }
   else if (TOE_LOST && !SHOULDER_LOST)
@@ -1094,7 +1094,7 @@ void compute_curve_lut(dt_iop_filmic_params_t *p, float *table, float *table_tem
       d->latitude_max = shoulder_log;
     }
 
-    //dt_control_log(_("Filmic curve using 4 nodes - shadows lost"));
+    //dt_control_log(_("filmic curve using 4 nodes - shadows lost"));
 
   }
   else if (TOE_LOST && SHOULDER_LOST)
@@ -1116,7 +1116,7 @@ void compute_curve_lut(dt_iop_filmic_params_t *p, float *table, float *table_tem
       d->latitude_max = white_log;
     }
 
-    //dt_control_log(_("Filmic curve using 3 nodes - highlights & shadows lost"));
+    //dt_control_log(_("filmic curve using 3 nodes - highlights & shadows lost"));
 
   }
   else
@@ -1142,7 +1142,7 @@ void compute_curve_lut(dt_iop_filmic_params_t *p, float *table, float *table_tem
       d->latitude_max = shoulder_log;
     }
 
-    //dt_control_log(_("Filmic curve using 5 nodes - everything alright"));
+    //dt_control_log(_("filmic curve using 5 nodes - everything alright"));
   }
 
   if (p->interpolator != 3)

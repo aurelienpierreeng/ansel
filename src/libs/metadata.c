@@ -805,7 +805,7 @@ void gui_init(dt_lib_module_t *self)
   }
 
   // apply button
-  d->apply_button = dt_action_button_new(self, N_("Apply"), _apply_button_clicked, self,
+  d->apply_button = dt_action_button_new(self, N_("Apply"), &_apply_button_clicked, self,
                                          _("Write metadata for selected images"), 0, 0);
 
   gtk_grid_attach(GTK_GRID(self->widget), GTK_WIDGET(d->apply_button), 0, DT_METADATA_NUMBER, 2, 1);
