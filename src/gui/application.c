@@ -273,7 +273,7 @@ void dt_gui_gtk_quit()
 {
   GtkWidget *win = dt_ui_main_window(darktable.gui->ui);
   dt_gui_add_class(win, "dt_gui_quit");
-  gtk_window_set_title(GTK_WINDOW(win), _("closing Ansel..."));
+  gtk_window_set_title(GTK_WINDOW(win), _("Closing Ansel..."));
 
   dt_ui_cleanup_titlebar(darktable.gui->ui);
 
@@ -286,7 +286,7 @@ void dt_gui_gtk_quit()
 
 gboolean dt_gui_quit_callback(GtkWidget *widget, GdkEvent *event, gpointer user_data)
 {
-  dt_control_quit();
+  dt_gui_closing_quit();
   return TRUE;
 }
 
@@ -308,7 +308,7 @@ static gboolean _osx_quit_callback(GtkosxApplication *OSXapp, gpointer user_data
   for(window = windows; !IS_NULL_PTR(window); window = g_list_next(window))
     if(gtk_window_get_modal(GTK_WINDOW(window->data)) && gtk_widget_get_visible(GTK_WIDGET(window->data)))
       break;
-  if(IS_NULL_PTR(window)) dt_control_quit();
+  if(IS_NULL_PTR(window)) dt_gui_closing_quit();
   g_list_free(windows);
   windows = NULL;
   return TRUE;

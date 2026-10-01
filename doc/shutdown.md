@@ -10,8 +10,10 @@ fills it, what the user sees during it, and what it still gets wrong.
 
 ## The sequence
 
-`dt_control_quit()` (`control/control.c:452`) is how a quit starts: the window's `delete-event`,
-the Quit menu entry and the macOS dock all call it. It hides the main window
+`dt_control_quit()` (`control/control.c:452`) is how a quit starts. The window's `delete-event`,
+the Quit menu entry and the macOS dock reach it through `dt_gui_closing_quit()` (`gui/closing.c`),
+which may first ask (see *Before the quit* below); the D-Bus `Quit` method calls it directly,
+since no one is there to answer. It hides the main window
 (`dt_gui_gtk_quit()`), clears `running`, broadcasts the workers' condition and stops `gtk_main()`.
 `dt_gui_gtk_run()` then calls `dt_cleanup()`, which — for the part that matters here — asks its
 last questions (database maintenance and snapshot), leaves the current view, and calls
@@ -34,6 +36,29 @@ else running, **4.54 s**, the preload returning 4.47 s into the wait — the thu
 Of the 295 selected images, 259 still had no size-0 thumbnail on disc afterwards (the selection
 read from `selected_images`, each image's file tested in the cache directory), so the job had
 not reached the end of its list.
+
+## Before the quit
+
+While background tasks are running or queued, `dt_gui_closing_quit()` asks before it quits. A
+background task is a job that publishes a progress — those the background jobs panel shows: an
+export, a preload, an import. They are counted with `dt_control_progress_foreach()`, the only
+creator of progress objects being `dt_control_job_add_progress()`. Thumbnail and darkroom
+pipelines publish none and do not ask: they run nearly all the time a collection is browsed.
+
+The question is the closing window in another mode (`DT_CLOSING_CONFIRM`): a warning icon in
+place of the spinner, *Background tasks are still running*, the tasks' progress messages in
+italics, the same *Details* list — whose line about queued jobs says they *would be* dropped —
+and two buttons, *Go back* and *Quit anyway*. *Go back* has the focus, so Enter does not quit;
+Escape and the window's close button go back too. It is modal over the main window and runs its
+own `GMainLoop`, which refreshes it every 100 ms. A second request while it is open — the
+shortcut again, the dock — is ignored.
+
+Nothing is cancelled either way. The text says what a quit does: the tasks not started are
+dropped, and Ansel closes once the running ones are done. Cancelling the cancellable tasks on
+*Quit anyway* was considered and declined: an export goes to its last image, as before. Checked
+2026-10-01 on top of `fbed8b059f`, by hand, during a preload: the question named it, *Go back*
+left Ansel running with the preload going on, and *Quit anyway* from the window's close button
+quit.
 
 ## What it costs
 
