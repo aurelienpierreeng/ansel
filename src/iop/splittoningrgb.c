@@ -1314,11 +1314,11 @@ static void _build_simple_ui(dt_iop_module_t *self, dt_iop_splittoning_rgb_gui_d
 
   g->point[point].simple_stretch_1
       = dt_bauhaus_slider_new_with_range(dt_bauhaus_get_global(), DT_GUI_MODULE(self), -1.5f, 1.5f, 0, 1.f, 3);
-  dt_bauhaus_widget_set_label(g->point[point].simple_stretch_1, N_("U stretch"));
+  dt_bauhaus_widget_set_label(g->point[point].simple_stretch_1, N_("u stretch"));
 
   g->point[point].simple_stretch_2
       = dt_bauhaus_slider_new_with_range(dt_bauhaus_get_global(), DT_GUI_MODULE(self), -1.5f, 1.5f, 0, 1.f, 3);
-  dt_bauhaus_widget_set_label(g->point[point].simple_stretch_2, N_("V stretch"));
+  dt_bauhaus_widget_set_label(g->point[point].simple_stretch_2, N_("v stretch"));
 
   g->point[point].simple_coupling_2
       = dt_bauhaus_slider_new_with_range(dt_bauhaus_get_global(), DT_GUI_MODULE(self), -1.f, 1.f, 0, 0.f, 3);

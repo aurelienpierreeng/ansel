@@ -3359,24 +3359,24 @@ const dt_iop_gui_blendif_channel_t Lab_channels[]
     = { { N_("L"), N_("Sliders for L channel"), 1.0f / 100.0f, COLORSTOPS(_gradient_L), TRUE, 0.0f,
           { DEVELOP_BLENDIF_L_in, DEVELOP_BLENDIF_L_out }, DT_DEV_PIXELPIPE_DISPLAY_L,
           _blendif_scale_print_default, _blendop_blendif_disp_alternative_log, N_("lightness") },
-        { N_("A"), N_("Sliders for a channel"), 1.0f / 256.0f, COLORSTOPS(_gradient_a), TRUE, 0.0f,
+        { N_("a"), N_("Sliders for a channel"), 1.0f / 256.0f, COLORSTOPS(_gradient_a), TRUE, 0.0f,
           { DEVELOP_BLENDIF_A_in, DEVELOP_BLENDIF_A_out }, DT_DEV_PIXELPIPE_DISPLAY_a,
           _blendif_scale_print_ab, _blendop_blendif_disp_alternative_mag, N_("green/red") },
-        { N_("B"), N_("Sliders for b channel"), 1.0f / 256.0f, COLORSTOPS(_gradient_b), TRUE, 0.0f,
+        { N_("b"), N_("Sliders for b channel"), 1.0f / 256.0f, COLORSTOPS(_gradient_b), TRUE, 0.0f,
           { DEVELOP_BLENDIF_B_in, DEVELOP_BLENDIF_B_out }, DT_DEV_PIXELPIPE_DISPLAY_b,
           _blendif_scale_print_ab, _blendop_blendif_disp_alternative_mag, N_("blue/yellow") },
         { N_("C"), N_("Sliders for chroma channel (of LCh)"), 1.0f / 100.0f, COLORSTOPS(_gradient_chroma),
           TRUE, 0.0f,
           { DEVELOP_BLENDIF_C_in, DEVELOP_BLENDIF_C_out }, DT_DEV_PIXELPIPE_DISPLAY_LCH_C,
           _blendif_scale_print_default, _blendop_blendif_disp_alternative_log, N_("saturation") },
-        { N_("H"), N_("Sliders for hue channel (of LCh)"), 1.0f / 360.0f, COLORSTOPS(_gradient_LCh_hue),
+        { N_("h"), N_("Sliders for hue channel (of LCh)"), 1.0f / 360.0f, COLORSTOPS(_gradient_LCh_hue),
           FALSE, 0.0f,
           { DEVELOP_BLENDIF_h_in, DEVELOP_BLENDIF_h_out }, DT_DEV_PIXELPIPE_DISPLAY_LCH_h,
           _blendif_scale_print_hue, NULL, N_("hue") },
         { NULL } };
 
 const dt_iop_gui_blendif_channel_t rgb_channels[]
-    = { { N_("G"), N_("Sliders for gray value"), 1.0f / 255.0f, COLORSTOPS(_gradient_gray), TRUE, 0.0f,
+    = { { N_("g"), N_("Sliders for gray value"), 1.0f / 255.0f, COLORSTOPS(_gradient_gray), TRUE, 0.0f,
           { DEVELOP_BLENDIF_GRAY_in, DEVELOP_BLENDIF_GRAY_out }, DT_DEV_PIXELPIPE_DISPLAY_GRAY,
           _blendif_scale_print_default, _blendop_blendif_disp_alternative_log, N_("gray") },
         { N_("R"), N_("Sliders for red channel"), 1.0f / 255.0f, COLORSTOPS(_gradient_red), TRUE, 0.0f,
@@ -3403,7 +3403,7 @@ const dt_iop_gui_blendif_channel_t rgb_channels[]
         { NULL } };
 
 const dt_iop_gui_blendif_channel_t rgbj_channels[]
-    = { { N_("G"), N_("Sliders for gray value"), 1.0f / 255.0f, COLORSTOPS(_gradient_gray), TRUE, 0.0f,
+    = { { N_("g"), N_("Sliders for gray value"), 1.0f / 255.0f, COLORSTOPS(_gradient_gray), TRUE, 0.0f,
           { DEVELOP_BLENDIF_GRAY_in, DEVELOP_BLENDIF_GRAY_out }, DT_DEV_PIXELPIPE_DISPLAY_GRAY,
           _blendif_scale_print_default, _blendop_blendif_disp_alternative_log, N_("gray") },
         { N_("R"), N_("Sliders for red channel"), 1.0f / 255.0f, COLORSTOPS(_gradient_red), TRUE, 0.0f,
@@ -3423,7 +3423,7 @@ const dt_iop_gui_blendif_channel_t rgbj_channels[]
           TRUE, -6.64385619f, // cf. _blend_init_blendif_boost_parameters
           { DEVELOP_BLENDIF_Cz_in, DEVELOP_BLENDIF_Cz_out }, DT_DEV_PIXELPIPE_DISPLAY_JzCzhz_Cz,
           _blendif_scale_print_default, _blendop_blendif_disp_alternative_log, N_("chroma") },
-        { N_("Hz"), N_("Sliders for hue channel (of JzCzhz)"), 1.0f / 360.0f, COLORSTOPS(_gradient_JzCzhz_hue),
+        { N_("hz"), N_("Sliders for hue channel (of JzCzhz)"), 1.0f / 360.0f, COLORSTOPS(_gradient_JzCzhz_hue),
           FALSE, 0.0f,
           { DEVELOP_BLENDIF_hz_in, DEVELOP_BLENDIF_hz_out }, DT_DEV_PIXELPIPE_DISPLAY_JzCzhz_hz,
           _blendif_scale_print_hue, NULL, N_("hue") },

@@ -5683,9 +5683,9 @@ void gui_init(dt_iop_module_t *self)
   // Color science
   g->version = dt_bauhaus_combobox_from_params(self, "version");
   gtk_widget_set_tooltip_text(g->version,
-                              _("V3 is darktable 3.0 desaturation method, same as color balance.\n"
-                                "V4 is a newer desaturation method, based on spectral purity of light.\n"
-                                "V8 tone maps each RGB channel separately in an inset rendering space:\n"
+                              _("v3 is darktable 3.0 desaturation method, same as color balance.\n"
+                                "v4 is a newer desaturation method, based on spectral purity of light.\n"
+                                "v8 tone maps each RGB channel separately in an inset rendering space:\n"
                                 "highlights bleach toward white and hues drift as tonal compression\n"
                                 "increases, with a parametric hue recovery on the saturation slider."));
 
@@ -5696,7 +5696,7 @@ void gui_init(dt_iop_module_t *self)
                               _("How the latitude, balance and contrast place the toe and\n"
                                 "shoulder nodes of the curve (not the shape between them —\n"
                                 "that is 'contrast in shadows/highlights').\n"
-                                "V3 (2021) is recommended; v1/v2 are kept for older edits."));
+                                "v3 (2021) is recommended; v1/v2 are kept for older edits."));
 
 
   g->auto_hardness = dt_bauhaus_toggle_from_params(self, "auto_hardness");

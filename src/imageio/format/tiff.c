@@ -869,7 +869,7 @@ void gui_init(dt_imageio_module_format_t *self)
 
   // shortfile option combo box
   gui->shortfiles = dt_bauhaus_combobox_new(dt_bauhaus_get_global(), DT_GUI_MODULE(NULL));
-  dt_bauhaus_widget_set_label(gui->shortfiles, N_("B&w image"));
+  dt_bauhaus_widget_set_label(gui->shortfiles, N_("B&W image"));
   dt_bauhaus_combobox_add(gui->shortfiles, _("write rgb colors"));
   dt_bauhaus_combobox_add(gui->shortfiles, _("write grayscale"));
   dt_bauhaus_combobox_set(gui->shortfiles, shortmode);

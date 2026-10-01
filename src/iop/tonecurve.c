@@ -1115,8 +1115,8 @@ void gui_init(struct dt_iop_module_t *self)
 
   c->channel_tabs = dt_ui_notebook_new();
   dt_ui_notebook_page(c->channel_tabs, N_("L"), _("Tonecurve for L channel"));
-  dt_ui_notebook_page(c->channel_tabs, N_("A"), _("Tonecurve for a channel"));
-  dt_ui_notebook_page(c->channel_tabs, N_("B"), _("Tonecurve for b channel"));
+  dt_ui_notebook_page(c->channel_tabs, N_("a"), _("Tonecurve for a channel"));
+  dt_ui_notebook_page(c->channel_tabs, N_("b"), _("Tonecurve for b channel"));
   g_signal_connect(G_OBJECT(c->channel_tabs), "switch_page", G_CALLBACK(tab_switch), self);
   dt_ui_notebook_set_picker_owner(c->channel_tabs, self);
   gtk_box_pack_start(GTK_BOX(hbox), GTK_WIDGET(c->channel_tabs), TRUE, TRUE, 0);

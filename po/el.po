@@ -5978,9 +5978,6 @@ msgstr ""
 msgid "mm"
 msgstr "χιλ."
 
-msgid "Mm"
-msgstr "Χιλ."
-
 #: ../src/common/pdf.h:94 ../src/libs/export.c:540 ../src/libs/export.c:1183
 #: ../src/libs/print_settings.c:105
 msgid "cm"
@@ -7275,8 +7272,8 @@ msgstr "Ολισθητές καναλιού L"
 
 #: ../src/develop/blend_gui.c:3278 ../src/iop/tonecurve.c:1103
 #, fuzzy
-msgid "A"
-msgstr "A4"
+msgid "a"
+msgstr "a4"
 
 #: ../src/develop/blend_gui.c:3278
 msgid "Sliders for a channel"
@@ -7405,7 +7402,7 @@ msgid "Sliders for chroma channel (of JzCzhz)"
 msgstr "Ολισθητές καναλιού χρώματος (σε LCh)"
 
 #: ../src/develop/blend_gui.c:3342
-msgid "Hz"
+msgid "hz"
 msgstr ""
 
 #: ../src/develop/blend_gui.c:3342
@@ -10794,12 +10791,8 @@ msgstr ""
 msgid "dpi"
 msgstr "dpi"
 
-#. dpi
-msgid "Dpi"
-msgstr "Dpi"
-
 #: ../src/imageio/format/pdf.c:598
-msgid "Dpi of the images inside the pdf"
+msgid "DPI of the images inside the pdf"
 msgstr "Συντελεστής dpi των εικόνων στο pdf"
 
 #: ../src/imageio/format/pdf.c:605
@@ -10924,7 +10917,7 @@ msgstr "Τύπος συμπίεσης"
 
 #: ../src/imageio/format/tiff.c:868
 #, fuzzy
-msgid "B&w image"
+msgid "B&W image"
 msgstr "Εικόνα"
 
 #: ../src/imageio/format/tiff.c:869
@@ -12933,8 +12926,8 @@ msgstr ""
 
 #: ../src/iop/channelmixerrgb.c:4986 ../src/iop/splittoningrgb.c:1149
 #, fuzzy
-msgid "U stretch"
-msgstr "Ισχύς"
+msgid "u stretch"
+msgstr "ισχύς"
 
 #: ../src/iop/channelmixerrgb.c:4987
 msgid ""
@@ -12944,8 +12937,8 @@ msgstr ""
 
 #: ../src/iop/channelmixerrgb.c:4992 ../src/iop/splittoningrgb.c:1153
 #, fuzzy
-msgid "V stretch"
-msgstr "Ισχύς"
+msgid "v stretch"
+msgstr "ισχύς"
 
 #: ../src/iop/channelmixerrgb.c:4993
 msgid ""
@@ -16143,16 +16136,16 @@ msgstr "Εστιακό μήκος (χιλ.)"
 
 #: ../src/iop/lens.cc:1969
 #, fuzzy
-msgid "F"
-msgstr "F/"
+msgid "f"
+msgstr "f/"
 
 #: ../src/iop/lens.cc:1970
-msgid "F-number (aperture)"
-msgstr "Τιμή f (διάφραγμα)"
+msgid "f-number (aperture)"
+msgstr "τιμή f (διάφραγμα)"
 
 #: ../src/iop/lens.cc:1984
-msgid "D"
-msgstr "D"
+msgid "d"
+msgstr "d"
 
 #: ../src/iop/lens.cc:1985
 msgid "Distance to subject"

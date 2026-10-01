@@ -5457,13 +5457,13 @@ void gui_init(struct dt_iop_module_t *self)
   g_signal_connect(G_OBJECT(g->simple_psi), "value-changed", G_CALLBACK(_channelmixerrgb_simple_slider_callback), self);
 
   g->simple_stretch_1 = dt_bauhaus_slider_new_with_range(dt_bauhaus_get_global(), DT_GUI_MODULE(self), -1.5f, 1.5f, 0, 1.f, 3);
-  dt_bauhaus_widget_set_label(g->simple_stretch_1, N_("U stretch"));
+  dt_bauhaus_widget_set_label(g->simple_stretch_1, N_("u stretch"));
   gtk_widget_set_tooltip_text(g->simple_stretch_1, _("Stretch along the first principal chroma axis. 0 neutralizes chroma, 1 keeps identity, -1 reverses chroma and +/-1.5 add contrast."));
   gtk_box_pack_start(GTK_BOX(mixer_simple), GTK_WIDGET(g->simple_stretch_1), FALSE, FALSE, 0);
   g_signal_connect(G_OBJECT(g->simple_stretch_1), "value-changed", G_CALLBACK(_channelmixerrgb_simple_slider_callback), self);
 
   g->simple_stretch_2 = dt_bauhaus_slider_new_with_range(dt_bauhaus_get_global(), DT_GUI_MODULE(self), -1.5f, 1.5f, 0, 1.f, 3);
-  dt_bauhaus_widget_set_label(g->simple_stretch_2, N_("V stretch"));
+  dt_bauhaus_widget_set_label(g->simple_stretch_2, N_("v stretch"));
   gtk_widget_set_tooltip_text(g->simple_stretch_2, _("Stretch along the second principal chroma axis. 0 neutralizes chroma, 1 keeps identity, -1 reverses chroma and +/-1.5 add contrast."));
   gtk_box_pack_start(GTK_BOX(mixer_simple), GTK_WIDGET(g->simple_stretch_2), FALSE, FALSE, 0);
   g_signal_connect(G_OBJECT(g->simple_stretch_2), "value-changed", G_CALLBACK(_channelmixerrgb_simple_slider_callback), self);

@@ -5965,9 +5965,6 @@ msgstr ""
 msgid "mm"
 msgstr "mm"
 
-msgid "Mm"
-msgstr "Mm"
-
 #: ../src/common/pdf.h:94 ../src/libs/export.c:540 ../src/libs/export.c:1183
 #: ../src/libs/print_settings.c:105
 msgid "cm"
@@ -7246,8 +7243,8 @@ msgid "Sliders for L channel"
 msgstr "Reglage för L-kanal"
 
 #: ../src/develop/blend_gui.c:3278 ../src/iop/tonecurve.c:1103
-msgid "A"
-msgstr "A"
+msgid "a"
+msgstr "a"
 
 #: ../src/develop/blend_gui.c:3278
 msgid "Sliders for a channel"
@@ -7374,8 +7371,8 @@ msgid "Sliders for chroma channel (of JzCzhz)"
 msgstr "Reglage för färgkanal (i LCh)"
 
 #: ../src/develop/blend_gui.c:3342
-msgid "Hz"
-msgstr "Hz"
+msgid "hz"
+msgstr "hz"
 
 #: ../src/develop/blend_gui.c:3342
 #, fuzzy
@@ -10780,13 +10777,9 @@ msgstr ""
 msgid "dpi"
 msgstr "dpi"
 
-#. dpi
-msgid "Dpi"
-msgstr "Dpi"
-
 #: ../src/imageio/format/pdf.c:598
-msgid "Dpi of the images inside the pdf"
-msgstr "Dpi för bilder i pdf:en"
+msgid "DPI of the images inside the pdf"
+msgstr "DPI för bilder i pdf:en"
 
 #: ../src/imageio/format/pdf.c:605
 msgid "Rotate images"
@@ -10909,7 +10902,7 @@ msgstr "Komprimeringsgrad"
 
 #: ../src/imageio/format/tiff.c:868
 #, fuzzy
-msgid "B&w image"
+msgid "B&W image"
 msgstr "Bild"
 
 #: ../src/imageio/format/tiff.c:869
@@ -12937,8 +12930,8 @@ msgstr ""
 
 #: ../src/iop/channelmixerrgb.c:4986 ../src/iop/splittoningrgb.c:1149
 #, fuzzy
-msgid "U stretch"
-msgstr "Styrka"
+msgid "u stretch"
+msgstr "styrka"
 
 #: ../src/iop/channelmixerrgb.c:4987
 msgid ""
@@ -12948,8 +12941,8 @@ msgstr ""
 
 #: ../src/iop/channelmixerrgb.c:4992 ../src/iop/splittoningrgb.c:1153
 #, fuzzy
-msgid "V stretch"
-msgstr "Styrka"
+msgid "v stretch"
+msgstr "styrka"
 
 #: ../src/iop/channelmixerrgb.c:4993
 msgid ""
@@ -16228,16 +16221,16 @@ msgstr "Brännvidd (mm)"
 
 #: ../src/iop/lens.cc:1969
 #, fuzzy
-msgid "F"
-msgstr "F/"
+msgid "f"
+msgstr "f/"
 
 #: ../src/iop/lens.cc:1970
-msgid "F-number (aperture)"
-msgstr "Bländartal"
+msgid "f-number (aperture)"
+msgstr "bländartal"
 
 #: ../src/iop/lens.cc:1984
-msgid "D"
-msgstr "D"
+msgid "d"
+msgstr "d"
 
 #: ../src/iop/lens.cc:1985
 msgid "Distance to subject"

@@ -3010,7 +3010,7 @@ static void lens_set(dt_iop_module_t *self, long long lens_id)
 
   // focal length
   w = dt_bauhaus_combobox_new(dt_bauhaus_get_global(), DT_GUI_MODULE(self));
-  dt_bauhaus_widget_set_label(w, N_("Mm"));
+  dt_bauhaus_widget_set_label(w, N_("mm"));
   gtk_widget_set_tooltip_text(w, _("Focal length (mm)"));
   snprintf(txt, sizeof(txt), "%.*f", precision(p->focal, 10.0), p->focal);
   dt_bauhaus_combobox_add(w, txt);
@@ -3035,8 +3035,8 @@ static void lens_set(dt_iop_module_t *self, long long lens_id)
   }
 
   w = dt_bauhaus_combobox_new(dt_bauhaus_get_global(), DT_GUI_MODULE(self));
-  dt_bauhaus_widget_set_label(w, N_("F"));
-  gtk_widget_set_tooltip_text(w, _("F-number (aperture)"));
+  dt_bauhaus_widget_set_label(w, N_("f"));
+  gtk_widget_set_tooltip_text(w, _("f-number (aperture)"));
   snprintf(txt, sizeof(txt), "%.*f", precision(p->aperture, 10.0), p->aperture);
   dt_bauhaus_combobox_add(w, txt);
   for(int k = 0; k < fli - ffi; k++)
@@ -3050,7 +3050,7 @@ static void lens_set(dt_iop_module_t *self, long long lens_id)
   g->cbe[1] = w;
 
   w = dt_bauhaus_combobox_new(dt_bauhaus_get_global(), DT_GUI_MODULE(self));
-  dt_bauhaus_widget_set_label(w, N_("D"));
+  dt_bauhaus_widget_set_label(w, N_("d"));
   gtk_widget_set_tooltip_text(w, _("Distance to subject"));
   snprintf(txt, sizeof(txt), "%.*f", precision(p->distance, 10.0), p->distance);
   dt_bauhaus_combobox_add(w, txt);

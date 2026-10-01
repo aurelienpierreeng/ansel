@@ -109,6 +109,7 @@ After non-trivial code changes, run the narrowest relevant build or test target 
 
 - Every sentence, title and tooltip starts with a capital letter: window and dialog titles, section titles, tooltips, messages shown by `dt_control_log()` and dialogs.
 - The capital is written in the source: module names, labels, `$DESCRIPTION` of parameter fields and preference labels included. Nothing capitalises a string at run time, except where the text is data (a collection rule, a metadata name, a field name without `$DESCRIPTION`, an action path), and there it is done where it is shown.
+- Units, symbols and variable names keep their own case, at the start of a label or a sentence too: `mm`, `f`, `dpi`, the Lab channels `a` and `b`, the hue `h`, version tags such as `v3`. A sentence that would start with one starts with it unchanged, or with the acronym's own spelling (`DPI`).
 - Changing the English text of a translated string changes its `msgid`: rename it in `po/ansel.pot` and in every `po/*.po` too, or every language loses that translation. When the old text is still used elsewhere, add the new entry beside it instead.
 
 ## Cross-platform printf format specifiers

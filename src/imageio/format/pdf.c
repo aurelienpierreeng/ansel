@@ -596,11 +596,11 @@ void gui_init(dt_imageio_module_format_t *self)
 
   // dpi
 
-  gtk_grid_attach(grid, dt_ui_label_new(_("Dpi")), 0, ++line, 1, 1);
+  gtk_grid_attach(grid, dt_ui_label_new(_("dpi")), 0, ++line, 1, 1);
 
   d->dpi = GTK_SPIN_BUTTON(gtk_spin_button_new_with_range(1, 5000, 1));
   gtk_grid_attach(grid, GTK_WIDGET(d->dpi), 1, line, 1, 1);
-  gtk_widget_set_tooltip_text(GTK_WIDGET(d->dpi), _("Dpi of the images inside the pdf"));
+  gtk_widget_set_tooltip_text(GTK_WIDGET(d->dpi), _("DPI of the images inside the pdf"));
   gtk_spin_button_set_value(d->dpi, dt_conf_get_float("plugins/imageio/format/pdf/dpi"));
   g_signal_connect(G_OBJECT(d->dpi), "value-changed", G_CALLBACK(dpi_changed_callback), self);
 

@@ -5785,9 +5785,6 @@ msgstr ""
 msgid "mm"
 msgstr "มม"
 
-msgid "Mm"
-msgstr "มม"
-
 #: ../src/common/pdf.h:94 ../src/libs/export.c:540 ../src/libs/export.c:1183
 #: ../src/libs/print_settings.c:105
 msgid "cm"
@@ -7068,7 +7065,7 @@ msgid "Sliders for L channel"
 msgstr "ตัวเลื่อนสำหรับช่อง L"
 
 #: ../src/develop/blend_gui.c:3278 ../src/iop/tonecurve.c:1103
-msgid "A"
+msgid "a"
 msgstr ""
 
 #: ../src/develop/blend_gui.c:3278
@@ -7198,7 +7195,7 @@ msgid "Sliders for chroma channel (of JzCzhz)"
 msgstr "ตัวเลื่อนสำหรับช่อง ความเข้มของสีจาก LCH"
 
 #: ../src/develop/blend_gui.c:3342
-msgid "Hz"
+msgid "hz"
 msgstr ""
 
 #: ../src/develop/blend_gui.c:3342
@@ -10499,12 +10496,8 @@ msgstr ""
 msgid "dpi"
 msgstr ""
 
-#. dpi
-msgid "Dpi"
-msgstr ""
-
 #: ../src/imageio/format/pdf.c:598
-msgid "Dpi of the images inside the pdf"
+msgid "DPI of the images inside the pdf"
 msgstr ""
 
 #: ../src/imageio/format/pdf.c:605
@@ -10623,7 +10616,7 @@ msgstr ""
 
 #: ../src/imageio/format/tiff.c:868
 #, fuzzy
-msgid "B&w image"
+msgid "B&W image"
 msgstr "รูปภาพ"
 
 #: ../src/imageio/format/tiff.c:869
@@ -12574,7 +12567,7 @@ msgid "Orientation of the principal stretch axes in the chroma plane."
 msgstr ""
 
 #: ../src/iop/channelmixerrgb.c:4986 ../src/iop/splittoningrgb.c:1149
-msgid "U stretch"
+msgid "u stretch"
 msgstr ""
 
 #: ../src/iop/channelmixerrgb.c:4987
@@ -12584,7 +12577,7 @@ msgid ""
 msgstr ""
 
 #: ../src/iop/channelmixerrgb.c:4992 ../src/iop/splittoningrgb.c:1153
-msgid "V stretch"
+msgid "v stretch"
 msgstr ""
 
 #: ../src/iop/channelmixerrgb.c:4993
@@ -15691,16 +15684,16 @@ msgstr "ระยะโฟกัส (มม)"
 
 #: ../src/iop/lens.cc:1969
 #, fuzzy
-msgid "F"
-msgstr "F/"
+msgid "f"
+msgstr "f/"
 
 #: ../src/iop/lens.cc:1970
-msgid "F-number (aperture)"
+msgid "f-number (aperture)"
 msgstr ""
 
 #: ../src/iop/lens.cc:1984
-msgid "D"
-msgstr "D"
+msgid "d"
+msgstr "d"
 
 #: ../src/iop/lens.cc:1985
 msgid "Distance to subject"

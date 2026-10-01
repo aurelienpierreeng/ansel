@@ -5998,9 +5998,6 @@ msgstr "Genero i kernel OpenCL: %s"
 msgid "mm"
 msgstr "mm"
 
-msgid "Mm"
-msgstr "Mm"
-
 #: ../src/common/pdf.h:94 ../src/libs/export.c:540 ../src/libs/export.c:1183
 #: ../src/libs/print_settings.c:105
 msgid "cm"
@@ -7287,8 +7284,8 @@ msgid "Sliders for L channel"
 msgstr "Selettore scorrevole per canale L"
 
 #: ../src/develop/blend_gui.c:3278 ../src/iop/tonecurve.c:1103
-msgid "A"
-msgstr "A"
+msgid "a"
+msgstr "a"
 
 #: ../src/develop/blend_gui.c:3278
 msgid "Sliders for a channel"
@@ -7413,8 +7410,8 @@ msgid "Sliders for chroma channel (of JzCzhz)"
 msgstr "Selettore scorrevole per il canale cromaticità (di JzCzhz)"
 
 #: ../src/develop/blend_gui.c:3342
-msgid "Hz"
-msgstr "Hz"
+msgid "hz"
+msgstr "hz"
 
 #: ../src/develop/blend_gui.c:3342
 msgid "Sliders for hue channel (of JzCzhz)"
@@ -10821,12 +10818,8 @@ msgstr ""
 msgid "dpi"
 msgstr "DPI"
 
-#. dpi
-msgid "Dpi"
-msgstr "DPI"
-
 #: ../src/imageio/format/pdf.c:598
-msgid "Dpi of the images inside the pdf"
+msgid "DPI of the images inside the pdf"
 msgstr "DPI delle immagini nel PDF"
 
 #: ../src/imageio/format/pdf.c:605
@@ -10949,7 +10942,7 @@ msgid "Compression level"
 msgstr "Livello di compressione"
 
 #: ../src/imageio/format/tiff.c:868
-msgid "B&w image"
+msgid "B&W image"
 msgstr "Immagine B/N"
 
 #: ../src/imageio/format/tiff.c:869
@@ -13054,7 +13047,7 @@ msgstr ""
 "Orientamento degli assi principali di deformazione nel piano cromatico."
 
 #: ../src/iop/channelmixerrgb.c:4986 ../src/iop/splittoningrgb.c:1149
-msgid "U stretch"
+msgid "u stretch"
 msgstr "Allungamento u"
 
 #: ../src/iop/channelmixerrgb.c:4987
@@ -13067,7 +13060,7 @@ msgstr ""
 "contrasto."
 
 #: ../src/iop/channelmixerrgb.c:4992 ../src/iop/splittoningrgb.c:1153
-msgid "V stretch"
+msgid "v stretch"
 msgstr "Allungamento v"
 
 #: ../src/iop/channelmixerrgb.c:4993
@@ -16650,16 +16643,16 @@ msgid "Focal length (mm)"
 msgstr "Lunghezza focale (mm)"
 
 #: ../src/iop/lens.cc:1969
-msgid "F"
-msgstr "F"
+msgid "f"
+msgstr "f"
 
 #: ../src/iop/lens.cc:1970
-msgid "F-number (aperture)"
+msgid "f-number (aperture)"
 msgstr "Numero-f (apertura diaframma)"
 
 #: ../src/iop/lens.cc:1984
-msgid "D"
-msgstr "D"
+msgid "d"
+msgstr "d"
 
 #: ../src/iop/lens.cc:1985
 msgid "Distance to subject"

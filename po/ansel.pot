@@ -5620,9 +5620,6 @@ msgstr ""
 msgid "mm"
 msgstr ""
 
-msgid "Mm"
-msgstr ""
-
 #: ../src/common/pdf.h:94 ../src/libs/export.c:540 ../src/libs/export.c:1183
 #: ../src/libs/print_settings.c:105
 msgid "cm"
@@ -6846,7 +6843,7 @@ msgid "Sliders for L channel"
 msgstr ""
 
 #: ../src/develop/blend_gui.c:3278 ../src/iop/tonecurve.c:1103
-msgid "A"
+msgid "a"
 msgstr ""
 
 #: ../src/develop/blend_gui.c:3278
@@ -6972,7 +6969,7 @@ msgid "Sliders for chroma channel (of JzCzhz)"
 msgstr ""
 
 #: ../src/develop/blend_gui.c:3342
-msgid "Hz"
+msgid "hz"
 msgstr ""
 
 #: ../src/develop/blend_gui.c:3342
@@ -10219,12 +10216,8 @@ msgstr ""
 msgid "dpi"
 msgstr ""
 
-#. dpi
-msgid "Dpi"
-msgstr ""
-
 #: ../src/imageio/format/pdf.c:598
-msgid "Dpi of the images inside the pdf"
+msgid "DPI of the images inside the pdf"
 msgstr ""
 
 #: ../src/imageio/format/pdf.c:605
@@ -10339,7 +10332,7 @@ msgid "Compression level"
 msgstr ""
 
 #: ../src/imageio/format/tiff.c:868
-msgid "B&w image"
+msgid "B&W image"
 msgstr ""
 
 #: ../src/imageio/format/tiff.c:869
@@ -12248,7 +12241,7 @@ msgid "Orientation of the principal stretch axes in the chroma plane."
 msgstr ""
 
 #: ../src/iop/channelmixerrgb.c:4986 ../src/iop/splittoningrgb.c:1149
-msgid "U stretch"
+msgid "u stretch"
 msgstr ""
 
 #: ../src/iop/channelmixerrgb.c:4987
@@ -12258,7 +12251,7 @@ msgid ""
 msgstr ""
 
 #: ../src/iop/channelmixerrgb.c:4992 ../src/iop/splittoningrgb.c:1153
-msgid "V stretch"
+msgid "v stretch"
 msgstr ""
 
 #: ../src/iop/channelmixerrgb.c:4993
@@ -15303,15 +15296,15 @@ msgid "Focal length (mm)"
 msgstr ""
 
 #: ../src/iop/lens.cc:1969
-msgid "F"
+msgid "f"
 msgstr ""
 
 #: ../src/iop/lens.cc:1970
-msgid "F-number (aperture)"
+msgid "f-number (aperture)"
 msgstr ""
 
 #: ../src/iop/lens.cc:1984
-msgid "D"
+msgid "d"
 msgstr ""
 
 #: ../src/iop/lens.cc:1985

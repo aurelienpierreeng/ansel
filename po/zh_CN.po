@@ -5812,9 +5812,6 @@ msgstr ""
 msgid "mm"
 msgstr "毫米"
 
-msgid "Mm"
-msgstr "毫米"
-
 #: ../src/common/pdf.h:94 ../src/libs/export.c:540 ../src/libs/export.c:1183
 #: ../src/libs/print_settings.c:105
 msgid "cm"
@@ -7034,8 +7031,8 @@ msgid "Sliders for L channel"
 msgstr "滑块 - L 通道。"
 
 #: ../src/develop/blend_gui.c:3278 ../src/iop/tonecurve.c:1103
-msgid "A"
-msgstr "A"
+msgid "a"
+msgstr "a"
 
 #: ../src/develop/blend_gui.c:3278
 msgid "Sliders for a channel"
@@ -7160,8 +7157,8 @@ msgid "Sliders for chroma channel (of JzCzhz)"
 msgstr "色度通道滑块（JzCzhz）。"
 
 #: ../src/develop/blend_gui.c:3342
-msgid "Hz"
-msgstr "Hz"
+msgid "hz"
+msgstr "hz"
 
 #: ../src/develop/blend_gui.c:3342
 msgid "Sliders for hue channel (of JzCzhz)"
@@ -10517,12 +10514,8 @@ msgstr ""
 msgid "dpi"
 msgstr "DPI"
 
-#. dpi
-msgid "Dpi"
-msgstr "DPI"
-
 #: ../src/imageio/format/pdf.c:598
-msgid "Dpi of the images inside the pdf"
+msgid "DPI of the images inside the pdf"
 msgstr "PDF 内图像的 DPI。"
 
 #: ../src/imageio/format/pdf.c:605
@@ -10643,7 +10636,7 @@ msgid "Compression level"
 msgstr "压缩级别"
 
 #: ../src/imageio/format/tiff.c:868
-msgid "B&w image"
+msgid "B&W image"
 msgstr "黑白图片"
 
 #: ../src/imageio/format/tiff.c:869
@@ -12685,7 +12678,7 @@ msgstr ""
 
 #: ../src/iop/channelmixerrgb.c:4986 ../src/iop/splittoningrgb.c:1149
 #, fuzzy
-msgid "U stretch"
+msgid "u stretch"
 msgstr "力度"
 
 #: ../src/iop/channelmixerrgb.c:4987
@@ -12696,7 +12689,7 @@ msgstr ""
 
 #: ../src/iop/channelmixerrgb.c:4992 ../src/iop/splittoningrgb.c:1153
 #, fuzzy
-msgid "V stretch"
+msgid "v stretch"
 msgstr "力度"
 
 #: ../src/iop/channelmixerrgb.c:4993
@@ -16110,16 +16103,16 @@ msgstr "镜头焦距（毫米）"
 
 #: ../src/iop/lens.cc:1969
 #, fuzzy
-msgid "F"
+msgid "f"
 msgstr "F"
 
 #: ../src/iop/lens.cc:1970
-msgid "F-number (aperture)"
-msgstr "F 值（光圈）。"
+msgid "f-number (aperture)"
+msgstr "f 值（光圈）。"
 
 #: ../src/iop/lens.cc:1984
-msgid "D"
-msgstr "D"
+msgid "d"
+msgstr "d"
 
 #: ../src/iop/lens.cc:1985
 msgid "Distance to subject"
