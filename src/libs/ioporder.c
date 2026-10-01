@@ -1525,7 +1525,7 @@ static void _ioporder_add_preset(GtkButton *button, gpointer user_data)
   dt_lib_module_t *self = (dt_lib_module_t *)user_data;
   dt_lib_ioporder_t *d = (dt_lib_ioporder_t *)self->data;
   GtkWindow *parent = GTK_WINDOW(d->window ? d->window : dt_gui_main_window());
-  GtkWidget *dialog = gtk_dialog_new_with_buttons(_("save module order preset"), parent,
+  GtkWidget *dialog = gtk_dialog_new_with_buttons(_("Save module order preset"), parent,
                                                   GTK_DIALOG_DESTROY_WITH_PARENT,
                                                   _("_cancel"), GTK_RESPONSE_CANCEL,
                                                   _("_save"), GTK_RESPONSE_ACCEPT, NULL);
@@ -1617,7 +1617,7 @@ static void _ioporder_init_popup(dt_lib_module_t *self)
   GtkWidget *drawing = gtk_drawing_area_new();
   GtkWidget *fixed = gtk_fixed_new();
 
-  gtk_window_set_title(GTK_WINDOW(window), _("module order"));
+  gtk_window_set_title(GTK_WINDOW(window), _("Module order"));
   gtk_window_set_default_size(GTK_WINDOW(window), DT_PIXEL_APPLY_DPI(1120), DT_PIXEL_APPLY_DPI(440));
   gtk_window_set_transient_for(GTK_WINDOW(window), GTK_WINDOW(dt_gui_main_window()));
   gtk_window_set_destroy_with_parent(GTK_WINDOW(window), TRUE);

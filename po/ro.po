@@ -655,6 +655,9 @@ msgstr ""
 msgid "select directory"
 msgstr "selectează director"
 
+msgid "Select directory"
+msgstr "Selectează director"
+
 #: ../build/src/preferences_gen.h:3047
 msgid ""
 "this folder (and sub-folders) contains Lut files used by lut3d modules. "
@@ -4001,6 +4004,9 @@ msgstr ""
 msgid "module order"
 msgstr ""
 
+msgid "Module order"
+msgstr ""
+
 #: ../src/common/collection.c:685 ../src/develop/lightroom.c:1505
 #: ../src/libs/tools/filter.c:119
 #, fuzzy
@@ -4781,7 +4787,7 @@ msgid ""
 msgstr ""
 
 #: ../src/common/database.c:2911
-msgid "ansel - schema migration"
+msgid "Ansel - schema migration"
 msgstr ""
 
 #: ../src/common/database.c:2912 ../src/common/database.c:3265
@@ -4824,7 +4830,7 @@ msgstr ""
 
 #: ../src/common/database.c:3262 ../src/common/database.c:3280
 #: ../src/common/database.c:3440 ../src/common/database.c:3458
-msgid "ansel - error opening database"
+msgid "Ansel - error opening database"
 msgstr ""
 
 #: ../src/common/database.c:3267 ../src/common/database.c:3445
@@ -4889,7 +4895,7 @@ msgid ""
 msgstr ""
 
 #: ../src/common/database.c:3815
-msgid "ansel - schema maintenance"
+msgid "Ansel - schema maintenance"
 msgstr ""
 
 #: ../src/common/database.c:3816
@@ -4933,10 +4939,10 @@ msgstr[1] ""
 
 #: ../src/common/film.c:297
 #, fuzzy
-msgid "remove empty directory?"
-msgid_plural "remove empty directories?"
-msgstr[0] "selectează director"
-msgstr[1] "selectează director"
+msgid "Remove empty directory?"
+msgid_plural "Remove empty directories?"
+msgstr[0] "Selectează director"
+msgstr[1] "Selectează director"
 
 #: ../src/common/film.c:317 ../src/gui/preferences.c:979
 #: ../src/gui/styles_dialog.c:466 ../src/libs/collect.c:3003
@@ -6034,8 +6040,8 @@ msgstr ""
 
 #: ../src/control/crawler.c:785
 #, fuzzy
-msgid "updated XMP sidecar files found"
-msgstr "scrie fișierele ataș"
+msgid "Updated XMP sidecar files found"
+msgstr "Scrie fișierele ataș"
 
 #: ../src/control/crawler.c:786
 msgid "_close"
@@ -6168,13 +6174,13 @@ msgid "stop process"
 msgstr ""
 
 #: ../src/control/jobs/control_jobs.c:901
-msgid "trashing error"
+msgid "Trashing error"
 msgstr ""
 
 #: ../src/control/jobs/control_jobs.c:902
 #, fuzzy
-msgid "deletion error"
-msgstr "șterge"
+msgid "Deletion error"
+msgstr "Șterge"
 
 #: ../src/control/jobs/control_jobs.c:1044
 #, fuzzy, c-format
@@ -6360,13 +6366,17 @@ msgstr ""
 
 #: ../src/control/jobs/control_jobs.c:1736
 #, fuzzy
-msgid "delete image?"
-msgstr "şterge tag?"
+msgid "Delete image?"
+msgstr "Şterge tag?"
 
 #: ../src/control/jobs/control_jobs.c:1754 ../src/libs/collect.c:2059
 #, fuzzy
 msgid "move images"
 msgstr "adaugă mai multe imagini"
+
+#, fuzzy
+msgid "Move images"
+msgstr "Adaugă mai multe imagini"
 
 #: ../src/control/jobs/control_jobs.c:1766
 #: ../src/control/jobs/control_jobs.c:1828
@@ -6387,10 +6397,10 @@ msgstr[1] ""
 
 #: ../src/control/jobs/control_jobs.c:1795
 #, fuzzy
-msgid "move image?"
-msgid_plural "move images?"
-msgstr[0] "importă imagine"
-msgstr[1] "importă imagine"
+msgid "Move image?"
+msgid_plural "Move images?"
+msgstr[0] "Importă imagine"
+msgstr[1] "Importă imagine"
 
 #: ../src/control/jobs/control_jobs.c:1816
 #, fuzzy
@@ -6406,10 +6416,10 @@ msgstr[1] ""
 
 #: ../src/control/jobs/control_jobs.c:1854
 #, fuzzy
-msgid "copy image?"
-msgid_plural "copy images?"
-msgstr[0] "imagine orfană"
-msgstr[1] "imagine orfană"
+msgid "Copy image?"
+msgid_plural "Copy images?"
+msgstr[0] "Imagine orfană"
+msgstr[1] "Imagine orfană"
 
 #: ../src/control/jobs/control_jobs.c:1874
 #: ../src/control/jobs/control_jobs.c:1882
@@ -9056,7 +9066,7 @@ msgid "failed to import preset %s"
 msgstr ""
 
 #: ../src/gui/preferences.c:1184
-msgid "select preset(s) to import"
+msgid "Select preset(s) to import"
 msgstr ""
 
 #: ../src/gui/preferences.c:1185 ../src/gui/actions/edit.c:305
@@ -9105,8 +9115,8 @@ msgstr ""
 
 #: ../src/gui/presets.c:303 ../src/gui/presets.c:532 ../src/libs/lib.c:321
 #, fuzzy
-msgid "delete preset?"
-msgstr "șterge această presetare"
+msgid "Delete preset?"
+msgstr "Șterge această presetare"
 
 #. add new preset
 #. then show edit dialog
@@ -9124,8 +9134,8 @@ msgstr ""
 
 #: ../src/gui/presets.c:339
 #, fuzzy
-msgid "unnamed preset"
-msgstr "presetare nouă"
+msgid "Unnamed preset"
+msgstr "Presetare nouă"
 
 #: ../src/gui/presets.c:368
 #, c-format
@@ -9136,8 +9146,8 @@ msgstr ""
 
 #: ../src/gui/presets.c:373
 #, fuzzy
-msgid "overwrite preset?"
-msgstr "suprascrie"
+msgid "Overwrite preset?"
+msgstr "Suprascrie"
 
 #: ../src/gui/presets.c:490 ../src/imageio/storage/disk.c:154
 #: ../src/imageio/storage/gallery.c:142
@@ -9151,8 +9161,8 @@ msgstr "stilul '%s' a fost creat cu succes"
 
 #: ../src/gui/presets.c:565
 #, c-format
-msgid "edit `%s' for module `%s'"
-msgstr "editează `%s' pentru modulul `%s'"
+msgid "Edit `%s' for module `%s'"
+msgstr "Editează `%s' pentru modulul `%s'"
 
 #: ../src/gui/presets.c:568
 #, fuzzy
@@ -9254,8 +9264,8 @@ msgstr ""
 
 #: ../src/gui/presets.c:921 ../src/libs/lib.c:236
 #, fuzzy
-msgid "update preset?"
-msgstr "presetare nouă"
+msgid "Update preset?"
+msgstr "Presetare nouă"
 
 #: ../src/gui/presets.c:1245
 msgid "(default)"
@@ -9336,8 +9346,8 @@ msgstr ""
 #: ../src/gui/styles_dialog.c:230 ../src/libs/styles.c:461
 #: ../src/libs/styles.c:645
 #, fuzzy
-msgid "overwrite style?"
-msgstr "suprascrie"
+msgid "Overwrite style?"
+msgstr "Suprascrie"
 
 #: ../src/gui/styles_dialog.c:259 ../src/gui/styles_dialog.c:318
 msgid "please give style a name"
@@ -9345,8 +9355,8 @@ msgstr ""
 
 #: ../src/gui/styles_dialog.c:263 ../src/gui/styles_dialog.c:322
 #, fuzzy
-msgid "unnamed style"
-msgstr "editează stil"
+msgid "Unnamed style"
+msgstr "Editează stil"
 
 #: ../src/gui/styles_dialog.c:310
 #, fuzzy, c-format
@@ -9354,8 +9364,8 @@ msgid "style %s was successfully saved"
 msgstr "stilul '%s' a fost creat cu succes"
 
 #: ../src/gui/styles_dialog.c:425
-msgid "edit style"
-msgstr "editează stil"
+msgid "Edit style"
+msgstr "Editează stil"
 
 #: ../src/gui/styles_dialog.c:426
 #, fuzzy
@@ -9368,8 +9378,8 @@ msgid "creates a duplicate of the style before applying changes"
 msgstr "creează un duplicat al imaginii înainte de aplicarea stilului"
 
 #: ../src/gui/styles_dialog.c:431
-msgid "create new style"
-msgstr "creează stil nou"
+msgid "Create new style"
+msgstr "Creează stil nou"
 
 #: ../src/gui/styles_dialog.c:467
 msgid "enter a name for the new style"
@@ -9537,8 +9547,8 @@ msgid "Paste history (parts) — merge settings"
 msgstr ""
 
 #: ../src/gui/actions/edit.c:304
-msgid "open sidecar file"
-msgstr "deschide fișier ataș"
+msgid "Open sidecar file"
+msgstr "Deschide fișier ataș"
 
 #: ../src/gui/actions/edit.c:337
 #, fuzzy
@@ -9759,7 +9769,7 @@ msgid "do you want to access ansel.photos ?"
 msgstr ""
 
 #: ../src/gui/actions/help.c:146
-msgid "access the online usermanual?"
+msgid "Access the online usermanual?"
 msgstr ""
 
 #: ../src/gui/actions/help.c:158
@@ -16140,8 +16150,8 @@ msgstr ""
 
 #: ../src/iop/lut3d.c:1339
 #, fuzzy
-msgid "select lut file"
-msgstr "selectează stil"
+msgid "Select lut file"
+msgstr "Selectează stil"
 
 #: ../src/iop/lut3d.c:1340
 #, fuzzy
@@ -17895,13 +17905,13 @@ msgstr ""
 
 #: ../src/libs/collect.c:1840
 #, fuzzy
-msgid "select the new location of this folder"
-msgstr "selectează nuanța de culoare a filtrului"
+msgid "Select the new location of this folder"
+msgstr "Selectează nuanța de culoare a filtrului"
 
 #: ../src/libs/collect.c:1840
 #, fuzzy
-msgid "select the new parent folder"
-msgstr "selectează nuanța de culoare a filtrului"
+msgid "Select the new parent folder"
+msgstr "Selectează nuanța de culoare a filtrului"
 
 #: ../src/libs/collect.c:1873
 msgid "problem selecting new path for the folder"
@@ -17919,10 +17929,14 @@ msgstr[1] "detaşează tag-ul de pe toate imaginile selectate"
 msgid "delete tags"
 msgstr "şterge tag?"
 
+#, fuzzy
+msgid "Delete tags"
+msgstr "Şterge tag?"
+
 #: ../src/libs/collect.c:1906
 #, fuzzy
-msgid "rename tag"
-msgstr "şterge tag?"
+msgid "Rename tag"
+msgstr "Şterge tag?"
 
 #: ../src/libs/collect.c:1971
 #, fuzzy
@@ -18173,8 +18187,8 @@ msgstr "creează duplicat"
 
 #: ../src/libs/export.c:347
 #, fuzzy
-msgid "export to disk"
-msgstr "fișier pe disc"
+msgid "Export to disk"
+msgstr "Fișier pe disc"
 
 #: ../src/libs/export.c:505
 #, c-format
@@ -18369,8 +18383,8 @@ msgstr ""
 
 #: ../src/libs/export_metadata.c:174
 #, fuzzy
-msgid "select tag"
-msgstr "selectează tot"
+msgid "Select tag"
+msgstr "Selectează tot"
 
 #: ../src/libs/export_metadata.c:175
 msgid "add"
@@ -18392,7 +18406,7 @@ msgid ""
 msgstr ""
 
 #: ../src/libs/export_metadata.c:302
-msgid "edit metadata exportation"
+msgid "Edit metadata exportation"
 msgstr ""
 
 #: ../src/libs/export_metadata.c:303 ../src/libs/metadata.c:518
@@ -18583,8 +18597,8 @@ msgstr "imagini"
 
 #: ../src/libs/geotagging.c:956
 #, fuzzy
-msgid "open GPX file"
-msgstr "deschide fișier ataș"
+msgid "Open GPX file"
+msgstr "Deschide fișier ataș"
 
 #: ../src/libs/geotagging.c:970
 msgid "GPS data exchange format"
@@ -19079,8 +19093,8 @@ msgstr ""
 
 #: ../src/libs/ioporder.c:1536
 #, fuzzy
-msgid "save module order preset"
-msgstr "numele presetării"
+msgid "Save module order preset"
+msgstr "Numele presetării"
 
 #: ../src/libs/ioporder.c:1545
 #, fuzzy
@@ -19326,8 +19340,8 @@ msgstr "<lasă neschimbat>"
 
 #: ../src/libs/metadata.c:516 ../src/libs/metadata_view.c:1186
 #, fuzzy
-msgid "metadata settings"
-msgstr "setări imagine"
+msgid "Metadata settings"
+msgstr "Setări imagine"
 
 #: ../src/libs/metadata.c:566 ../src/libs/metadata_view.c:1232
 msgid "visible"
@@ -20014,10 +20028,10 @@ msgstr[1] ""
 
 #: ../src/libs/styles.c:344
 #, fuzzy
-msgid "remove style?"
-msgid_plural "remove styles?"
-msgstr[0] "selectează stil"
-msgstr[1] "selectează stil"
+msgid "Remove style?"
+msgid_plural "Remove styles?"
+msgstr[0] "Selectează stil"
+msgstr[1] "Selectează stil"
 
 #: ../src/libs/styles.c:468 ../src/libs/styles.c:652
 #, c-format
@@ -20037,8 +20051,8 @@ msgid "style %s was successfully exported"
 msgstr "stilul '%s' a fost creat cu succes"
 
 #: ../src/libs/styles.c:551
-msgid "select style"
-msgstr "selectează stil"
+msgid "Select style"
+msgstr "Selectează stil"
 
 #: ../src/libs/styles.c:561
 #, fuzzy
@@ -20145,8 +20159,8 @@ msgstr "detaşează"
 
 #: ../src/libs/tagging.c:1461
 #, fuzzy
-msgid "delete node?"
-msgstr "şterge tag?"
+msgid "Delete node?"
+msgstr "Şterge tag?"
 
 #: ../src/libs/tagging.c:1468 ../src/libs/tagging.c:1683
 #: ../src/libs/tagging.c:1968
@@ -20176,8 +20190,8 @@ msgstr ""
 
 #: ../src/libs/tagging.c:1543
 #, fuzzy
-msgid "create tag"
-msgstr "şterge tag?"
+msgid "Create tag"
+msgstr "Şterge tag?"
 
 #: ../src/libs/tagging.c:1553 ../src/libs/tagging.c:1703
 msgid "name: "
@@ -20235,16 +20249,16 @@ msgstr "un stil cu numele '%s' există deja"
 
 #: ../src/libs/tagging.c:1961
 #, fuzzy
-msgid "change path"
-msgstr "schimbă în: sau"
+msgid "Change path"
+msgstr "Schimbă în: sau"
 
 #: ../src/libs/tagging.c:2005
 msgid "'|' misplaced, empty tag is not allowed, aborting"
 msgstr ""
 
 #: ../src/libs/tagging.c:2088
-msgid "delete tag?"
-msgstr "şterge tag?"
+msgid "Delete tag?"
+msgstr "Şterge tag?"
 
 #: ../src/libs/tagging.c:2092
 #, c-format
@@ -20308,8 +20322,8 @@ msgstr ""
 
 #: ../src/libs/tagging.c:2435
 #, fuzzy
-msgid "select a keyword file"
-msgstr "selectează stil"
+msgid "Select a keyword file"
+msgstr "Selectează stil"
 
 #: ../src/libs/tagging.c:2436
 #, fuzzy
@@ -20323,8 +20337,8 @@ msgstr "nu sunt imagini selectate!"
 
 #: ../src/libs/tagging.c:2468
 #, fuzzy
-msgid "select file to export to"
-msgstr "selectează director"
+msgid "Select file to export to"
+msgstr "Selectează director"
 
 #: ../src/libs/tagging.c:2469
 #, fuzzy
@@ -20397,8 +20411,8 @@ msgstr "ataşează tag-ul pe toate imaginile selectate"
 
 #: ../src/libs/tagging.c:3248
 #, fuzzy
-msgid "manage tags"
-msgstr "presetare nouă"
+msgid "Manage tags"
+msgstr "Presetare nouă"
 
 #: ../src/libs/tagging.c:3263
 msgid "type to filter the tag dictionary below"
@@ -21286,7 +21300,7 @@ msgid "no LUT to save"
 msgstr ""
 
 #: ../src/common/lut_viewer.c:1207
-msgid "save 3D LUT"
+msgid "Save 3D LUT"
 msgstr ""
 
 #: ../src/common/lut_viewer.c:1222

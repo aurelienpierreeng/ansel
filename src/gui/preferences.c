@@ -1223,7 +1223,7 @@ static void import_preset(GtkButton *button, gpointer data)
 
   // Zero value indicates import
   GtkFileChooserNative *chooser = gtk_file_chooser_native_new(
-        _("select preset(s) to import"), GTK_WINDOW(win), GTK_FILE_CHOOSER_ACTION_OPEN,
+        _("Select preset(s) to import"), GTK_WINDOW(win), GTK_FILE_CHOOSER_ACTION_OPEN,
         _("_open"), _("_cancel"));
 
   dt_conf_get_folder_to_file_chooser("ui_last/import_path", GTK_FILE_CHOOSER(chooser));
@@ -1262,7 +1262,7 @@ static void export_preset(GtkButton *button, gpointer data)
   GtkWindow *win = GTK_WINDOW(gtk_widget_get_toplevel(GTK_WIDGET(button)));
 
   GtkFileChooserNative *filechooser = gtk_file_chooser_native_new(
-        _("select directory"), GTK_WINDOW(win), GTK_FILE_CHOOSER_ACTION_SELECT_FOLDER,
+        _("Select directory"), GTK_WINDOW(win), GTK_FILE_CHOOSER_ACTION_SELECT_FOLDER,
         _("_save"), _("_cancel"));
 
   dt_conf_get_folder_to_file_chooser("ui_last/export_path", GTK_FILE_CHOOSER(filechooser));

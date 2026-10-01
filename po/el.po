@@ -668,6 +668,9 @@ msgstr ""
 msgid "select directory"
 msgstr "επιλογή καταλόγου"
 
+msgid "Select directory"
+msgstr "Επιλογή καταλόγου"
+
 #: ../build/src/preferences_gen.h:3047
 msgid ""
 "this folder (and sub-folders) contains Lut files used by lut3d modules. "
@@ -4085,6 +4088,10 @@ msgstr "μονάδα"
 msgid "module order"
 msgstr "μικρό περίγραμμα"
 
+#, fuzzy
+msgid "Module order"
+msgstr "Μικρό περίγραμμα"
+
 #: ../src/common/collection.c:685 ../src/develop/lightroom.c:1505
 #: ../src/libs/tools/filter.c:119
 msgid "rating"
@@ -4880,7 +4887,7 @@ msgid ""
 msgstr ""
 
 #: ../src/common/database.c:2911
-msgid "ansel - schema migration"
+msgid "Ansel - schema migration"
 msgstr ""
 
 #: ../src/common/database.c:2912 ../src/common/database.c:3265
@@ -4923,7 +4930,7 @@ msgstr ""
 
 #: ../src/common/database.c:3262 ../src/common/database.c:3280
 #: ../src/common/database.c:3440 ../src/common/database.c:3458
-msgid "ansel - error opening database"
+msgid "Ansel - error opening database"
 msgstr ""
 
 #: ../src/common/database.c:3267 ../src/common/database.c:3445
@@ -4990,7 +4997,7 @@ msgid ""
 msgstr ""
 
 #: ../src/common/database.c:3815
-msgid "ansel - schema maintenance"
+msgid "Ansel - schema maintenance"
 msgstr ""
 
 #: ../src/common/database.c:3816
@@ -5035,10 +5042,10 @@ msgstr[1] ""
 
 #: ../src/common/film.c:297
 #, fuzzy
-msgid "remove empty directory?"
-msgid_plural "remove empty directories?"
-msgstr[0] "επιλογή καταλόγου"
-msgstr[1] "επιλογή καταλόγου"
+msgid "Remove empty directory?"
+msgid_plural "Remove empty directories?"
+msgstr[0] "Επιλογή καταλόγου"
+msgstr[1] "Επιλογή καταλόγου"
 
 #: ../src/common/film.c:317 ../src/gui/preferences.c:979
 #: ../src/gui/styles_dialog.c:466 ../src/libs/collect.c:3003
@@ -6154,8 +6161,8 @@ msgstr "διαφορά"
 
 #: ../src/control/crawler.c:785
 #, fuzzy
-msgid "updated XMP sidecar files found"
-msgstr "αρχεία XMP sidecar"
+msgid "Updated XMP sidecar files found"
+msgstr "Αρχεία XMP sidecar"
 
 #: ../src/control/crawler.c:786
 msgid "_close"
@@ -6293,12 +6300,12 @@ msgid "stop process"
 msgstr "τέλος διαδικασίας"
 
 #: ../src/control/jobs/control_jobs.c:901
-msgid "trashing error"
-msgstr "σφάλμα διαγραφής"
+msgid "Trashing error"
+msgstr "Σφάλμα διαγραφής"
 
 #: ../src/control/jobs/control_jobs.c:902
-msgid "deletion error"
-msgstr "σφάλμα διαγραφής"
+msgid "Deletion error"
+msgstr "Σφάλμα διαγραφής"
 
 #: ../src/control/jobs/control_jobs.c:1044
 #, c-format
@@ -6490,13 +6497,17 @@ msgstr "θέλετε πραγματικά να διαγράψετε το προ�
 
 #: ../src/control/jobs/control_jobs.c:1736
 #, fuzzy
-msgid "delete image?"
-msgstr "διαγραφή ετικέτας;"
+msgid "Delete image?"
+msgstr "Διαγραφή ετικέτας;"
 
 #: ../src/control/jobs/control_jobs.c:1754 ../src/libs/collect.c:2059
 #, fuzzy
 msgid "move images"
 msgstr "μετακίνηση εικόνας;"
+
+#, fuzzy
+msgid "Move images"
+msgstr "Μετακίνηση εικόνας;"
 
 #: ../src/control/jobs/control_jobs.c:1766
 #: ../src/control/jobs/control_jobs.c:1828
@@ -6516,10 +6527,10 @@ msgstr[0] ""
 msgstr[1] ""
 
 #: ../src/control/jobs/control_jobs.c:1795
-msgid "move image?"
-msgid_plural "move images?"
-msgstr[0] "μετακίνηση εικόνας;"
-msgstr[1] "μετακίνηση εικόνων;"
+msgid "Move image?"
+msgid_plural "Move images?"
+msgstr[0] "Μετακίνηση εικόνας;"
+msgstr[1] "Μετακίνηση εικόνων;"
 
 #: ../src/control/jobs/control_jobs.c:1816
 #, fuzzy
@@ -6534,10 +6545,10 @@ msgstr[0] "θέλετε πραγματικά να διαγράψετε το πρ
 msgstr[1] "θέλετε πραγματικά να διαγράψετε το προκαθορισμένο %s;"
 
 #: ../src/control/jobs/control_jobs.c:1854
-msgid "copy image?"
-msgid_plural "copy images?"
-msgstr[0] "αντιγραφή εικόνας;"
-msgstr[1] "αντιγραφή εικόνων;"
+msgid "Copy image?"
+msgid_plural "Copy images?"
+msgstr[0] "Αντιγραφή εικόνας;"
+msgstr[1] "Αντιγραφή εικόνων;"
 
 #: ../src/control/jobs/control_jobs.c:1874
 #: ../src/control/jobs/control_jobs.c:1882
@@ -9259,7 +9270,7 @@ msgid "failed to import preset %s"
 msgstr "αδυναμία αντικατάστασης αρχείου στυλ %s"
 
 #: ../src/gui/preferences.c:1184
-msgid "select preset(s) to import"
+msgid "Select preset(s) to import"
 msgstr ""
 
 #: ../src/gui/preferences.c:1185 ../src/gui/actions/edit.c:305
@@ -9307,8 +9318,8 @@ msgid "do you really want to delete the preset `%s'?"
 msgstr "θέλετε πραγματικά να διαγράψετε το προκαθορισμένο %s;"
 
 #: ../src/gui/presets.c:303 ../src/gui/presets.c:532 ../src/libs/lib.c:321
-msgid "delete preset?"
-msgstr "αφαίρεση προκαθορισμένου;"
+msgid "Delete preset?"
+msgstr "Αφαίρεση προκαθορισμένου;"
 
 #. add new preset
 #. then show edit dialog
@@ -9325,8 +9336,8 @@ msgid "please give preset a name"
 msgstr "παρακαλώ ονομάστε το προκαθορισμένο"
 
 #: ../src/gui/presets.c:339
-msgid "unnamed preset"
-msgstr "ανώνυμο προκαθορισμένο"
+msgid "Unnamed preset"
+msgstr "Ανώνυμο προκαθορισμένο"
 
 #: ../src/gui/presets.c:368
 #, c-format
@@ -9338,8 +9349,8 @@ msgstr ""
 "να γίνει αντικατάσταση;"
 
 #: ../src/gui/presets.c:373
-msgid "overwrite preset?"
-msgstr "αντικατάσταση προκαθορισμένου;"
+msgid "Overwrite preset?"
+msgstr "Αντικατάσταση προκαθορισμένου;"
 
 #: ../src/gui/presets.c:490 ../src/imageio/storage/disk.c:154
 #: ../src/imageio/storage/gallery.c:142
@@ -9353,8 +9364,8 @@ msgstr "το στυλ %s εισάχθηκε με επιτυχία"
 
 #: ../src/gui/presets.c:565
 #, c-format
-msgid "edit `%s' for module `%s'"
-msgstr "επεξεργασία %s για το πρόσθετο %s "
+msgid "Edit `%s' for module `%s'"
+msgstr "Επεξεργασία %s για το πρόσθετο %s "
 
 #: ../src/gui/presets.c:568
 #, fuzzy
@@ -9453,8 +9464,8 @@ msgstr "θέλετε πραγματικά να διαγράψετε το προ�
 
 #: ../src/gui/presets.c:921 ../src/libs/lib.c:236
 #, fuzzy
-msgid "update preset?"
-msgstr "ενημέρωση προκαθορισμένου"
+msgid "Update preset?"
+msgstr "Ενημέρωση προκαθορισμένου"
 
 #: ../src/gui/presets.c:1245
 msgid "(default)"
@@ -9537,8 +9548,8 @@ msgstr ""
 #: ../src/gui/styles_dialog.c:230 ../src/libs/styles.c:461
 #: ../src/libs/styles.c:645
 #, fuzzy
-msgid "overwrite style?"
-msgstr "αντικατάσταση προκαθορισμένου;"
+msgid "Overwrite style?"
+msgstr "Αντικατάσταση προκαθορισμένου;"
 
 #: ../src/gui/styles_dialog.c:259 ../src/gui/styles_dialog.c:318
 #, fuzzy
@@ -9547,8 +9558,8 @@ msgstr "παρακαλώ ονομάστε το προκαθορισμένο"
 
 #: ../src/gui/styles_dialog.c:263 ../src/gui/styles_dialog.c:322
 #, fuzzy
-msgid "unnamed style"
-msgstr "ανώνυμο προκαθορισμένο"
+msgid "Unnamed style"
+msgstr "Ανώνυμο προκαθορισμένο"
 
 #: ../src/gui/styles_dialog.c:310
 #, c-format
@@ -9556,8 +9567,8 @@ msgid "style %s was successfully saved"
 msgstr "το στυλ %s αποθηκεύτηκε"
 
 #: ../src/gui/styles_dialog.c:425
-msgid "edit style"
-msgstr "επεξεργασία στυλ"
+msgid "Edit style"
+msgstr "Επεξεργασία στυλ"
 
 #: ../src/gui/styles_dialog.c:426
 msgid "duplicate style"
@@ -9568,8 +9579,8 @@ msgid "creates a duplicate of the style before applying changes"
 msgstr "δημιουργεί διπλότυπο της εικόνας πριν την εφαρμογή στυλ"
 
 #: ../src/gui/styles_dialog.c:431
-msgid "create new style"
-msgstr "δημιουργία νέου στυλ"
+msgid "Create new style"
+msgstr "Δημιουργία νέου στυλ"
 
 #: ../src/gui/styles_dialog.c:467
 msgid "enter a name for the new style"
@@ -9740,8 +9751,8 @@ msgid "Paste history (parts) — merge settings"
 msgstr ""
 
 #: ../src/gui/actions/edit.c:304
-msgid "open sidecar file"
-msgstr "άνοιγμα αρχείου sidecar"
+msgid "Open sidecar file"
+msgstr "Άνοιγμα αρχείου sidecar"
 
 #: ../src/gui/actions/edit.c:337
 msgid "XMP sidecar files"
@@ -9966,7 +9977,7 @@ msgid "do you want to access ansel.photos ?"
 msgstr ""
 
 #: ../src/gui/actions/help.c:146
-msgid "access the online usermanual?"
+msgid "Access the online usermanual?"
 msgstr ""
 
 #: ../src/gui/actions/help.c:158
@@ -16409,8 +16420,8 @@ msgstr ""
 
 #: ../src/iop/lut3d.c:1339
 #, fuzzy
-msgid "select lut file"
-msgstr "επιλογή αρχείου"
+msgid "Select lut file"
+msgstr "Επιλογή αρχείου"
 
 #: ../src/iop/lut3d.c:1340
 #, fuzzy
@@ -18202,13 +18213,13 @@ msgstr "μη κατηγοριοποιημένες"
 
 #: ../src/libs/collect.c:1840
 #, fuzzy
-msgid "select the new location of this folder"
-msgstr "επιλέξτε τον τόνο του φίλτρου"
+msgid "Select the new location of this folder"
+msgstr "Επιλέξτε τον τόνο του φίλτρου"
 
 #: ../src/libs/collect.c:1840
 #, fuzzy
-msgid "select the new parent folder"
-msgstr "επιλέξτε τον τόνο απόχρωσης"
+msgid "Select the new parent folder"
+msgstr "Επιλέξτε τον τόνο απόχρωσης"
 
 #: ../src/libs/collect.c:1873
 #, fuzzy
@@ -18227,10 +18238,14 @@ msgstr[1] "απόσπαση ετικέτας από όλες τις επιλεγ
 msgid "delete tags"
 msgstr "διαγραφή ετικέτας;"
 
+#, fuzzy
+msgid "Delete tags"
+msgstr "Διαγραφή ετικέτας;"
+
 #: ../src/libs/collect.c:1906
 #, fuzzy
-msgid "rename tag"
-msgstr "δημιουργημένα σχήματα"
+msgid "Rename tag"
+msgstr "Δημιουργημένα σχήματα"
 
 #: ../src/libs/collect.c:1971
 #, fuzzy
@@ -18485,8 +18500,8 @@ msgstr "διπλότυπο στυλ"
 
 #: ../src/libs/export.c:347
 #, fuzzy
-msgid "export to disk"
-msgstr "αρχείο στο δίσκο"
+msgid "Export to disk"
+msgstr "Αρχείο στο δίσκο"
 
 #: ../src/libs/export.c:505
 #, c-format
@@ -18686,8 +18701,8 @@ msgstr "ρυθμίσεις εκτύπωσης"
 
 #: ../src/libs/export_metadata.c:174
 #, fuzzy
-msgid "select tag"
-msgstr "επιλογή όλων"
+msgid "Select tag"
+msgstr "Επιλογή όλων"
 
 #: ../src/libs/export_metadata.c:175
 msgid "add"
@@ -18709,7 +18724,7 @@ msgid ""
 msgstr ""
 
 #: ../src/libs/export_metadata.c:302
-msgid "edit metadata exportation"
+msgid "Edit metadata exportation"
 msgstr ""
 
 #: ../src/libs/export_metadata.c:303 ../src/libs/metadata.c:518
@@ -18904,8 +18919,8 @@ msgid "images"
 msgstr "εικόνες"
 
 #: ../src/libs/geotagging.c:956
-msgid "open GPX file"
-msgstr "άνοιγμα αρχείου GPX"
+msgid "Open GPX file"
+msgstr "Άνοιγμα αρχείου GPX"
 
 #: ../src/libs/geotagging.c:970
 msgid "GPS data exchange format"
@@ -19421,8 +19436,8 @@ msgstr ""
 
 #: ../src/libs/ioporder.c:1536
 #, fuzzy
-msgid "save module order preset"
-msgstr "μικρό περίγραμμα"
+msgid "Save module order preset"
+msgstr "Μικρό περίγραμμα"
 
 #: ../src/libs/ioporder.c:1545
 #, fuzzy
@@ -19679,8 +19694,8 @@ msgstr "<leave unchanged>"
 
 #: ../src/libs/metadata.c:516 ../src/libs/metadata_view.c:1186
 #, fuzzy
-msgid "metadata settings"
-msgstr "ρυθμίσεις χάρτη"
+msgid "Metadata settings"
+msgstr "Ρυθμίσεις χάρτη"
 
 #: ../src/libs/metadata.c:566 ../src/libs/metadata_view.c:1232
 #, fuzzy
@@ -20365,10 +20380,10 @@ msgstr[1] "θέλετε πραγματικά να διαγράψετε το πρ
 
 #: ../src/libs/styles.c:344
 #, fuzzy
-msgid "remove style?"
-msgid_plural "remove styles?"
-msgstr[0] "επιλογή στυλ"
-msgstr[1] "επιλογή στυλ"
+msgid "Remove style?"
+msgid_plural "Remove styles?"
+msgstr[0] "Επιλογή στυλ"
+msgstr[1] "Επιλογή στυλ"
 
 #: ../src/libs/styles.c:468 ../src/libs/styles.c:652
 #, fuzzy, c-format
@@ -20390,8 +20405,8 @@ msgid "style %s was successfully exported"
 msgstr "το στυλ %s εισάχθηκε με επιτυχία"
 
 #: ../src/libs/styles.c:551
-msgid "select style"
-msgstr "επιλογή στυλ"
+msgid "Select style"
+msgstr "Επιλογή στυλ"
 
 #: ../src/libs/styles.c:561
 #, fuzzy
@@ -20498,8 +20513,8 @@ msgstr "απόσπαση"
 
 #: ../src/libs/tagging.c:1461
 #, fuzzy
-msgid "delete node?"
-msgstr "διαγραφή ετικέτας;"
+msgid "Delete node?"
+msgstr "Διαγραφή ετικέτας;"
 
 #: ../src/libs/tagging.c:1468 ../src/libs/tagging.c:1683
 #: ../src/libs/tagging.c:1968
@@ -20529,8 +20544,8 @@ msgstr ""
 
 #: ../src/libs/tagging.c:1543
 #, fuzzy
-msgid "create tag"
-msgstr "δημιουργημένα σχήματα"
+msgid "Create tag"
+msgstr "Δημιουργημένα σχήματα"
 
 #: ../src/libs/tagging.c:1553 ../src/libs/tagging.c:1703
 #, fuzzy
@@ -20590,16 +20605,16 @@ msgstr "υπάρχει ήδη στυλ με όνομα %s"
 
 #: ../src/libs/tagging.c:1961
 #, fuzzy
-msgid "change path"
-msgstr "αλλαγή σε: ή"
+msgid "Change path"
+msgstr "Αλλαγή σε: ή"
 
 #: ../src/libs/tagging.c:2005
 msgid "'|' misplaced, empty tag is not allowed, aborting"
 msgstr ""
 
 #: ../src/libs/tagging.c:2088
-msgid "delete tag?"
-msgstr "διαγραφή ετικέτας;"
+msgid "Delete tag?"
+msgstr "Διαγραφή ετικέτας;"
 
 #: ../src/libs/tagging.c:2092
 #, fuzzy, c-format
@@ -20669,8 +20684,8 @@ msgstr "ιδιωτικό"
 
 #: ../src/libs/tagging.c:2435
 #, fuzzy
-msgid "select a keyword file"
-msgstr "επιλογή αρχείου"
+msgid "Select a keyword file"
+msgstr "Επιλογή αρχείου"
 
 #: ../src/libs/tagging.c:2436
 #, fuzzy
@@ -20684,8 +20699,8 @@ msgstr "έγινε εισαγωγή του %s"
 
 #: ../src/libs/tagging.c:2468
 #, fuzzy
-msgid "select file to export to"
-msgstr "επιλογή αρχείου"
+msgid "Select file to export to"
+msgstr "Επιλογή αρχείου"
 
 #: ../src/libs/tagging.c:2469
 #, fuzzy
@@ -20758,8 +20773,8 @@ msgstr "προσάρτηση ετικέτας σε όλες τις επιλεγ�
 
 #: ../src/libs/tagging.c:3248
 #, fuzzy
-msgid "manage tags"
-msgstr "ετικέτες"
+msgid "Manage tags"
+msgstr "Ετικέτες"
 
 #: ../src/libs/tagging.c:3263
 msgid "type to filter the tag dictionary below"
@@ -21690,7 +21705,7 @@ msgid "no LUT to save"
 msgstr ""
 
 #: ../src/common/lut_viewer.c:1207
-msgid "save 3D LUT"
+msgid "Save 3D LUT"
 msgstr ""
 
 #: ../src/common/lut_viewer.c:1222

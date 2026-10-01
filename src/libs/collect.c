@@ -1931,7 +1931,7 @@ static void _act_folders_relocate(dt_lib_collect_t *d, GList *rows)
   collect_row_t *first = (collect_row_t *)rows->data;
 
   GtkFileChooserNative *fc = gtk_file_chooser_native_new(
-      single ? _("select the new location of this folder") : _("select the new parent folder"), GTK_WINDOW(win),
+      single ? _("Select the new location of this folder") : _("Select the new parent folder"), GTK_WINDOW(win),
       GTK_FILE_CHOOSER_ACTION_SELECT_FOLDER, _("_open"), _("_cancel"));
   if(single && first->path) gtk_file_chooser_set_current_folder(GTK_FILE_CHOOSER(fc), first->path);
 
@@ -1975,7 +1975,7 @@ static void _act_tags_remove(dt_lib_collect_t *d, GList *rows)
   gchar *msg = g_strdup_printf(ngettext("Delete %d tag and detach it from all images?",
                                         "Delete %d tags and detach them from all images?", n),
                                n);
-  const gboolean ok = _confirm(_("delete tags"), msg);
+  const gboolean ok = _confirm(_("Delete tags"), msg);
   dt_free(msg);
   if(!ok) return;
 
@@ -1997,7 +1997,7 @@ static void _act_tag_rename(dt_lib_collect_t *d, GList *rows)
   if(IS_NULL_PTR(r->path)) return;
   const guint tagid = dt_tag_get_tag_id_by_name(r->path);
   if(!tagid) return;
-  gchar *newname = _ask_text(_("rename tag"), r->path);
+  gchar *newname = _ask_text(_("Rename tag"), r->path);
   if(newname)
   {
     dt_tag_rename(tagid, newname);
@@ -2168,7 +2168,7 @@ static gboolean _drop_move_to_folder(dt_lib_collect_t *d, const char *folder, GL
   gchar *msg = g_strdup_printf(ngettext("Physically move %d image to\n%s ?\n\nFiles are moved on disk.",
                                         "Physically move %d images to\n%s ?\n\nFiles are moved on disk.", n),
                                n, folder);
-  const gboolean ok = _confirm(_("move images"), msg);
+  const gboolean ok = _confirm(_("Move images"), msg);
   g_free(msg);
   if(!ok) return FALSE;
 

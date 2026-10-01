@@ -656,6 +656,9 @@ msgstr ""
 msgid "select directory"
 msgstr "Выбор каталога"
 
+msgid "Select directory"
+msgstr "Выбор каталога"
+
 #: ../build/src/preferences_gen.h:3047
 msgid ""
 "this folder (and sub-folders) contains Lut files used by lut3d modules. "
@@ -3906,6 +3909,9 @@ msgstr "Модуль"
 msgid "module order"
 msgstr "Порядок модулей"
 
+msgid "Module order"
+msgstr "Порядок модулей"
+
 #: ../src/common/collection.c:685 ../src/develop/lightroom.c:1505
 #: ../src/libs/tools/filter.c:119
 msgid "rating"
@@ -4679,7 +4685,7 @@ msgstr ""
 "Обновить формат или выйти для создания резервной копии?\n"
 
 #: ../src/common/database.c:2911
-msgid "ansel - schema migration"
+msgid "Ansel - schema migration"
 msgstr ""
 
 #: ../src/common/database.c:2912 ../src/common/database.c:3265
@@ -4724,7 +4730,7 @@ msgstr ""
 
 #: ../src/common/database.c:3262 ../src/common/database.c:3280
 #: ../src/common/database.c:3440 ../src/common/database.c:3458
-msgid "ansel - error opening database"
+msgid "Ansel - error opening database"
 msgstr ""
 
 #: ../src/common/database.c:3267 ../src/common/database.c:3445
@@ -4806,7 +4812,7 @@ msgstr ""
 
 #: ../src/common/database.c:3815
 #, fuzzy
-msgid "ansel - schema maintenance"
+msgid "Ansel - schema maintenance"
 msgstr "Экземпляр растровой маски"
 
 #: ../src/common/database.c:3816
@@ -4851,8 +4857,8 @@ msgstr[1] "Вы действительно хотите удалить эти п
 msgstr[2] "Вы действительно хотите удалить эти пустые каталоги?"
 
 #: ../src/common/film.c:297
-msgid "remove empty directory?"
-msgid_plural "remove empty directories?"
+msgid "Remove empty directory?"
+msgid_plural "Remove empty directories?"
 msgstr[0] "Удаление пустого каталога"
 msgstr[1] "Удаление пустых каталогов"
 msgstr[2] "Удаление пустых каталогов"
@@ -5978,7 +5984,7 @@ msgid "time difference"
 msgstr "Разница во времени"
 
 #: ../src/control/crawler.c:785
-msgid "updated XMP sidecar files found"
+msgid "Updated XMP sidecar files found"
 msgstr "Найдены изменённые файлы XMP"
 
 #: ../src/control/crawler.c:786
@@ -6117,11 +6123,11 @@ msgid "stop process"
 msgstr "Остановить процесс"
 
 #: ../src/control/jobs/control_jobs.c:901
-msgid "trashing error"
+msgid "Trashing error"
 msgstr "Ошибка перемещения в корзину!"
 
 #: ../src/control/jobs/control_jobs.c:902
-msgid "deletion error"
+msgid "Deletion error"
 msgstr "Ошибка удаления с диска!"
 
 #: ../src/control/jobs/control_jobs.c:1044
@@ -6323,11 +6329,14 @@ msgid "do you really want to physically delete selected image from disk?"
 msgstr "Вы действительно хотите удалить выбранный снимок с диска?"
 
 #: ../src/control/jobs/control_jobs.c:1736
-msgid "delete image?"
+msgid "Delete image?"
 msgstr "Удаление снимка"
 
 #: ../src/control/jobs/control_jobs.c:1754 ../src/libs/collect.c:2059
 msgid "move images"
+msgstr "Перемещение снимков"
+
+msgid "Move images"
 msgstr "Перемещение снимков"
 
 #: ../src/control/jobs/control_jobs.c:1766
@@ -6357,8 +6366,8 @@ msgstr[2] ""
 "(все невыбранные копии также будут перемещены)"
 
 #: ../src/control/jobs/control_jobs.c:1795
-msgid "move image?"
-msgid_plural "move images?"
+msgid "Move image?"
+msgid_plural "Move images?"
 msgstr[0] "Перемещение снимка"
 msgstr[1] "Перемещение снимков"
 msgstr[2] "Перемещение снимков"
@@ -6376,8 +6385,8 @@ msgstr[1] "Вы действительно хотите копировать %d 
 msgstr[2] "Вы действительно хотите копировать %d выбранных снимков в %s?"
 
 #: ../src/control/jobs/control_jobs.c:1854
-msgid "copy image?"
-msgid_plural "copy images?"
+msgid "Copy image?"
+msgid_plural "Copy images?"
 msgstr[0] "Копирование снимка"
 msgstr[1] "Копирование снимков"
 msgstr[2] "Копирование снимков"
@@ -9124,7 +9133,7 @@ msgid "failed to import preset %s"
 msgstr "Ошибка импорта профиля «%s»"
 
 #: ../src/gui/preferences.c:1184
-msgid "select preset(s) to import"
+msgid "Select preset(s) to import"
 msgstr "Выберите пресет(ы) для импорта"
 
 #: ../src/gui/preferences.c:1185 ../src/gui/actions/edit.c:305
@@ -9172,7 +9181,7 @@ msgid "do you really want to delete the preset `%s'?"
 msgstr "Вы действительно хотите удалить профиль «%s»?"
 
 #: ../src/gui/presets.c:303 ../src/gui/presets.c:532 ../src/libs/lib.c:321
-msgid "delete preset?"
+msgid "Delete preset?"
 msgstr "Удаление профиля"
 
 #. add new preset
@@ -9190,7 +9199,7 @@ msgid "please give preset a name"
 msgstr "Дайте профилю название"
 
 #: ../src/gui/presets.c:339
-msgid "unnamed preset"
+msgid "Unnamed preset"
 msgstr "Безымянный профиль"
 
 #: ../src/gui/presets.c:368
@@ -9203,7 +9212,7 @@ msgstr ""
 "Вы хотите его перезаписать?"
 
 #: ../src/gui/presets.c:373
-msgid "overwrite preset?"
+msgid "Overwrite preset?"
 msgstr "Перезапись профиля"
 
 #: ../src/gui/presets.c:490 ../src/imageio/storage/disk.c:154
@@ -9218,7 +9227,7 @@ msgstr "Профиль «%s» успешно экспортирован"
 
 #: ../src/gui/presets.c:565
 #, c-format
-msgid "edit `%s' for module `%s'"
+msgid "Edit `%s' for module `%s'"
 msgstr "Изменение профиля «%s» для модуля «%s»"
 
 #: ../src/gui/presets.c:568
@@ -9316,7 +9325,7 @@ msgid "do you really want to update the preset `%s'?"
 msgstr "Вы действительно хотите обновить профиль «%s»?"
 
 #: ../src/gui/presets.c:921 ../src/libs/lib.c:236
-msgid "update preset?"
+msgid "Update preset?"
 msgstr "Обновление профиля"
 
 #: ../src/gui/presets.c:1245
@@ -9402,7 +9411,7 @@ msgstr ""
 
 #: ../src/gui/styles_dialog.c:230 ../src/libs/styles.c:461
 #: ../src/libs/styles.c:645
-msgid "overwrite style?"
+msgid "Overwrite style?"
 msgstr "Перезапись стиля"
 
 #: ../src/gui/styles_dialog.c:259 ../src/gui/styles_dialog.c:318
@@ -9410,7 +9419,7 @@ msgid "please give style a name"
 msgstr "Дайте стилю название"
 
 #: ../src/gui/styles_dialog.c:263 ../src/gui/styles_dialog.c:322
-msgid "unnamed style"
+msgid "Unnamed style"
 msgstr "Безымянный стиль"
 
 #: ../src/gui/styles_dialog.c:310
@@ -9419,7 +9428,7 @@ msgid "style %s was successfully saved"
 msgstr "Стиль «%s» успешно сохранён"
 
 #: ../src/gui/styles_dialog.c:425
-msgid "edit style"
+msgid "Edit style"
 msgstr "Изменение стиля"
 
 #: ../src/gui/styles_dialog.c:426
@@ -9431,7 +9440,7 @@ msgid "creates a duplicate of the style before applying changes"
 msgstr "Создать копию этого стиля перед внесением изменений"
 
 #: ../src/gui/styles_dialog.c:431
-msgid "create new style"
+msgid "Create new style"
 msgstr "Создание нового стиля"
 
 #: ../src/gui/styles_dialog.c:467
@@ -9610,7 +9619,7 @@ msgid "Paste history (parts) — merge settings"
 msgstr ""
 
 #: ../src/gui/actions/edit.c:304
-msgid "open sidecar file"
+msgid "Open sidecar file"
 msgstr "Выбор файла с историей изменений"
 
 #: ../src/gui/actions/edit.c:337
@@ -9839,7 +9848,7 @@ msgid "do you want to access ansel.photos ?"
 msgstr ""
 
 #: ../src/gui/actions/help.c:146
-msgid "access the online usermanual?"
+msgid "Access the online usermanual?"
 msgstr "Открытие онлайн справки"
 
 #: ../src/gui/actions/help.c:158
@@ -16574,7 +16583,7 @@ msgid "lut root folder not defined"
 msgstr ""
 
 #: ../src/iop/lut3d.c:1339
-msgid "select lut file"
+msgid "Select lut file"
 msgstr "Выбор файла таблицы поиска цветов"
 
 #: ../src/iop/lut3d.c:1340
@@ -18393,12 +18402,12 @@ msgstr "Без категории"
 
 #: ../src/libs/collect.c:1840
 #, fuzzy
-msgid "select the new location of this folder"
+msgid "Select the new location of this folder"
 msgstr "Укажите тон фильтра"
 
 #: ../src/libs/collect.c:1840
 #, fuzzy
-msgid "select the new parent folder"
+msgid "Select the new parent folder"
 msgstr "Выбор тона"
 
 #: ../src/libs/collect.c:1873
@@ -18419,9 +18428,13 @@ msgstr[2] "Снять метку с выбранных снимков"
 msgid "delete tags"
 msgstr "Удалить"
 
+#, fuzzy
+msgid "Delete tags"
+msgstr "Удалить"
+
 #: ../src/libs/collect.c:1906
 #, fuzzy
-msgid "rename tag"
+msgid "Rename tag"
 msgstr "Создание метки"
 
 #: ../src/libs/collect.c:1971
@@ -18697,7 +18710,7 @@ msgid "Duplicates"
 msgstr "Создание копии стиля"
 
 #: ../src/libs/export.c:347
-msgid "export to disk"
+msgid "Export to disk"
 msgstr "Экспортировать на диск"
 
 #: ../src/libs/export.c:505
@@ -18898,7 +18911,7 @@ msgid "export with current settings"
 msgstr "Экспорт с текущими настройками"
 
 #: ../src/libs/export_metadata.c:174
-msgid "select tag"
+msgid "Select tag"
 msgstr "Выбор меток"
 
 #: ../src/libs/export_metadata.c:175
@@ -18922,7 +18935,7 @@ msgstr ""
 "для добавления выделенной метки."
 
 #: ../src/libs/export_metadata.c:302
-msgid "edit metadata exportation"
+msgid "Edit metadata exportation"
 msgstr "Редактор экспортируемых метаданных"
 
 #: ../src/libs/export_metadata.c:303 ../src/libs/metadata.c:518
@@ -19115,7 +19128,7 @@ msgid "images"
 msgstr "Снимок"
 
 #: ../src/libs/geotagging.c:956
-msgid "open GPX file"
+msgid "Open GPX file"
 msgstr "Выбор файла GPX"
 
 #: ../src/libs/geotagging.c:970
@@ -19632,7 +19645,7 @@ msgstr ""
 
 #: ../src/libs/ioporder.c:1536
 #, fuzzy
-msgid "save module order preset"
+msgid "Save module order preset"
 msgstr "Порядок модулей"
 
 #: ../src/libs/ioporder.c:1545
@@ -19887,7 +19900,7 @@ msgid "<leave unchanged>"
 msgstr "<не менять>"
 
 #: ../src/libs/metadata.c:516 ../src/libs/metadata_view.c:1186
-msgid "metadata settings"
+msgid "Metadata settings"
 msgstr "Настройки метаданных"
 
 #: ../src/libs/metadata.c:566 ../src/libs/metadata_view.c:1232
@@ -20578,8 +20591,8 @@ msgstr[1] "Вы действительно хотите удалить %d сти
 msgstr[2] "Вы действительно хотите удалить %d стилей?"
 
 #: ../src/libs/styles.c:344
-msgid "remove style?"
-msgid_plural "remove styles?"
+msgid "Remove style?"
+msgid_plural "Remove styles?"
 msgstr[0] "Удаление стиля"
 msgstr[1] "Удаление стилей"
 msgstr[2] "Удаление стилей"
@@ -20603,7 +20616,7 @@ msgid "style %s was successfully exported"
 msgstr "Стиль «%s» успешно экспортирован"
 
 #: ../src/libs/styles.c:551
-msgid "select style"
+msgid "Select style"
 msgstr "Выбор файла стилей"
 
 #: ../src/libs/styles.c:561
@@ -20701,7 +20714,7 @@ msgid "detach all tags"
 msgstr "Снять метку"
 
 #: ../src/libs/tagging.c:1461
-msgid "delete node?"
+msgid "Delete node?"
 msgstr "Удаление узла"
 
 #: ../src/libs/tagging.c:1468 ../src/libs/tagging.c:1683
@@ -20733,7 +20746,7 @@ msgid "%d tags removed"
 msgstr "Удалено меток: %d"
 
 #: ../src/libs/tagging.c:1543
-msgid "create tag"
+msgid "Create tag"
 msgstr "Создание метки"
 
 #: ../src/libs/tagging.c:1553 ../src/libs/tagging.c:1703
@@ -20793,7 +20806,7 @@ msgstr ""
 "По крайней мере одна новая метка «%s» уже существует. Действие прервано."
 
 #: ../src/libs/tagging.c:1961
-msgid "change path"
+msgid "Change path"
 msgstr "Переименование пути"
 
 #: ../src/libs/tagging.c:2005
@@ -20802,7 +20815,7 @@ msgstr ""
 "Ошибка в использовании символа «|» для разделения меток. Действие прервано."
 
 #: ../src/libs/tagging.c:2088
-msgid "delete tag?"
+msgid "Delete tag?"
 msgstr "Удаление метки"
 
 #: ../src/libs/tagging.c:2092
@@ -20870,7 +20883,7 @@ msgid "(private)"
 msgstr "(персональн.)"
 
 #: ../src/libs/tagging.c:2435
-msgid "select a keyword file"
+msgid "Select a keyword file"
 msgstr "Выберите файл ключевых слов"
 
 #: ../src/libs/tagging.c:2436
@@ -20883,7 +20896,7 @@ msgid "%u tags imported"
 msgstr "Импортировано меток: %zd"
 
 #: ../src/libs/tagging.c:2468
-msgid "select file to export to"
+msgid "Select file to export to"
 msgstr "Выберите файл для экспорта в"
 
 #: ../src/libs/tagging.c:2469
@@ -20958,7 +20971,7 @@ msgstr "Прикрепить метку к выбранным снимкам"
 
 #: ../src/libs/tagging.c:3248
 #, fuzzy
-msgid "manage tags"
+msgid "Manage tags"
 msgstr "Геотеги"
 
 #: ../src/libs/tagging.c:3263
@@ -21927,7 +21940,7 @@ msgid "no LUT to save"
 msgstr "Нет изменений для сохранения"
 
 #: ../src/common/lut_viewer.c:1207
-msgid "save 3D LUT"
+msgid "Save 3D LUT"
 msgstr ""
 
 #: ../src/common/lut_viewer.c:1222

@@ -878,8 +878,8 @@ static gboolean _dt_delete_dialog_main_thread(gpointer user_data)
   gtk_window_set_title(
       GTK_WINDOW(dialog),
       modal_dialog->send_to_trash
-        ? _("trashing error")
-        : _("deletion error"));
+        ? _("Trashing error")
+        : _("Deletion error"));
   modal_dialog->dialog_result = gtk_dialog_run(GTK_DIALOG(dialog));
   gtk_widget_destroy(dialog);
 
@@ -1723,7 +1723,7 @@ void dt_control_delete_image(int32_t imgid)
     dt_osx_disallow_fullscreen(dialog);
 #endif
 
-    gtk_window_set_title(GTK_WINDOW(dialog), _("delete image?"));
+    gtk_window_set_title(GTK_WINDOW(dialog), _("Delete image?"));
     gint res = gtk_dialog_run(GTK_DIALOG(dialog));
     gtk_widget_destroy(dialog);
     if(res != GTK_RESPONSE_YES)
@@ -1752,7 +1752,7 @@ void dt_control_move_images()
   }
 
   GtkFileChooserNative *filechooser = gtk_file_chooser_native_new(
-        _("select directory"), GTK_WINDOW(win), GTK_FILE_CHOOSER_ACTION_SELECT_FOLDER,
+        _("Select directory"), GTK_WINDOW(win), GTK_FILE_CHOOSER_ACTION_SELECT_FOLDER,
         _("_select as destination"), _("_cancel"));
 
   dt_conf_get_folder_to_file_chooser("ui_last/move_path", GTK_FILE_CHOOSER(filechooser));
@@ -1782,7 +1782,7 @@ void dt_control_move_images()
 #ifdef GDK_WINDOWING_QUARTZ
     dt_osx_disallow_fullscreen(dialog);
 #endif
-    gtk_window_set_title(GTK_WINDOW(dialog), ngettext("move image?", "move images?", number));
+    gtk_window_set_title(GTK_WINDOW(dialog), ngettext("Move image?", "Move images?", number));
 
     gint res = gtk_dialog_run(GTK_DIALOG(dialog));
     gtk_widget_destroy(dialog);
@@ -1814,7 +1814,7 @@ void dt_control_copy_images()
   }
 
   GtkFileChooserNative *filechooser = gtk_file_chooser_native_new(
-        _("select directory"), GTK_WINDOW(win), GTK_FILE_CHOOSER_ACTION_SELECT_FOLDER,
+        _("Select directory"), GTK_WINDOW(win), GTK_FILE_CHOOSER_ACTION_SELECT_FOLDER,
         _("_select as destination"), _("_cancel"));
 
   dt_conf_get_folder_to_file_chooser("ui_last/copy_path", GTK_FILE_CHOOSER(filechooser));
@@ -1841,7 +1841,7 @@ void dt_control_copy_images()
 #ifdef GDK_WINDOWING_QUARTZ
     dt_osx_disallow_fullscreen(dialog);
 #endif
-    gtk_window_set_title(GTK_WINDOW(dialog), ngettext("copy image?", "copy images?", number));
+    gtk_window_set_title(GTK_WINDOW(dialog), ngettext("Copy image?", "Copy images?", number));
 
     gint res = gtk_dialog_run(GTK_DIALOG(dialog));
     gtk_widget_destroy(dialog);

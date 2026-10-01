@@ -654,6 +654,9 @@ msgstr ""
 msgid "select directory"
 msgstr "選擇資料夾"
 
+msgid "Select directory"
+msgstr "選擇資料夾"
+
 #: ../build/src/preferences_gen.h:3047
 msgid ""
 "this folder (and sub-folders) contains Lut files used by lut3d modules. "
@@ -3917,6 +3920,9 @@ msgstr "模組"
 msgid "module order"
 msgstr "模組順序"
 
+msgid "Module order"
+msgstr "模組順序"
+
 #: ../src/common/collection.c:685 ../src/develop/lightroom.c:1505
 #: ../src/libs/tools/filter.c:119
 msgid "rating"
@@ -4688,7 +4694,7 @@ msgstr ""
 "是否要繼續執行？或是關閉以手動進行備份\n"
 
 #: ../src/common/database.c:2911
-msgid "ansel - schema migration"
+msgid "Ansel - schema migration"
 msgstr ""
 
 #: ../src/common/database.c:2912 ../src/common/database.c:3265
@@ -4733,7 +4739,7 @@ msgstr ""
 
 #: ../src/common/database.c:3262 ../src/common/database.c:3280
 #: ../src/common/database.c:3440 ../src/common/database.c:3458
-msgid "ansel - error opening database"
+msgid "Ansel - error opening database"
 msgstr ""
 
 #: ../src/common/database.c:3267 ../src/common/database.c:3445
@@ -4810,7 +4816,7 @@ msgstr ""
 
 #: ../src/common/database.c:3815
 #, fuzzy
-msgid "ansel - schema maintenance"
+msgid "Ansel - schema maintenance"
 msgstr "點陣遮罩實例"
 
 #: ../src/common/database.c:3816
@@ -4854,8 +4860,8 @@ msgid_plural "do you want to remove these empty directories?"
 msgstr[0] "是否要刪除此空白資料夾？"
 
 #: ../src/common/film.c:297
-msgid "remove empty directory?"
-msgid_plural "remove empty directories?"
+msgid "Remove empty directory?"
+msgid_plural "Remove empty directories?"
 msgstr[0] "刪除空白資料夾？"
 
 #: ../src/common/film.c:317 ../src/gui/preferences.c:979
@@ -5979,7 +5985,7 @@ msgid "time difference"
 msgstr "時間差異"
 
 #: ../src/control/crawler.c:785
-msgid "updated XMP sidecar files found"
+msgid "Updated XMP sidecar files found"
 msgstr "找到已更新的 XMP 附屬檔案"
 
 #: ../src/control/crawler.c:786
@@ -6106,11 +6112,11 @@ msgid "stop process"
 msgstr "停止處理"
 
 #: ../src/control/jobs/control_jobs.c:901
-msgid "trashing error"
+msgid "Trashing error"
 msgstr "丟進回收桶時發生錯誤"
 
 #: ../src/control/jobs/control_jobs.c:902
-msgid "deletion error"
+msgid "Deletion error"
 msgstr "刪除時發生錯誤"
 
 #: ../src/control/jobs/control_jobs.c:1044
@@ -6287,11 +6293,14 @@ msgid "do you really want to physically delete selected image from disk?"
 msgstr "確定要從硬碟中刪除選取的影像檔案？"
 
 #: ../src/control/jobs/control_jobs.c:1736
-msgid "delete image?"
+msgid "Delete image?"
 msgstr "是否要刪除影像？"
 
 #: ../src/control/jobs/control_jobs.c:1754 ../src/libs/collect.c:2059
 msgid "move images"
+msgstr "移動影像"
+
+msgid "Move images"
 msgstr "移動影像"
 
 #: ../src/control/jobs/control_jobs.c:1766
@@ -6312,8 +6321,8 @@ msgstr[0] ""
 "（所有複本都會被移動）"
 
 #: ../src/control/jobs/control_jobs.c:1795
-msgid "move image?"
-msgid_plural "move images?"
+msgid "Move image?"
+msgid_plural "Move images?"
 msgstr[0] "是否要移動影像？"
 
 #: ../src/control/jobs/control_jobs.c:1816
@@ -6327,8 +6336,8 @@ msgid_plural "do you really want to physically copy %d images to %s?"
 msgstr[0] "是否要將 %d 張影像實體複製到「%s」？"
 
 #: ../src/control/jobs/control_jobs.c:1854
-msgid "copy image?"
-msgid_plural "copy images?"
+msgid "Copy image?"
+msgid_plural "Copy images?"
 msgstr[0] "是否要複製影像？"
 
 #: ../src/control/jobs/control_jobs.c:1874
@@ -9118,7 +9127,7 @@ msgid "failed to import preset %s"
 msgstr "無法匯入預設集「%s」"
 
 #: ../src/gui/preferences.c:1184
-msgid "select preset(s) to import"
+msgid "Select preset(s) to import"
 msgstr "選擇要匯入的預設集"
 
 #: ../src/gui/preferences.c:1185 ../src/gui/actions/edit.c:305
@@ -9166,7 +9175,7 @@ msgid "do you really want to delete the preset `%s'?"
 msgstr "是否要刪除預設集「%s」？"
 
 #: ../src/gui/presets.c:303 ../src/gui/presets.c:532 ../src/libs/lib.c:321
-msgid "delete preset?"
+msgid "Delete preset?"
 msgstr "是否要刪除預設集？"
 
 #. add new preset
@@ -9184,7 +9193,7 @@ msgid "please give preset a name"
 msgstr "輸入預設集的名稱"
 
 #: ../src/gui/presets.c:339
-msgid "unnamed preset"
+msgid "Unnamed preset"
 msgstr "未命名的預設集"
 
 #: ../src/gui/presets.c:368
@@ -9197,7 +9206,7 @@ msgstr ""
 "是否要取代既有設定？"
 
 #: ../src/gui/presets.c:373
-msgid "overwrite preset?"
+msgid "Overwrite preset?"
 msgstr "是否要覆寫預設集？"
 
 #: ../src/gui/presets.c:490 ../src/imageio/storage/disk.c:154
@@ -9212,7 +9221,7 @@ msgstr "預設集「%s」已成功匯出"
 
 #: ../src/gui/presets.c:565
 #, c-format
-msgid "edit `%s' for module `%s'"
+msgid "Edit `%s' for module `%s'"
 msgstr "編輯預設集「%s」（供模組「%s」使用）"
 
 #: ../src/gui/presets.c:568
@@ -9308,7 +9317,7 @@ msgid "do you really want to update the preset `%s'?"
 msgstr "要更新預設集「%s」嗎？"
 
 #: ../src/gui/presets.c:921 ../src/libs/lib.c:236
-msgid "update preset?"
+msgid "Update preset?"
 msgstr "是否要更新預設集？"
 
 #: ../src/gui/presets.c:1245
@@ -9394,7 +9403,7 @@ msgstr ""
 
 #: ../src/gui/styles_dialog.c:230 ../src/libs/styles.c:461
 #: ../src/libs/styles.c:645
-msgid "overwrite style?"
+msgid "Overwrite style?"
 msgstr "是否要覆寫風格檔？"
 
 #: ../src/gui/styles_dialog.c:259 ../src/gui/styles_dialog.c:318
@@ -9402,7 +9411,7 @@ msgid "please give style a name"
 msgstr "請為風格檔命名"
 
 #: ../src/gui/styles_dialog.c:263 ../src/gui/styles_dialog.c:322
-msgid "unnamed style"
+msgid "Unnamed style"
 msgstr "未命名的風格檔"
 
 #: ../src/gui/styles_dialog.c:310
@@ -9411,7 +9420,7 @@ msgid "style %s was successfully saved"
 msgstr "風格檔「%s」已儲存"
 
 #: ../src/gui/styles_dialog.c:425
-msgid "edit style"
+msgid "Edit style"
 msgstr "編輯風格檔"
 
 #: ../src/gui/styles_dialog.c:426
@@ -9423,7 +9432,7 @@ msgid "creates a duplicate of the style before applying changes"
 msgstr "套用改變前建立一個此風格檔的複本"
 
 #: ../src/gui/styles_dialog.c:431
-msgid "create new style"
+msgid "Create new style"
 msgstr "建立新的風格檔"
 
 #: ../src/gui/styles_dialog.c:467
@@ -9601,7 +9610,7 @@ msgid "Paste history (parts) — merge settings"
 msgstr ""
 
 #: ../src/gui/actions/edit.c:304
-msgid "open sidecar file"
+msgid "Open sidecar file"
 msgstr "開啟附屬檔案"
 
 #: ../src/gui/actions/edit.c:337
@@ -9829,7 +9838,7 @@ msgid "do you want to access ansel.photos ?"
 msgstr ""
 
 #: ../src/gui/actions/help.c:146
-msgid "access the online usermanual?"
+msgid "Access the online usermanual?"
 msgstr "是否要查看線上使用手冊？"
 
 #: ../src/gui/actions/help.c:158
@@ -17108,7 +17117,7 @@ msgstr ""
 
 #: ../src/iop/lut3d.c:1339
 #, fuzzy
-msgid "select lut file"
+msgid "Select lut file"
 msgstr "選擇檔案"
 
 #: ../src/iop/lut3d.c:1340
@@ -19135,14 +19144,14 @@ msgstr "未分類"
 
 #: ../src/libs/collect.c:1840
 #, fuzzy
-msgid "select the new location of this folder"
+msgid "Select the new location of this folder"
 msgstr ""
 "漸層濾鏡的顏色\n"
 "可使用右側色彩選取工具從影像中選擇，會一次設定色相和飽和度"
 
 #: ../src/libs/collect.c:1840
 #, fuzzy
-msgid "select the new parent folder"
+msgid "Select the new parent folder"
 msgstr "設定覆蓋純色的色相"
 
 #: ../src/libs/collect.c:1873
@@ -19161,9 +19170,13 @@ msgstr[0] "從選取的影像上去除標籤"
 msgid "delete tags"
 msgstr "刪除標籤"
 
+#, fuzzy
+msgid "Delete tags"
+msgstr "刪除標籤"
+
 #: ../src/libs/collect.c:1906
 #, fuzzy
-msgid "rename tag"
+msgid "Rename tag"
 msgstr "建立標籤"
 
 #: ../src/libs/collect.c:1971
@@ -19431,7 +19444,7 @@ msgid "Duplicates"
 msgstr "複製風格檔"
 
 #: ../src/libs/export.c:347
-msgid "export to disk"
+msgid "Export to disk"
 msgstr "匯出到硬碟"
 
 #: ../src/libs/export.c:505
@@ -19635,7 +19648,7 @@ msgid "export with current settings"
 msgstr "使用以上的設定匯出影像"
 
 #: ../src/libs/export_metadata.c:174
-msgid "select tag"
+msgid "Select tag"
 msgstr "選擇標籤"
 
 #: ../src/libs/export_metadata.c:175
@@ -19659,7 +19672,7 @@ msgstr ""
 "點擊「增加」按鈕或雙擊貼上所選標籤"
 
 #: ../src/libs/export_metadata.c:302
-msgid "edit metadata exportation"
+msgid "Edit metadata exportation"
 msgstr "編輯詮釋資料匯出設定"
 
 #: ../src/libs/export_metadata.c:303 ../src/libs/metadata.c:518
@@ -19856,7 +19869,7 @@ msgid "images"
 msgstr "影像"
 
 #: ../src/libs/geotagging.c:956
-msgid "open GPX file"
+msgid "Open GPX file"
 msgstr "開啟 GPX 檔案"
 
 #: ../src/libs/geotagging.c:970
@@ -20374,7 +20387,7 @@ msgstr ""
 
 #: ../src/libs/ioporder.c:1536
 #, fuzzy
-msgid "save module order preset"
+msgid "Save module order preset"
 msgstr "模組順序"
 
 #: ../src/libs/ioporder.c:1545
@@ -20627,7 +20640,7 @@ msgid "<leave unchanged>"
 msgstr "<保持不變>"
 
 #: ../src/libs/metadata.c:516 ../src/libs/metadata_view.c:1186
-msgid "metadata settings"
+msgid "Metadata settings"
 msgstr "詮釋資料設定"
 
 #: ../src/libs/metadata.c:566 ../src/libs/metadata_view.c:1232
@@ -21330,8 +21343,8 @@ msgid_plural "do you really want to remove %d styles?"
 msgstr[0] "確定要刪除 %d 個風格檔？"
 
 #: ../src/libs/styles.c:344
-msgid "remove style?"
-msgid_plural "remove styles?"
+msgid "Remove style?"
+msgid_plural "Remove styles?"
 msgstr[0] "是否要刪除風格檔？"
 
 #: ../src/libs/styles.c:468 ../src/libs/styles.c:652
@@ -21353,7 +21366,7 @@ msgid "style %s was successfully exported"
 msgstr "風格檔「%s」已成功匯出"
 
 #: ../src/libs/styles.c:551
-msgid "select style"
+msgid "Select style"
 msgstr "選擇風格檔"
 
 #: ../src/libs/styles.c:561
@@ -21451,7 +21464,7 @@ msgid "detach all tags"
 msgstr "撕除標籤"
 
 #: ../src/libs/tagging.c:1461
-msgid "delete node?"
+msgid "Delete node?"
 msgstr "是否要刪除整個結構？"
 
 #: ../src/libs/tagging.c:1468 ../src/libs/tagging.c:1683
@@ -21479,7 +21492,7 @@ msgid "%d tags removed"
 msgstr "%d 個標籤已移除"
 
 #: ../src/libs/tagging.c:1543
-msgid "create tag"
+msgid "Create tag"
 msgstr "建立標籤"
 
 #: ../src/libs/tagging.c:1553 ../src/libs/tagging.c:1703
@@ -21537,7 +21550,7 @@ msgid "at least one new tagname (%s) already exists, aborting."
 msgstr "至少有一個標籤名稱「%s」已存在，操作取消"
 
 #: ../src/libs/tagging.c:1961
-msgid "change path"
+msgid "Change path"
 msgstr "變更路徑"
 
 #: ../src/libs/tagging.c:2005
@@ -21545,7 +21558,7 @@ msgid "'|' misplaced, empty tag is not allowed, aborting"
 msgstr "「|」位置錯誤，不能使用空白標籤，操作取消"
 
 #: ../src/libs/tagging.c:2088
-msgid "delete tag?"
+msgid "Delete tag?"
 msgstr "是否要刪除標籤？"
 
 #: ../src/libs/tagging.c:2092
@@ -21608,7 +21621,7 @@ msgid "(private)"
 msgstr "（私人）"
 
 #: ../src/libs/tagging.c:2435
-msgid "select a keyword file"
+msgid "Select a keyword file"
 msgstr "選擇關鍵字標籤檔案"
 
 #: ../src/libs/tagging.c:2436
@@ -21621,7 +21634,7 @@ msgid "%u tags imported"
 msgstr "已匯入 %zd 個標籤"
 
 #: ../src/libs/tagging.c:2468
-msgid "select file to export to"
+msgid "Select file to export to"
 msgstr "匯出關鍵字檔案到"
 
 #: ../src/libs/tagging.c:2469
@@ -21696,7 +21709,7 @@ msgstr "把標籤附加到選取的影像上"
 
 #: ../src/libs/tagging.c:3248
 #, fuzzy
-msgid "manage tags"
+msgid "Manage tags"
 msgstr "地理標籤"
 
 #: ../src/libs/tagging.c:3263
@@ -22666,7 +22679,7 @@ msgid "no LUT to save"
 msgstr "沒有東西可以儲存"
 
 #: ../src/common/lut_viewer.c:1207
-msgid "save 3D LUT"
+msgid "Save 3D LUT"
 msgstr ""
 
 #: ../src/common/lut_viewer.c:1222

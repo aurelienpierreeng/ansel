@@ -162,7 +162,7 @@ static void _main_do_event_help(GdkEvent *event, gpointer data)
             dt_osx_disallow_fullscreen(dialog);
 #endif
 
-          gtk_window_set_title(GTK_WINDOW(dialog), _("access the online usermanual?"));
+          gtk_window_set_title(GTK_WINDOW(dialog), _("Access the online usermanual?"));
           const gint res = gtk_dialog_run(GTK_DIALOG(dialog));
           const gboolean open = (res == GTK_RESPONSE_YES) || !(res == GTK_RESPONSE_NO);
           gtk_widget_destroy(dialog);

@@ -661,6 +661,9 @@ msgstr "radika dosierujo por 3D lut-oj"
 msgid "select directory"
 msgstr "elektu dosierujon"
 
+msgid "Select directory"
+msgstr "Elektu dosierujon"
+
 #: ../build/src/preferences_gen.h:3047
 msgid ""
 "this folder (and sub-folders) contains Lut files used by lut3d modules. "
@@ -3931,6 +3934,9 @@ msgstr "modulo"
 msgid "module order"
 msgstr "ordo de moduloj"
 
+msgid "Module order"
+msgstr "Ordo de moduloj"
+
 #: ../src/common/collection.c:685 ../src/develop/lightroom.c:1505
 #: ../src/libs/tools/filter.c:119
 msgid "rating"
@@ -4705,7 +4711,7 @@ msgstr ""
 "ĉu vi volas daŭrigi aŭ ĉesi nun por fari sekurkopion\n"
 
 #: ../src/common/database.c:2911
-msgid "ansel - schema migration"
+msgid "Ansel - schema migration"
 msgstr ""
 
 #: ../src/common/database.c:2912 ../src/common/database.c:3265
@@ -4750,7 +4756,7 @@ msgstr ""
 
 #: ../src/common/database.c:3262 ../src/common/database.c:3280
 #: ../src/common/database.c:3440 ../src/common/database.c:3458
-msgid "ansel - error opening database"
+msgid "Ansel - error opening database"
 msgstr ""
 
 #: ../src/common/database.c:3267 ../src/common/database.c:3445
@@ -4831,8 +4837,8 @@ msgstr ""
 
 #: ../src/common/database.c:3815
 #, fuzzy
-msgid "ansel - schema maintenance"
-msgstr "okazo de rastuma masko"
+msgid "Ansel - schema maintenance"
+msgstr "Okazo de rastuma masko"
 
 #: ../src/common/database.c:3816
 msgid "later"
@@ -4876,10 +4882,10 @@ msgstr[0] "ĉu vi volas forigi ĉi tiun malplenan dosierujon?"
 msgstr[1] "ĉu vi volas forigi ĉi tiujn malplenajn dosierujojn?"
 
 #: ../src/common/film.c:297
-msgid "remove empty directory?"
-msgid_plural "remove empty directories?"
-msgstr[0] "forigi malplenan dosierujon?"
-msgstr[1] "forigi malplenajn dosierujojn?"
+msgid "Remove empty directory?"
+msgid_plural "Remove empty directories?"
+msgstr[0] "Forigi malplenan dosierujon?"
+msgstr[1] "Forigi malplenajn dosierujojn?"
 
 #: ../src/common/film.c:317 ../src/gui/preferences.c:979
 #: ../src/gui/styles_dialog.c:466 ../src/libs/collect.c:3003
@@ -5996,7 +6002,7 @@ msgstr "tempa diferenco"
 
 #: ../src/control/crawler.c:785
 #, fuzzy
-msgid "updated XMP sidecar files found"
+msgid "Updated XMP sidecar files found"
 msgstr "XMP kromĉaraj dosieroj"
 
 #: ../src/control/crawler.c:786
@@ -6131,12 +6137,12 @@ msgid "stop process"
 msgstr "ĉesigi procezon"
 
 #: ../src/control/jobs/control_jobs.c:901
-msgid "trashing error"
-msgstr "rubuja eraro"
+msgid "Trashing error"
+msgstr "Rubuja eraro"
 
 #: ../src/control/jobs/control_jobs.c:902
-msgid "deletion error"
-msgstr "forviŝa eraro"
+msgid "Deletion error"
+msgstr "Forviŝa eraro"
 
 #: ../src/control/jobs/control_jobs.c:1044
 #, c-format
@@ -6325,12 +6331,15 @@ msgid "do you really want to physically delete selected image from disk?"
 msgstr "ĉu vi vere volas fizike forigi elektitan bildon de disko?"
 
 #: ../src/control/jobs/control_jobs.c:1736
-msgid "delete image?"
-msgstr "forviŝi bildon?"
+msgid "Delete image?"
+msgstr "Forviŝi bildon?"
 
 #: ../src/control/jobs/control_jobs.c:1754 ../src/libs/collect.c:2059
 msgid "move images"
 msgstr "movi bildojn"
+
+msgid "Move images"
+msgstr "Movi bildojn"
 
 #: ../src/control/jobs/control_jobs.c:1766
 #: ../src/control/jobs/control_jobs.c:1828
@@ -6353,10 +6362,10 @@ msgstr[1] ""
 "(ĉiuj kopioj kopiiĝos)"
 
 #: ../src/control/jobs/control_jobs.c:1795
-msgid "move image?"
-msgid_plural "move images?"
-msgstr[0] "movi bildon?"
-msgstr[1] "movi bildojn?"
+msgid "Move image?"
+msgid_plural "Move images?"
+msgstr[0] "Movi bildon?"
+msgstr[1] "Movi bildojn?"
 
 #: ../src/control/jobs/control_jobs.c:1816
 msgid "copy images"
@@ -6370,10 +6379,10 @@ msgstr[0] "ĉu vi vere volas fizike kopii %d bildon al %s?"
 msgstr[1] "ĉu vi vere volas fizike kopii %d bildojn al %s?"
 
 #: ../src/control/jobs/control_jobs.c:1854
-msgid "copy image?"
-msgid_plural "copy images?"
-msgstr[0] "kopii bildon?"
-msgstr[1] "kopii bildojn?"
+msgid "Copy image?"
+msgid_plural "Copy images?"
+msgstr[0] "Kopii bildon?"
+msgstr[1] "Kopii bildojn?"
 
 #: ../src/control/jobs/control_jobs.c:1874
 #: ../src/control/jobs/control_jobs.c:1882
@@ -9120,8 +9129,8 @@ msgid "failed to import preset %s"
 msgstr "malsukcesis importi zapagordaron %s"
 
 #: ../src/gui/preferences.c:1184
-msgid "select preset(s) to import"
-msgstr "elekti importenda(j)n zapagordaro(j)n"
+msgid "Select preset(s) to import"
+msgstr "Elekti importenda(j)n zapagordaro(j)n"
 
 #: ../src/gui/preferences.c:1185 ../src/gui/actions/edit.c:305
 #: ../src/libs/collect.c:1841 ../src/libs/geotagging.c:959
@@ -9168,8 +9177,8 @@ msgid "do you really want to delete the preset `%s'?"
 msgstr "ĉu vi vere volas forviŝi la zapagordaron `%s'?"
 
 #: ../src/gui/presets.c:303 ../src/gui/presets.c:532 ../src/libs/lib.c:321
-msgid "delete preset?"
-msgstr "forviŝi zapagordaron?"
+msgid "Delete preset?"
+msgstr "Forviŝi zapagordaron?"
 
 #. add new preset
 #. then show edit dialog
@@ -9186,8 +9195,8 @@ msgid "please give preset a name"
 msgstr "bonvolu eniri nomo por la zapagordaro"
 
 #: ../src/gui/presets.c:339
-msgid "unnamed preset"
-msgstr "nenomata zapagordaro"
+msgid "Unnamed preset"
+msgstr "Nenomata zapagordaro"
 
 #: ../src/gui/presets.c:368
 #, c-format
@@ -9199,8 +9208,8 @@ msgstr ""
 "ĉu vi volas anstataŭigi?"
 
 #: ../src/gui/presets.c:373
-msgid "overwrite preset?"
-msgstr "anstataŭigi zapagordaron?"
+msgid "Overwrite preset?"
+msgstr "Anstataŭigi zapagordaron?"
 
 #: ../src/gui/presets.c:490 ../src/imageio/storage/disk.c:154
 #: ../src/imageio/storage/gallery.c:142
@@ -9214,8 +9223,8 @@ msgstr "zapagordaro %s estas sukcese eksportita"
 
 #: ../src/gui/presets.c:565
 #, c-format
-msgid "edit `%s' for module `%s'"
-msgstr "redakti '%s' por modulo '%s'"
+msgid "Edit `%s' for module `%s'"
+msgstr "Redakti '%s' por modulo '%s'"
 
 #: ../src/gui/presets.c:568
 msgid "_export..."
@@ -9313,8 +9322,8 @@ msgid "do you really want to update the preset `%s'?"
 msgstr "ĉu vi vere volas ĝisdatigi la zapagordaron `%s'?"
 
 #: ../src/gui/presets.c:921 ../src/libs/lib.c:236
-msgid "update preset?"
-msgstr "ĝisdatigi zapagordaron?"
+msgid "Update preset?"
+msgstr "Ĝisdatigi zapagordaron?"
 
 #: ../src/gui/presets.c:1245
 msgid "(default)"
@@ -9399,16 +9408,16 @@ msgstr ""
 
 #: ../src/gui/styles_dialog.c:230 ../src/libs/styles.c:461
 #: ../src/libs/styles.c:645
-msgid "overwrite style?"
-msgstr "anstataŭigi stilon?"
+msgid "Overwrite style?"
+msgstr "Anstataŭigi stilon?"
 
 #: ../src/gui/styles_dialog.c:259 ../src/gui/styles_dialog.c:318
 msgid "please give style a name"
 msgstr "bonvolu doni nomon al stilo"
 
 #: ../src/gui/styles_dialog.c:263 ../src/gui/styles_dialog.c:322
-msgid "unnamed style"
-msgstr "nenomata stilo"
+msgid "Unnamed style"
+msgstr "Nenomata stilo"
 
 #: ../src/gui/styles_dialog.c:310
 #, c-format
@@ -9416,8 +9425,8 @@ msgid "style %s was successfully saved"
 msgstr "stilo %s estis sukcese konservita"
 
 #: ../src/gui/styles_dialog.c:425
-msgid "edit style"
-msgstr "redakti stilon"
+msgid "Edit style"
+msgstr "Redakti stilon"
 
 #: ../src/gui/styles_dialog.c:426
 msgid "duplicate style"
@@ -9428,8 +9437,8 @@ msgid "creates a duplicate of the style before applying changes"
 msgstr "kreas duplikaton de la stilo antaŭ ol apliki ŝanĝojn"
 
 #: ../src/gui/styles_dialog.c:431
-msgid "create new style"
-msgstr "kreii novan stilon"
+msgid "Create new style"
+msgstr "Kreii novan stilon"
 
 #: ../src/gui/styles_dialog.c:467
 msgid "enter a name for the new style"
@@ -9606,8 +9615,8 @@ msgid "Paste history (parts) — merge settings"
 msgstr ""
 
 #: ../src/gui/actions/edit.c:304
-msgid "open sidecar file"
-msgstr "malfermu kromĉaran dosieron"
+msgid "Open sidecar file"
+msgstr "Malfermu kromĉaran dosieron"
 
 #: ../src/gui/actions/edit.c:337
 msgid "XMP sidecar files"
@@ -9833,8 +9842,8 @@ msgid "do you want to access ansel.photos ?"
 msgstr ""
 
 #: ../src/gui/actions/help.c:146
-msgid "access the online usermanual?"
-msgstr "ĉu viziti la retan manlibron?"
+msgid "Access the online usermanual?"
+msgstr "Ĉu viziti la retan manlibron?"
 
 #: ../src/gui/actions/help.c:158
 msgid "help url opened in web browser"
@@ -16671,8 +16680,8 @@ msgid "lut root folder not defined"
 msgstr "radika dosierujo por 3D lut-oj"
 
 #: ../src/iop/lut3d.c:1339
-msgid "select lut file"
-msgstr "elekti kst dosieron"
+msgid "Select lut file"
+msgstr "Elekti kst dosieron"
 
 #: ../src/iop/lut3d.c:1340
 msgid "_select"
@@ -18521,13 +18530,13 @@ msgstr "nekategoriita"
 
 #: ../src/libs/collect.c:1840
 #, fuzzy
-msgid "select the new location of this folder"
-msgstr "elekti la nuancon de filtrilo"
+msgid "Select the new location of this folder"
+msgstr "Elekti la nuancon de filtrilo"
 
 #: ../src/libs/collect.c:1840
 #, fuzzy
-msgid "select the new parent folder"
-msgstr "elektu la nuancan tonon"
+msgid "Select the new parent folder"
+msgstr "Elektu la nuancan tonon"
 
 #: ../src/libs/collect.c:1873
 #, fuzzy
@@ -18546,10 +18555,14 @@ msgstr[1] "malligi etikedon de ĉiuj elektitaj bildoj"
 msgid "delete tags"
 msgstr "forviŝi etikedon"
 
+#, fuzzy
+msgid "Delete tags"
+msgstr "Forviŝi etikedon"
+
 #: ../src/libs/collect.c:1906
 #, fuzzy
-msgid "rename tag"
-msgstr "krei etikedon"
+msgid "Rename tag"
+msgstr "Krei etikedon"
 
 #: ../src/libs/collect.c:1971
 #, fuzzy
@@ -18817,8 +18830,8 @@ msgid "Duplicates"
 msgstr "duplicati stilon"
 
 #: ../src/libs/export.c:347
-msgid "export to disk"
-msgstr "eksporti al diskon"
+msgid "Export to disk"
+msgstr "Eksporti al diskon"
 
 #: ../src/libs/export.c:505
 #, c-format
@@ -19021,8 +19034,8 @@ msgid "export with current settings"
 msgstr "eksporti kun aktualaj agordoj"
 
 #: ../src/libs/export_metadata.c:174
-msgid "select tag"
-msgstr "elekti etikedon"
+msgid "Select tag"
+msgstr "Elekti etikedon"
 
 #: ../src/libs/export_metadata.c:175
 msgid "add"
@@ -19045,8 +19058,8 @@ msgstr ""
 "etikedon por aldoni tiun etikedon"
 
 #: ../src/libs/export_metadata.c:302
-msgid "edit metadata exportation"
-msgstr "redakti metadatenan eksportadon"
+msgid "Edit metadata exportation"
+msgstr "Redakti metadatenan eksportadon"
 
 #: ../src/libs/export_metadata.c:303 ../src/libs/metadata.c:518
 #: ../src/libs/metadata_view.c:1188 ../src/libs/styles.c:462
@@ -19252,8 +19265,8 @@ msgid "images"
 msgstr "bildoj"
 
 #: ../src/libs/geotagging.c:956
-msgid "open GPX file"
-msgstr "malfermi GPX dosieron"
+msgid "Open GPX file"
+msgstr "Malfermi GPX dosieron"
 
 #: ../src/libs/geotagging.c:970
 msgid "GPS data exchange format"
@@ -19768,8 +19781,8 @@ msgstr ""
 
 #: ../src/libs/ioporder.c:1536
 #, fuzzy
-msgid "save module order preset"
-msgstr "ordo de moduloj"
+msgid "Save module order preset"
+msgstr "Ordo de moduloj"
 
 #: ../src/libs/ioporder.c:1545
 #, fuzzy
@@ -20036,8 +20049,8 @@ msgid "<leave unchanged>"
 msgstr "<lasi senŝanĝe>"
 
 #: ../src/libs/metadata.c:516 ../src/libs/metadata_view.c:1186
-msgid "metadata settings"
-msgstr "metadatenaj agordoj"
+msgid "Metadata settings"
+msgstr "Metadatenaj agordoj"
 
 #: ../src/libs/metadata.c:566 ../src/libs/metadata_view.c:1232
 msgid "visible"
@@ -20736,10 +20749,10 @@ msgstr[0] "ĉu vi vere volas forigi %d stilon?"
 msgstr[1] "ĉu vi vere volas forigi %d stilojn?"
 
 #: ../src/libs/styles.c:344
-msgid "remove style?"
-msgid_plural "remove styles?"
-msgstr[0] "ĉu forigi stilon?"
-msgstr[1] "forigi stilojn?"
+msgid "Remove style?"
+msgid_plural "Remove styles?"
+msgstr[0] "Ĉu forigi stilon?"
+msgstr[1] "Forigi stilojn?"
 
 #: ../src/libs/styles.c:468 ../src/libs/styles.c:652
 #, c-format
@@ -20760,8 +20773,8 @@ msgid "style %s was successfully exported"
 msgstr "stilo %s estas sukcese eksportita"
 
 #: ../src/libs/styles.c:551
-msgid "select style"
-msgstr "elektu srilon"
+msgid "Select style"
+msgstr "Elektu srilon"
 
 #: ../src/libs/styles.c:561
 #, fuzzy
@@ -20860,8 +20873,8 @@ msgid "detach all tags"
 msgstr "malligi etikedon"
 
 #: ../src/libs/tagging.c:1461
-msgid "delete node?"
-msgstr "forviŝi nodon?"
+msgid "Delete node?"
+msgstr "Forviŝi nodon?"
 
 #: ../src/libs/tagging.c:1468 ../src/libs/tagging.c:1683
 #: ../src/libs/tagging.c:1968
@@ -20890,8 +20903,8 @@ msgid "%d tags removed"
 msgstr "%d etikedoj forigitaj"
 
 #: ../src/libs/tagging.c:1543
-msgid "create tag"
-msgstr "krei etikedon"
+msgid "Create tag"
+msgstr "Krei etikedon"
 
 #: ../src/libs/tagging.c:1553 ../src/libs/tagging.c:1703
 msgid "name: "
@@ -20949,16 +20962,16 @@ msgid "at least one new tagname (%s) already exists, aborting."
 msgstr "almenaŭ unu nova etikednomo (%s) jam ekzistas, abortante."
 
 #: ../src/libs/tagging.c:1961
-msgid "change path"
-msgstr "ŝanĝi vojon"
+msgid "Change path"
+msgstr "Ŝanĝi vojon"
 
 #: ../src/libs/tagging.c:2005
 msgid "'|' misplaced, empty tag is not allowed, aborting"
 msgstr "'|' mislokigita, malplena etikedo ne estas permesata, abortante"
 
 #: ../src/libs/tagging.c:2088
-msgid "delete tag?"
-msgstr "forviŝi etikedon?"
+msgid "Delete tag?"
+msgstr "Forviŝi etikedon?"
 
 #: ../src/libs/tagging.c:2092
 #, fuzzy, c-format
@@ -21022,8 +21035,8 @@ msgid "(private)"
 msgstr "(privata)"
 
 #: ../src/libs/tagging.c:2435
-msgid "select a keyword file"
-msgstr "elekti ŝlosilvortan dosieron"
+msgid "Select a keyword file"
+msgstr "Elekti ŝlosilvortan dosieron"
 
 #: ../src/libs/tagging.c:2436
 msgid "_import"
@@ -21035,8 +21048,8 @@ msgid "%u tags imported"
 msgstr "%zd etikedoj importitaj"
 
 #: ../src/libs/tagging.c:2468
-msgid "select file to export to"
-msgstr "elekti celan dosieron por eksporto"
+msgid "Select file to export to"
+msgstr "Elekti celan dosieron por eksporto"
 
 #: ../src/libs/tagging.c:2469
 msgid "_export"
@@ -21116,8 +21129,8 @@ msgstr "alligi etikedon al ĉiuj elektitaj bildoj"
 
 #: ../src/libs/tagging.c:3248
 #, fuzzy
-msgid "manage tags"
-msgstr "geo-etikedoj"
+msgid "Manage tags"
+msgstr "Geo-etikedoj"
 
 #: ../src/libs/tagging.c:3263
 msgid "type to filter the tag dictionary below"
@@ -22083,7 +22096,7 @@ msgid "no LUT to save"
 msgstr "nenio konservenda"
 
 #: ../src/common/lut_viewer.c:1207
-msgid "save 3D LUT"
+msgid "Save 3D LUT"
 msgstr ""
 
 #: ../src/common/lut_viewer.c:1222

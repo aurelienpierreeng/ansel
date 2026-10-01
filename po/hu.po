@@ -660,6 +660,9 @@ msgstr "3D lut gyökérkönyvtár"
 msgid "select directory"
 msgstr "könyvtár kiválasztása"
 
+msgid "Select directory"
+msgstr "Könyvtár kiválasztása"
+
 #: ../build/src/preferences_gen.h:3047
 msgid ""
 "this folder (and sub-folders) contains Lut files used by lut3d modules. "
@@ -3935,6 +3938,9 @@ msgstr "modul"
 msgid "module order"
 msgstr "modulsorrend"
 
+msgid "Module order"
+msgstr "Modulsorrend"
+
 #: ../src/common/collection.c:685 ../src/develop/lightroom.c:1505
 #: ../src/libs/tools/filter.c:119
 msgid "rating"
@@ -4712,7 +4718,7 @@ msgstr ""
 "szeretné folytatni, vagy most kilép, hogy biztonsági mentést készítsen\n"
 
 #: ../src/common/database.c:2911
-msgid "ansel - schema migration"
+msgid "Ansel - schema migration"
 msgstr ""
 
 #: ../src/common/database.c:2912 ../src/common/database.c:3265
@@ -4757,7 +4763,7 @@ msgstr ""
 
 #: ../src/common/database.c:3262 ../src/common/database.c:3280
 #: ../src/common/database.c:3440 ../src/common/database.c:3458
-msgid "ansel - error opening database"
+msgid "Ansel - error opening database"
 msgstr ""
 
 #: ../src/common/database.c:3267 ../src/common/database.c:3445
@@ -4838,8 +4844,8 @@ msgstr ""
 
 #: ../src/common/database.c:3815
 #, fuzzy
-msgid "ansel - schema maintenance"
-msgstr "raszter maszk példány"
+msgid "Ansel - schema maintenance"
+msgstr "Raszter maszk példány"
 
 #: ../src/common/database.c:3816
 msgid "later"
@@ -4883,10 +4889,10 @@ msgstr[0] "biztosan el szeretné távolítani ezt az üres könyvtárat?"
 msgstr[1] "biztosan el szeretné távolítani ezeket az üres könyvtárakat?"
 
 #: ../src/common/film.c:297
-msgid "remove empty directory?"
-msgid_plural "remove empty directories?"
-msgstr[0] "eltávolítja az üres könyvtárat?"
-msgstr[1] "eltávolítja az üres könyvtárakat?"
+msgid "Remove empty directory?"
+msgid_plural "Remove empty directories?"
+msgstr[0] "Eltávolítja az üres könyvtárat?"
+msgstr[1] "Eltávolítja az üres könyvtárakat?"
 
 #: ../src/common/film.c:317 ../src/gui/preferences.c:979
 #: ../src/gui/styles_dialog.c:466 ../src/libs/collect.c:3003
@@ -6002,8 +6008,8 @@ msgid "time difference"
 msgstr "időkülönbség"
 
 #: ../src/control/crawler.c:785
-msgid "updated XMP sidecar files found"
-msgstr "frissített XMP kísérőfájlok találhatóak"
+msgid "Updated XMP sidecar files found"
+msgstr "Frissített XMP kísérőfájlok találhatóak"
 
 #: ../src/control/crawler.c:786
 msgid "_close"
@@ -6137,12 +6143,12 @@ msgid "stop process"
 msgstr "folyamat megszakítása"
 
 #: ../src/control/jobs/control_jobs.c:901
-msgid "trashing error"
-msgstr "kukába dobási hiba"
+msgid "Trashing error"
+msgstr "Kukába dobási hiba"
 
 #: ../src/control/jobs/control_jobs.c:902
-msgid "deletion error"
-msgstr "törlési hiba"
+msgid "Deletion error"
+msgstr "Törlési hiba"
 
 #: ../src/control/jobs/control_jobs.c:1044
 #, c-format
@@ -6335,12 +6341,15 @@ msgstr ""
 "biztosan szeretné fizikailag törölni a kiválasztott képeket a lemezről?"
 
 #: ../src/control/jobs/control_jobs.c:1736
-msgid "delete image?"
-msgstr "törli a képet?"
+msgid "Delete image?"
+msgstr "Törli a képet?"
 
 #: ../src/control/jobs/control_jobs.c:1754 ../src/libs/collect.c:2059
 msgid "move images"
 msgstr "képek áthelyezése"
+
+msgid "Move images"
+msgstr "Képek áthelyezése"
 
 #: ../src/control/jobs/control_jobs.c:1766
 #: ../src/control/jobs/control_jobs.c:1828
@@ -6363,10 +6372,10 @@ msgstr[1] ""
 "(a nem kiválasztott duplikátumok is át lesznek helyezve)"
 
 #: ../src/control/jobs/control_jobs.c:1795
-msgid "move image?"
-msgid_plural "move images?"
-msgstr[0] "áthelyezi a képet?"
-msgstr[1] "áthelyezi a képeket?"
+msgid "Move image?"
+msgid_plural "Move images?"
+msgstr[0] "Áthelyezi a képet?"
+msgstr[1] "Áthelyezi a képeket?"
 
 #: ../src/control/jobs/control_jobs.c:1816
 msgid "copy images"
@@ -6380,10 +6389,10 @@ msgstr[0] "biztosan szeretne %d képet fizikailag ide másolni: %s?"
 msgstr[1] "biztosan szeretne %d képet fizikailag ide másolni: %s?"
 
 #: ../src/control/jobs/control_jobs.c:1854
-msgid "copy image?"
-msgid_plural "copy images?"
-msgstr[0] "átmásolja a képet?"
-msgstr[1] "átmásolja a képeket?"
+msgid "Copy image?"
+msgid_plural "Copy images?"
+msgstr[0] "Átmásolja a képet?"
+msgstr[1] "Átmásolja a képeket?"
 
 #: ../src/control/jobs/control_jobs.c:1874
 #: ../src/control/jobs/control_jobs.c:1882
@@ -9143,8 +9152,8 @@ msgid "failed to import preset %s"
 msgstr "%s tárolt beállítás importálása sikertelen"
 
 #: ../src/gui/preferences.c:1184
-msgid "select preset(s) to import"
-msgstr "válasszon importálandó tárolt beállításokat"
+msgid "Select preset(s) to import"
+msgstr "Válasszon importálandó tárolt beállításokat"
 
 #: ../src/gui/preferences.c:1185 ../src/gui/actions/edit.c:305
 #: ../src/libs/collect.c:1841 ../src/libs/geotagging.c:959
@@ -9191,8 +9200,8 @@ msgid "do you really want to delete the preset `%s'?"
 msgstr "biztosan törli a(z) „%s” tárolt beállítást?"
 
 #: ../src/gui/presets.c:303 ../src/gui/presets.c:532 ../src/libs/lib.c:321
-msgid "delete preset?"
-msgstr "törli a tárolt beállítást?"
+msgid "Delete preset?"
+msgstr "Törli a tárolt beállítást?"
 
 #. add new preset
 #. then show edit dialog
@@ -9209,8 +9218,8 @@ msgid "please give preset a name"
 msgstr "adja meg a tárolt beállítás nevét"
 
 #: ../src/gui/presets.c:339
-msgid "unnamed preset"
-msgstr "névtelen tárolt beállítás"
+msgid "Unnamed preset"
+msgstr "Névtelen tárolt beállítás"
 
 #: ../src/gui/presets.c:368
 #, c-format
@@ -9222,8 +9231,8 @@ msgstr ""
 "biztosan felülírja?"
 
 #: ../src/gui/presets.c:373
-msgid "overwrite preset?"
-msgstr "felülírja a tárolt beállítást?"
+msgid "Overwrite preset?"
+msgstr "Felülírja a tárolt beállítást?"
 
 #: ../src/gui/presets.c:490 ../src/imageio/storage/disk.c:154
 #: ../src/imageio/storage/gallery.c:142
@@ -9237,7 +9246,7 @@ msgstr "%s tárolt beállítás sikeresen exportálva"
 
 #: ../src/gui/presets.c:565
 #, c-format
-msgid "edit `%s' for module `%s'"
+msgid "Edit `%s' for module `%s'"
 msgstr "„%s” szerkesztése „%s” modulhoz"
 
 #: ../src/gui/presets.c:568
@@ -9337,8 +9346,8 @@ msgid "do you really want to update the preset `%s'?"
 msgstr "biztosan frissíteni szeretné a(z) „%s” tárolt beállítást?"
 
 #: ../src/gui/presets.c:921 ../src/libs/lib.c:236
-msgid "update preset?"
-msgstr "frissíti a tárolt beállítást?"
+msgid "Update preset?"
+msgstr "Frissíti a tárolt beállítást?"
 
 #: ../src/gui/presets.c:1245
 msgid "(default)"
@@ -9423,16 +9432,16 @@ msgstr ""
 
 #: ../src/gui/styles_dialog.c:230 ../src/libs/styles.c:461
 #: ../src/libs/styles.c:645
-msgid "overwrite style?"
-msgstr "felülírja a stílust?"
+msgid "Overwrite style?"
+msgstr "Felülírja a stílust?"
 
 #: ../src/gui/styles_dialog.c:259 ../src/gui/styles_dialog.c:318
 msgid "please give style a name"
 msgstr "adjon nevet a stílusnak"
 
 #: ../src/gui/styles_dialog.c:263 ../src/gui/styles_dialog.c:322
-msgid "unnamed style"
-msgstr "névtelen stílus"
+msgid "Unnamed style"
+msgstr "Névtelen stílus"
 
 #: ../src/gui/styles_dialog.c:310
 #, c-format
@@ -9440,8 +9449,8 @@ msgid "style %s was successfully saved"
 msgstr "%s stílus sikeresen elmentve"
 
 #: ../src/gui/styles_dialog.c:425
-msgid "edit style"
-msgstr "stílus szerkesztése"
+msgid "Edit style"
+msgstr "Stílus szerkesztése"
 
 #: ../src/gui/styles_dialog.c:426
 msgid "duplicate style"
@@ -9452,8 +9461,8 @@ msgid "creates a duplicate of the style before applying changes"
 msgstr "a változtatások érvényesítése előtt másolatot hoz létre a stílusról"
 
 #: ../src/gui/styles_dialog.c:431
-msgid "create new style"
-msgstr "új stílus létrehozása"
+msgid "Create new style"
+msgstr "Új stílus létrehozása"
 
 #: ../src/gui/styles_dialog.c:467
 msgid "enter a name for the new style"
@@ -9630,8 +9639,8 @@ msgid "Paste history (parts) — merge settings"
 msgstr ""
 
 #: ../src/gui/actions/edit.c:304
-msgid "open sidecar file"
-msgstr "kísérőfájl megnyitása"
+msgid "Open sidecar file"
+msgstr "Kísérőfájl megnyitása"
 
 #: ../src/gui/actions/edit.c:337
 msgid "XMP sidecar files"
@@ -9857,8 +9866,8 @@ msgid "do you want to access ansel.photos ?"
 msgstr ""
 
 #: ../src/gui/actions/help.c:146
-msgid "access the online usermanual?"
-msgstr "megnyitja az online kézikönyvet?"
+msgid "Access the online usermanual?"
+msgstr "Megnyitja az online kézikönyvet?"
 
 #: ../src/gui/actions/help.c:158
 msgid "help url opened in web browser"
@@ -16732,8 +16741,8 @@ msgid "lut root folder not defined"
 msgstr "lut gyökérkönyvtár nincs megadva"
 
 #: ../src/iop/lut3d.c:1339
-msgid "select lut file"
-msgstr "lut fájl kiválasztása"
+msgid "Select lut file"
+msgstr "Lut fájl kiválasztása"
 
 #: ../src/iop/lut3d.c:1340
 msgid "_select"
@@ -18612,13 +18621,13 @@ msgstr "kategorizálatlan"
 
 #: ../src/libs/collect.c:1840
 #, fuzzy
-msgid "select the new location of this folder"
-msgstr "árnyalat telítettség meghatározása"
+msgid "Select the new location of this folder"
+msgstr "Árnyalat telítettség meghatározása"
 
 #: ../src/libs/collect.c:1840
 #, fuzzy
-msgid "select the new parent folder"
-msgstr "árnyalat telítettség meghatározása"
+msgid "Select the new parent folder"
+msgstr "Árnyalat telítettség meghatározása"
 
 #: ../src/libs/collect.c:1873
 #, fuzzy
@@ -18637,10 +18646,14 @@ msgstr[1] "címke eltávolítása a kijelölt képekről"
 msgid "delete tags"
 msgstr "címke törlése"
 
+#, fuzzy
+msgid "Delete tags"
+msgstr "Címke törlése"
+
 #: ../src/libs/collect.c:1906
 #, fuzzy
-msgid "rename tag"
-msgstr "címke létrehozása"
+msgid "Rename tag"
+msgstr "Címke létrehozása"
 
 #: ../src/libs/collect.c:1971
 #, fuzzy
@@ -18914,8 +18927,8 @@ msgid "Duplicates"
 msgstr "stílus duplikálása"
 
 #: ../src/libs/export.c:347
-msgid "export to disk"
-msgstr "exportálás lemezre"
+msgid "Export to disk"
+msgstr "Exportálás lemezre"
 
 #: ../src/libs/export.c:505
 #, c-format
@@ -19118,8 +19131,8 @@ msgid "export with current settings"
 msgstr "exportálás a jelenlegi beállításokkal"
 
 #: ../src/libs/export_metadata.c:174
-msgid "select tag"
-msgstr "címke kiválasztása"
+msgid "Select tag"
+msgstr "Címke kiválasztása"
 
 #: ../src/libs/export_metadata.c:175
 msgid "add"
@@ -19142,8 +19155,8 @@ msgstr ""
 "gombra vagy duplán a címkére"
 
 #: ../src/libs/export_metadata.c:302
-msgid "edit metadata exportation"
-msgstr "metaadat exportálás szerkesztése"
+msgid "Edit metadata exportation"
+msgstr "Metaadat exportálás szerkesztése"
 
 #: ../src/libs/export_metadata.c:303 ../src/libs/metadata.c:518
 #: ../src/libs/metadata_view.c:1188 ../src/libs/styles.c:462
@@ -19349,7 +19362,7 @@ msgid "images"
 msgstr "képek"
 
 #: ../src/libs/geotagging.c:956
-msgid "open GPX file"
+msgid "Open GPX file"
 msgstr "GPX fájl megnyitása"
 
 #: ../src/libs/geotagging.c:970
@@ -19864,8 +19877,8 @@ msgstr ""
 
 #: ../src/libs/ioporder.c:1536
 #, fuzzy
-msgid "save module order preset"
-msgstr "modulsorrend"
+msgid "Save module order preset"
+msgstr "Modulsorrend"
 
 #: ../src/libs/ioporder.c:1545
 #, fuzzy
@@ -20134,8 +20147,8 @@ msgid "<leave unchanged>"
 msgstr "<változatlanul hagy>"
 
 #: ../src/libs/metadata.c:516 ../src/libs/metadata_view.c:1186
-msgid "metadata settings"
-msgstr "metaadat beállítások"
+msgid "Metadata settings"
+msgstr "Metaadat beállítások"
 
 #: ../src/libs/metadata.c:566 ../src/libs/metadata_view.c:1232
 msgid "visible"
@@ -20838,10 +20851,10 @@ msgstr[0] "biztosan töröl %d stílust?"
 msgstr[1] "biztosan töröl %d stílust?"
 
 #: ../src/libs/styles.c:344
-msgid "remove style?"
-msgid_plural "remove styles?"
-msgstr[0] "eltávolítja a stílust?"
-msgstr[1] "eltávolítja a stílusokat?"
+msgid "Remove style?"
+msgid_plural "Remove styles?"
+msgstr[0] "Eltávolítja a stílust?"
+msgstr[1] "Eltávolítja a stílusokat?"
 
 #: ../src/libs/styles.c:468 ../src/libs/styles.c:652
 #, c-format
@@ -20862,8 +20875,8 @@ msgid "style %s was successfully exported"
 msgstr "%s stílus sikeresen exportálva"
 
 #: ../src/libs/styles.c:551
-msgid "select style"
-msgstr "stílus választása"
+msgid "Select style"
+msgstr "Stílus választása"
 
 #: ../src/libs/styles.c:561
 #, fuzzy
@@ -20962,8 +20975,8 @@ msgid "detach all tags"
 msgstr "címke leválasztása"
 
 #: ../src/libs/tagging.c:1461
-msgid "delete node?"
-msgstr "törli a pontot?"
+msgid "Delete node?"
+msgstr "Törli a pontot?"
 
 #: ../src/libs/tagging.c:1468 ../src/libs/tagging.c:1683
 #: ../src/libs/tagging.c:1968
@@ -20992,8 +21005,8 @@ msgid "%d tags removed"
 msgstr "%d címke eltávolítva"
 
 #: ../src/libs/tagging.c:1543
-msgid "create tag"
-msgstr "címke létrehozása"
+msgid "Create tag"
+msgstr "Címke létrehozása"
 
 #: ../src/libs/tagging.c:1553 ../src/libs/tagging.c:1703
 msgid "name: "
@@ -21051,8 +21064,8 @@ msgid "at least one new tagname (%s) already exists, aborting."
 msgstr "már létezik legalább egy új címkenév (%s), megszakítás."
 
 #: ../src/libs/tagging.c:1961
-msgid "change path"
-msgstr "útvonal módosítása"
+msgid "Change path"
+msgstr "Útvonal módosítása"
 
 #: ../src/libs/tagging.c:2005
 msgid "'|' misplaced, empty tag is not allowed, aborting"
@@ -21060,8 +21073,8 @@ msgstr ""
 "a „|” karakter rossz helyen van, üres címke nem engedélyezett. megszakítás"
 
 #: ../src/libs/tagging.c:2088
-msgid "delete tag?"
-msgstr "törli a címkét?"
+msgid "Delete tag?"
+msgstr "Törli a címkét?"
 
 #: ../src/libs/tagging.c:2092
 #, fuzzy, c-format
@@ -21125,8 +21138,8 @@ msgid "(private)"
 msgstr "(privát)"
 
 #: ../src/libs/tagging.c:2435
-msgid "select a keyword file"
-msgstr "válasszon egy kulcsszó fájlt"
+msgid "Select a keyword file"
+msgstr "Válasszon egy kulcsszó fájlt"
 
 #: ../src/libs/tagging.c:2436
 msgid "_import"
@@ -21138,8 +21151,8 @@ msgid "%u tags imported"
 msgstr "%zd címke importálva"
 
 #: ../src/libs/tagging.c:2468
-msgid "select file to export to"
-msgstr "válassza ki a fájlt, amibe exportálni fog"
+msgid "Select file to export to"
+msgstr "Válassza ki a fájlt, amibe exportálni fog"
 
 #: ../src/libs/tagging.c:2469
 msgid "_export"
@@ -21219,8 +21232,8 @@ msgstr "címke hozzárendelése a kijelölt képekhez"
 
 #: ../src/libs/tagging.c:3248
 #, fuzzy
-msgid "manage tags"
-msgstr "geotagek"
+msgid "Manage tags"
+msgstr "Geotagek"
 
 #: ../src/libs/tagging.c:3263
 msgid "type to filter the tag dictionary below"
@@ -22186,7 +22199,7 @@ msgid "no LUT to save"
 msgstr "nincs mit elmenteni"
 
 #: ../src/common/lut_viewer.c:1207
-msgid "save 3D LUT"
+msgid "Save 3D LUT"
 msgstr ""
 
 #: ../src/common/lut_viewer.c:1222

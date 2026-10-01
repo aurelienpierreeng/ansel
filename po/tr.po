@@ -663,6 +663,9 @@ msgstr ""
 msgid "select directory"
 msgstr "dizini seç"
 
+msgid "Select directory"
+msgstr "Dizini seç"
+
 #: ../build/src/preferences_gen.h:3047
 msgid ""
 "this folder (and sub-folders) contains Lut files used by lut3d modules. "
@@ -3931,6 +3934,9 @@ msgstr "modül"
 msgid "module order"
 msgstr "modül siparişi"
 
+msgid "Module order"
+msgstr "Modül siparişi"
+
 #: ../src/common/collection.c:685 ../src/develop/lightroom.c:1505
 #: ../src/libs/tools/filter.c:119
 msgid "rating"
@@ -4707,7 +4713,7 @@ msgstr ""
 "yedekleme yapmak için devam etmek mi yoksa şimdi çıkmak mı istiyorsunuz\n"
 
 #: ../src/common/database.c:2911
-msgid "ansel - schema migration"
+msgid "Ansel - schema migration"
 msgstr ""
 
 #: ../src/common/database.c:2912 ../src/common/database.c:3265
@@ -4752,7 +4758,7 @@ msgstr ""
 
 #: ../src/common/database.c:3262 ../src/common/database.c:3280
 #: ../src/common/database.c:3440 ../src/common/database.c:3458
-msgid "ansel - error opening database"
+msgid "Ansel - error opening database"
 msgstr ""
 
 #: ../src/common/database.c:3267 ../src/common/database.c:3445
@@ -4833,8 +4839,8 @@ msgstr ""
 
 #: ../src/common/database.c:3815
 #, fuzzy
-msgid "ansel - schema maintenance"
-msgstr "raster maske örneği"
+msgid "Ansel - schema maintenance"
+msgstr "Raster maske örneği"
 
 #: ../src/common/database.c:3816
 msgid "later"
@@ -4876,10 +4882,10 @@ msgstr[0] "bu boş dizini kaldırmak istiyor musunuz?"
 msgstr[1] "bu boş dizinleri kaldırmak istiyor musunuz?"
 
 #: ../src/common/film.c:297
-msgid "remove empty directory?"
-msgid_plural "remove empty directories?"
-msgstr[0] "boş dizini kaldır?"
-msgstr[1] "boş dizinleri kaldır?"
+msgid "Remove empty directory?"
+msgid_plural "Remove empty directories?"
+msgstr[0] "Boş dizini kaldır?"
+msgstr[1] "Boş dizinleri kaldır?"
 
 #: ../src/common/film.c:317 ../src/gui/preferences.c:979
 #: ../src/gui/styles_dialog.c:466 ../src/libs/collect.c:3003
@@ -5994,8 +6000,8 @@ msgid "time difference"
 msgstr "zaman farkı"
 
 #: ../src/control/crawler.c:785
-msgid "updated XMP sidecar files found"
-msgstr "güncellenmiş XMP sepet dosyaları bulundu"
+msgid "Updated XMP sidecar files found"
+msgstr "Güncellenmiş XMP sepet dosyaları bulundu"
 
 #: ../src/control/crawler.c:786
 msgid "_close"
@@ -6127,12 +6133,12 @@ msgid "stop process"
 msgstr "süreci durdur"
 
 #: ../src/control/jobs/control_jobs.c:901
-msgid "trashing error"
-msgstr "çöpe atma hatası"
+msgid "Trashing error"
+msgstr "Çöpe atma hatası"
 
 #: ../src/control/jobs/control_jobs.c:902
-msgid "deletion error"
-msgstr "silme hatası"
+msgid "Deletion error"
+msgstr "Silme hatası"
 
 #: ../src/control/jobs/control_jobs.c:1044
 #, c-format
@@ -6326,12 +6332,15 @@ msgstr ""
 "gerçekten seçilen görüntüyü diskten fiziksel olarak silmek istiyor musunuz?"
 
 #: ../src/control/jobs/control_jobs.c:1736
-msgid "delete image?"
-msgstr "görüntüyü sil?"
+msgid "Delete image?"
+msgstr "Görüntüyü sil?"
 
 #: ../src/control/jobs/control_jobs.c:1754 ../src/libs/collect.c:2059
 msgid "move images"
 msgstr "görüntüleri taşı"
+
+msgid "Move images"
+msgstr "Görüntüleri taşı"
 
 #: ../src/control/jobs/control_jobs.c:1766
 #: ../src/control/jobs/control_jobs.c:1828
@@ -6354,10 +6363,10 @@ msgstr[1] ""
 "(tüm kopyalar birlikte taşınacaktır)"
 
 #: ../src/control/jobs/control_jobs.c:1795
-msgid "move image?"
-msgid_plural "move images?"
-msgstr[0] "görüntü taşınsın mı?"
-msgstr[1] "görüntüler taşınsın mı?"
+msgid "Move image?"
+msgid_plural "Move images?"
+msgstr[0] "Görüntü taşınsın mı?"
+msgstr[1] "Görüntüler taşınsın mı?"
 
 #: ../src/control/jobs/control_jobs.c:1816
 msgid "copy images"
@@ -6373,10 +6382,10 @@ msgstr[1] ""
 "gerçekten %d görüntülerini %s'e fiziksel olarak kopyalamak istiyor musunuz?"
 
 #: ../src/control/jobs/control_jobs.c:1854
-msgid "copy image?"
-msgid_plural "copy images?"
-msgstr[0] "görüntü kopyalansın mı?"
-msgstr[1] "görüntüler kopyalansın mı?"
+msgid "Copy image?"
+msgid_plural "Copy images?"
+msgstr[0] "Görüntü kopyalansın mı?"
+msgstr[1] "Görüntüler kopyalansın mı?"
 
 #: ../src/control/jobs/control_jobs.c:1874
 #: ../src/control/jobs/control_jobs.c:1882
@@ -9126,8 +9135,8 @@ msgid "failed to import preset %s"
 msgstr "%s ön ayarı içe aktarılamadı"
 
 #: ../src/gui/preferences.c:1184
-msgid "select preset(s) to import"
-msgstr "içe aktarılacak ön ayar(lar)ı seçin"
+msgid "Select preset(s) to import"
+msgstr "İçe aktarılacak ön ayar(lar)ı seçin"
 
 #: ../src/gui/preferences.c:1185 ../src/gui/actions/edit.c:305
 #: ../src/libs/collect.c:1841 ../src/libs/geotagging.c:959
@@ -9174,8 +9183,8 @@ msgid "do you really want to delete the preset `%s'?"
 msgstr "`%s' ön ayarını gerçekten silmek istiyor musunuz?"
 
 #: ../src/gui/presets.c:303 ../src/gui/presets.c:532 ../src/libs/lib.c:321
-msgid "delete preset?"
-msgstr "ön ayar silinsin mi?"
+msgid "Delete preset?"
+msgstr "Ön ayar silinsin mi?"
 
 #. add new preset
 #. then show edit dialog
@@ -9192,8 +9201,8 @@ msgid "please give preset a name"
 msgstr "lütfen ön ayara bir ad verin"
 
 #: ../src/gui/presets.c:339
-msgid "unnamed preset"
-msgstr "adsız ön ayar"
+msgid "Unnamed preset"
+msgstr "Adsız ön ayar"
 
 #: ../src/gui/presets.c:368
 #, c-format
@@ -9205,8 +9214,8 @@ msgstr ""
 "üzerine yazmak ister misin?"
 
 #: ../src/gui/presets.c:373
-msgid "overwrite preset?"
-msgstr "ön ayarın üzerine yazılsın mı?"
+msgid "Overwrite preset?"
+msgstr "Ön ayarın üzerine yazılsın mı?"
 
 #: ../src/gui/presets.c:490 ../src/imageio/storage/disk.c:154
 #: ../src/imageio/storage/gallery.c:142
@@ -9220,7 +9229,7 @@ msgstr "%s ön ayarı başarıyla dışa aktarıldı"
 
 #: ../src/gui/presets.c:565
 #, c-format
-msgid "edit `%s' for module `%s'"
+msgid "Edit `%s' for module `%s'"
 msgstr "'%s' modülü için '%s'yi düzenle"
 
 #: ../src/gui/presets.c:568
@@ -9318,8 +9327,8 @@ msgid "do you really want to update the preset `%s'?"
 msgstr "`%s' ön ayarını gerçekten güncellemek istiyor musunuz?"
 
 #: ../src/gui/presets.c:921 ../src/libs/lib.c:236
-msgid "update preset?"
-msgstr "ön ayar güncellensin mi?"
+msgid "Update preset?"
+msgstr "Ön ayar güncellensin mi?"
 
 #: ../src/gui/presets.c:1245
 msgid "(default)"
@@ -9404,16 +9413,16 @@ msgstr ""
 
 #: ../src/gui/styles_dialog.c:230 ../src/libs/styles.c:461
 #: ../src/libs/styles.c:645
-msgid "overwrite style?"
-msgstr "tarzın üzerine yazılsınmı?"
+msgid "Overwrite style?"
+msgstr "Tarzın üzerine yazılsınmı?"
 
 #: ../src/gui/styles_dialog.c:259 ../src/gui/styles_dialog.c:318
 msgid "please give style a name"
 msgstr "lütfen tarza bir isim verin"
 
 #: ../src/gui/styles_dialog.c:263 ../src/gui/styles_dialog.c:322
-msgid "unnamed style"
-msgstr "isimsiz tarz"
+msgid "Unnamed style"
+msgstr "İsimsiz tarz"
 
 #: ../src/gui/styles_dialog.c:310
 #, c-format
@@ -9421,8 +9430,8 @@ msgid "style %s was successfully saved"
 msgstr "tarz %s başarıyla kaydedildi"
 
 #: ../src/gui/styles_dialog.c:425
-msgid "edit style"
-msgstr "tarzı düzenle"
+msgid "Edit style"
+msgstr "Tarzı düzenle"
 
 #: ../src/gui/styles_dialog.c:426
 msgid "duplicate style"
@@ -9433,8 +9442,8 @@ msgid "creates a duplicate of the style before applying changes"
 msgstr "değişiklikleri uygulamadan önce tarzın bir kopyasını oluşturur"
 
 #: ../src/gui/styles_dialog.c:431
-msgid "create new style"
-msgstr "yeni tarz oluştur"
+msgid "Create new style"
+msgstr "Yeni tarz oluştur"
 
 #: ../src/gui/styles_dialog.c:467
 msgid "enter a name for the new style"
@@ -9611,8 +9620,8 @@ msgid "Paste history (parts) — merge settings"
 msgstr ""
 
 #: ../src/gui/actions/edit.c:304
-msgid "open sidecar file"
-msgstr "sepet dosyasını aç"
+msgid "Open sidecar file"
+msgstr "Sepet dosyasını aç"
 
 #: ../src/gui/actions/edit.c:337
 msgid "XMP sidecar files"
@@ -9838,8 +9847,8 @@ msgid "do you want to access ansel.photos ?"
 msgstr ""
 
 #: ../src/gui/actions/help.c:146
-msgid "access the online usermanual?"
-msgstr "çevrimiçi kullanım kılavuzuna erişin?"
+msgid "Access the online usermanual?"
+msgstr "Çevrimiçi kullanım kılavuzuna erişin?"
 
 #: ../src/gui/actions/help.c:158
 msgid "help url opened in web browser"
@@ -16664,8 +16673,8 @@ msgid "lut root folder not defined"
 msgstr ""
 
 #: ../src/iop/lut3d.c:1339
-msgid "select lut file"
-msgstr "lut dosyasını seç"
+msgid "Select lut file"
+msgstr "Lut dosyasını seç"
 
 #: ../src/iop/lut3d.c:1340
 msgid "_select"
@@ -18529,13 +18538,13 @@ msgstr "kategorisiz"
 
 #: ../src/libs/collect.c:1840
 #, fuzzy
-msgid "select the new location of this folder"
-msgstr "filtrenin tonunu seçin"
+msgid "Select the new location of this folder"
+msgstr "Filtrenin tonunu seçin"
 
 #: ../src/libs/collect.c:1840
 #, fuzzy
-msgid "select the new parent folder"
-msgstr "ton tonunu seç"
+msgid "Select the new parent folder"
+msgstr "Ton tonunu seç"
 
 #: ../src/libs/collect.c:1873
 #, fuzzy
@@ -18554,10 +18563,14 @@ msgstr[1] "seçili tüm görüntülerden etiketi ayır"
 msgid "delete tags"
 msgstr "etiketi sil"
 
+#, fuzzy
+msgid "Delete tags"
+msgstr "Etiketi sil"
+
 #: ../src/libs/collect.c:1906
 #, fuzzy
-msgid "rename tag"
-msgstr "etiket oluştur"
+msgid "Rename tag"
+msgstr "Etiket oluştur"
 
 #: ../src/libs/collect.c:1971
 #, fuzzy
@@ -18826,8 +18839,8 @@ msgid "Duplicates"
 msgstr "yinelenen tarz"
 
 #: ../src/libs/export.c:347
-msgid "export to disk"
-msgstr "diske aktar"
+msgid "Export to disk"
+msgstr "Diske aktar"
 
 #: ../src/libs/export.c:505
 #, c-format
@@ -19030,8 +19043,8 @@ msgid "export with current settings"
 msgstr "mevcut ayarlarla dışa aktar"
 
 #: ../src/libs/export_metadata.c:174
-msgid "select tag"
-msgstr "etiket seç"
+msgid "Select tag"
+msgstr "Etiket seç"
 
 #: ../src/libs/export_metadata.c:175
 msgid "add"
@@ -19054,8 +19067,8 @@ msgstr ""
 "tıklayın veya etikete çift tıklayın"
 
 #: ../src/libs/export_metadata.c:302
-msgid "edit metadata exportation"
-msgstr "üst veri dışa aktarımını düzenle"
+msgid "Edit metadata exportation"
+msgstr "Üst veri dışa aktarımını düzenle"
 
 #: ../src/libs/export_metadata.c:303 ../src/libs/metadata.c:518
 #: ../src/libs/metadata_view.c:1188 ../src/libs/styles.c:462
@@ -19252,7 +19265,7 @@ msgid "images"
 msgstr "görüntüler"
 
 #: ../src/libs/geotagging.c:956
-msgid "open GPX file"
+msgid "Open GPX file"
 msgstr "GPX dosyasını aç"
 
 #: ../src/libs/geotagging.c:970
@@ -19769,8 +19782,8 @@ msgstr ""
 
 #: ../src/libs/ioporder.c:1536
 #, fuzzy
-msgid "save module order preset"
-msgstr "modül siparişi"
+msgid "Save module order preset"
+msgstr "Modül siparişi"
 
 #: ../src/libs/ioporder.c:1545
 #, fuzzy
@@ -20024,8 +20037,8 @@ msgid "<leave unchanged>"
 msgstr "<degismeden birakilan>"
 
 #: ../src/libs/metadata.c:516 ../src/libs/metadata_view.c:1186
-msgid "metadata settings"
-msgstr "üstveri ayarları"
+msgid "Metadata settings"
+msgstr "Üstveri ayarları"
 
 #: ../src/libs/metadata.c:566 ../src/libs/metadata_view.c:1232
 msgid "visible"
@@ -20716,10 +20729,10 @@ msgstr[0] "%d tarzını gerçekten kaldırmak istiyor musunuz?"
 msgstr[1] "%d tarzları gerçekten kaldırmak istiyor musunuz?"
 
 #: ../src/libs/styles.c:344
-msgid "remove style?"
-msgid_plural "remove styles?"
-msgstr[0] "tarz kaldırılsınmı?"
-msgstr[1] "tarzlar kaldırılsınmı?"
+msgid "Remove style?"
+msgid_plural "Remove styles?"
+msgstr[0] "Tarz kaldırılsınmı?"
+msgstr[1] "Tarzlar kaldırılsınmı?"
 
 #: ../src/libs/styles.c:468 ../src/libs/styles.c:652
 #, c-format
@@ -20740,8 +20753,8 @@ msgid "style %s was successfully exported"
 msgstr "%s tarzı başarıyla dışa aktarıldı"
 
 #: ../src/libs/styles.c:551
-msgid "select style"
-msgstr "tarz seç"
+msgid "Select style"
+msgstr "Tarz seç"
 
 #: ../src/libs/styles.c:561
 #, fuzzy
@@ -20838,8 +20851,8 @@ msgid "detach all tags"
 msgstr "etiketi ayır"
 
 #: ../src/libs/tagging.c:1461
-msgid "delete node?"
-msgstr "düğümü sil?"
+msgid "Delete node?"
+msgstr "Düğümü sil?"
 
 #: ../src/libs/tagging.c:1468 ../src/libs/tagging.c:1683
 #: ../src/libs/tagging.c:1968
@@ -20868,8 +20881,8 @@ msgid "%d tags removed"
 msgstr "%d etiket kaldırıldı"
 
 #: ../src/libs/tagging.c:1543
-msgid "create tag"
-msgstr "etiket oluştur"
+msgid "Create tag"
+msgstr "Etiket oluştur"
 
 #: ../src/libs/tagging.c:1553 ../src/libs/tagging.c:1703
 msgid "name: "
@@ -20928,16 +20941,16 @@ msgid "at least one new tagname (%s) already exists, aborting."
 msgstr "en az bir yeni etiket adı (%s) zaten var, iptal ediliyor."
 
 #: ../src/libs/tagging.c:1961
-msgid "change path"
-msgstr "yolu değiştir"
+msgid "Change path"
+msgstr "Yolu değiştir"
 
 #: ../src/libs/tagging.c:2005
 msgid "'|' misplaced, empty tag is not allowed, aborting"
 msgstr "'|' yanlış yerleştirilmiş, boş etikete izin verilmiyor, iptal ediliyor"
 
 #: ../src/libs/tagging.c:2088
-msgid "delete tag?"
-msgstr "etiketi sil?"
+msgid "Delete tag?"
+msgstr "Etiketi sil?"
 
 #: ../src/libs/tagging.c:2092
 #, fuzzy, c-format
@@ -21001,8 +21014,8 @@ msgid "(private)"
 msgstr "(özel)"
 
 #: ../src/libs/tagging.c:2435
-msgid "select a keyword file"
-msgstr "bir anahtar kelime dosyası seçin"
+msgid "Select a keyword file"
+msgstr "Bir anahtar kelime dosyası seçin"
 
 #: ../src/libs/tagging.c:2436
 msgid "_import"
@@ -21014,8 +21027,8 @@ msgid "%u tags imported"
 msgstr "%zd etiket içe aktarıldı"
 
 #: ../src/libs/tagging.c:2468
-msgid "select file to export to"
-msgstr "dışa aktarılacak dosyayı seçin"
+msgid "Select file to export to"
+msgstr "Dışa aktarılacak dosyayı seçin"
 
 #: ../src/libs/tagging.c:2469
 msgid "_export"
@@ -21089,8 +21102,8 @@ msgstr "seçili tüm görüntülere etiket ekle"
 
 #: ../src/libs/tagging.c:3248
 #, fuzzy
-msgid "manage tags"
-msgstr "coğrafi etiketler"
+msgid "Manage tags"
+msgstr "Coğrafi etiketler"
 
 #: ../src/libs/tagging.c:3263
 msgid "type to filter the tag dictionary below"
@@ -22059,7 +22072,7 @@ msgid "no LUT to save"
 msgstr "kaydedilecek bir şey yok"
 
 #: ../src/common/lut_viewer.c:1207
-msgid "save 3D LUT"
+msgid "Save 3D LUT"
 msgstr ""
 
 #: ../src/common/lut_viewer.c:1222

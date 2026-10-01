@@ -219,7 +219,7 @@ static void _gui_styles_new_style_response(GtkDialog *dialog, gint response_id, 
         dt_osx_disallow_fullscreen(dlg_overwrite);
 #endif
 
-        gtk_window_set_title(GTK_WINDOW(dlg_overwrite), _("overwrite style?"));
+        gtk_window_set_title(GTK_WINDOW(dlg_overwrite), _("Overwrite style?"));
 
         const gint dlg_ret = gtk_dialog_run(GTK_DIALOG(dlg_overwrite));
         gtk_widget_destroy(dlg_overwrite);
@@ -252,7 +252,7 @@ static void _gui_styles_new_style_response(GtkDialog *dialog, gint response_id, 
 #ifdef GDK_WINDOWING_QUARTZ
       dt_osx_disallow_fullscreen(dlg_changename);
 #endif
-      gtk_window_set_title(GTK_WINDOW(dlg_changename), _("unnamed style"));
+      gtk_window_set_title(GTK_WINDOW(dlg_changename), _("Unnamed style"));
       gtk_dialog_run(GTK_DIALOG(dlg_changename));
       gtk_widget_destroy(dlg_changename);
       return;
@@ -311,7 +311,7 @@ static void _gui_styles_edit_style_response(GtkDialog *dialog, gint response_id,
 #ifdef GDK_WINDOWING_QUARTZ
       dt_osx_disallow_fullscreen(dlg_changename);
 #endif
-      gtk_window_set_title(GTK_WINDOW(dlg_changename), _("unnamed style"));
+      gtk_window_set_title(GTK_WINDOW(dlg_changename), _("Unnamed style"));
       gtk_dialog_run(GTK_DIALOG(dlg_changename));
       gtk_widget_destroy(dlg_changename);
       return;
@@ -414,13 +414,13 @@ static void _gui_styles_dialog_run(gboolean edit, const char *name, int32_t imgi
 
   if(edit)
   {
-    snprintf(title, sizeof(title), "%s \"%s\"", _("edit style"), name);
+    snprintf(title, sizeof(title), "%s \"%s\"", _("Edit style"), name);
     sd->duplicate = gtk_check_button_new_with_label(_("duplicate style"));
     gtk_widget_set_tooltip_text(sd->duplicate, _("creates a duplicate of the style before applying changes"));
   }
   else
   {
-    g_strlcpy(title, _("create new style"), sizeof(title));
+    g_strlcpy(title, _("Create new style"), sizeof(title));
     sd->duplicate = NULL;
   }
   GtkWidget *window = dt_gui_main_window();

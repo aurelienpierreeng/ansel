@@ -348,7 +348,7 @@ gboolean _ask_before_delete_style(const gint style_cnt)
     dt_osx_disallow_fullscreen(dialog);
 #endif
 
-    gtk_window_set_title(GTK_WINDOW(dialog), ngettext("remove style?", "remove styles?", style_cnt));
+    gtk_window_set_title(GTK_WINDOW(dialog), ngettext("Remove style?", "Remove styles?", style_cnt));
     res = gtk_dialog_run(GTK_DIALOG(dialog));
     gtk_widget_destroy(dialog);
   }
@@ -419,7 +419,7 @@ static void export_clicked(GtkWidget *w, gpointer user_data)
 
   GtkWidget *win = dt_gui_main_window();
   GtkFileChooserNative *filechooser = gtk_file_chooser_native_new(
-        _("select directory"), GTK_WINDOW(win), GTK_FILE_CHOOSER_ACTION_SELECT_FOLDER,
+        _("Select directory"), GTK_WINDOW(win), GTK_FILE_CHOOSER_ACTION_SELECT_FOLDER,
         _("_save"), _("_cancel"));
 
   dt_conf_get_folder_to_file_chooser("ui_last/export_path", GTK_FILE_CHOOSER(filechooser));
@@ -465,7 +465,7 @@ static void export_clicked(GtkWidget *w, gpointer user_data)
 
           if(dt_conf_get_bool("plugins/lighttable/style/ask_before_delete_style"))
           {
-            GtkWidget *dialog_overwrite_export = gtk_dialog_new_with_buttons(_("overwrite style?"), GTK_WINDOW(win), GTK_DIALOG_DESTROY_WITH_PARENT,
+            GtkWidget *dialog_overwrite_export = gtk_dialog_new_with_buttons(_("Overwrite style?"), GTK_WINDOW(win), GTK_DIALOG_DESTROY_WITH_PARENT,
                 _("cancel"), GTK_RESPONSE_CANCEL,
                 _("skip"), GTK_RESPONSE_NONE,
                 _("overwrite"), GTK_RESPONSE_ACCEPT, NULL);
@@ -555,7 +555,7 @@ static void import_clicked(GtkWidget *w, gpointer user_data)
 
   GtkWidget *win = dt_gui_main_window();
   GtkFileChooserNative *filechooser = gtk_file_chooser_native_new(
-        _("select style"), GTK_WINDOW(win), GTK_FILE_CHOOSER_ACTION_OPEN,
+        _("Select style"), GTK_WINDOW(win), GTK_FILE_CHOOSER_ACTION_OPEN,
         _("_open"), _("_cancel"));
 
   dt_conf_get_folder_to_file_chooser("ui_last/import_path", GTK_FILE_CHOOSER(filechooser));
@@ -649,7 +649,7 @@ static void import_clicked(GtkWidget *w, gpointer user_data)
           // use security check/option
           if(dt_conf_get_bool("plugins/lighttable/style/ask_before_delete_style"))
           {
-            GtkWidget *dialog_overwrite_import = gtk_dialog_new_with_buttons(_("overwrite style?"), GTK_WINDOW(win), GTK_DIALOG_DESTROY_WITH_PARENT,
+            GtkWidget *dialog_overwrite_import = gtk_dialog_new_with_buttons(_("Overwrite style?"), GTK_WINDOW(win), GTK_DIALOG_DESTROY_WITH_PARENT,
                 _("cancel"), GTK_RESPONSE_CANCEL,
                 _("skip"), GTK_RESPONSE_NONE,
                 _("overwrite"), GTK_RESPONSE_ACCEPT, NULL);

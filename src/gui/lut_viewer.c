@@ -1211,7 +1211,7 @@ static void _save_clut_callback(GtkWidget *widget, gpointer user_data)
 
   GtkWidget *win = dt_gui_main_window();
   GtkFileChooserNative *filechooser = gtk_file_chooser_native_new(
-        _("save 3D LUT"), GTK_WINDOW(win), GTK_FILE_CHOOSER_ACTION_SAVE,
+        _("Save 3D LUT"), GTK_WINDOW(win), GTK_FILE_CHOOSER_ACTION_SAVE,
         _("_save"), _("_cancel"));
   gtk_file_chooser_set_select_multiple(GTK_FILE_CHOOSER(filechooser), FALSE);
   gtk_file_chooser_set_do_overwrite_confirmation(GTK_FILE_CHOOSER(filechooser), TRUE);

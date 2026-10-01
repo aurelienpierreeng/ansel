@@ -687,6 +687,9 @@ msgstr "mapp för 3D-lut"
 msgid "select directory"
 msgstr "välj katalog"
 
+msgid "Select directory"
+msgstr "Välj katalog"
+
 #: ../build/src/preferences_gen.h:3047
 msgid ""
 "this folder (and sub-folders) contains Lut files used by lut3d modules. "
@@ -4067,6 +4070,10 @@ msgstr "modul"
 msgid "module order"
 msgstr "kortsidan"
 
+#, fuzzy
+msgid "Module order"
+msgstr "Kortsidan"
+
 #: ../src/common/collection.c:685 ../src/develop/lightroom.c:1505
 #: ../src/libs/tools/filter.c:119
 msgid "rating"
@@ -4872,7 +4879,7 @@ msgstr ""
 "vill du fortsätta eller avsluta nu för att ta en säkerhetskopia\n"
 
 #: ../src/common/database.c:2911
-msgid "ansel - schema migration"
+msgid "Ansel - schema migration"
 msgstr ""
 
 #: ../src/common/database.c:2912 ../src/common/database.c:3265
@@ -4917,7 +4924,7 @@ msgstr ""
 
 #: ../src/common/database.c:3262 ../src/common/database.c:3280
 #: ../src/common/database.c:3440 ../src/common/database.c:3458
-msgid "ansel - error opening database"
+msgid "Ansel - error opening database"
 msgstr ""
 
 #: ../src/common/database.c:3267 ../src/common/database.c:3445
@@ -4984,8 +4991,8 @@ msgstr ""
 
 #: ../src/common/database.c:3815
 #, fuzzy
-msgid "ansel - schema maintenance"
-msgstr "kontrollera för underhåll av databas"
+msgid "Ansel - schema maintenance"
+msgstr "Kontrollera för underhåll av databas"
 
 #: ../src/common/database.c:3816
 #, fuzzy
@@ -5030,10 +5037,10 @@ msgstr[0] "vill du verkligen ta bort denna tomma katalog?"
 msgstr[1] "vill du verkligen ta bort dessa tomma kataloger?"
 
 #: ../src/common/film.c:297
-msgid "remove empty directory?"
-msgid_plural "remove empty directories?"
-msgstr[0] "ta bort tom katalog?"
-msgstr[1] "ta bort tomma kataloger?"
+msgid "Remove empty directory?"
+msgid_plural "Remove empty directories?"
+msgstr[0] "Ta bort tom katalog?"
+msgstr[1] "Ta bort tomma kataloger?"
 
 #: ../src/common/film.c:317 ../src/gui/preferences.c:979
 #: ../src/gui/styles_dialog.c:466 ../src/libs/collect.c:3003
@@ -6145,7 +6152,7 @@ msgstr "differens"
 
 #: ../src/control/crawler.c:785
 #, fuzzy
-msgid "updated XMP sidecar files found"
+msgid "Updated XMP sidecar files found"
 msgstr "XMP sidofiler"
 
 #: ../src/control/crawler.c:786
@@ -6285,12 +6292,12 @@ msgid "stop process"
 msgstr "stoppa processen"
 
 #: ../src/control/jobs/control_jobs.c:901
-msgid "trashing error"
-msgstr "fel när filen skickades till papperskorgen"
+msgid "Trashing error"
+msgstr "Fel när filen skickades till papperskorgen"
 
 #: ../src/control/jobs/control_jobs.c:902
-msgid "deletion error"
-msgstr "fel när filen skulle tas bort"
+msgid "Deletion error"
+msgstr "Fel när filen skulle tas bort"
 
 #: ../src/control/jobs/control_jobs.c:1044
 #, c-format
@@ -6479,12 +6486,15 @@ msgstr "vill du verkligen ta bort förinställning `%s'?"
 
 #: ../src/control/jobs/control_jobs.c:1736
 #, fuzzy
-msgid "delete image?"
-msgstr "raderar bilder"
+msgid "Delete image?"
+msgstr "Raderar bilder"
 
 #: ../src/control/jobs/control_jobs.c:1754 ../src/libs/collect.c:2059
 msgid "move images"
 msgstr "flyttar bild"
+
+msgid "Move images"
+msgstr "Flyttar bild"
 
 #: ../src/control/jobs/control_jobs.c:1766
 #: ../src/control/jobs/control_jobs.c:1828
@@ -6503,10 +6513,10 @@ msgstr[0] ""
 msgstr[1] ""
 
 #: ../src/control/jobs/control_jobs.c:1795
-msgid "move image?"
-msgid_plural "move images?"
-msgstr[0] "flytta bild?"
-msgstr[1] "flytta bilder?"
+msgid "Move image?"
+msgid_plural "Move images?"
+msgstr[0] "Flytta bild?"
+msgstr[1] "Flytta bilder?"
 
 #: ../src/control/jobs/control_jobs.c:1816
 msgid "copy images"
@@ -6520,10 +6530,10 @@ msgstr[0] "vill du verkligen ta bort historiken för %d vald bild?"
 msgstr[1] "vill du verkligen ta bort historiken för %d vald bild?"
 
 #: ../src/control/jobs/control_jobs.c:1854
-msgid "copy image?"
-msgid_plural "copy images?"
-msgstr[0] "kopiera bild?"
-msgstr[1] "kopiera bilder?"
+msgid "Copy image?"
+msgid_plural "Copy images?"
+msgstr[0] "Kopiera bild?"
+msgstr[1] "Kopiera bilder?"
 
 #: ../src/control/jobs/control_jobs.c:1874
 #: ../src/control/jobs/control_jobs.c:1882
@@ -9242,7 +9252,7 @@ msgid "failed to import preset %s"
 msgstr "kunde inte skriva över stilfilen för %s"
 
 #: ../src/gui/preferences.c:1184
-msgid "select preset(s) to import"
+msgid "Select preset(s) to import"
 msgstr ""
 
 #: ../src/gui/preferences.c:1185 ../src/gui/actions/edit.c:305
@@ -9290,8 +9300,8 @@ msgid "do you really want to delete the preset `%s'?"
 msgstr "vill du verkligen ta bort förinställning `%s'?"
 
 #: ../src/gui/presets.c:303 ../src/gui/presets.c:532 ../src/libs/lib.c:321
-msgid "delete preset?"
-msgstr "ta bort förinställning?"
+msgid "Delete preset?"
+msgstr "Ta bort förinställning?"
 
 #. add new preset
 #. then show edit dialog
@@ -9308,8 +9318,8 @@ msgid "please give preset a name"
 msgstr "var god ge förinställningen ett namn"
 
 #: ../src/gui/presets.c:339
-msgid "unnamed preset"
-msgstr "förinställning utan namn"
+msgid "Unnamed preset"
+msgstr "Förinställning utan namn"
 
 #: ../src/gui/presets.c:368
 #, c-format
@@ -9321,8 +9331,8 @@ msgstr ""
 "Vill du skriva över den?"
 
 #: ../src/gui/presets.c:373
-msgid "overwrite preset?"
-msgstr "skriv över förinställning?"
+msgid "Overwrite preset?"
+msgstr "Skriv över förinställning?"
 
 #: ../src/gui/presets.c:490 ../src/imageio/storage/disk.c:154
 #: ../src/imageio/storage/gallery.c:142
@@ -9336,8 +9346,8 @@ msgstr "stilen %s exporterades korrekt"
 
 #: ../src/gui/presets.c:565
 #, c-format
-msgid "edit `%s' for module `%s'"
-msgstr "editera `%s' för modul `%s'"
+msgid "Edit `%s' for module `%s'"
+msgstr "Editera `%s' för modul `%s'"
 
 #: ../src/gui/presets.c:568
 msgid "_export..."
@@ -9435,8 +9445,8 @@ msgstr "vill du verkligen ta bort förinställning `%s'?"
 
 #: ../src/gui/presets.c:921 ../src/libs/lib.c:236
 #, fuzzy
-msgid "update preset?"
-msgstr "uppdatera förinställning"
+msgid "Update preset?"
+msgstr "Uppdatera förinställning"
 
 #: ../src/gui/presets.c:1245
 msgid "(default)"
@@ -9520,8 +9530,8 @@ msgstr ""
 #: ../src/gui/styles_dialog.c:230 ../src/libs/styles.c:461
 #: ../src/libs/styles.c:645
 #, fuzzy
-msgid "overwrite style?"
-msgstr "skriv över förinställning?"
+msgid "Overwrite style?"
+msgstr "Skriv över förinställning?"
 
 #: ../src/gui/styles_dialog.c:259 ../src/gui/styles_dialog.c:318
 #, fuzzy
@@ -9530,8 +9540,8 @@ msgstr "var god ge förinställningen ett namn"
 
 #: ../src/gui/styles_dialog.c:263 ../src/gui/styles_dialog.c:322
 #, fuzzy
-msgid "unnamed style"
-msgstr "förinställning utan namn"
+msgid "Unnamed style"
+msgstr "Förinställning utan namn"
 
 #: ../src/gui/styles_dialog.c:310
 #, c-format
@@ -9539,8 +9549,8 @@ msgid "style %s was successfully saved"
 msgstr "stilen '%s' sparades"
 
 #: ../src/gui/styles_dialog.c:425
-msgid "edit style"
-msgstr "ändra stil"
+msgid "Edit style"
+msgstr "Ändra stil"
 
 #: ../src/gui/styles_dialog.c:426
 msgid "duplicate style"
@@ -9551,8 +9561,8 @@ msgid "creates a duplicate of the style before applying changes"
 msgstr "skapa en kopia på stilen innan förändringar appliceras"
 
 #: ../src/gui/styles_dialog.c:431
-msgid "create new style"
-msgstr "skapa ny stil"
+msgid "Create new style"
+msgstr "Skapa ny stil"
 
 #: ../src/gui/styles_dialog.c:467
 msgid "enter a name for the new style"
@@ -9729,8 +9739,8 @@ msgid "Paste history (parts) — merge settings"
 msgstr ""
 
 #: ../src/gui/actions/edit.c:304
-msgid "open sidecar file"
-msgstr "öppna sidofil"
+msgid "Open sidecar file"
+msgstr "Öppna sidofil"
 
 #: ../src/gui/actions/edit.c:337
 msgid "XMP sidecar files"
@@ -9959,8 +9969,8 @@ msgid "do you want to access ansel.photos ?"
 msgstr ""
 
 #: ../src/gui/actions/help.c:146
-msgid "access the online usermanual?"
-msgstr "gå till användarmanualen online?"
+msgid "Access the online usermanual?"
+msgstr "Gå till användarmanualen online?"
 
 #: ../src/gui/actions/help.c:158
 msgid "help url opened in web browser"
@@ -16508,8 +16518,8 @@ msgstr "mapp för 3D-lut"
 
 #: ../src/iop/lut3d.c:1339
 #, fuzzy
-msgid "select lut file"
-msgstr "välj fil"
+msgid "Select lut file"
+msgstr "Välj fil"
 
 #: ../src/iop/lut3d.c:1340
 #, fuzzy
@@ -18302,13 +18312,13 @@ msgstr "ej kategoriserad"
 
 #: ../src/libs/collect.c:1840
 #, fuzzy
-msgid "select the new location of this folder"
-msgstr "välj filtrets nyans"
+msgid "Select the new location of this folder"
+msgstr "Välj filtrets nyans"
 
 #: ../src/libs/collect.c:1840
 #, fuzzy
-msgid "select the new parent folder"
-msgstr "välj färgton"
+msgid "Select the new parent folder"
+msgstr "Välj färgton"
 
 #: ../src/libs/collect.c:1873
 #, fuzzy
@@ -18327,10 +18337,14 @@ msgstr[1] "ta bort tagg från alla valda bilder"
 msgid "delete tags"
 msgstr "ta bort tagg?"
 
+#, fuzzy
+msgid "Delete tags"
+msgstr "Ta bort tagg?"
+
 #: ../src/libs/collect.c:1906
 #, fuzzy
-msgid "rename tag"
-msgstr "skapa tagg"
+msgid "Rename tag"
+msgstr "Skapa tagg"
 
 #: ../src/libs/collect.c:1971
 #, fuzzy
@@ -18584,8 +18598,8 @@ msgid "Duplicates"
 msgstr "duplicera stil"
 
 #: ../src/libs/export.c:347
-msgid "export to disk"
-msgstr "exportera till disk"
+msgid "Export to disk"
+msgstr "Exportera till disk"
 
 #: ../src/libs/export.c:505
 #, c-format
@@ -18785,8 +18799,8 @@ msgid "export with current settings"
 msgstr "exportera med nuvarande inställningar"
 
 #: ../src/libs/export_metadata.c:174
-msgid "select tag"
-msgstr "välj tagg"
+msgid "Select tag"
+msgstr "Välj tagg"
 
 #: ../src/libs/export_metadata.c:175
 msgid "add"
@@ -18808,8 +18822,8 @@ msgstr ""
 
 #: ../src/libs/export_metadata.c:302
 #, fuzzy
-msgid "edit metadata exportation"
-msgstr "per metadata inställning"
+msgid "Edit metadata exportation"
+msgstr "Per metadata inställning"
 
 #: ../src/libs/export_metadata.c:303 ../src/libs/metadata.c:518
 #: ../src/libs/metadata_view.c:1188 ../src/libs/styles.c:462
@@ -18997,8 +19011,8 @@ msgid "images"
 msgstr "bilder"
 
 #: ../src/libs/geotagging.c:956
-msgid "open GPX file"
-msgstr "öppna GPX-fil"
+msgid "Open GPX file"
+msgstr "Öppna GPX-fil"
 
 #: ../src/libs/geotagging.c:970
 msgid "GPS data exchange format"
@@ -19506,8 +19520,8 @@ msgstr ""
 
 #: ../src/libs/ioporder.c:1536
 #, fuzzy
-msgid "save module order preset"
-msgstr "kortsidan"
+msgid "Save module order preset"
+msgstr "Kortsidan"
 
 #: ../src/libs/ioporder.c:1545
 #, fuzzy
@@ -19756,8 +19770,8 @@ msgid "<leave unchanged>"
 msgstr "<lämna oförändrad>"
 
 #: ../src/libs/metadata.c:516 ../src/libs/metadata_view.c:1186
-msgid "metadata settings"
-msgstr "metadatasinställningar"
+msgid "Metadata settings"
+msgstr "Metadatasinställningar"
 
 #: ../src/libs/metadata.c:566 ../src/libs/metadata_view.c:1232
 msgid "visible"
@@ -20449,10 +20463,10 @@ msgstr[0] "vill du verkligen ta bort %d stilen?"
 msgstr[1] "vill du verkligen ta bort %d stilarna?"
 
 #: ../src/libs/styles.c:344
-msgid "remove style?"
-msgid_plural "remove styles?"
-msgstr[0] "ta bort stil?"
-msgstr[1] "ta bort stilar?"
+msgid "Remove style?"
+msgid_plural "Remove styles?"
+msgstr[0] "Ta bort stil?"
+msgstr[1] "Ta bort stilar?"
 
 #: ../src/libs/styles.c:468 ../src/libs/styles.c:652
 #, fuzzy, c-format
@@ -20474,8 +20488,8 @@ msgid "style %s was successfully exported"
 msgstr "stilen %s exporterades korrekt"
 
 #: ../src/libs/styles.c:551
-msgid "select style"
-msgstr "välj stil"
+msgid "Select style"
+msgstr "Välj stil"
 
 #: ../src/libs/styles.c:561
 #, fuzzy
@@ -20575,8 +20589,8 @@ msgid "detach all tags"
 msgstr "koppla bort tagg"
 
 #: ../src/libs/tagging.c:1461
-msgid "delete node?"
-msgstr "ta bort nod?"
+msgid "Delete node?"
+msgstr "Ta bort nod?"
 
 #: ../src/libs/tagging.c:1468 ../src/libs/tagging.c:1683
 #: ../src/libs/tagging.c:1968
@@ -20605,8 +20619,8 @@ msgid "%d tags removed"
 msgstr "%d taggars har tagits bort"
 
 #: ../src/libs/tagging.c:1543
-msgid "create tag"
-msgstr "skapa tagg"
+msgid "Create tag"
+msgstr "Skapa tagg"
 
 #: ../src/libs/tagging.c:1553 ../src/libs/tagging.c:1703
 msgid "name: "
@@ -20663,16 +20677,16 @@ msgid "at least one new tagname (%s) already exists, aborting."
 msgstr "tagg namnet finns redan, avbryter."
 
 #: ../src/libs/tagging.c:1961
-msgid "change path"
-msgstr "ändra sökväg"
+msgid "Change path"
+msgstr "Ändra sökväg"
 
 #: ../src/libs/tagging.c:2005
 msgid "'|' misplaced, empty tag is not allowed, aborting"
 msgstr "“|” felplacerat; tom tagg är inte tillåtet; avbryter"
 
 #: ../src/libs/tagging.c:2088
-msgid "delete tag?"
-msgstr "ta bort tagg?"
+msgid "Delete tag?"
+msgstr "Ta bort tagg?"
 
 #: ../src/libs/tagging.c:2092
 #, fuzzy, c-format
@@ -20743,8 +20757,8 @@ msgstr "(privat)"
 
 #: ../src/libs/tagging.c:2435
 #, fuzzy
-msgid "select a keyword file"
-msgstr "välj fil"
+msgid "Select a keyword file"
+msgstr "Välj fil"
 
 #: ../src/libs/tagging.c:2436
 msgid "_import"
@@ -20757,8 +20771,8 @@ msgstr "%zd taggar har importerats"
 
 #: ../src/libs/tagging.c:2468
 #, fuzzy
-msgid "select file to export to"
-msgstr "välj fyllnadsfärg"
+msgid "Select file to export to"
+msgstr "Välj fyllnadsfärg"
 
 #: ../src/libs/tagging.c:2469
 msgid "_export"
@@ -20833,8 +20847,8 @@ msgstr "lägg till tagg på alla valda bilder"
 
 #: ../src/libs/tagging.c:3248
 #, fuzzy
-msgid "manage tags"
-msgstr "geo taggar"
+msgid "Manage tags"
+msgstr "Geo taggar"
 
 #: ../src/libs/tagging.c:3263
 msgid "type to filter the tag dictionary below"
@@ -21773,7 +21787,7 @@ msgid "no LUT to save"
 msgstr "inget att spara"
 
 #: ../src/common/lut_viewer.c:1207
-msgid "save 3D LUT"
+msgid "Save 3D LUT"
 msgstr ""
 
 #: ../src/common/lut_viewer.c:1222

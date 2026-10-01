@@ -673,6 +673,9 @@ msgstr "carpeta arrel de LUT 3D"
 msgid "select directory"
 msgstr "seleccioneu un directori"
 
+msgid "Select directory"
+msgstr "Seleccioneu un directori"
+
 #: ../build/src/preferences_gen.h:3047
 msgid ""
 "this folder (and sub-folders) contains Lut files used by lut3d modules. "
@@ -4054,6 +4057,10 @@ msgstr "mòdul"
 msgid "module order"
 msgstr "vora més petita"
 
+#, fuzzy
+msgid "Module order"
+msgstr "Vora més petita"
+
 #: ../src/common/collection.c:685 ../src/develop/lightroom.c:1505
 #: ../src/libs/tools/filter.c:119
 msgid "rating"
@@ -4850,7 +4857,7 @@ msgid ""
 msgstr ""
 
 #: ../src/common/database.c:2911
-msgid "ansel - schema migration"
+msgid "Ansel - schema migration"
 msgstr ""
 
 #: ../src/common/database.c:2912 ../src/common/database.c:3265
@@ -4893,7 +4900,7 @@ msgstr ""
 
 #: ../src/common/database.c:3262 ../src/common/database.c:3280
 #: ../src/common/database.c:3440 ../src/common/database.c:3458
-msgid "ansel - error opening database"
+msgid "Ansel - error opening database"
 msgstr ""
 
 #: ../src/common/database.c:3267 ../src/common/database.c:3445
@@ -4959,7 +4966,7 @@ msgid ""
 msgstr ""
 
 #: ../src/common/database.c:3815
-msgid "ansel - schema maintenance"
+msgid "Ansel - schema maintenance"
 msgstr ""
 
 #: ../src/common/database.c:3816
@@ -5005,10 +5012,10 @@ msgstr[0] "voleu eliminar aquest directori buit?"
 msgstr[1] "voleu eliminar aquests directoris buits?"
 
 #: ../src/common/film.c:297
-msgid "remove empty directory?"
-msgid_plural "remove empty directories?"
-msgstr[0] "eliminar directori buit?"
-msgstr[1] "eliminar directoris buits?"
+msgid "Remove empty directory?"
+msgid_plural "Remove empty directories?"
+msgstr[0] "Eliminar directori buit?"
+msgstr[1] "Eliminar directoris buits?"
 
 #: ../src/common/film.c:317 ../src/gui/preferences.c:979
 #: ../src/gui/styles_dialog.c:466 ../src/libs/collect.c:3003
@@ -6121,7 +6128,7 @@ msgstr "diferència"
 
 #: ../src/control/crawler.c:785
 #, fuzzy
-msgid "updated XMP sidecar files found"
+msgid "Updated XMP sidecar files found"
 msgstr "XMP arxius sidecar"
 
 #: ../src/control/crawler.c:786
@@ -6257,12 +6264,12 @@ msgid "stop process"
 msgstr "atura el procés"
 
 #: ../src/control/jobs/control_jobs.c:901
-msgid "trashing error"
-msgstr "error en esborrar"
+msgid "Trashing error"
+msgstr "Error en esborrar"
 
 #: ../src/control/jobs/control_jobs.c:902
-msgid "deletion error"
-msgstr "error en esborrar"
+msgid "Deletion error"
+msgstr "Error en esborrar"
 
 #: ../src/control/jobs/control_jobs.c:1044
 #, c-format
@@ -6449,12 +6456,15 @@ msgstr "esteu segur que voleu suprimir el predefinit `%s'?"
 
 #: ../src/control/jobs/control_jobs.c:1736
 #, fuzzy
-msgid "delete image?"
-msgstr "esborra imatges"
+msgid "Delete image?"
+msgstr "Esborra imatges"
 
 #: ../src/control/jobs/control_jobs.c:1754 ../src/libs/collect.c:2059
 msgid "move images"
 msgstr "mou imatges"
+
+msgid "Move images"
+msgstr "Mou imatges"
 
 #: ../src/control/jobs/control_jobs.c:1766
 #: ../src/control/jobs/control_jobs.c:1828
@@ -6473,10 +6483,10 @@ msgstr[0] ""
 msgstr[1] ""
 
 #: ../src/control/jobs/control_jobs.c:1795
-msgid "move image?"
-msgid_plural "move images?"
-msgstr[0] "voleu moure la imatge?"
-msgstr[1] "voleu moure les imatges?"
+msgid "Move image?"
+msgid_plural "Move images?"
+msgstr[0] "Voleu moure la imatge?"
+msgstr[1] "Voleu moure les imatges?"
 
 #: ../src/control/jobs/control_jobs.c:1816
 msgid "copy images"
@@ -6490,10 +6500,10 @@ msgstr[0] "esteu segur que voleu suprimir el predefinit `%s'?"
 msgstr[1] "esteu segur que voleu suprimir el predefinit `%s'?"
 
 #: ../src/control/jobs/control_jobs.c:1854
-msgid "copy image?"
-msgid_plural "copy images?"
-msgstr[0] "voleu copiar la imatge?"
-msgstr[1] "voleu copiar les imatges?"
+msgid "Copy image?"
+msgid_plural "Copy images?"
+msgstr[0] "Voleu copiar la imatge?"
+msgstr[1] "Voleu copiar les imatges?"
 
 #: ../src/control/jobs/control_jobs.c:1874
 #: ../src/control/jobs/control_jobs.c:1882
@@ -9214,7 +9224,7 @@ msgid "failed to import preset %s"
 msgstr "no s'ha pogut sobreescriure el fitxer d'estil per a %s"
 
 #: ../src/gui/preferences.c:1184
-msgid "select preset(s) to import"
+msgid "Select preset(s) to import"
 msgstr ""
 
 #: ../src/gui/preferences.c:1185 ../src/gui/actions/edit.c:305
@@ -9262,8 +9272,8 @@ msgid "do you really want to delete the preset `%s'?"
 msgstr "esteu segur que voleu suprimir el predefinit `%s'?"
 
 #: ../src/gui/presets.c:303 ../src/gui/presets.c:532 ../src/libs/lib.c:321
-msgid "delete preset?"
-msgstr "voleu suprimir el predefinit?"
+msgid "Delete preset?"
+msgstr "Voleu suprimir el predefinit?"
 
 #. add new preset
 #. then show edit dialog
@@ -9280,8 +9290,8 @@ msgid "please give preset a name"
 msgstr "doneu un nom al predefinit"
 
 #: ../src/gui/presets.c:339
-msgid "unnamed preset"
-msgstr "predefinit sense nom"
+msgid "Unnamed preset"
+msgstr "Predefinit sense nom"
 
 #: ../src/gui/presets.c:368
 #, c-format
@@ -9293,8 +9303,8 @@ msgstr ""
 "Voleu sobreescriure'l?"
 
 #: ../src/gui/presets.c:373
-msgid "overwrite preset?"
-msgstr "sobreescriu el predefinit?"
+msgid "Overwrite preset?"
+msgstr "Sobreescriu el predefinit?"
 
 #: ../src/gui/presets.c:490 ../src/imageio/storage/disk.c:154
 #: ../src/imageio/storage/gallery.c:142
@@ -9308,8 +9318,8 @@ msgstr "s'ha importat amb èxit l'estil %s"
 
 #: ../src/gui/presets.c:565
 #, c-format
-msgid "edit `%s' for module `%s'"
-msgstr "edició de `%s' del mòdul `%s'"
+msgid "Edit `%s' for module `%s'"
+msgstr "Edició de `%s' del mòdul `%s'"
 
 #: ../src/gui/presets.c:568
 #, fuzzy
@@ -9408,8 +9418,8 @@ msgstr "esteu segur que voleu suprimir el predefinit `%s'?"
 
 #: ../src/gui/presets.c:921 ../src/libs/lib.c:236
 #, fuzzy
-msgid "update preset?"
-msgstr "actualitza el predefinit"
+msgid "Update preset?"
+msgstr "Actualitza el predefinit"
 
 #: ../src/gui/presets.c:1245
 msgid "(default)"
@@ -9492,8 +9502,8 @@ msgstr ""
 #: ../src/gui/styles_dialog.c:230 ../src/libs/styles.c:461
 #: ../src/libs/styles.c:645
 #, fuzzy
-msgid "overwrite style?"
-msgstr "sobreescriu el predefinit?"
+msgid "Overwrite style?"
+msgstr "Sobreescriu el predefinit?"
 
 #: ../src/gui/styles_dialog.c:259 ../src/gui/styles_dialog.c:318
 #, fuzzy
@@ -9502,8 +9512,8 @@ msgstr "doneu un nom al predefinit"
 
 #: ../src/gui/styles_dialog.c:263 ../src/gui/styles_dialog.c:322
 #, fuzzy
-msgid "unnamed style"
-msgstr "predefinit sense nom"
+msgid "Unnamed style"
+msgstr "Predefinit sense nom"
 
 #: ../src/gui/styles_dialog.c:310
 #, c-format
@@ -9511,8 +9521,8 @@ msgid "style %s was successfully saved"
 msgstr "s'ha desat correctament l'estil %s"
 
 #: ../src/gui/styles_dialog.c:425
-msgid "edit style"
-msgstr "edita estil"
+msgid "Edit style"
+msgstr "Edita estil"
 
 #: ../src/gui/styles_dialog.c:426
 msgid "duplicate style"
@@ -9523,8 +9533,8 @@ msgid "creates a duplicate of the style before applying changes"
 msgstr "crea un duplicat de l'estil abans d'aplicar canvis"
 
 #: ../src/gui/styles_dialog.c:431
-msgid "create new style"
-msgstr "crea nou estil"
+msgid "Create new style"
+msgstr "Crea nou estil"
 
 #: ../src/gui/styles_dialog.c:467
 msgid "enter a name for the new style"
@@ -9700,8 +9710,8 @@ msgid "Paste history (parts) — merge settings"
 msgstr ""
 
 #: ../src/gui/actions/edit.c:304
-msgid "open sidecar file"
-msgstr "abre arxiu XMP"
+msgid "Open sidecar file"
+msgstr "Abre arxiu XMP"
 
 #: ../src/gui/actions/edit.c:337
 msgid "XMP sidecar files"
@@ -9926,8 +9936,8 @@ msgid "do you want to access ansel.photos ?"
 msgstr ""
 
 #: ../src/gui/actions/help.c:146
-msgid "access the online usermanual?"
-msgstr "accedir al manual d'usuari en línia?"
+msgid "Access the online usermanual?"
+msgstr "Accedir al manual d'usuari en línia?"
 
 #: ../src/gui/actions/help.c:158
 msgid "help url opened in web browser"
@@ -16504,8 +16514,8 @@ msgid "lut root folder not defined"
 msgstr "carpeta arrel de LUT 3D"
 
 #: ../src/iop/lut3d.c:1339
-msgid "select lut file"
-msgstr "seleccioneu arxiu de LUT"
+msgid "Select lut file"
+msgstr "Seleccioneu arxiu de LUT"
 
 #: ../src/iop/lut3d.c:1340
 msgid "_select"
@@ -18318,13 +18328,13 @@ msgstr "sense categoritzar"
 
 #: ../src/libs/collect.c:1840
 #, fuzzy
-msgid "select the new location of this folder"
-msgstr "trieu el to de color del filtre"
+msgid "Select the new location of this folder"
+msgstr "Trieu el to de color del filtre"
 
 #: ../src/libs/collect.c:1840
 #, fuzzy
-msgid "select the new parent folder"
-msgstr "seleccioneu el to de color"
+msgid "Select the new parent folder"
+msgstr "Seleccioneu el to de color"
 
 #: ../src/libs/collect.c:1873
 #, fuzzy
@@ -18343,10 +18353,14 @@ msgstr[1] "treu etiqueta de totes les imatges seleccionades"
 msgid "delete tags"
 msgstr "suprimeix l'etiqueta"
 
+#, fuzzy
+msgid "Delete tags"
+msgstr "Suprimeix l'etiqueta"
+
 #: ../src/libs/collect.c:1906
 #, fuzzy
-msgid "rename tag"
-msgstr "crea etiqueta"
+msgid "Rename tag"
+msgstr "Crea etiqueta"
 
 #: ../src/libs/collect.c:1971
 #, fuzzy
@@ -18602,8 +18616,8 @@ msgid "Duplicates"
 msgstr "duplica estil"
 
 #: ../src/libs/export.c:347
-msgid "export to disk"
-msgstr "exporta a disk"
+msgid "Export to disk"
+msgstr "Exporta a disk"
 
 #: ../src/libs/export.c:505
 #, c-format
@@ -18802,8 +18816,8 @@ msgid "export with current settings"
 msgstr "exporta amb valors actuals"
 
 #: ../src/libs/export_metadata.c:174
-msgid "select tag"
-msgstr "selecciona etiqueta"
+msgid "Select tag"
+msgstr "Selecciona etiqueta"
 
 #: ../src/libs/export_metadata.c:175
 msgid "add"
@@ -18827,8 +18841,8 @@ msgstr ""
 "sobre l'etiqueta per afegir la seleccionada"
 
 #: ../src/libs/export_metadata.c:302
-msgid "edit metadata exportation"
-msgstr "edita exportació de metadades"
+msgid "Edit metadata exportation"
+msgstr "Edita exportació de metadades"
 
 #: ../src/libs/export_metadata.c:303 ../src/libs/metadata.c:518
 #: ../src/libs/metadata_view.c:1188 ../src/libs/styles.c:462
@@ -19026,8 +19040,8 @@ msgid "images"
 msgstr "imatges"
 
 #: ../src/libs/geotagging.c:956
-msgid "open GPX file"
-msgstr "obre arxiu GPS"
+msgid "Open GPX file"
+msgstr "Obre arxiu GPS"
 
 #: ../src/libs/geotagging.c:970
 msgid "GPS data exchange format"
@@ -19550,8 +19564,8 @@ msgstr ""
 
 #: ../src/libs/ioporder.c:1536
 #, fuzzy
-msgid "save module order preset"
-msgstr "vora més petita"
+msgid "Save module order preset"
+msgstr "Vora més petita"
 
 #: ../src/libs/ioporder.c:1545
 #, fuzzy
@@ -19808,8 +19822,8 @@ msgstr "<deixar sense canvis>"
 
 #: ../src/libs/metadata.c:516 ../src/libs/metadata_view.c:1186
 #, fuzzy
-msgid "metadata settings"
-msgstr "ajustos per metadades"
+msgid "Metadata settings"
+msgstr "Ajustos per metadades"
 
 #: ../src/libs/metadata.c:566 ../src/libs/metadata_view.c:1232
 #, fuzzy
@@ -20497,10 +20511,10 @@ msgstr[1] "esteu segur que voleu suprimir el predefinit `%s'?"
 
 #: ../src/libs/styles.c:344
 #, fuzzy
-msgid "remove style?"
-msgid_plural "remove styles?"
-msgstr[0] "selecciona l'estil"
-msgstr[1] "selecciona l'estil"
+msgid "Remove style?"
+msgid_plural "Remove styles?"
+msgstr[0] "Selecciona l'estil"
+msgstr[1] "Selecciona l'estil"
 
 #: ../src/libs/styles.c:468 ../src/libs/styles.c:652
 #, fuzzy, c-format
@@ -20522,8 +20536,8 @@ msgid "style %s was successfully exported"
 msgstr "s'ha importat amb èxit l'estil %s"
 
 #: ../src/libs/styles.c:551
-msgid "select style"
-msgstr "selecciona l'estil"
+msgid "Select style"
+msgstr "Selecciona l'estil"
 
 #: ../src/libs/styles.c:561
 #, fuzzy
@@ -20626,8 +20640,8 @@ msgstr "treu etiqueta"
 
 #: ../src/libs/tagging.c:1461
 #, fuzzy
-msgid "delete node?"
-msgstr "voleu suprimir l'etiqueta?"
+msgid "Delete node?"
+msgstr "Voleu suprimir l'etiqueta?"
 
 #: ../src/libs/tagging.c:1468 ../src/libs/tagging.c:1683
 #: ../src/libs/tagging.c:1968
@@ -20656,8 +20670,8 @@ msgid "%d tags removed"
 msgstr "%d etiquetes eliminades"
 
 #: ../src/libs/tagging.c:1543
-msgid "create tag"
-msgstr "crea etiqueta"
+msgid "Create tag"
+msgstr "Crea etiqueta"
 
 #: ../src/libs/tagging.c:1553 ../src/libs/tagging.c:1703
 msgid "name: "
@@ -20715,16 +20729,16 @@ msgstr "almenys un nou nom d'etiqueta (%s) ja existeix, avortant."
 
 #: ../src/libs/tagging.c:1961
 #, fuzzy
-msgid "change path"
-msgstr "canvia a: o"
+msgid "Change path"
+msgstr "Canvia a: o"
 
 #: ../src/libs/tagging.c:2005
 msgid "'|' misplaced, empty tag is not allowed, aborting"
 msgstr "'|' mal posat, no es permet una etiqueta buida, avortant"
 
 #: ../src/libs/tagging.c:2088
-msgid "delete tag?"
-msgstr "voleu suprimir l'etiqueta?"
+msgid "Delete tag?"
+msgstr "Voleu suprimir l'etiqueta?"
 
 #: ../src/libs/tagging.c:2092
 #, fuzzy, c-format
@@ -20791,8 +20805,8 @@ msgstr "(privat)"
 
 #: ../src/libs/tagging.c:2435
 #, fuzzy
-msgid "select a keyword file"
-msgstr "seleccioneu un arxiu"
+msgid "Select a keyword file"
+msgstr "Seleccioneu un arxiu"
 
 #: ../src/libs/tagging.c:2436
 msgid "_import"
@@ -20805,8 +20819,8 @@ msgstr "%zd etiquetes importades"
 
 #: ../src/libs/tagging.c:2468
 #, fuzzy
-msgid "select file to export to"
-msgstr "tria color d'emplenat"
+msgid "Select file to export to"
+msgstr "Tria color d'emplenat"
 
 #: ../src/libs/tagging.c:2469
 msgid "_export"
@@ -20880,8 +20894,8 @@ msgstr "aplica etiqueta a totes les imatges seleccionades"
 
 #: ../src/libs/tagging.c:3248
 #, fuzzy
-msgid "manage tags"
-msgstr "geoetiquetes"
+msgid "Manage tags"
+msgstr "Geoetiquetes"
 
 #: ../src/libs/tagging.c:3263
 msgid "type to filter the tag dictionary below"
@@ -21822,7 +21836,7 @@ msgid "no LUT to save"
 msgstr "res a desar"
 
 #: ../src/common/lut_viewer.c:1207
-msgid "save 3D LUT"
+msgid "Save 3D LUT"
 msgstr ""
 
 #: ../src/common/lut_viewer.c:1222

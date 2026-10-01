@@ -670,6 +670,9 @@ msgstr "3D lut toppmappe"
 msgid "select directory"
 msgstr "velg mappe"
 
+msgid "Select directory"
+msgstr "Velg mappe"
+
 #: ../build/src/preferences_gen.h:3047
 msgid ""
 "this folder (and sub-folders) contains Lut files used by lut3d modules. "
@@ -4046,6 +4049,10 @@ msgstr "modul"
 msgid "module order"
 msgstr "mindre kant"
 
+#, fuzzy
+msgid "Module order"
+msgstr "Mindre kant"
+
 #: ../src/common/collection.c:685 ../src/develop/lightroom.c:1505
 #: ../src/libs/tools/filter.c:119
 msgid "rating"
@@ -4843,7 +4850,7 @@ msgid ""
 msgstr ""
 
 #: ../src/common/database.c:2911
-msgid "ansel - schema migration"
+msgid "Ansel - schema migration"
 msgstr ""
 
 #: ../src/common/database.c:2912 ../src/common/database.c:3265
@@ -4886,7 +4893,7 @@ msgstr ""
 
 #: ../src/common/database.c:3262 ../src/common/database.c:3280
 #: ../src/common/database.c:3440 ../src/common/database.c:3458
-msgid "ansel - error opening database"
+msgid "Ansel - error opening database"
 msgstr ""
 
 #: ../src/common/database.c:3267 ../src/common/database.c:3445
@@ -4952,7 +4959,7 @@ msgid ""
 msgstr ""
 
 #: ../src/common/database.c:3815
-msgid "ansel - schema maintenance"
+msgid "Ansel - schema maintenance"
 msgstr ""
 
 #: ../src/common/database.c:3816
@@ -4997,10 +5004,10 @@ msgstr[0] "vil du fjerne denne tomme mappen?"
 msgstr[1] "vil du fjerne disse tomme mappene?"
 
 #: ../src/common/film.c:297
-msgid "remove empty directory?"
-msgid_plural "remove empty directories?"
-msgstr[0] "fjerne tom mappe?"
-msgstr[1] "fjerne tomme mapper?"
+msgid "Remove empty directory?"
+msgid_plural "Remove empty directories?"
+msgstr[0] "Fjerne tom mappe?"
+msgstr[1] "Fjerne tomme mapper?"
 
 #: ../src/common/film.c:317 ../src/gui/preferences.c:979
 #: ../src/gui/styles_dialog.c:466 ../src/libs/collect.c:3003
@@ -6110,7 +6117,7 @@ msgstr "forskjell"
 
 #: ../src/control/crawler.c:785
 #, fuzzy
-msgid "updated XMP sidecar files found"
+msgid "Updated XMP sidecar files found"
 msgstr "XMP sidefiler"
 
 #: ../src/control/crawler.c:786
@@ -6245,12 +6252,12 @@ msgid "stop process"
 msgstr "stopp prosessen"
 
 #: ../src/control/jobs/control_jobs.c:901
-msgid "trashing error"
-msgstr "feil med papirkurven"
+msgid "Trashing error"
+msgstr "Feil med papirkurven"
 
 #: ../src/control/jobs/control_jobs.c:902
-msgid "deletion error"
-msgstr "feil ved sletting"
+msgid "Deletion error"
+msgstr "Feil ved sletting"
 
 #: ../src/control/jobs/control_jobs.c:1044
 #, c-format
@@ -6437,12 +6444,15 @@ msgstr "vil du faktisk slette forhåndsinnstillingen `%s'?"
 
 #: ../src/control/jobs/control_jobs.c:1736
 #, fuzzy
-msgid "delete image?"
-msgstr "slett bilder"
+msgid "Delete image?"
+msgstr "Slett bilder"
 
 #: ../src/control/jobs/control_jobs.c:1754 ../src/libs/collect.c:2059
 msgid "move images"
 msgstr "flytte bilder"
+
+msgid "Move images"
+msgstr "Flytte bilder"
 
 #: ../src/control/jobs/control_jobs.c:1766
 #: ../src/control/jobs/control_jobs.c:1828
@@ -6461,10 +6471,10 @@ msgstr[0] ""
 msgstr[1] ""
 
 #: ../src/control/jobs/control_jobs.c:1795
-msgid "move image?"
-msgid_plural "move images?"
-msgstr[0] "flytt bilde?"
-msgstr[1] "flytt bilder?"
+msgid "Move image?"
+msgid_plural "Move images?"
+msgstr[0] "Flytt bilde?"
+msgstr[1] "Flytt bilder?"
 
 #: ../src/control/jobs/control_jobs.c:1816
 msgid "copy images"
@@ -6478,10 +6488,10 @@ msgstr[0] "vil du faktisk slette forhåndsinnstillingen `%s'?"
 msgstr[1] "vil du faktisk slette forhåndsinnstillingen `%s'?"
 
 #: ../src/control/jobs/control_jobs.c:1854
-msgid "copy image?"
-msgid_plural "copy images?"
-msgstr[0] "kopiere bilde?"
-msgstr[1] "kopiere bilder?"
+msgid "Copy image?"
+msgid_plural "Copy images?"
+msgstr[0] "Kopiere bilde?"
+msgstr[1] "Kopiere bilder?"
 
 #: ../src/control/jobs/control_jobs.c:1874
 #: ../src/control/jobs/control_jobs.c:1882
@@ -9193,7 +9203,7 @@ msgid "failed to import preset %s"
 msgstr "stil-filen for %s ble ikke overskrevet"
 
 #: ../src/gui/preferences.c:1184
-msgid "select preset(s) to import"
+msgid "Select preset(s) to import"
 msgstr ""
 
 #: ../src/gui/preferences.c:1185 ../src/gui/actions/edit.c:305
@@ -9241,8 +9251,8 @@ msgid "do you really want to delete the preset `%s'?"
 msgstr "vil du faktisk slette forhåndsinnstillingen `%s'?"
 
 #: ../src/gui/presets.c:303 ../src/gui/presets.c:532 ../src/libs/lib.c:321
-msgid "delete preset?"
-msgstr "slette forhåndsinnstilling?"
+msgid "Delete preset?"
+msgstr "Slette forhåndsinnstilling?"
 
 #. add new preset
 #. then show edit dialog
@@ -9259,8 +9269,8 @@ msgid "please give preset a name"
 msgstr "angi et navn for forhåndsinnstillingen"
 
 #: ../src/gui/presets.c:339
-msgid "unnamed preset"
-msgstr "forhåndsinnstilling uten navn"
+msgid "Unnamed preset"
+msgstr "Forhåndsinnstilling uten navn"
 
 #: ../src/gui/presets.c:368
 #, c-format
@@ -9272,8 +9282,8 @@ msgstr ""
 "vil du skrive over?"
 
 #: ../src/gui/presets.c:373
-msgid "overwrite preset?"
-msgstr "skrive over forhåndsinnstilling?"
+msgid "Overwrite preset?"
+msgstr "Skrive over forhåndsinnstilling?"
 
 #: ../src/gui/presets.c:490 ../src/imageio/storage/disk.c:154
 #: ../src/imageio/storage/gallery.c:142
@@ -9287,8 +9297,8 @@ msgstr "stilen %s ble importert"
 
 #: ../src/gui/presets.c:565
 #, c-format
-msgid "edit `%s' for module `%s'"
-msgstr "rediger `%s' for modul `%s'"
+msgid "Edit `%s' for module `%s'"
+msgstr "Rediger `%s' for modul `%s'"
 
 #: ../src/gui/presets.c:568
 #, fuzzy
@@ -9387,8 +9397,8 @@ msgstr "vil du faktisk slette forhåndsinnstillingen `%s'?"
 
 #: ../src/gui/presets.c:921 ../src/libs/lib.c:236
 #, fuzzy
-msgid "update preset?"
-msgstr "oppdater forhåndsinnstilling"
+msgid "Update preset?"
+msgstr "Oppdater forhåndsinnstilling"
 
 #: ../src/gui/presets.c:1245
 msgid "(default)"
@@ -9471,8 +9481,8 @@ msgstr ""
 #: ../src/gui/styles_dialog.c:230 ../src/libs/styles.c:461
 #: ../src/libs/styles.c:645
 #, fuzzy
-msgid "overwrite style?"
-msgstr "skrive over forhåndsinnstilling?"
+msgid "Overwrite style?"
+msgstr "Skrive over forhåndsinnstilling?"
 
 #: ../src/gui/styles_dialog.c:259 ../src/gui/styles_dialog.c:318
 #, fuzzy
@@ -9481,8 +9491,8 @@ msgstr "angi et navn for forhåndsinnstillingen"
 
 #: ../src/gui/styles_dialog.c:263 ../src/gui/styles_dialog.c:322
 #, fuzzy
-msgid "unnamed style"
-msgstr "forhåndsinnstilling uten navn"
+msgid "Unnamed style"
+msgstr "Forhåndsinnstilling uten navn"
 
 #: ../src/gui/styles_dialog.c:310
 #, c-format
@@ -9490,8 +9500,8 @@ msgid "style %s was successfully saved"
 msgstr "stilen %s ble lagret"
 
 #: ../src/gui/styles_dialog.c:425
-msgid "edit style"
-msgstr "rediger stil"
+msgid "Edit style"
+msgstr "Rediger stil"
 
 #: ../src/gui/styles_dialog.c:426
 msgid "duplicate style"
@@ -9502,8 +9512,8 @@ msgid "creates a duplicate of the style before applying changes"
 msgstr "lager et duplikat av stilen før endringene legges inn"
 
 #: ../src/gui/styles_dialog.c:431
-msgid "create new style"
-msgstr "lag en ny stil"
+msgid "Create new style"
+msgstr "Lag en ny stil"
 
 #: ../src/gui/styles_dialog.c:467
 msgid "enter a name for the new style"
@@ -9678,8 +9688,8 @@ msgid "Paste history (parts) — merge settings"
 msgstr ""
 
 #: ../src/gui/actions/edit.c:304
-msgid "open sidecar file"
-msgstr "åpne sidefil"
+msgid "Open sidecar file"
+msgstr "Åpne sidefil"
 
 #: ../src/gui/actions/edit.c:337
 msgid "XMP sidecar files"
@@ -9904,8 +9914,8 @@ msgid "do you want to access ansel.photos ?"
 msgstr ""
 
 #: ../src/gui/actions/help.c:146
-msgid "access the online usermanual?"
-msgstr "vis brukermanual på nettet?"
+msgid "Access the online usermanual?"
+msgstr "Vis brukermanual på nettet?"
 
 #: ../src/gui/actions/help.c:158
 msgid "help url opened in web browser"
@@ -16466,8 +16476,8 @@ msgid "lut root folder not defined"
 msgstr "3D lut toppmappe"
 
 #: ../src/iop/lut3d.c:1339
-msgid "select lut file"
-msgstr "velg lut-fil"
+msgid "Select lut file"
+msgstr "Velg lut-fil"
 
 #: ../src/iop/lut3d.c:1340
 msgid "_select"
@@ -18271,13 +18281,13 @@ msgstr "ikke kategorisert"
 
 #: ../src/libs/collect.c:1840
 #, fuzzy
-msgid "select the new location of this folder"
-msgstr "velg fargetone for filteret"
+msgid "Select the new location of this folder"
+msgstr "Velg fargetone for filteret"
 
 #: ../src/libs/collect.c:1840
 #, fuzzy
-msgid "select the new parent folder"
-msgstr "velg fargetone"
+msgid "Select the new parent folder"
+msgstr "Velg fargetone"
 
 #: ../src/libs/collect.c:1873
 #, fuzzy
@@ -18296,10 +18306,14 @@ msgstr[1] "fjern merkelapp fra valgte bilder"
 msgid "delete tags"
 msgstr "slette merkelapp"
 
+#, fuzzy
+msgid "Delete tags"
+msgstr "Slette merkelapp"
+
 #: ../src/libs/collect.c:1906
 #, fuzzy
-msgid "rename tag"
-msgstr "lag merkelapp"
+msgid "Rename tag"
+msgstr "Lag merkelapp"
 
 #: ../src/libs/collect.c:1971
 #, fuzzy
@@ -18553,8 +18567,8 @@ msgid "Duplicates"
 msgstr "dupliser stil"
 
 #: ../src/libs/export.c:347
-msgid "export to disk"
-msgstr "eksporter til disk"
+msgid "Export to disk"
+msgstr "Eksporter til disk"
 
 #: ../src/libs/export.c:505
 #, c-format
@@ -18752,8 +18766,8 @@ msgid "export with current settings"
 msgstr "eksporter med nåværende innstillinger"
 
 #: ../src/libs/export_metadata.c:174
-msgid "select tag"
-msgstr "velg merkelapp"
+msgid "Select tag"
+msgstr "Velg merkelapp"
 
 #: ../src/libs/export_metadata.c:175
 msgid "add"
@@ -18777,8 +18791,8 @@ msgstr ""
 "for å legge til den valgte"
 
 #: ../src/libs/export_metadata.c:302
-msgid "edit metadata exportation"
-msgstr "metadata redigering for eksport"
+msgid "Edit metadata exportation"
+msgstr "Metadata redigering for eksport"
 
 #: ../src/libs/export_metadata.c:303 ../src/libs/metadata.c:518
 #: ../src/libs/metadata_view.c:1188 ../src/libs/styles.c:462
@@ -18974,8 +18988,8 @@ msgid "images"
 msgstr "bilder"
 
 #: ../src/libs/geotagging.c:956
-msgid "open GPX file"
-msgstr "åpne GPX-fil"
+msgid "Open GPX file"
+msgstr "Åpne GPX-fil"
 
 #: ../src/libs/geotagging.c:970
 msgid "GPS data exchange format"
@@ -19498,8 +19512,8 @@ msgstr ""
 
 #: ../src/libs/ioporder.c:1536
 #, fuzzy
-msgid "save module order preset"
-msgstr "mindre kant"
+msgid "Save module order preset"
+msgstr "Mindre kant"
 
 #: ../src/libs/ioporder.c:1545
 #, fuzzy
@@ -19756,8 +19770,8 @@ msgstr "<bruk uendret>"
 
 #: ../src/libs/metadata.c:516 ../src/libs/metadata_view.c:1186
 #, fuzzy
-msgid "metadata settings"
-msgstr "innstillinger for metadata"
+msgid "Metadata settings"
+msgstr "Innstillinger for metadata"
 
 #: ../src/libs/metadata.c:566 ../src/libs/metadata_view.c:1232
 #, fuzzy
@@ -20444,10 +20458,10 @@ msgstr[1] "vil du faktisk slette forhåndsinnstillingen `%s'?"
 
 #: ../src/libs/styles.c:344
 #, fuzzy
-msgid "remove style?"
-msgid_plural "remove styles?"
-msgstr[0] "velg stil"
-msgstr[1] "velg stil"
+msgid "Remove style?"
+msgid_plural "Remove styles?"
+msgstr[0] "Velg stil"
+msgstr[1] "Velg stil"
 
 #: ../src/libs/styles.c:468 ../src/libs/styles.c:652
 #, fuzzy, c-format
@@ -20469,8 +20483,8 @@ msgid "style %s was successfully exported"
 msgstr "stilen %s ble importert"
 
 #: ../src/libs/styles.c:551
-msgid "select style"
-msgstr "velg stil"
+msgid "Select style"
+msgstr "Velg stil"
 
 #: ../src/libs/styles.c:561
 #, fuzzy
@@ -20573,8 +20587,8 @@ msgstr "fjern merkelapp"
 
 #: ../src/libs/tagging.c:1461
 #, fuzzy
-msgid "delete node?"
-msgstr "slette merkelapp?"
+msgid "Delete node?"
+msgstr "Slette merkelapp?"
 
 #: ../src/libs/tagging.c:1468 ../src/libs/tagging.c:1683
 #: ../src/libs/tagging.c:1968
@@ -20603,8 +20617,8 @@ msgid "%d tags removed"
 msgstr "%d merkelapper fjernet"
 
 #: ../src/libs/tagging.c:1543
-msgid "create tag"
-msgstr "lag merkelapp"
+msgid "Create tag"
+msgstr "Lag merkelapp"
 
 #: ../src/libs/tagging.c:1553 ../src/libs/tagging.c:1703
 msgid "name: "
@@ -20662,16 +20676,16 @@ msgstr "minst en merkelapp med dette navnet (%s) finnes fra før, avslutter."
 
 #: ../src/libs/tagging.c:1961
 #, fuzzy
-msgid "change path"
-msgstr "bytte til: eller"
+msgid "Change path"
+msgstr "Bytte til: eller"
 
 #: ../src/libs/tagging.c:2005
 msgid "'|' misplaced, empty tag is not allowed, aborting"
 msgstr "tegnet '|' kan ikke brukes, merkelapper må ha et navn, avslutter"
 
 #: ../src/libs/tagging.c:2088
-msgid "delete tag?"
-msgstr "slette merkelapp?"
+msgid "Delete tag?"
+msgstr "Slette merkelapp?"
 
 #: ../src/libs/tagging.c:2092
 #, fuzzy, c-format
@@ -20738,8 +20752,8 @@ msgstr "(privat)"
 
 #: ../src/libs/tagging.c:2435
 #, fuzzy
-msgid "select a keyword file"
-msgstr "velg fil"
+msgid "Select a keyword file"
+msgstr "Velg fil"
 
 #: ../src/libs/tagging.c:2436
 msgid "_import"
@@ -20752,8 +20766,8 @@ msgstr "%zd merkelapper importert"
 
 #: ../src/libs/tagging.c:2468
 #, fuzzy
-msgid "select file to export to"
-msgstr "velg fyll-farge"
+msgid "Select file to export to"
+msgstr "Velg fyll-farge"
 
 #: ../src/libs/tagging.c:2469
 msgid "_export"
@@ -20827,8 +20841,8 @@ msgstr "legg til merkelapp for alle valgte bilder"
 
 #: ../src/libs/tagging.c:3248
 #, fuzzy
-msgid "manage tags"
-msgstr "geotags"
+msgid "Manage tags"
+msgstr "Geotags"
 
 #: ../src/libs/tagging.c:3263
 msgid "type to filter the tag dictionary below"
@@ -21766,7 +21780,7 @@ msgid "no LUT to save"
 msgstr "ingenting å lagre"
 
 #: ../src/common/lut_viewer.c:1207
-msgid "save 3D LUT"
+msgid "Save 3D LUT"
 msgstr ""
 
 #: ../src/common/lut_viewer.c:1222

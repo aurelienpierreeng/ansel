@@ -55,7 +55,7 @@ static gboolean _ask_and_delete(gpointer user_data)
 #endif
 
   gtk_window_set_title(GTK_WINDOW(dialog),
-                       ngettext("remove empty directory?", "remove empty directories?", n_empty_dirs));
+                       ngettext("Remove empty directory?", "Remove empty directories?", n_empty_dirs));
 
   GtkWidget *content_area = gtk_dialog_get_content_area(GTK_DIALOG(dialog));
 

@@ -655,6 +655,9 @@ msgstr ""
 msgid "select directory"
 msgstr "ディレクトリを選択してください"
 
+msgid "Select directory"
+msgstr "ディレクトリを選択してください"
+
 #: ../build/src/preferences_gen.h:3047
 msgid ""
 "this folder (and sub-folders) contains Lut files used by lut3d modules. "
@@ -3912,6 +3915,9 @@ msgstr "モジュール"
 msgid "module order"
 msgstr "モジュールの順序"
 
+msgid "Module order"
+msgstr "モジュールの順序"
+
 #: ../src/common/collection.c:685 ../src/develop/lightroom.c:1505
 #: ../src/libs/tools/filter.c:119
 msgid "rating"
@@ -4688,7 +4694,7 @@ msgstr ""
 "続行しますか、今すぐ終了してバックアップを実行しますか\n"
 
 #: ../src/common/database.c:2911
-msgid "ansel - schema migration"
+msgid "Ansel - schema migration"
 msgstr ""
 
 #: ../src/common/database.c:2912 ../src/common/database.c:3265
@@ -4733,7 +4739,7 @@ msgstr ""
 
 #: ../src/common/database.c:3262 ../src/common/database.c:3280
 #: ../src/common/database.c:3440 ../src/common/database.c:3458
-msgid "ansel - error opening database"
+msgid "Ansel - error opening database"
 msgstr ""
 
 #: ../src/common/database.c:3267 ../src/common/database.c:3445
@@ -4813,7 +4819,7 @@ msgstr ""
 
 #: ../src/common/database.c:3815
 #, fuzzy
-msgid "ansel - schema maintenance"
+msgid "Ansel - schema maintenance"
 msgstr "ラスターマスクのインスタンス"
 
 #: ../src/common/database.c:3816
@@ -4858,8 +4864,8 @@ msgstr[0] "この空のディレクトリを削除しますか？"
 msgstr[1] "この空のディレクトリを削除しますか？"
 
 #: ../src/common/film.c:297
-msgid "remove empty directory?"
-msgid_plural "remove empty directories?"
+msgid "Remove empty directory?"
+msgid_plural "Remove empty directories?"
 msgstr[0] "空のディレクトリを削除しますか？"
 msgstr[1] "空のディレクトリを削除しますか？"
 
@@ -5987,7 +5993,7 @@ msgid "time difference"
 msgstr "時間差"
 
 #: ../src/control/crawler.c:785
-msgid "updated XMP sidecar files found"
+msgid "Updated XMP sidecar files found"
 msgstr "更新されたXMPサイドカーファイルが見つかりました"
 
 #: ../src/control/crawler.c:786
@@ -6121,11 +6127,11 @@ msgid "stop process"
 msgstr "処理を停止する"
 
 #: ../src/control/jobs/control_jobs.c:901
-msgid "trashing error"
+msgid "Trashing error"
 msgstr "ゴミ箱への移動エラー"
 
 #: ../src/control/jobs/control_jobs.c:902
-msgid "deletion error"
+msgid "Deletion error"
 msgstr "削除エラー"
 
 #: ../src/control/jobs/control_jobs.c:1044
@@ -6319,11 +6325,14 @@ msgid "do you really want to physically delete selected image from disk?"
 msgstr "選択した画像を本当にディスクから物理的に削除しますか？"
 
 #: ../src/control/jobs/control_jobs.c:1736
-msgid "delete image?"
+msgid "Delete image?"
 msgstr "画像を削除しますか？"
 
 #: ../src/control/jobs/control_jobs.c:1754 ../src/libs/collect.c:2059
 msgid "move images"
+msgstr "画像を移動します"
+
+msgid "Move images"
 msgstr "画像を移動します"
 
 #: ../src/control/jobs/control_jobs.c:1766
@@ -6347,8 +6356,8 @@ msgstr[1] ""
 "（全ての複製画像が移動します）"
 
 #: ../src/control/jobs/control_jobs.c:1795
-msgid "move image?"
-msgid_plural "move images?"
+msgid "Move image?"
+msgid_plural "Move images?"
 msgstr[0] "画像を移動しますか？"
 msgstr[1] "画像を移動しますか？"
 
@@ -6364,8 +6373,8 @@ msgstr[0] "%d枚の画像を 本当に%s に物理的にコピーしますか？
 msgstr[1] "%d枚の画像を本当に%s に物理的にコピーしますか？"
 
 #: ../src/control/jobs/control_jobs.c:1854
-msgid "copy image?"
-msgid_plural "copy images?"
+msgid "Copy image?"
+msgid_plural "Copy images?"
 msgstr[0] "画像をコピーしますか？"
 msgstr[1] "画像をコピーしますか？"
 
@@ -9121,7 +9130,7 @@ msgid "failed to import preset %s"
 msgstr "プリセット%sのインポートに失敗しました"
 
 #: ../src/gui/preferences.c:1184
-msgid "select preset(s) to import"
+msgid "Select preset(s) to import"
 msgstr "インポートするプリセットを選択します"
 
 #: ../src/gui/preferences.c:1185 ../src/gui/actions/edit.c:305
@@ -9169,7 +9178,7 @@ msgid "do you really want to delete the preset `%s'?"
 msgstr "プリセット`%s'を本当に削除しますか？"
 
 #: ../src/gui/presets.c:303 ../src/gui/presets.c:532 ../src/libs/lib.c:321
-msgid "delete preset?"
+msgid "Delete preset?"
 msgstr "プリセットを削除しますか？"
 
 #. add new preset
@@ -9187,7 +9196,7 @@ msgid "please give preset a name"
 msgstr "プリセットに名前をつけてください"
 
 #: ../src/gui/presets.c:339
-msgid "unnamed preset"
+msgid "Unnamed preset"
 msgstr "名称未設定のプリセット"
 
 #: ../src/gui/presets.c:368
@@ -9200,7 +9209,7 @@ msgstr ""
 "上書きしますか？"
 
 #: ../src/gui/presets.c:373
-msgid "overwrite preset?"
+msgid "Overwrite preset?"
 msgstr "プリセットを上書きしますか？"
 
 #: ../src/gui/presets.c:490 ../src/imageio/storage/disk.c:154
@@ -9215,7 +9224,7 @@ msgstr "プリセット%sは正常にエクスポートされました"
 
 #: ../src/gui/presets.c:565
 #, c-format
-msgid "edit `%s' for module `%s'"
+msgid "Edit `%s' for module `%s'"
 msgstr "`%s'を編集します（モジュール`%s'）"
 
 #: ../src/gui/presets.c:568
@@ -9316,7 +9325,7 @@ msgid "do you really want to update the preset `%s'?"
 msgstr "プリセット`%s'を本当に更新しますか？"
 
 #: ../src/gui/presets.c:921 ../src/libs/lib.c:236
-msgid "update preset?"
+msgid "Update preset?"
 msgstr "プリセットを更新しますか？"
 
 #: ../src/gui/presets.c:1245
@@ -9402,7 +9411,7 @@ msgstr ""
 
 #: ../src/gui/styles_dialog.c:230 ../src/libs/styles.c:461
 #: ../src/libs/styles.c:645
-msgid "overwrite style?"
+msgid "Overwrite style?"
 msgstr "スタイルを上書きしますか？"
 
 #: ../src/gui/styles_dialog.c:259 ../src/gui/styles_dialog.c:318
@@ -9410,7 +9419,7 @@ msgid "please give style a name"
 msgstr "スタイルに名前をつけてください"
 
 #: ../src/gui/styles_dialog.c:263 ../src/gui/styles_dialog.c:322
-msgid "unnamed style"
+msgid "Unnamed style"
 msgstr "名称未設定のスタイル"
 
 #: ../src/gui/styles_dialog.c:310
@@ -9419,7 +9428,7 @@ msgid "style %s was successfully saved"
 msgstr "スタイル%sは正常に保存されました"
 
 #: ../src/gui/styles_dialog.c:425
-msgid "edit style"
+msgid "Edit style"
 msgstr "スタイルを編集します"
 
 #: ../src/gui/styles_dialog.c:426
@@ -9431,7 +9440,7 @@ msgid "creates a duplicate of the style before applying changes"
 msgstr "変更を適用する前にスタイルの複製を作成します"
 
 #: ../src/gui/styles_dialog.c:431
-msgid "create new style"
+msgid "Create new style"
 msgstr "新しいスタイルを作成します"
 
 #: ../src/gui/styles_dialog.c:467
@@ -9609,7 +9618,7 @@ msgid "Paste history (parts) — merge settings"
 msgstr ""
 
 #: ../src/gui/actions/edit.c:304
-msgid "open sidecar file"
+msgid "Open sidecar file"
 msgstr "サイドカーファイルを開いてください"
 
 #: ../src/gui/actions/edit.c:337
@@ -9836,7 +9845,7 @@ msgid "do you want to access ansel.photos ?"
 msgstr ""
 
 #: ../src/gui/actions/help.c:146
-msgid "access the online usermanual?"
+msgid "Access the online usermanual?"
 msgstr "オンラインのユーザーマニュアルにアクセスしますか？"
 
 #: ../src/gui/actions/help.c:158
@@ -16718,8 +16727,8 @@ msgid "lut root folder not defined"
 msgstr ""
 
 #: ../src/iop/lut3d.c:1339
-msgid "select lut file"
-msgstr "lutファイルを選択してください"
+msgid "Select lut file"
+msgstr "Lutファイルを選択してください"
 
 #: ../src/iop/lut3d.c:1340
 msgid "_select"
@@ -18595,12 +18604,12 @@ msgstr "未分類"
 
 #: ../src/libs/collect.c:1840
 #, fuzzy
-msgid "select the new location of this folder"
+msgid "Select the new location of this folder"
 msgstr "フィルターの色相トーンを選択してください"
 
 #: ../src/libs/collect.c:1840
 #, fuzzy
-msgid "select the new parent folder"
+msgid "Select the new parent folder"
 msgstr "色相トーンを選択してください"
 
 #: ../src/libs/collect.c:1873
@@ -18620,9 +18629,13 @@ msgstr[1] "選択した画像全てからタグを外します"
 msgid "delete tags"
 msgstr "タグを削除..."
 
+#, fuzzy
+msgid "Delete tags"
+msgstr "タグを削除..."
+
 #: ../src/libs/collect.c:1906
 #, fuzzy
-msgid "rename tag"
+msgid "Rename tag"
 msgstr "タグを作成"
 
 #: ../src/libs/collect.c:1971
@@ -18895,7 +18908,7 @@ msgid "Duplicates"
 msgstr "スタイルを複製します"
 
 #: ../src/libs/export.c:347
-msgid "export to disk"
+msgid "Export to disk"
 msgstr "ディスクにエクスポート"
 
 #: ../src/libs/export.c:505
@@ -19099,7 +19112,7 @@ msgid "export with current settings"
 msgstr "現在の設定でエクスポートします"
 
 #: ../src/libs/export_metadata.c:174
-msgid "select tag"
+msgid "Select tag"
 msgstr "タグを選択する"
 
 #: ../src/libs/export_metadata.c:175
@@ -19123,7 +19136,7 @@ msgstr ""
 "リックして、選択したタグを追加します"
 
 #: ../src/libs/export_metadata.c:302
-msgid "edit metadata exportation"
+msgid "Edit metadata exportation"
 msgstr "メタデータのエクスポートの編集"
 
 #: ../src/libs/export_metadata.c:303 ../src/libs/metadata.c:518
@@ -19321,7 +19334,7 @@ msgid "images"
 msgstr "画像"
 
 #: ../src/libs/geotagging.c:956
-msgid "open GPX file"
+msgid "Open GPX file"
 msgstr "GPXファイルを開いてください"
 
 #: ../src/libs/geotagging.c:970
@@ -19836,7 +19849,7 @@ msgstr ""
 
 #: ../src/libs/ioporder.c:1536
 #, fuzzy
-msgid "save module order preset"
+msgid "Save module order preset"
 msgstr "モジュールの順序"
 
 #: ../src/libs/ioporder.c:1545
@@ -20094,7 +20107,7 @@ msgid "<leave unchanged>"
 msgstr "<変更しない>"
 
 #: ../src/libs/metadata.c:516 ../src/libs/metadata_view.c:1186
-msgid "metadata settings"
+msgid "Metadata settings"
 msgstr "メタデータ設定"
 
 #: ../src/libs/metadata.c:566 ../src/libs/metadata_view.c:1232
@@ -20786,8 +20799,8 @@ msgstr[0] "`%d'個のスタイルを本当に削除しますか？"
 msgstr[1] "`%d'個のスタイルを本当に削除しますか？"
 
 #: ../src/libs/styles.c:344
-msgid "remove style?"
-msgid_plural "remove styles?"
+msgid "Remove style?"
+msgid_plural "Remove styles?"
 msgstr[0] "スタイルを削除しますか？"
 msgstr[1] "スタイルを削除しますか？"
 
@@ -20810,7 +20823,7 @@ msgid "style %s was successfully exported"
 msgstr "スタイル%sは正常にインポートされました"
 
 #: ../src/libs/styles.c:551
-msgid "select style"
+msgid "Select style"
 msgstr "スタイルを選択してください"
 
 #: ../src/libs/styles.c:561
@@ -20908,7 +20921,7 @@ msgid "detach all tags"
 msgstr "タグを外します"
 
 #: ../src/libs/tagging.c:1461
-msgid "delete node?"
+msgid "Delete node?"
 msgstr "ノードを削除しますか？"
 
 #: ../src/libs/tagging.c:1468 ../src/libs/tagging.c:1683
@@ -20938,7 +20951,7 @@ msgid "%d tags removed"
 msgstr "%d個のタグを削除しました"
 
 #: ../src/libs/tagging.c:1543
-msgid "create tag"
+msgid "Create tag"
 msgstr "タグを作成"
 
 #: ../src/libs/tagging.c:1553 ../src/libs/tagging.c:1703
@@ -20997,7 +21010,7 @@ msgid "at least one new tagname (%s) already exists, aborting."
 msgstr "新しいタグ名（%s）が既に存在します。中止します"
 
 #: ../src/libs/tagging.c:1961
-msgid "change path"
+msgid "Change path"
 msgstr "パスの変更"
 
 #: ../src/libs/tagging.c:2005
@@ -21005,7 +21018,7 @@ msgid "'|' misplaced, empty tag is not allowed, aborting"
 msgstr "'|' の場所が不適切です。空のタグは許可されません。中止します"
 
 #: ../src/libs/tagging.c:2088
-msgid "delete tag?"
+msgid "Delete tag?"
 msgstr "タグを削除しますか？"
 
 #: ../src/libs/tagging.c:2092
@@ -21070,7 +21083,7 @@ msgid "(private)"
 msgstr "（プライベート）"
 
 #: ../src/libs/tagging.c:2435
-msgid "select a keyword file"
+msgid "Select a keyword file"
 msgstr "キーワードファイルを選択してください"
 
 #: ../src/libs/tagging.c:2436
@@ -21083,7 +21096,7 @@ msgid "%u tags imported"
 msgstr "%zd個のタグがインポートされました"
 
 #: ../src/libs/tagging.c:2468
-msgid "select file to export to"
+msgid "Select file to export to"
 msgstr "ファイルを選択して次の宛先にエクスポートします"
 
 #: ../src/libs/tagging.c:2469
@@ -21158,7 +21171,7 @@ msgstr "選択した画像全てにタグを付けます"
 
 #: ../src/libs/tagging.c:3248
 #, fuzzy
-msgid "manage tags"
+msgid "Manage tags"
 msgstr "ジオタグ"
 
 #: ../src/libs/tagging.c:3263
@@ -22130,7 +22143,7 @@ msgid "no LUT to save"
 msgstr "保存するものがありません"
 
 #: ../src/common/lut_viewer.c:1207
-msgid "save 3D LUT"
+msgid "Save 3D LUT"
 msgstr ""
 
 #: ../src/common/lut_viewer.c:1222

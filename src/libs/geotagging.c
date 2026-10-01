@@ -979,7 +979,7 @@ static void _choose_gpx_callback(GtkWidget *widget, dt_lib_module_t *self)
   dt_lib_geotagging_t *d = (dt_lib_geotagging_t *)self->data;
   GtkWidget *win = dt_gui_main_window();
   GtkWidget *filechooser = gtk_file_chooser_dialog_new(
-            _("open GPX file"), GTK_WINDOW(win), GTK_FILE_CHOOSER_ACTION_OPEN,
+            _("Open GPX file"), GTK_WINDOW(win), GTK_FILE_CHOOSER_ACTION_OPEN,
             _("preview"), GTK_RESPONSE_ACCEPT,
             _("_cancel"), GTK_RESPONSE_CANCEL,
             _("_open"), GTK_RESPONSE_OK, (char *)NULL);

@@ -660,6 +660,9 @@ msgstr "základní složka se soubory 3D lut"
 msgid "select directory"
 msgstr "vybrat složku"
 
+msgid "Select directory"
+msgstr "Vybrat složku"
+
 #: ../build/src/preferences_gen.h:3047
 msgid ""
 "this folder (and sub-folders) contains Lut files used by lut3d modules. "
@@ -3922,6 +3925,9 @@ msgstr "modul"
 msgid "module order"
 msgstr "třídění modulů"
 
+msgid "Module order"
+msgstr "Třídění modulů"
+
 #: ../src/common/collection.c:685 ../src/develop/lightroom.c:1505
 #: ../src/libs/tools/filter.c:119
 msgid "rating"
@@ -4699,7 +4705,7 @@ msgstr ""
 "chcete pokračovat nebo skončit nyní a provést zálohu\n"
 
 #: ../src/common/database.c:2911
-msgid "ansel - schema migration"
+msgid "Ansel - schema migration"
 msgstr ""
 
 #: ../src/common/database.c:2912 ../src/common/database.c:3265
@@ -4744,7 +4750,7 @@ msgstr ""
 
 #: ../src/common/database.c:3262 ../src/common/database.c:3280
 #: ../src/common/database.c:3440 ../src/common/database.c:3458
-msgid "ansel - error opening database"
+msgid "Ansel - error opening database"
 msgstr ""
 
 #: ../src/common/database.c:3267 ../src/common/database.c:3445
@@ -4828,8 +4834,8 @@ msgstr ""
 
 #: ../src/common/database.c:3815
 #, fuzzy
-msgid "ansel - schema maintenance"
-msgstr "instance rastrové masky"
+msgid "Ansel - schema maintenance"
+msgstr "Instance rastrové masky"
 
 #: ../src/common/database.c:3816
 msgid "later"
@@ -4873,11 +4879,11 @@ msgstr[1] "chcete odstranit tyto prázdné složky?"
 msgstr[2] "chcete odstranit tyto prázdných složek?"
 
 #: ../src/common/film.c:297
-msgid "remove empty directory?"
-msgid_plural "remove empty directories?"
-msgstr[0] "odstranit prázdnou složku?"
-msgstr[1] "odstranit prázdné složky?"
-msgstr[2] "odstranit prázdných složek?"
+msgid "Remove empty directory?"
+msgid_plural "Remove empty directories?"
+msgstr[0] "Odstranit prázdnou složku?"
+msgstr[1] "Odstranit prázdné složky?"
+msgstr[2] "Odstranit prázdných složek?"
 
 #: ../src/common/film.c:317 ../src/gui/preferences.c:979
 #: ../src/gui/styles_dialog.c:466 ../src/libs/collect.c:3003
@@ -5997,7 +6003,7 @@ msgstr "časový rozdíl"
 
 #: ../src/control/crawler.c:785
 #, fuzzy
-msgid "updated XMP sidecar files found"
+msgid "Updated XMP sidecar files found"
 msgstr "XMP pomocné soubory"
 
 #: ../src/control/crawler.c:786
@@ -6138,12 +6144,12 @@ msgid "stop process"
 msgstr "zastavit proces"
 
 #: ../src/control/jobs/control_jobs.c:901
-msgid "trashing error"
-msgstr "chyba při přesunu do koše"
+msgid "Trashing error"
+msgstr "Chyba při přesunu do koše"
 
 #: ../src/control/jobs/control_jobs.c:902
-msgid "deletion error"
-msgstr "chyba při mazání"
+msgid "Deletion error"
+msgstr "Chyba při mazání"
 
 #: ../src/control/jobs/control_jobs.c:1044
 #, c-format
@@ -6344,12 +6350,15 @@ msgid "do you really want to physically delete selected image from disk?"
 msgstr "opravdu chcete fyzicky smazat vybraný obrázek z disku?"
 
 #: ../src/control/jobs/control_jobs.c:1736
-msgid "delete image?"
-msgstr "vymazat obrázek?"
+msgid "Delete image?"
+msgstr "Vymazat obrázek?"
 
 #: ../src/control/jobs/control_jobs.c:1754 ../src/libs/collect.c:2059
 msgid "move images"
 msgstr "přesun obrázků"
+
+msgid "Move images"
+msgstr "Přesun obrázků"
 
 #: ../src/control/jobs/control_jobs.c:1766
 #: ../src/control/jobs/control_jobs.c:1828
@@ -6375,11 +6384,11 @@ msgstr[2] ""
 "(všechny duplikáty budou přesunuty)"
 
 #: ../src/control/jobs/control_jobs.c:1795
-msgid "move image?"
-msgid_plural "move images?"
-msgstr[0] "přesunout obrázek?"
-msgstr[1] "přesunout obrázky?"
-msgstr[2] "přesunout obrázků?"
+msgid "Move image?"
+msgid_plural "Move images?"
+msgstr[0] "Přesunout obrázek?"
+msgstr[1] "Přesunout obrázky?"
+msgstr[2] "Přesunout obrázků?"
 
 #: ../src/control/jobs/control_jobs.c:1816
 msgid "copy images"
@@ -6394,11 +6403,11 @@ msgstr[1] "opravdu fyzicky zkopírovat %d obrázky do %s?"
 msgstr[2] "opravdu fyzicky zkopírovat %d obrázků do %s?"
 
 #: ../src/control/jobs/control_jobs.c:1854
-msgid "copy image?"
-msgid_plural "copy images?"
-msgstr[0] "kopírovat obrázek?"
-msgstr[1] "kopírovat obrázky?"
-msgstr[2] "kopírovat obrázků?"
+msgid "Copy image?"
+msgid_plural "Copy images?"
+msgstr[0] "Kopírovat obrázek?"
+msgstr[1] "Kopírovat obrázky?"
+msgstr[2] "Kopírovat obrázků?"
 
 #: ../src/control/jobs/control_jobs.c:1874
 #: ../src/control/jobs/control_jobs.c:1882
@@ -9147,8 +9156,8 @@ msgid "failed to import preset %s"
 msgstr "chyba při importu presetu %s"
 
 #: ../src/gui/preferences.c:1184
-msgid "select preset(s) to import"
-msgstr "vybrat preset(y) pro import"
+msgid "Select preset(s) to import"
+msgstr "Vybrat preset(y) pro import"
 
 #: ../src/gui/preferences.c:1185 ../src/gui/actions/edit.c:305
 #: ../src/libs/collect.c:1841 ../src/libs/geotagging.c:959
@@ -9195,8 +9204,8 @@ msgid "do you really want to delete the preset `%s'?"
 msgstr "opravdu vymazat preset `%s'?"
 
 #: ../src/gui/presets.c:303 ../src/gui/presets.c:532 ../src/libs/lib.c:321
-msgid "delete preset?"
-msgstr "vymazat preset?"
+msgid "Delete preset?"
+msgstr "Vymazat preset?"
 
 #. add new preset
 #. then show edit dialog
@@ -9213,8 +9222,8 @@ msgid "please give preset a name"
 msgstr "prosím zadejte název presetu"
 
 #: ../src/gui/presets.c:339
-msgid "unnamed preset"
-msgstr "bezejmenný preset"
+msgid "Unnamed preset"
+msgstr "Bezejmenný preset"
 
 #: ../src/gui/presets.c:368
 #, c-format
@@ -9226,8 +9235,8 @@ msgstr ""
 "chcete jej nahradit?"
 
 #: ../src/gui/presets.c:373
-msgid "overwrite preset?"
-msgstr "nahradit preset?"
+msgid "Overwrite preset?"
+msgstr "Nahradit preset?"
 
 #: ../src/gui/presets.c:490 ../src/imageio/storage/disk.c:154
 #: ../src/imageio/storage/gallery.c:142
@@ -9241,8 +9250,8 @@ msgstr "preset %s byl v pořádku exportován"
 
 #: ../src/gui/presets.c:565
 #, c-format
-msgid "edit `%s' for module `%s'"
-msgstr "upravit `%s' pro modul `%s'"
+msgid "Edit `%s' for module `%s'"
+msgstr "Upravit `%s' pro modul `%s'"
 
 #: ../src/gui/presets.c:568
 msgid "_export..."
@@ -9339,8 +9348,8 @@ msgid "do you really want to update the preset `%s'?"
 msgstr "opravdu chcete aktualizovat preset `%s'?"
 
 #: ../src/gui/presets.c:921 ../src/libs/lib.c:236
-msgid "update preset?"
-msgstr "aktualizovat preset?"
+msgid "Update preset?"
+msgstr "Aktualizovat preset?"
 
 #: ../src/gui/presets.c:1245
 msgid "(default)"
@@ -9425,16 +9434,16 @@ msgstr ""
 
 #: ../src/gui/styles_dialog.c:230 ../src/libs/styles.c:461
 #: ../src/libs/styles.c:645
-msgid "overwrite style?"
-msgstr "nahradit styl?"
+msgid "Overwrite style?"
+msgstr "Nahradit styl?"
 
 #: ../src/gui/styles_dialog.c:259 ../src/gui/styles_dialog.c:318
 msgid "please give style a name"
 msgstr "prosím zadejte název stylu"
 
 #: ../src/gui/styles_dialog.c:263 ../src/gui/styles_dialog.c:322
-msgid "unnamed style"
-msgstr "bezejmenný styl"
+msgid "Unnamed style"
+msgstr "Bezejmenný styl"
 
 #: ../src/gui/styles_dialog.c:310
 #, c-format
@@ -9442,8 +9451,8 @@ msgid "style %s was successfully saved"
 msgstr "styl %s byl uložen"
 
 #: ../src/gui/styles_dialog.c:425
-msgid "edit style"
-msgstr "úprava stylu"
+msgid "Edit style"
+msgstr "Úprava stylu"
 
 #: ../src/gui/styles_dialog.c:426
 msgid "duplicate style"
@@ -9454,8 +9463,8 @@ msgid "creates a duplicate of the style before applying changes"
 msgstr "vytvoří duplikát stylu před použitím změn"
 
 #: ../src/gui/styles_dialog.c:431
-msgid "create new style"
-msgstr "vytvořit nový styl"
+msgid "Create new style"
+msgstr "Vytvořit nový styl"
 
 #: ../src/gui/styles_dialog.c:467
 msgid "enter a name for the new style"
@@ -9632,8 +9641,8 @@ msgid "Paste history (parts) — merge settings"
 msgstr ""
 
 #: ../src/gui/actions/edit.c:304
-msgid "open sidecar file"
-msgstr "otevřít pomocný soubor"
+msgid "Open sidecar file"
+msgstr "Otevřít pomocný soubor"
 
 #: ../src/gui/actions/edit.c:337
 msgid "XMP sidecar files"
@@ -9859,8 +9868,8 @@ msgid "do you want to access ansel.photos ?"
 msgstr ""
 
 #: ../src/gui/actions/help.c:146
-msgid "access the online usermanual?"
-msgstr "získat přístup k online uživatelské příručce?"
+msgid "Access the online usermanual?"
+msgstr "Získat přístup k online uživatelské příručce?"
 
 #: ../src/gui/actions/help.c:158
 msgid "help url opened in web browser"
@@ -16688,8 +16697,8 @@ msgid "lut root folder not defined"
 msgstr "základní složka se soubory 3D lut"
 
 #: ../src/iop/lut3d.c:1339
-msgid "select lut file"
-msgstr "vyberte soubor lut"
+msgid "Select lut file"
+msgstr "Vyberte soubor lut"
 
 #: ../src/iop/lut3d.c:1340
 msgid "_select"
@@ -18535,13 +18544,13 @@ msgstr "bez kategorie"
 
 #: ../src/libs/collect.c:1840
 #, fuzzy
-msgid "select the new location of this folder"
-msgstr "vyberte barevný tón filtru"
+msgid "Select the new location of this folder"
+msgstr "Vyberte barevný tón filtru"
 
 #: ../src/libs/collect.c:1840
 #, fuzzy
-msgid "select the new parent folder"
-msgstr "vyberte tón odstínu"
+msgid "Select the new parent folder"
+msgstr "Vyberte tón odstínu"
 
 #: ../src/libs/collect.c:1873
 #, fuzzy
@@ -18561,10 +18570,14 @@ msgstr[2] "odepnout štítek od vybraných obrázků"
 msgid "delete tags"
 msgstr "vymazat štítek"
 
+#, fuzzy
+msgid "Delete tags"
+msgstr "Vymazat štítek"
+
 #: ../src/libs/collect.c:1906
 #, fuzzy
-msgid "rename tag"
-msgstr "vytvořit štítek"
+msgid "Rename tag"
+msgstr "Vytvořit štítek"
 
 #: ../src/libs/collect.c:1971
 #, fuzzy
@@ -18834,8 +18847,8 @@ msgid "Duplicates"
 msgstr "duplikovat styl"
 
 #: ../src/libs/export.c:347
-msgid "export to disk"
-msgstr "exportovat na disk"
+msgid "Export to disk"
+msgstr "Exportovat na disk"
 
 #: ../src/libs/export.c:505
 #, c-format
@@ -19038,8 +19051,8 @@ msgid "export with current settings"
 msgstr "exportovat s aktuálním nastavením"
 
 #: ../src/libs/export_metadata.c:174
-msgid "select tag"
-msgstr "vybrat štítek"
+msgid "Select tag"
+msgstr "Vybrat štítek"
 
 #: ../src/libs/export_metadata.c:175
 msgid "add"
@@ -19062,8 +19075,8 @@ msgstr ""
 "klikněte na značku a přidejte vybranou značku"
 
 #: ../src/libs/export_metadata.c:302
-msgid "edit metadata exportation"
-msgstr "upravit export metadat"
+msgid "Edit metadata exportation"
+msgstr "Upravit export metadat"
 
 #: ../src/libs/export_metadata.c:303 ../src/libs/metadata.c:518
 #: ../src/libs/metadata_view.c:1188 ../src/libs/styles.c:462
@@ -19269,8 +19282,8 @@ msgid "images"
 msgstr "obrázky"
 
 #: ../src/libs/geotagging.c:956
-msgid "open GPX file"
-msgstr "otevřít GPX soubor"
+msgid "Open GPX file"
+msgstr "Otevřít GPX soubor"
 
 #: ../src/libs/geotagging.c:970
 msgid "GPS data exchange format"
@@ -19786,8 +19799,8 @@ msgstr ""
 
 #: ../src/libs/ioporder.c:1536
 #, fuzzy
-msgid "save module order preset"
-msgstr "třídění modulů"
+msgid "Save module order preset"
+msgstr "Třídění modulů"
 
 #: ../src/libs/ioporder.c:1545
 #, fuzzy
@@ -20054,8 +20067,8 @@ msgid "<leave unchanged>"
 msgstr "<zachovat>"
 
 #: ../src/libs/metadata.c:516 ../src/libs/metadata_view.c:1186
-msgid "metadata settings"
-msgstr "nastavení metadat"
+msgid "Metadata settings"
+msgstr "Nastavení metadat"
 
 #: ../src/libs/metadata.c:566 ../src/libs/metadata_view.c:1232
 msgid "visible"
@@ -20758,11 +20771,11 @@ msgstr[1] "opravdu vymazat %d styly?"
 msgstr[2] "opravdu vymazat %d stylů?"
 
 #: ../src/libs/styles.c:344
-msgid "remove style?"
-msgid_plural "remove styles?"
-msgstr[0] "odstranit styl?"
-msgstr[1] "odstranit styly?"
-msgstr[2] "odstranit stylů?"
+msgid "Remove style?"
+msgid_plural "Remove styles?"
+msgstr[0] "Odstranit styl?"
+msgstr[1] "Odstranit styly?"
+msgstr[2] "Odstranit stylů?"
 
 #: ../src/libs/styles.c:468 ../src/libs/styles.c:652
 #, c-format
@@ -20783,8 +20796,8 @@ msgid "style %s was successfully exported"
 msgstr "styl %s byl úspěšně exportován"
 
 #: ../src/libs/styles.c:551
-msgid "select style"
-msgstr "výběr stylu"
+msgid "Select style"
+msgstr "Výběr stylu"
 
 #: ../src/libs/styles.c:561
 #, fuzzy
@@ -20883,8 +20896,8 @@ msgid "detach all tags"
 msgstr "odpojit štítek"
 
 #: ../src/libs/tagging.c:1461
-msgid "delete node?"
-msgstr "smazat uzel?"
+msgid "Delete node?"
+msgstr "Smazat uzel?"
 
 #: ../src/libs/tagging.c:1468 ../src/libs/tagging.c:1683
 #: ../src/libs/tagging.c:1968
@@ -20915,8 +20928,8 @@ msgid "%d tags removed"
 msgstr "%d štítků odstraněno"
 
 #: ../src/libs/tagging.c:1543
-msgid "create tag"
-msgstr "vytvořit štítek"
+msgid "Create tag"
+msgstr "Vytvořit štítek"
 
 #: ../src/libs/tagging.c:1553 ../src/libs/tagging.c:1703
 msgid "name: "
@@ -20975,16 +20988,16 @@ msgid "at least one new tagname (%s) already exists, aborting."
 msgstr "alespoň jeden nový štítek (%s) již existuje, storno."
 
 #: ../src/libs/tagging.c:1961
-msgid "change path"
-msgstr "změnit cestu"
+msgid "Change path"
+msgstr "Změnit cestu"
 
 #: ../src/libs/tagging.c:2005
 msgid "'|' misplaced, empty tag is not allowed, aborting"
 msgstr "'|' špatně umístěn, prázdný štítek není povolen, storno"
 
 #: ../src/libs/tagging.c:2088
-msgid "delete tag?"
-msgstr "vymazat štítek?"
+msgid "Delete tag?"
+msgstr "Vymazat štítek?"
 
 #: ../src/libs/tagging.c:2092
 #, fuzzy, c-format
@@ -21051,8 +21064,8 @@ msgid "(private)"
 msgstr "(soukromé)"
 
 #: ../src/libs/tagging.c:2435
-msgid "select a keyword file"
-msgstr "vybrat soubor klíčových slov"
+msgid "Select a keyword file"
+msgstr "Vybrat soubor klíčových slov"
 
 #: ../src/libs/tagging.c:2436
 msgid "_import"
@@ -21064,8 +21077,8 @@ msgid "%u tags imported"
 msgstr "%zd štítků importováno"
 
 #: ../src/libs/tagging.c:2468
-msgid "select file to export to"
-msgstr "vyberte cílový soubor"
+msgid "Select file to export to"
+msgstr "Vyberte cílový soubor"
 
 #: ../src/libs/tagging.c:2469
 msgid "_export"
@@ -21145,8 +21158,8 @@ msgstr "přiřadit štítek vybraným obrázkům"
 
 #: ../src/libs/tagging.c:3248
 #, fuzzy
-msgid "manage tags"
-msgstr "geo štítky"
+msgid "Manage tags"
+msgstr "Geo štítky"
 
 #: ../src/libs/tagging.c:3263
 msgid "type to filter the tag dictionary below"
@@ -22113,7 +22126,7 @@ msgid "no LUT to save"
 msgstr "nic pro uložení"
 
 #: ../src/common/lut_viewer.c:1207
-msgid "save 3D LUT"
+msgid "Save 3D LUT"
 msgstr ""
 
 #: ../src/common/lut_viewer.c:1222

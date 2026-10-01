@@ -652,6 +652,9 @@ msgstr ""
 msgid "select directory"
 msgstr "בחר תיקיה"
 
+msgid "Select directory"
+msgstr "בחר תיקיה"
+
 #: ../build/src/preferences_gen.h:3047
 msgid ""
 "this folder (and sub-folders) contains Lut files used by lut3d modules. "
@@ -3892,6 +3895,9 @@ msgstr "מודול"
 msgid "module order"
 msgstr "סדר מודולים"
 
+msgid "Module order"
+msgstr "סדר מודולים"
+
 #: ../src/common/collection.c:685 ../src/develop/lightroom.c:1505
 #: ../src/libs/tools/filter.c:119
 msgid "rating"
@@ -4666,7 +4672,7 @@ msgstr ""
 "האם ברצונך להמשיך או לוותר עכשיו על מנת לבצע גיבוי\n"
 
 #: ../src/common/database.c:2911
-msgid "ansel - schema migration"
+msgid "Ansel - schema migration"
 msgstr ""
 
 #: ../src/common/database.c:2912 ../src/common/database.c:3265
@@ -4711,7 +4717,7 @@ msgstr ""
 
 #: ../src/common/database.c:3262 ../src/common/database.c:3280
 #: ../src/common/database.c:3440 ../src/common/database.c:3458
-msgid "ansel - error opening database"
+msgid "Ansel - error opening database"
 msgstr ""
 
 #: ../src/common/database.c:3267 ../src/common/database.c:3445
@@ -4792,7 +4798,7 @@ msgstr ""
 
 #: ../src/common/database.c:3815
 #, fuzzy
-msgid "ansel - schema maintenance"
+msgid "Ansel - schema maintenance"
 msgstr "שלב מסיכת רסטר"
 
 #: ../src/common/database.c:3816
@@ -4835,8 +4841,8 @@ msgstr[0] "האם באמת ברצונך להסיר ספריה ריקה זו?"
 msgstr[1] "האם באמת ברצונך להסיר ספריות ריקות אלו?"
 
 #: ../src/common/film.c:297
-msgid "remove empty directory?"
-msgid_plural "remove empty directories?"
+msgid "Remove empty directory?"
+msgid_plural "Remove empty directories?"
 msgstr[0] "הסר ספריה ריקה?"
 msgstr[1] "הסר ספריות ריקות?"
 
@@ -5948,7 +5954,7 @@ msgid "time difference"
 msgstr "הפרש זמן"
 
 #: ../src/control/crawler.c:785
-msgid "updated XMP sidecar files found"
+msgid "Updated XMP sidecar files found"
 msgstr "קובץ XMP נלווה מעודכן נמצא"
 
 #: ../src/control/crawler.c:786
@@ -6081,11 +6087,11 @@ msgid "stop process"
 msgstr "עצור עיבוד"
 
 #: ../src/control/jobs/control_jobs.c:901
-msgid "trashing error"
+msgid "Trashing error"
 msgstr "שגיאה בשליחה לסל המחזור"
 
 #: ../src/control/jobs/control_jobs.c:902
-msgid "deletion error"
+msgid "Deletion error"
 msgstr "שגיאה במחיקה"
 
 #: ../src/control/jobs/control_jobs.c:1044
@@ -6273,11 +6279,14 @@ msgid "do you really want to physically delete selected image from disk?"
 msgstr "האם אתה באמת מעוניין למחוק פיסית תמונה נבחרת %d מהדיסק?"
 
 #: ../src/control/jobs/control_jobs.c:1736
-msgid "delete image?"
+msgid "Delete image?"
 msgstr "מחק תמונה?"
 
 #: ../src/control/jobs/control_jobs.c:1754 ../src/libs/collect.c:2059
 msgid "move images"
+msgstr "העבר תמונות"
+
+msgid "Move images"
 msgstr "העבר תמונות"
 
 #: ../src/control/jobs/control_jobs.c:1766
@@ -6301,8 +6310,8 @@ msgstr[1] ""
 "(כל ההעתקים יועברו גם)"
 
 #: ../src/control/jobs/control_jobs.c:1795
-msgid "move image?"
-msgid_plural "move images?"
+msgid "Move image?"
+msgid_plural "Move images?"
 msgstr[0] "העבר תמונה?"
 msgstr[1] "העבר תמונות?"
 
@@ -6318,8 +6327,8 @@ msgstr[0] "האם אתה באמת מעוניין להעתיק פיסית את ה
 msgstr[1] "האם אתה באמת מעוניין להעתיק פיסית את התמונות הנבחרות %d אל %s?"
 
 #: ../src/control/jobs/control_jobs.c:1854
-msgid "copy image?"
-msgid_plural "copy images?"
+msgid "Copy image?"
+msgid_plural "Copy images?"
 msgstr[0] "העתק תמונה?"
 msgstr[1] "העתק תמונות?"
 
@@ -9048,7 +9057,7 @@ msgid "failed to import preset %s"
 msgstr "ייבוא פריסט %s נכשל"
 
 #: ../src/gui/preferences.c:1184
-msgid "select preset(s) to import"
+msgid "Select preset(s) to import"
 msgstr "בחר פריסט(ים) לייבוא"
 
 #: ../src/gui/preferences.c:1185 ../src/gui/actions/edit.c:305
@@ -9096,7 +9105,7 @@ msgid "do you really want to delete the preset `%s'?"
 msgstr "האם את/ה בטוח/ה שברצונך למחוק את פריסט `%s'?"
 
 #: ../src/gui/presets.c:303 ../src/gui/presets.c:532 ../src/libs/lib.c:321
-msgid "delete preset?"
+msgid "Delete preset?"
 msgstr "מחק פריסט?"
 
 #. add new preset
@@ -9114,7 +9123,7 @@ msgid "please give preset a name"
 msgstr "אנא תן/י שם לפריסט"
 
 #: ../src/gui/presets.c:339
-msgid "unnamed preset"
+msgid "Unnamed preset"
 msgstr "פריסט ללא שם"
 
 #: ../src/gui/presets.c:368
@@ -9127,7 +9136,7 @@ msgstr ""
 "האם ברצונך לדרוס?"
 
 #: ../src/gui/presets.c:373
-msgid "overwrite preset?"
+msgid "Overwrite preset?"
 msgstr "דרוס פריסט?"
 
 #: ../src/gui/presets.c:490 ../src/imageio/storage/disk.c:154
@@ -9142,7 +9151,7 @@ msgstr "פריסט %s יוצא בהצלחה"
 
 #: ../src/gui/presets.c:565
 #, c-format
-msgid "edit `%s' for module `%s'"
+msgid "Edit `%s' for module `%s'"
 msgstr "ערוך `%s' עבור מודול `%s'"
 
 #: ../src/gui/presets.c:568
@@ -9240,7 +9249,7 @@ msgid "do you really want to update the preset `%s'?"
 msgstr "האם אתה בטוח שברצונך לעדכן את פריסט `%s'?"
 
 #: ../src/gui/presets.c:921 ../src/libs/lib.c:236
-msgid "update preset?"
+msgid "Update preset?"
 msgstr "עדכן פריסט?"
 
 #: ../src/gui/presets.c:1245
@@ -9326,7 +9335,7 @@ msgstr ""
 
 #: ../src/gui/styles_dialog.c:230 ../src/libs/styles.c:461
 #: ../src/libs/styles.c:645
-msgid "overwrite style?"
+msgid "Overwrite style?"
 msgstr "דרוס סיגנון?"
 
 #: ../src/gui/styles_dialog.c:259 ../src/gui/styles_dialog.c:318
@@ -9334,7 +9343,7 @@ msgid "please give style a name"
 msgstr "אנא תן/י שם לסגנון"
 
 #: ../src/gui/styles_dialog.c:263 ../src/gui/styles_dialog.c:322
-msgid "unnamed style"
+msgid "Unnamed style"
 msgstr "סגנון ללא שם"
 
 #: ../src/gui/styles_dialog.c:310
@@ -9343,7 +9352,7 @@ msgid "style %s was successfully saved"
 msgstr "סגנון %s נשמר בהצלחה"
 
 #: ../src/gui/styles_dialog.c:425
-msgid "edit style"
+msgid "Edit style"
 msgstr "ערוך סגנון"
 
 #: ../src/gui/styles_dialog.c:426
@@ -9355,7 +9364,7 @@ msgid "creates a duplicate of the style before applying changes"
 msgstr "יוצר העתק של הסגנון לפני החלת השינויים"
 
 #: ../src/gui/styles_dialog.c:431
-msgid "create new style"
+msgid "Create new style"
 msgstr "צור סגנון חדש"
 
 #: ../src/gui/styles_dialog.c:467
@@ -9533,7 +9542,7 @@ msgid "Paste history (parts) — merge settings"
 msgstr ""
 
 #: ../src/gui/actions/edit.c:304
-msgid "open sidecar file"
+msgid "Open sidecar file"
 msgstr "פתח קובץ נלווה"
 
 #: ../src/gui/actions/edit.c:337
@@ -9760,7 +9769,7 @@ msgid "do you want to access ansel.photos ?"
 msgstr ""
 
 #: ../src/gui/actions/help.c:146
-msgid "access the online usermanual?"
+msgid "Access the online usermanual?"
 msgstr "פתח את המדריך למשתמש המכוון?"
 
 #: ../src/gui/actions/help.c:158
@@ -16498,7 +16507,7 @@ msgid "lut root folder not defined"
 msgstr ""
 
 #: ../src/iop/lut3d.c:1339
-msgid "select lut file"
+msgid "Select lut file"
 msgstr "בחר קובץ lut"
 
 #: ../src/iop/lut3d.c:1340
@@ -18333,12 +18342,12 @@ msgstr "לא מקוטלג"
 
 #: ../src/libs/collect.c:1840
 #, fuzzy
-msgid "select the new location of this folder"
+msgid "Select the new location of this folder"
 msgstr "בחר את חוזק הגוון של הפילטר"
 
 #: ../src/libs/collect.c:1840
 #, fuzzy
-msgid "select the new parent folder"
+msgid "Select the new parent folder"
 msgstr "בחר את גוון הטון"
 
 #: ../src/libs/collect.c:1873
@@ -18358,9 +18367,13 @@ msgstr[1] "נתק תג מכל התמונות הנבחרות"
 msgid "delete tags"
 msgstr "מחק תג"
 
+#, fuzzy
+msgid "Delete tags"
+msgstr "מחק תג"
+
 #: ../src/libs/collect.c:1906
 #, fuzzy
-msgid "rename tag"
+msgid "Rename tag"
 msgstr "צור תג"
 
 #: ../src/libs/collect.c:1971
@@ -18628,7 +18641,7 @@ msgid "Duplicates"
 msgstr "שכפל סגנון"
 
 #: ../src/libs/export.c:347
-msgid "export to disk"
+msgid "Export to disk"
 msgstr "ייצא לדיסק"
 
 #: ../src/libs/export.c:505
@@ -18830,7 +18843,7 @@ msgid "export with current settings"
 msgstr "ייצא עם הגדרות נוכחיות"
 
 #: ../src/libs/export_metadata.c:174
-msgid "select tag"
+msgid "Select tag"
 msgstr "בחר תג"
 
 #: ../src/libs/export_metadata.c:175
@@ -18853,7 +18866,7 @@ msgstr ""
 "רשימה של תגים זמינים. הקלק על כפתור 'הוסף' או הקלק כפול על תג להוספת הנבחר"
 
 #: ../src/libs/export_metadata.c:302
-msgid "edit metadata exportation"
+msgid "Edit metadata exportation"
 msgstr "ערוך פרטי ייצוא של מטה נתונים"
 
 #: ../src/libs/export_metadata.c:303 ../src/libs/metadata.c:518
@@ -19049,7 +19062,7 @@ msgid "images"
 msgstr "תמונות"
 
 #: ../src/libs/geotagging.c:956
-msgid "open GPX file"
+msgid "Open GPX file"
 msgstr "פתח קובץ GPX"
 
 #: ../src/libs/geotagging.c:970
@@ -19563,7 +19576,7 @@ msgstr ""
 
 #: ../src/libs/ioporder.c:1536
 #, fuzzy
-msgid "save module order preset"
+msgid "Save module order preset"
 msgstr "סדר מודולים"
 
 #: ../src/libs/ioporder.c:1545
@@ -19816,7 +19829,7 @@ msgid "<leave unchanged>"
 msgstr "<השאר ללא שינוי>"
 
 #: ../src/libs/metadata.c:516 ../src/libs/metadata_view.c:1186
-msgid "metadata settings"
+msgid "Metadata settings"
 msgstr "הגדרות מטא-נתונים"
 
 #: ../src/libs/metadata.c:566 ../src/libs/metadata_view.c:1232
@@ -20504,8 +20517,8 @@ msgstr[0] "האם באמת ברצונך למחוק סגנון %d ?"
 msgstr[1] "האם באמת ברצונך למחוק סגנונות %d ?"
 
 #: ../src/libs/styles.c:344
-msgid "remove style?"
-msgid_plural "remove styles?"
+msgid "Remove style?"
+msgid_plural "Remove styles?"
 msgstr[0] "מחק סגנון?"
 msgstr[1] "מחק סגנונות?"
 
@@ -20528,7 +20541,7 @@ msgid "style %s was successfully exported"
 msgstr "סגנון %s יוצא בהצלחה"
 
 #: ../src/libs/styles.c:551
-msgid "select style"
+msgid "Select style"
 msgstr "בחר סגנון"
 
 #: ../src/libs/styles.c:561
@@ -20626,7 +20639,7 @@ msgid "detach all tags"
 msgstr "נתק תג"
 
 #: ../src/libs/tagging.c:1461
-msgid "delete node?"
+msgid "Delete node?"
 msgstr "מחק צומת?"
 
 #: ../src/libs/tagging.c:1468 ../src/libs/tagging.c:1683
@@ -20656,7 +20669,7 @@ msgid "%d tags removed"
 msgstr "%d תגים הוסרו"
 
 #: ../src/libs/tagging.c:1543
-msgid "create tag"
+msgid "Create tag"
 msgstr "צור תג"
 
 #: ../src/libs/tagging.c:1553 ../src/libs/tagging.c:1703
@@ -20715,7 +20728,7 @@ msgid "at least one new tagname (%s) already exists, aborting."
 msgstr "לפחות תג חדש אחת בשם (%s) כבר קיים, מבטל."
 
 #: ../src/libs/tagging.c:1961
-msgid "change path"
+msgid "Change path"
 msgstr "שנה נתיב"
 
 #: ../src/libs/tagging.c:2005
@@ -20723,7 +20736,7 @@ msgid "'|' misplaced, empty tag is not allowed, aborting"
 msgstr "הסימן '|' אינו ממוקם נכון, תג ריק אינו מותר, מבטל"
 
 #: ../src/libs/tagging.c:2088
-msgid "delete tag?"
+msgid "Delete tag?"
 msgstr "מחק תג?"
 
 #: ../src/libs/tagging.c:2092
@@ -20788,7 +20801,7 @@ msgid "(private)"
 msgstr "(פרטי)"
 
 #: ../src/libs/tagging.c:2435
-msgid "select a keyword file"
+msgid "Select a keyword file"
 msgstr "בחר קובץ מקלדת"
 
 #: ../src/libs/tagging.c:2436
@@ -20801,7 +20814,7 @@ msgid "%u tags imported"
 msgstr "יובאו תגיות %zd"
 
 #: ../src/libs/tagging.c:2468
-msgid "select file to export to"
+msgid "Select file to export to"
 msgstr "בחר קובץ לייצוא ל"
 
 #: ../src/libs/tagging.c:2469
@@ -20876,7 +20889,7 @@ msgstr "צרף תג לכל התמונות הנבחרות"
 
 #: ../src/libs/tagging.c:3248
 #, fuzzy
-msgid "manage tags"
+msgid "Manage tags"
 msgstr "גיאו תגים"
 
 #: ../src/libs/tagging.c:3263
@@ -21841,7 +21854,7 @@ msgid "no LUT to save"
 msgstr "אין מה לשמור"
 
 #: ../src/common/lut_viewer.c:1207
-msgid "save 3D LUT"
+msgid "Save 3D LUT"
 msgstr ""
 
 #: ../src/common/lut_viewer.c:1222

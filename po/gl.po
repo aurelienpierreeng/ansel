@@ -644,6 +644,9 @@ msgstr ""
 msgid "select directory"
 msgstr "seleccionar directorio"
 
+msgid "Select directory"
+msgstr "Seleccionar directorio"
+
 #: ../build/src/preferences_gen.h:3047
 msgid ""
 "this folder (and sub-folders) contains Lut files used by lut3d modules. "
@@ -3953,6 +3956,9 @@ msgstr ""
 msgid "module order"
 msgstr ""
 
+msgid "Module order"
+msgstr ""
+
 #: ../src/common/collection.c:685 ../src/develop/lightroom.c:1505
 #: ../src/libs/tools/filter.c:119
 #, fuzzy
@@ -4725,7 +4731,7 @@ msgid ""
 msgstr ""
 
 #: ../src/common/database.c:2911
-msgid "ansel - schema migration"
+msgid "Ansel - schema migration"
 msgstr ""
 
 #: ../src/common/database.c:2912 ../src/common/database.c:3265
@@ -4768,7 +4774,7 @@ msgstr ""
 
 #: ../src/common/database.c:3262 ../src/common/database.c:3280
 #: ../src/common/database.c:3440 ../src/common/database.c:3458
-msgid "ansel - error opening database"
+msgid "Ansel - error opening database"
 msgstr ""
 
 #: ../src/common/database.c:3267 ../src/common/database.c:3445
@@ -4833,7 +4839,7 @@ msgid ""
 msgstr ""
 
 #: ../src/common/database.c:3815
-msgid "ansel - schema maintenance"
+msgid "Ansel - schema maintenance"
 msgstr ""
 
 #: ../src/common/database.c:3816
@@ -4877,10 +4883,10 @@ msgstr[1] ""
 
 #: ../src/common/film.c:297
 #, fuzzy
-msgid "remove empty directory?"
-msgid_plural "remove empty directories?"
-msgstr[0] "seleccionar directorio"
-msgstr[1] "seleccionar directorio"
+msgid "Remove empty directory?"
+msgid_plural "Remove empty directories?"
+msgstr[0] "Seleccionar directorio"
+msgstr[1] "Seleccionar directorio"
 
 #: ../src/common/film.c:317 ../src/gui/preferences.c:979
 #: ../src/gui/styles_dialog.c:466 ../src/libs/collect.c:3003
@@ -5974,7 +5980,7 @@ msgid "time difference"
 msgstr ""
 
 #: ../src/control/crawler.c:785
-msgid "updated XMP sidecar files found"
+msgid "Updated XMP sidecar files found"
 msgstr ""
 
 #: ../src/control/crawler.c:786
@@ -6108,13 +6114,13 @@ msgid "stop process"
 msgstr ""
 
 #: ../src/control/jobs/control_jobs.c:901
-msgid "trashing error"
+msgid "Trashing error"
 msgstr ""
 
 #: ../src/control/jobs/control_jobs.c:902
 #, fuzzy
-msgid "deletion error"
-msgstr "borrar"
+msgid "Deletion error"
+msgstr "Borrar"
 
 #: ../src/control/jobs/control_jobs.c:1044
 #, fuzzy, c-format
@@ -6306,13 +6312,17 @@ msgstr ""
 
 #: ../src/control/jobs/control_jobs.c:1736
 #, fuzzy
-msgid "delete image?"
-msgstr "borrar etiqueta?"
+msgid "Delete image?"
+msgstr "Borrar etiqueta?"
 
 #: ../src/control/jobs/control_jobs.c:1754 ../src/libs/collect.c:2059
 #, fuzzy
 msgid "move images"
 msgstr "imaxes"
+
+#, fuzzy
+msgid "Move images"
+msgstr "Imaxes"
 
 #: ../src/control/jobs/control_jobs.c:1766
 #: ../src/control/jobs/control_jobs.c:1828
@@ -6333,10 +6343,10 @@ msgstr[1] ""
 
 #: ../src/control/jobs/control_jobs.c:1795
 #, fuzzy
-msgid "move image?"
-msgid_plural "move images?"
-msgstr[0] "importar imaxe"
-msgstr[1] "importar imaxe"
+msgid "Move image?"
+msgid_plural "Move images?"
+msgstr[0] "Importar imaxe"
+msgstr[1] "Importar imaxe"
 
 #: ../src/control/jobs/control_jobs.c:1816
 #, fuzzy
@@ -6352,10 +6362,10 @@ msgstr[1] ""
 
 #: ../src/control/jobs/control_jobs.c:1854
 #, fuzzy
-msgid "copy image?"
-msgid_plural "copy images?"
-msgstr[0] "imaxe"
-msgstr[1] "imaxe"
+msgid "Copy image?"
+msgid_plural "Copy images?"
+msgstr[0] "Imaxe"
+msgstr[1] "Imaxe"
 
 #: ../src/control/jobs/control_jobs.c:1874
 #: ../src/control/jobs/control_jobs.c:1882
@@ -8967,7 +8977,7 @@ msgid "failed to import preset %s"
 msgstr ""
 
 #: ../src/gui/preferences.c:1184
-msgid "select preset(s) to import"
+msgid "Select preset(s) to import"
 msgstr ""
 
 #: ../src/gui/preferences.c:1185 ../src/gui/actions/edit.c:305
@@ -9018,8 +9028,8 @@ msgstr ""
 
 #: ../src/gui/presets.c:303 ../src/gui/presets.c:532 ../src/libs/lib.c:321
 #, fuzzy
-msgid "delete preset?"
-msgstr "borrar este preestablecido"
+msgid "Delete preset?"
+msgstr "Borrar este preestablecido"
 
 #. add new preset
 #. then show edit dialog
@@ -9037,8 +9047,8 @@ msgstr ""
 
 #: ../src/gui/presets.c:339
 #, fuzzy
-msgid "unnamed preset"
-msgstr "novo preestablecido"
+msgid "Unnamed preset"
+msgstr "Novo preestablecido"
 
 #: ../src/gui/presets.c:368
 #, c-format
@@ -9049,8 +9059,8 @@ msgstr ""
 
 #: ../src/gui/presets.c:373
 #, fuzzy
-msgid "overwrite preset?"
-msgstr "sobreescribir"
+msgid "Overwrite preset?"
+msgstr "Sobreescribir"
 
 #: ../src/gui/presets.c:490 ../src/imageio/storage/disk.c:154
 #: ../src/imageio/storage/gallery.c:142
@@ -9064,8 +9074,8 @@ msgstr ""
 
 #: ../src/gui/presets.c:565
 #, c-format
-msgid "edit `%s' for module `%s'"
-msgstr "editar `%s' para modulo `%s'"
+msgid "Edit `%s' for module `%s'"
+msgstr "Editar `%s' para modulo `%s'"
 
 #: ../src/gui/presets.c:568
 #, fuzzy
@@ -9169,8 +9179,8 @@ msgstr ""
 
 #: ../src/gui/presets.c:921 ../src/libs/lib.c:236
 #, fuzzy
-msgid "update preset?"
-msgstr "novo preestablecido"
+msgid "Update preset?"
+msgstr "Novo preestablecido"
 
 #: ../src/gui/presets.c:1245
 msgid "(default)"
@@ -9251,15 +9261,15 @@ msgstr ""
 #: ../src/gui/styles_dialog.c:230 ../src/libs/styles.c:461
 #: ../src/libs/styles.c:645
 #, fuzzy
-msgid "overwrite style?"
-msgstr "sobreescribir"
+msgid "Overwrite style?"
+msgstr "Sobreescribir"
 
 #: ../src/gui/styles_dialog.c:259 ../src/gui/styles_dialog.c:318
 msgid "please give style a name"
 msgstr ""
 
 #: ../src/gui/styles_dialog.c:263 ../src/gui/styles_dialog.c:322
-msgid "unnamed style"
+msgid "Unnamed style"
 msgstr ""
 
 #: ../src/gui/styles_dialog.c:310
@@ -9268,7 +9278,7 @@ msgid "style %s was successfully saved"
 msgstr ""
 
 #: ../src/gui/styles_dialog.c:425
-msgid "edit style"
+msgid "Edit style"
 msgstr ""
 
 #: ../src/gui/styles_dialog.c:426
@@ -9281,8 +9291,8 @@ msgstr ""
 
 #: ../src/gui/styles_dialog.c:431
 #, fuzzy
-msgid "create new style"
-msgstr "crear album novo"
+msgid "Create new style"
+msgstr "Crear album novo"
 
 #: ../src/gui/styles_dialog.c:467
 msgid "enter a name for the new style"
@@ -9448,7 +9458,7 @@ msgid "Paste history (parts) — merge settings"
 msgstr ""
 
 #: ../src/gui/actions/edit.c:304
-msgid "open sidecar file"
+msgid "Open sidecar file"
 msgstr ""
 
 #: ../src/gui/actions/edit.c:337
@@ -9668,7 +9678,7 @@ msgid "do you want to access ansel.photos ?"
 msgstr ""
 
 #: ../src/gui/actions/help.c:146
-msgid "access the online usermanual?"
+msgid "Access the online usermanual?"
 msgstr ""
 
 #: ../src/gui/actions/help.c:158
@@ -15989,8 +15999,8 @@ msgstr ""
 
 #: ../src/iop/lut3d.c:1339
 #, fuzzy
-msgid "select lut file"
-msgstr "seleccionar todo"
+msgid "Select lut file"
+msgstr "Seleccionar todo"
 
 #: ../src/iop/lut3d.c:1340
 #, fuzzy
@@ -17726,13 +17736,13 @@ msgstr ""
 
 #: ../src/libs/collect.c:1840
 #, fuzzy
-msgid "select the new location of this folder"
-msgstr "seleccionar o tono de saturación das sombras"
+msgid "Select the new location of this folder"
+msgstr "Seleccionar o tono de saturación das sombras"
 
 #: ../src/libs/collect.c:1840
 #, fuzzy
-msgid "select the new parent folder"
-msgstr "non seleccionar"
+msgid "Select the new parent folder"
+msgstr "Non seleccionar"
 
 #: ../src/libs/collect.c:1873
 msgid "problem selecting new path for the folder"
@@ -17750,10 +17760,14 @@ msgstr[1] "quitar etiquetas de todas as imaxes escollidas"
 msgid "delete tags"
 msgstr "borrar etiqueta?"
 
+#, fuzzy
+msgid "Delete tags"
+msgstr "Borrar etiqueta?"
+
 #: ../src/libs/collect.c:1906
 #, fuzzy
-msgid "rename tag"
-msgstr "borrar etiqueta?"
+msgid "Rename tag"
+msgstr "Borrar etiqueta?"
 
 #: ../src/libs/collect.c:1971
 #, fuzzy
@@ -18003,8 +18017,8 @@ msgstr ""
 
 #: ../src/libs/export.c:347
 #, fuzzy
-msgid "export to disk"
-msgstr "arquivo en disco"
+msgid "Export to disk"
+msgstr "Arquivo en disco"
 
 #: ../src/libs/export.c:505
 #, c-format
@@ -18199,8 +18213,8 @@ msgstr ""
 
 #: ../src/libs/export_metadata.c:174
 #, fuzzy
-msgid "select tag"
-msgstr "seleccionar todo"
+msgid "Select tag"
+msgstr "Seleccionar todo"
 
 #: ../src/libs/export_metadata.c:175
 msgid "add"
@@ -18222,7 +18236,7 @@ msgid ""
 msgstr ""
 
 #: ../src/libs/export_metadata.c:302
-msgid "edit metadata exportation"
+msgid "Edit metadata exportation"
 msgstr ""
 
 #: ../src/libs/export_metadata.c:303 ../src/libs/metadata.c:518
@@ -18411,7 +18425,7 @@ msgid "images"
 msgstr "imaxes"
 
 #: ../src/libs/geotagging.c:956
-msgid "open GPX file"
+msgid "Open GPX file"
 msgstr ""
 
 #: ../src/libs/geotagging.c:970
@@ -18904,8 +18918,8 @@ msgstr ""
 
 #: ../src/libs/ioporder.c:1536
 #, fuzzy
-msgid "save module order preset"
-msgstr "nome de preestablecido"
+msgid "Save module order preset"
+msgstr "Nome de preestablecido"
 
 #: ../src/libs/ioporder.c:1545
 #, fuzzy
@@ -19150,8 +19164,8 @@ msgstr ""
 
 #: ../src/libs/metadata.c:516 ../src/libs/metadata_view.c:1186
 #, fuzzy
-msgid "metadata settings"
-msgstr "configuración da imaxe"
+msgid "Metadata settings"
+msgstr "Configuración da imaxe"
 
 #: ../src/libs/metadata.c:566 ../src/libs/metadata_view.c:1232
 msgid "visible"
@@ -19830,10 +19844,10 @@ msgstr[1] ""
 
 #: ../src/libs/styles.c:344
 #, fuzzy
-msgid "remove style?"
-msgid_plural "remove styles?"
-msgstr[0] "eliminar"
-msgstr[1] "eliminar"
+msgid "Remove style?"
+msgid_plural "Remove styles?"
+msgstr[0] "Eliminar"
+msgstr[1] "Eliminar"
 
 #: ../src/libs/styles.c:468 ../src/libs/styles.c:652
 #, c-format
@@ -19854,8 +19868,8 @@ msgstr ""
 
 #: ../src/libs/styles.c:551
 #, fuzzy
-msgid "select style"
-msgstr "seleccionar todo"
+msgid "Select style"
+msgstr "Seleccionar todo"
 
 #: ../src/libs/styles.c:561
 #, fuzzy
@@ -19959,8 +19973,8 @@ msgstr "quitar"
 
 #: ../src/libs/tagging.c:1461
 #, fuzzy
-msgid "delete node?"
-msgstr "borrar etiqueta?"
+msgid "Delete node?"
+msgstr "Borrar etiqueta?"
 
 #: ../src/libs/tagging.c:1468 ../src/libs/tagging.c:1683
 #: ../src/libs/tagging.c:1968
@@ -19990,8 +20004,8 @@ msgstr ""
 
 #: ../src/libs/tagging.c:1543
 #, fuzzy
-msgid "create tag"
-msgstr "borrar etiqueta?"
+msgid "Create tag"
+msgstr "Borrar etiqueta?"
 
 #: ../src/libs/tagging.c:1553 ../src/libs/tagging.c:1703
 msgid "name: "
@@ -20047,7 +20061,7 @@ msgid "at least one new tagname (%s) already exists, aborting."
 msgstr ""
 
 #: ../src/libs/tagging.c:1961
-msgid "change path"
+msgid "Change path"
 msgstr ""
 
 #: ../src/libs/tagging.c:2005
@@ -20055,8 +20069,8 @@ msgid "'|' misplaced, empty tag is not allowed, aborting"
 msgstr ""
 
 #: ../src/libs/tagging.c:2088
-msgid "delete tag?"
-msgstr "borrar etiqueta?"
+msgid "Delete tag?"
+msgstr "Borrar etiqueta?"
 
 #: ../src/libs/tagging.c:2092
 #, fuzzy, c-format
@@ -20123,7 +20137,7 @@ msgid "(private)"
 msgstr ""
 
 #: ../src/libs/tagging.c:2435
-msgid "select a keyword file"
+msgid "Select a keyword file"
 msgstr ""
 
 #: ../src/libs/tagging.c:2436
@@ -20138,8 +20152,8 @@ msgstr "no hai imaxe escollida!"
 
 #: ../src/libs/tagging.c:2468
 #, fuzzy
-msgid "select file to export to"
-msgstr "seleccionar directorio"
+msgid "Select file to export to"
+msgstr "Seleccionar directorio"
 
 #: ../src/libs/tagging.c:2469
 #, fuzzy
@@ -20211,8 +20225,8 @@ msgstr "engadir etiqueta a todas as imaxes escollidas"
 
 #: ../src/libs/tagging.c:3248
 #, fuzzy
-msgid "manage tags"
-msgstr "novo preestablecido"
+msgid "Manage tags"
+msgstr "Novo preestablecido"
 
 #: ../src/libs/tagging.c:3263
 msgid "type to filter the tag dictionary below"
@@ -21095,7 +21109,7 @@ msgid "no LUT to save"
 msgstr ""
 
 #: ../src/common/lut_viewer.c:1207
-msgid "save 3D LUT"
+msgid "Save 3D LUT"
 msgstr ""
 
 #: ../src/common/lut_viewer.c:1222

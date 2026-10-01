@@ -667,6 +667,9 @@ msgstr "корена фасцикла за 3Д lut"
 msgid "select directory"
 msgstr "изаберите фасциклу"
 
+msgid "Select directory"
+msgstr "Изаберите фасциклу"
+
 #: ../build/src/preferences_gen.h:3047
 msgid ""
 "this folder (and sub-folders) contains Lut files used by lut3d modules. "
@@ -4015,6 +4018,9 @@ msgstr "модул"
 msgid "module order"
 msgstr "редослед модула"
 
+msgid "Module order"
+msgstr "Редослед модула"
+
 #: ../src/common/collection.c:685 ../src/develop/lightroom.c:1505
 #: ../src/libs/tools/filter.c:119
 msgid "rating"
@@ -4814,7 +4820,7 @@ msgid ""
 msgstr ""
 
 #: ../src/common/database.c:2911
-msgid "ansel - schema migration"
+msgid "Ansel - schema migration"
 msgstr ""
 
 #: ../src/common/database.c:2912 ../src/common/database.c:3265
@@ -4859,7 +4865,7 @@ msgstr ""
 
 #: ../src/common/database.c:3262 ../src/common/database.c:3280
 #: ../src/common/database.c:3440 ../src/common/database.c:3458
-msgid "ansel - error opening database"
+msgid "Ansel - error opening database"
 msgstr ""
 
 #: ../src/common/database.c:3267 ../src/common/database.c:3445
@@ -4940,8 +4946,8 @@ msgstr ""
 
 #: ../src/common/database.c:3815
 #, fuzzy
-msgid "ansel - schema maintenance"
-msgstr "растерска маска"
+msgid "Ansel - schema maintenance"
+msgstr "Растерска маска"
 
 #: ../src/common/database.c:3816
 msgid "later"
@@ -4987,12 +4993,12 @@ msgstr[2] "да ли желите да уклоните ове празне ди
 msgstr[3] "да ли желите да уклоните овај празни директоријум?"
 
 #: ../src/common/film.c:297
-msgid "remove empty directory?"
-msgid_plural "remove empty directories?"
-msgstr[0] "да уклоним празне директоријуме?"
-msgstr[1] "да уклоним празне директоријуме?"
-msgstr[2] "да уклоним празне директоријуме?"
-msgstr[3] "да уклоним празни директоријум?"
+msgid "Remove empty directory?"
+msgid_plural "Remove empty directories?"
+msgstr[0] "Да уклоним празне директоријуме?"
+msgstr[1] "Да уклоним празне директоријуме?"
+msgstr[2] "Да уклоним празне директоријуме?"
+msgstr[3] "Да уклоним празни директоријум?"
 
 #: ../src/common/film.c:317 ../src/gui/preferences.c:979
 #: ../src/gui/styles_dialog.c:466 ../src/libs/collect.c:3003
@@ -6112,7 +6118,7 @@ msgstr "разлика"
 
 #: ../src/control/crawler.c:785
 #, fuzzy
-msgid "updated XMP sidecar files found"
+msgid "Updated XMP sidecar files found"
 msgstr "XMP прикључне датотеке"
 
 #: ../src/control/crawler.c:786
@@ -6261,12 +6267,12 @@ msgid "stop process"
 msgstr "прекини обраду"
 
 #: ../src/control/jobs/control_jobs.c:901
-msgid "trashing error"
-msgstr "грешка при слању у смеће"
+msgid "Trashing error"
+msgstr "Грешка при слању у смеће"
 
 #: ../src/control/jobs/control_jobs.c:902
-msgid "deletion error"
-msgstr "грешка при брисању"
+msgid "Deletion error"
+msgstr "Грешка при брисању"
 
 #: ../src/control/jobs/control_jobs.c:1044
 #, c-format
@@ -6483,12 +6489,15 @@ msgstr "да ли заиста желите да обришете изабран
 
 #: ../src/control/jobs/control_jobs.c:1736
 #, fuzzy
-msgid "delete image?"
-msgstr "брисање слика"
+msgid "Delete image?"
+msgstr "Брисање слика"
 
 #: ../src/control/jobs/control_jobs.c:1754 ../src/libs/collect.c:2059
 msgid "move images"
 msgstr "премести слике"
+
+msgid "Move images"
+msgstr "Премести слике"
 
 #: ../src/control/jobs/control_jobs.c:1766
 #: ../src/control/jobs/control_jobs.c:1828
@@ -6517,12 +6526,12 @@ msgstr[3] ""
 "(сви дупликати ће бити премештени)"
 
 #: ../src/control/jobs/control_jobs.c:1795
-msgid "move image?"
-msgid_plural "move images?"
-msgstr[0] "да преместим слике?"
-msgstr[1] "да преместим слике?"
-msgstr[2] "да преместим слике?"
-msgstr[3] "да преместим слику?"
+msgid "Move image?"
+msgid_plural "Move images?"
+msgstr[0] "Да преместим слике?"
+msgstr[1] "Да преместим слике?"
+msgstr[2] "Да преместим слике?"
+msgstr[3] "Да преместим слику?"
 
 #: ../src/control/jobs/control_jobs.c:1816
 msgid "copy images"
@@ -6538,12 +6547,12 @@ msgstr[2] "да ли заиста желите да копирате %d слик
 msgstr[3] "да ли заиста желите да копирате %d слику у %s?"
 
 #: ../src/control/jobs/control_jobs.c:1854
-msgid "copy image?"
-msgid_plural "copy images?"
-msgstr[0] "копирај слике?"
-msgstr[1] "копирај слике?"
-msgstr[2] "копирај слике?"
-msgstr[3] "копирај слику?"
+msgid "Copy image?"
+msgid_plural "Copy images?"
+msgstr[0] "Копирај слике?"
+msgstr[1] "Копирај слике?"
+msgstr[2] "Копирај слике?"
+msgstr[3] "Копирај слику?"
 
 #: ../src/control/jobs/control_jobs.c:1874
 #: ../src/control/jobs/control_jobs.c:1882
@@ -9297,7 +9306,7 @@ msgid "failed to import preset %s"
 msgstr "не могу да увезем поставку %s"
 
 #: ../src/gui/preferences.c:1184
-msgid "select preset(s) to import"
+msgid "Select preset(s) to import"
 msgstr ""
 
 #: ../src/gui/preferences.c:1185 ../src/gui/actions/edit.c:305
@@ -9345,8 +9354,8 @@ msgid "do you really want to delete the preset `%s'?"
 msgstr "да ли заиста желите да обришете поставку „%s“?"
 
 #: ../src/gui/presets.c:303 ../src/gui/presets.c:532 ../src/libs/lib.c:321
-msgid "delete preset?"
-msgstr "да обришем поставку?"
+msgid "Delete preset?"
+msgstr "Да обришем поставку?"
 
 #. add new preset
 #. then show edit dialog
@@ -9363,8 +9372,8 @@ msgid "please give preset a name"
 msgstr "дајте назив за поставку"
 
 #: ../src/gui/presets.c:339
-msgid "unnamed preset"
-msgstr "неименована поставка"
+msgid "Unnamed preset"
+msgstr "Неименована поставка"
 
 #: ../src/gui/presets.c:368
 #, c-format
@@ -9376,8 +9385,8 @@ msgstr ""
 "да ли желите да је препишете?"
 
 #: ../src/gui/presets.c:373
-msgid "overwrite preset?"
-msgstr "да препишем поставку?"
+msgid "Overwrite preset?"
+msgstr "Да препишем поставку?"
 
 #: ../src/gui/presets.c:490 ../src/imageio/storage/disk.c:154
 #: ../src/imageio/storage/gallery.c:142
@@ -9391,8 +9400,8 @@ msgstr "стил %s је успешно извезен"
 
 #: ../src/gui/presets.c:565
 #, c-format
-msgid "edit `%s' for module `%s'"
-msgstr "уређивање „%s“ за модул „%s“"
+msgid "Edit `%s' for module `%s'"
+msgstr "Уређивање „%s“ за модул „%s“"
 
 #: ../src/gui/presets.c:568
 #, fuzzy
@@ -9490,8 +9499,8 @@ msgid "do you really want to update the preset `%s'?"
 msgstr "да ли заиста желите да ажурирате поставку „%s“?"
 
 #: ../src/gui/presets.c:921 ../src/libs/lib.c:236
-msgid "update preset?"
-msgstr "да ажурирам поставку?"
+msgid "Update preset?"
+msgstr "Да ажурирам поставку?"
 
 #: ../src/gui/presets.c:1245
 msgid "(default)"
@@ -9576,16 +9585,16 @@ msgstr ""
 
 #: ../src/gui/styles_dialog.c:230 ../src/libs/styles.c:461
 #: ../src/libs/styles.c:645
-msgid "overwrite style?"
-msgstr "да препишем стил?"
+msgid "Overwrite style?"
+msgstr "Да препишем стил?"
 
 #: ../src/gui/styles_dialog.c:259 ../src/gui/styles_dialog.c:318
 msgid "please give style a name"
 msgstr "дајте назим за стил"
 
 #: ../src/gui/styles_dialog.c:263 ../src/gui/styles_dialog.c:322
-msgid "unnamed style"
-msgstr "неименовани стил"
+msgid "Unnamed style"
+msgstr "Неименовани стил"
 
 #: ../src/gui/styles_dialog.c:310
 #, c-format
@@ -9593,8 +9602,8 @@ msgid "style %s was successfully saved"
 msgstr "стил %s је успешно сачуван"
 
 #: ../src/gui/styles_dialog.c:425
-msgid "edit style"
-msgstr "уреди стил"
+msgid "Edit style"
+msgstr "Уреди стил"
 
 #: ../src/gui/styles_dialog.c:426
 msgid "duplicate style"
@@ -9605,8 +9614,8 @@ msgid "creates a duplicate of the style before applying changes"
 msgstr "прави дупликат стила пре него што примени промене"
 
 #: ../src/gui/styles_dialog.c:431
-msgid "create new style"
-msgstr "направи нови стил"
+msgid "Create new style"
+msgstr "Направи нови стил"
 
 #: ../src/gui/styles_dialog.c:467
 msgid "enter a name for the new style"
@@ -9783,8 +9792,8 @@ msgid "Paste history (parts) — merge settings"
 msgstr ""
 
 #: ../src/gui/actions/edit.c:304
-msgid "open sidecar file"
-msgstr "отвори прикључну датотеку"
+msgid "Open sidecar file"
+msgstr "Отвори прикључну датотеку"
 
 #: ../src/gui/actions/edit.c:337
 msgid "XMP sidecar files"
@@ -10012,8 +10021,8 @@ msgid "do you want to access ansel.photos ?"
 msgstr ""
 
 #: ../src/gui/actions/help.c:146
-msgid "access the online usermanual?"
-msgstr "да приступим корисничком упутству на мрежи?"
+msgid "Access the online usermanual?"
+msgstr "Да приступим корисничком упутству на мрежи?"
 
 #: ../src/gui/actions/help.c:158
 msgid "help url opened in web browser"
@@ -16714,8 +16723,8 @@ msgid "lut root folder not defined"
 msgstr "корена фасцикла за 3Д lut"
 
 #: ../src/iop/lut3d.c:1339
-msgid "select lut file"
-msgstr "изаберите lut датотеку"
+msgid "Select lut file"
+msgstr "Изаберите lut датотеку"
 
 #: ../src/iop/lut3d.c:1340
 msgid "_select"
@@ -18566,13 +18575,13 @@ msgstr "некатегоризовано"
 
 #: ../src/libs/collect.c:1840
 #, fuzzy
-msgid "select the new location of this folder"
-msgstr "изаберите нијансу филтера"
+msgid "Select the new location of this folder"
+msgstr "Изаберите нијансу филтера"
 
 #: ../src/libs/collect.c:1840
 #, fuzzy
-msgid "select the new parent folder"
-msgstr "изаберите нијансу"
+msgid "Select the new parent folder"
+msgstr "Изаберите нијансу"
 
 #: ../src/libs/collect.c:1873
 #, fuzzy
@@ -18593,10 +18602,14 @@ msgstr[3] "откачиње ознаке са свих изабраних сли
 msgid "delete tags"
 msgstr "обриши ознаку"
 
+#, fuzzy
+msgid "Delete tags"
+msgstr "Обриши ознаку"
+
 #: ../src/libs/collect.c:1906
 #, fuzzy
-msgid "rename tag"
-msgstr "направи ознаку"
+msgid "Rename tag"
+msgstr "Направи ознаку"
 
 #: ../src/libs/collect.c:1971
 #, fuzzy
@@ -18856,8 +18869,8 @@ msgid "Duplicates"
 msgstr "удвостручи стил"
 
 #: ../src/libs/export.c:347
-msgid "export to disk"
-msgstr "извези на диск"
+msgid "Export to disk"
+msgstr "Извези на диск"
 
 #: ../src/libs/export.c:505
 #, c-format
@@ -19059,8 +19072,8 @@ msgid "export with current settings"
 msgstr "извези са тренутним подешавањима"
 
 #: ../src/libs/export_metadata.c:174
-msgid "select tag"
-msgstr "изабери ознаку"
+msgid "Select tag"
+msgstr "Изабери ознаку"
 
 #: ../src/libs/export_metadata.c:175
 msgid "add"
@@ -19083,8 +19096,8 @@ msgstr ""
 "ознаку да је додате"
 
 #: ../src/libs/export_metadata.c:302
-msgid "edit metadata exportation"
-msgstr "уреди извожење метаподатака"
+msgid "Edit metadata exportation"
+msgstr "Уреди извожење метаподатака"
 
 #: ../src/libs/export_metadata.c:303 ../src/libs/metadata.c:518
 #: ../src/libs/metadata_view.c:1188 ../src/libs/styles.c:462
@@ -19285,8 +19298,8 @@ msgid "images"
 msgstr "слике"
 
 #: ../src/libs/geotagging.c:956
-msgid "open GPX file"
-msgstr "отвори GPX датотеку"
+msgid "Open GPX file"
+msgstr "Отвори GPX датотеку"
 
 #: ../src/libs/geotagging.c:970
 msgid "GPS data exchange format"
@@ -19802,8 +19815,8 @@ msgstr ""
 
 #: ../src/libs/ioporder.c:1536
 #, fuzzy
-msgid "save module order preset"
-msgstr "редослед модула"
+msgid "Save module order preset"
+msgstr "Редослед модула"
 
 #: ../src/libs/ioporder.c:1545
 #, fuzzy
@@ -20052,8 +20065,8 @@ msgid "<leave unchanged>"
 msgstr "<остави неизмењено>"
 
 #: ../src/libs/metadata.c:516 ../src/libs/metadata_view.c:1186
-msgid "metadata settings"
-msgstr "подешавање метаподатака"
+msgid "Metadata settings"
+msgstr "Подешавање метаподатака"
 
 #: ../src/libs/metadata.c:566 ../src/libs/metadata_view.c:1232
 msgid "visible"
@@ -20761,12 +20774,12 @@ msgstr[2] "да ли желите да обришете %d стилова!"
 msgstr[3] "да ли желите да обришете %d стил!"
 
 #: ../src/libs/styles.c:344
-msgid "remove style?"
-msgid_plural "remove styles?"
-msgstr[0] "да обришем стил?"
-msgstr[1] "да обришем стилове?"
-msgstr[2] "да обришем стилове?"
-msgstr[3] "да обришем стил?"
+msgid "Remove style?"
+msgid_plural "Remove styles?"
+msgstr[0] "Да обришем стил?"
+msgstr[1] "Да обришем стилове?"
+msgstr[2] "Да обришем стилове?"
+msgstr[3] "Да обришем стил?"
 
 #: ../src/libs/styles.c:468 ../src/libs/styles.c:652
 #, c-format
@@ -20787,8 +20800,8 @@ msgid "style %s was successfully exported"
 msgstr "стил %s је успешно извезен"
 
 #: ../src/libs/styles.c:551
-msgid "select style"
-msgstr "изабери стил"
+msgid "Select style"
+msgstr "Изабери стил"
 
 #: ../src/libs/styles.c:561
 #, fuzzy
@@ -20889,8 +20902,8 @@ msgstr "откачи ознаку"
 
 #: ../src/libs/tagging.c:1461
 #, fuzzy
-msgid "delete node?"
-msgstr "обриши ознаку?"
+msgid "Delete node?"
+msgstr "Обриши ознаку?"
 
 #: ../src/libs/tagging.c:1468 ../src/libs/tagging.c:1683
 #: ../src/libs/tagging.c:1968
@@ -20923,8 +20936,8 @@ msgid "%d tags removed"
 msgstr "ознака %d је уклоњена"
 
 #: ../src/libs/tagging.c:1543
-msgid "create tag"
-msgstr "направи ознаку"
+msgid "Create tag"
+msgstr "Направи ознаку"
 
 #: ../src/libs/tagging.c:1553 ../src/libs/tagging.c:1703
 msgid "name: "
@@ -20984,16 +20997,16 @@ msgstr "бар једно име ознаке (%s) већ постоји, пре
 
 #: ../src/libs/tagging.c:1961
 #, fuzzy
-msgid "change path"
-msgstr "промени у: или"
+msgid "Change path"
+msgstr "Промени у: или"
 
 #: ../src/libs/tagging.c:2005
 msgid "'|' misplaced, empty tag is not allowed, aborting"
 msgstr "„|“ је погрешно померено, празна ознака није дозвољена. прекидам"
 
 #: ../src/libs/tagging.c:2088
-msgid "delete tag?"
-msgstr "обриши ознаку?"
+msgid "Delete tag?"
+msgstr "Обриши ознаку?"
 
 #: ../src/libs/tagging.c:2092
 #, fuzzy, c-format
@@ -21067,8 +21080,8 @@ msgstr "(приватно)"
 
 #: ../src/libs/tagging.c:2435
 #, fuzzy
-msgid "select a keyword file"
-msgstr "изаберите датотеку"
+msgid "Select a keyword file"
+msgstr "Изаберите датотеку"
 
 #: ../src/libs/tagging.c:2436
 msgid "_import"
@@ -21081,8 +21094,8 @@ msgstr "%zd ознака је увезено"
 
 #: ../src/libs/tagging.c:2468
 #, fuzzy
-msgid "select file to export to"
-msgstr "изаберите боју за попуну"
+msgid "Select file to export to"
+msgstr "Изаберите боју за попуну"
 
 #: ../src/libs/tagging.c:2469
 msgid "_export"
@@ -21156,8 +21169,8 @@ msgstr "прикачиње ознаку на све изабране слике"
 
 #: ../src/libs/tagging.c:3248
 #, fuzzy
-msgid "manage tags"
-msgstr "гео ознаке"
+msgid "Manage tags"
+msgstr "Гео ознаке"
 
 #: ../src/libs/tagging.c:3263
 msgid "type to filter the tag dictionary below"
@@ -22109,7 +22122,7 @@ msgid "no LUT to save"
 msgstr "ништа за чување"
 
 #: ../src/common/lut_viewer.c:1207
-msgid "save 3D LUT"
+msgid "Save 3D LUT"
 msgstr ""
 
 #: ../src/common/lut_viewer.c:1222

@@ -644,6 +644,9 @@ msgstr ""
 msgid "select directory"
 msgstr "เลือกไดเรกทอรี"
 
+msgid "Select directory"
+msgstr "เลือกไดเรกทอรี"
+
 #: ../build/src/preferences_gen.h:3047
 msgid ""
 "this folder (and sub-folders) contains Lut files used by lut3d modules. "
@@ -3937,6 +3940,10 @@ msgstr "กลุ่มโมดูล"
 msgid "module order"
 msgstr "ขอบเล็กลง"
 
+#, fuzzy
+msgid "Module order"
+msgstr "ขอบเล็กลง"
+
 #: ../src/common/collection.c:685 ../src/develop/lightroom.c:1505
 #: ../src/libs/tools/filter.c:119
 msgid "rating"
@@ -4707,7 +4714,7 @@ msgid ""
 msgstr ""
 
 #: ../src/common/database.c:2911
-msgid "ansel - schema migration"
+msgid "Ansel - schema migration"
 msgstr ""
 
 #: ../src/common/database.c:2912 ../src/common/database.c:3265
@@ -4750,7 +4757,7 @@ msgstr ""
 
 #: ../src/common/database.c:3262 ../src/common/database.c:3280
 #: ../src/common/database.c:3440 ../src/common/database.c:3458
-msgid "ansel - error opening database"
+msgid "Ansel - error opening database"
 msgstr ""
 
 #: ../src/common/database.c:3267 ../src/common/database.c:3445
@@ -4816,7 +4823,7 @@ msgid ""
 msgstr ""
 
 #: ../src/common/database.c:3815
-msgid "ansel - schema maintenance"
+msgid "Ansel - schema maintenance"
 msgstr ""
 
 #: ../src/common/database.c:3816
@@ -4860,8 +4867,8 @@ msgstr[1] ""
 
 #: ../src/common/film.c:297
 #, fuzzy
-msgid "remove empty directory?"
-msgid_plural "remove empty directories?"
+msgid "Remove empty directory?"
+msgid_plural "Remove empty directories?"
 msgstr[0] "เลือกไดเรกทอรี"
 msgstr[1] "เลือกไดเรกทอรี"
 
@@ -5957,7 +5964,7 @@ msgid "time difference"
 msgstr ""
 
 #: ../src/control/crawler.c:785
-msgid "updated XMP sidecar files found"
+msgid "Updated XMP sidecar files found"
 msgstr ""
 
 #: ../src/control/crawler.c:786
@@ -6090,12 +6097,12 @@ msgid "stop process"
 msgstr ""
 
 #: ../src/control/jobs/control_jobs.c:901
-msgid "trashing error"
+msgid "Trashing error"
 msgstr ""
 
 #: ../src/control/jobs/control_jobs.c:902
 #, fuzzy
-msgid "deletion error"
+msgid "Deletion error"
 msgstr "ลบ"
 
 #: ../src/control/jobs/control_jobs.c:1044
@@ -6285,12 +6292,16 @@ msgstr "คุณต้องการจะลบค่าที่ตั้ง
 
 #: ../src/control/jobs/control_jobs.c:1736
 #, fuzzy
-msgid "delete image?"
+msgid "Delete image?"
 msgstr "ลบแท็ก?"
 
 #: ../src/control/jobs/control_jobs.c:1754 ../src/libs/collect.c:2059
 #, fuzzy
 msgid "move images"
+msgstr "ต้องการจะย้ายรูปหรือไม่?"
+
+#, fuzzy
+msgid "Move images"
 msgstr "ต้องการจะย้ายรูปหรือไม่?"
 
 #: ../src/control/jobs/control_jobs.c:1766
@@ -6311,8 +6322,8 @@ msgstr[0] ""
 msgstr[1] ""
 
 #: ../src/control/jobs/control_jobs.c:1795
-msgid "move image?"
-msgid_plural "move images?"
+msgid "Move image?"
+msgid_plural "Move images?"
 msgstr[0] "ต้องการจะย้ายรูปหรือไม่?"
 msgstr[1] "ต้องการจะย้ายรูปหรือไม่?"
 
@@ -6329,8 +6340,8 @@ msgstr[0] "คุณต้องการจะลบค่าที่ตั้
 msgstr[1] "คุณต้องการจะลบค่าที่ตั้งไว้ '%s'?"
 
 #: ../src/control/jobs/control_jobs.c:1854
-msgid "copy image?"
-msgid_plural "copy images?"
+msgid "Copy image?"
+msgid_plural "Copy images?"
 msgstr[0] "คัดลอกรูป?"
 msgstr[1] "คัดลอกรูป?"
 
@@ -8986,7 +8997,7 @@ msgid "failed to import preset %s"
 msgstr "ล้มเหลวในการเขียนทับแฟ้มสำหรับสไตล์ %s"
 
 #: ../src/gui/preferences.c:1184
-msgid "select preset(s) to import"
+msgid "Select preset(s) to import"
 msgstr ""
 
 #: ../src/gui/preferences.c:1185 ../src/gui/actions/edit.c:305
@@ -9034,7 +9045,7 @@ msgid "do you really want to delete the preset `%s'?"
 msgstr "คุณต้องการจะลบค่าที่ตั้งไว้ '%s'?"
 
 #: ../src/gui/presets.c:303 ../src/gui/presets.c:532 ../src/libs/lib.c:321
-msgid "delete preset?"
+msgid "Delete preset?"
 msgstr "ลบค่าที่ตั้งไว้"
 
 #. add new preset
@@ -9054,7 +9065,7 @@ msgstr ""
 
 #: ../src/gui/presets.c:339
 #, fuzzy
-msgid "unnamed preset"
+msgid "Unnamed preset"
 msgstr "ปรับปรุงค่าที่ตั้งไว้"
 
 #: ../src/gui/presets.c:368
@@ -9065,7 +9076,7 @@ msgid ""
 msgstr ""
 
 #: ../src/gui/presets.c:373
-msgid "overwrite preset?"
+msgid "Overwrite preset?"
 msgstr "เขียนทับค่าที่ตั้งไว้"
 
 #: ../src/gui/presets.c:490 ../src/imageio/storage/disk.c:154
@@ -9080,7 +9091,7 @@ msgstr "สไตล์ %s ถูกนำเข้าสำเร็จแล�
 
 #: ../src/gui/presets.c:565
 #, c-format
-msgid "edit `%s' for module `%s'"
+msgid "Edit `%s' for module `%s'"
 msgstr "แก้ไข `%s' สำหรับโมดูล `%s'"
 
 #: ../src/gui/presets.c:568
@@ -9184,7 +9195,7 @@ msgstr "คุณต้องการจะลบค่าที่ตั้ง
 
 #: ../src/gui/presets.c:921 ../src/libs/lib.c:236
 #, fuzzy
-msgid "update preset?"
+msgid "Update preset?"
 msgstr "ปรับปรุงค่าที่ตั้งไว้"
 
 #: ../src/gui/presets.c:1245
@@ -9266,7 +9277,7 @@ msgstr ""
 #: ../src/gui/styles_dialog.c:230 ../src/libs/styles.c:461
 #: ../src/libs/styles.c:645
 #, fuzzy
-msgid "overwrite style?"
+msgid "Overwrite style?"
 msgstr "เขียนทับค่าที่ตั้งไว้"
 
 #: ../src/gui/styles_dialog.c:259 ../src/gui/styles_dialog.c:318
@@ -9275,7 +9286,7 @@ msgstr ""
 
 #: ../src/gui/styles_dialog.c:263 ../src/gui/styles_dialog.c:322
 #, fuzzy
-msgid "unnamed style"
+msgid "Unnamed style"
 msgstr "แก้ไขสไตล์"
 
 #: ../src/gui/styles_dialog.c:310
@@ -9284,7 +9295,7 @@ msgid "style %s was successfully saved"
 msgstr "สไตล์ %s ถูกบันทึกสำเร็จแล้ว"
 
 #: ../src/gui/styles_dialog.c:425
-msgid "edit style"
+msgid "Edit style"
 msgstr "แก้ไขสไตล์"
 
 #: ../src/gui/styles_dialog.c:426
@@ -9296,7 +9307,7 @@ msgid "creates a duplicate of the style before applying changes"
 msgstr ""
 
 #: ../src/gui/styles_dialog.c:431
-msgid "create new style"
+msgid "Create new style"
 msgstr "สร้างสไตล์ใหม่"
 
 #: ../src/gui/styles_dialog.c:467
@@ -9460,7 +9471,7 @@ msgid "Paste history (parts) — merge settings"
 msgstr ""
 
 #: ../src/gui/actions/edit.c:304
-msgid "open sidecar file"
+msgid "Open sidecar file"
 msgstr ""
 
 #: ../src/gui/actions/edit.c:337
@@ -9685,7 +9696,7 @@ msgid "do you want to access ansel.photos ?"
 msgstr ""
 
 #: ../src/gui/actions/help.c:146
-msgid "access the online usermanual?"
+msgid "Access the online usermanual?"
 msgstr ""
 
 #: ../src/gui/actions/help.c:158
@@ -15953,7 +15964,7 @@ msgstr ""
 
 #: ../src/iop/lut3d.c:1339
 #, fuzzy
-msgid "select lut file"
+msgid "Select lut file"
 msgstr "เลือกสไตล์"
 
 #: ../src/iop/lut3d.c:1340
@@ -17680,12 +17691,12 @@ msgstr ""
 
 #: ../src/libs/collect.c:1840
 #, fuzzy
-msgid "select the new location of this folder"
+msgid "Select the new location of this folder"
 msgstr "เลือกโทนสี (hue)"
 
 #: ../src/libs/collect.c:1840
 #, fuzzy
-msgid "select the new parent folder"
+msgid "Select the new parent folder"
 msgstr "เลือกโทนสี (hue)"
 
 #: ../src/libs/collect.c:1873
@@ -17704,9 +17715,13 @@ msgstr[1] "สร้างสไตล์จากชุดประวัติ
 msgid "delete tags"
 msgstr "ลบแท็ก?"
 
+#, fuzzy
+msgid "Delete tags"
+msgstr "ลบแท็ก?"
+
 #: ../src/libs/collect.c:1906
 #, fuzzy
-msgid "rename tag"
+msgid "Rename tag"
 msgstr "รูปร่างถูกสร้างขึ้น"
 
 #: ../src/libs/collect.c:1971
@@ -17959,7 +17974,7 @@ msgstr "คัดลอกสไตล์"
 
 #: ../src/libs/export.c:347
 #, fuzzy
-msgid "export to disk"
+msgid "Export to disk"
 msgstr "แฟ้มบนดิสก์"
 
 #: ../src/libs/export.c:505
@@ -18159,7 +18174,7 @@ msgstr ""
 
 #: ../src/libs/export_metadata.c:174
 #, fuzzy
-msgid "select tag"
+msgid "Select tag"
 msgstr "เลือกทั้งหมด"
 
 #: ../src/libs/export_metadata.c:175
@@ -18182,7 +18197,7 @@ msgid ""
 msgstr ""
 
 #: ../src/libs/export_metadata.c:302
-msgid "edit metadata exportation"
+msgid "Edit metadata exportation"
 msgstr ""
 
 #: ../src/libs/export_metadata.c:303 ../src/libs/metadata.c:518
@@ -18373,7 +18388,7 @@ msgid "images"
 msgstr "รูปภาพ"
 
 #: ../src/libs/geotagging.c:956
-msgid "open GPX file"
+msgid "Open GPX file"
 msgstr ""
 
 #: ../src/libs/geotagging.c:970
@@ -18874,7 +18889,7 @@ msgstr ""
 
 #: ../src/libs/ioporder.c:1536
 #, fuzzy
-msgid "save module order preset"
+msgid "Save module order preset"
 msgstr "ขอบเล็กลง"
 
 #: ../src/libs/ioporder.c:1545
@@ -19119,7 +19134,7 @@ msgstr ""
 
 #: ../src/libs/metadata.c:516 ../src/libs/metadata_view.c:1186
 #, fuzzy
-msgid "metadata settings"
+msgid "Metadata settings"
 msgstr "ตั้งค่าแผนที่"
 
 #: ../src/libs/metadata.c:566 ../src/libs/metadata_view.c:1232
@@ -19796,8 +19811,8 @@ msgstr[1] "คุณต้องการจะลบค่าที่ตั้
 
 #: ../src/libs/styles.c:344
 #, fuzzy
-msgid "remove style?"
-msgid_plural "remove styles?"
+msgid "Remove style?"
+msgid_plural "Remove styles?"
 msgstr[0] "เลือกสไตล์"
 msgstr[1] "เลือกสไตล์"
 
@@ -19818,7 +19833,7 @@ msgid "style %s was successfully exported"
 msgstr "สไตล์ %s ถูกนำเข้าสำเร็จแล้ว"
 
 #: ../src/libs/styles.c:551
-msgid "select style"
+msgid "Select style"
 msgstr "เลือกสไตล์"
 
 #: ../src/libs/styles.c:561
@@ -19924,7 +19939,7 @@ msgstr "ลบแท็ก?"
 
 #: ../src/libs/tagging.c:1461
 #, fuzzy
-msgid "delete node?"
+msgid "Delete node?"
 msgstr "ลบแท็ก?"
 
 #: ../src/libs/tagging.c:1468 ../src/libs/tagging.c:1683
@@ -19955,7 +19970,7 @@ msgstr ""
 
 #: ../src/libs/tagging.c:1543
 #, fuzzy
-msgid "create tag"
+msgid "Create tag"
 msgstr "รูปร่างถูกสร้างขึ้น"
 
 #: ../src/libs/tagging.c:1553 ../src/libs/tagging.c:1703
@@ -20014,7 +20029,7 @@ msgid "at least one new tagname (%s) already exists, aborting."
 msgstr "สไตล์ที่ชื่อ '%s' มีอยู่แล้ว"
 
 #: ../src/libs/tagging.c:1961
-msgid "change path"
+msgid "Change path"
 msgstr ""
 
 #: ../src/libs/tagging.c:2005
@@ -20022,7 +20037,7 @@ msgid "'|' misplaced, empty tag is not allowed, aborting"
 msgstr ""
 
 #: ../src/libs/tagging.c:2088
-msgid "delete tag?"
+msgid "Delete tag?"
 msgstr "ลบแท็ก?"
 
 #: ../src/libs/tagging.c:2092
@@ -20086,7 +20101,7 @@ msgstr ""
 
 #: ../src/libs/tagging.c:2435
 #, fuzzy
-msgid "select a keyword file"
+msgid "Select a keyword file"
 msgstr "เลือกสไตล์"
 
 #: ../src/libs/tagging.c:2436
@@ -20101,7 +20116,7 @@ msgstr "%s ถูกนำเข้าสำเร็จแล้ว"
 
 #: ../src/libs/tagging.c:2468
 #, fuzzy
-msgid "select file to export to"
+msgid "Select file to export to"
 msgstr "เลือกโทนสี (hue)"
 
 #: ../src/libs/tagging.c:2469
@@ -20173,7 +20188,7 @@ msgstr "สร้างสไตล์จากชุดประวัติศ
 
 #: ../src/libs/tagging.c:3248
 #, fuzzy
-msgid "manage tags"
+msgid "Manage tags"
 msgstr "ปรับปรุงค่าที่ตั้งไว้"
 
 #: ../src/libs/tagging.c:3263
@@ -21057,7 +21072,7 @@ msgid "no LUT to save"
 msgstr ""
 
 #: ../src/common/lut_viewer.c:1207
-msgid "save 3D LUT"
+msgid "Save 3D LUT"
 msgstr ""
 
 #: ../src/common/lut_viewer.c:1222

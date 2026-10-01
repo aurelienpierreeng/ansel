@@ -350,7 +350,7 @@ static void _export_button_clicked(GtkWidget *widget, dt_lib_export_t *d)
     dt_osx_disallow_fullscreen(dialog);
 #endif
 
-    gtk_window_set_title(GTK_WINDOW(dialog), _("export to disk"));
+    gtk_window_set_title(GTK_WINDOW(dialog), _("Export to disk"));
     const gint res = gtk_dialog_run(GTK_DIALOG(dialog));
     GtkWindow *dialog_parent = gtk_window_get_transient_for(GTK_WINDOW(dialog));
     gtk_widget_destroy(dialog);

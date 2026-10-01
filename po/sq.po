@@ -655,6 +655,9 @@ msgstr ""
 msgid "select directory"
 msgstr "përzgjidhni direktorinë"
 
+msgid "Select directory"
+msgstr "Përzgjidhni direktorinë"
+
 #: ../build/src/preferences_gen.h:3047
 msgid ""
 "this folder (and sub-folders) contains Lut files used by lut3d modules. "
@@ -3940,6 +3943,9 @@ msgstr "moduli"
 msgid "module order"
 msgstr "radha e moduleve"
 
+msgid "Module order"
+msgstr "Radha e moduleve"
+
 #: ../src/common/collection.c:685 ../src/develop/lightroom.c:1505
 #: ../src/libs/tools/filter.c:119
 msgid "rating"
@@ -4716,7 +4722,7 @@ msgstr ""
 "do vijoni apo do e mbyllni tani programin për të bërë kopjen\n"
 
 #: ../src/common/database.c:2911
-msgid "ansel - schema migration"
+msgid "Ansel - schema migration"
 msgstr ""
 
 #: ../src/common/database.c:2912 ../src/common/database.c:3265
@@ -4761,7 +4767,7 @@ msgstr ""
 
 #: ../src/common/database.c:3262 ../src/common/database.c:3280
 #: ../src/common/database.c:3440 ../src/common/database.c:3458
-msgid "ansel - error opening database"
+msgid "Ansel - error opening database"
 msgstr ""
 
 #: ../src/common/database.c:3267 ../src/common/database.c:3445
@@ -4833,8 +4839,8 @@ msgstr ""
 
 #: ../src/common/database.c:3815
 #, fuzzy
-msgid "ansel - schema maintenance"
-msgstr "instanca e maskës raster"
+msgid "Ansel - schema maintenance"
+msgstr "Instanca e maskës raster"
 
 #: ../src/common/database.c:3816
 #, fuzzy
@@ -4879,10 +4885,10 @@ msgstr[0] "do e hiqni këtë direktorinë boshe?"
 msgstr[1] "do i hiqni këto direktoritë boshe?"
 
 #: ../src/common/film.c:297
-msgid "remove empty directory?"
-msgid_plural "remove empty directories?"
-msgstr[0] "do e hiqni direktorinë boshe?"
-msgstr[1] "do i hiqni direktoritë boshe?"
+msgid "Remove empty directory?"
+msgid_plural "Remove empty directories?"
+msgstr[0] "Do e hiqni direktorinë boshe?"
+msgstr[1] "Do i hiqni direktoritë boshe?"
 
 #: ../src/common/film.c:317 ../src/gui/preferences.c:979
 #: ../src/gui/styles_dialog.c:466 ../src/libs/collect.c:3003
@@ -5995,8 +6001,8 @@ msgid "time difference"
 msgstr "diferenca kohore"
 
 #: ../src/control/crawler.c:785
-msgid "updated XMP sidecar files found"
-msgstr "gjeti skedarët shoqërues XMP të azhurnuar"
+msgid "Updated XMP sidecar files found"
+msgstr "Gjeti skedarët shoqërues XMP të azhurnuar"
 
 #: ../src/control/crawler.c:786
 msgid "_close"
@@ -6128,12 +6134,12 @@ msgid "stop process"
 msgstr "ndaloj procesin"
 
 #: ../src/control/jobs/control_jobs.c:901
-msgid "trashing error"
-msgstr "problem me hedhjen në kosh"
+msgid "Trashing error"
+msgstr "Problem me hedhjen në kosh"
 
 #: ../src/control/jobs/control_jobs.c:902
-msgid "deletion error"
-msgstr "problem me fshirjen"
+msgid "Deletion error"
+msgstr "Problem me fshirjen"
 
 #: ../src/control/jobs/control_jobs.c:1044
 #, c-format
@@ -6326,12 +6332,15 @@ msgid "do you really want to physically delete selected image from disk?"
 msgstr "vërtet do e fshini imazhin e përzgjedhur fizikisht nga disku?"
 
 #: ../src/control/jobs/control_jobs.c:1736
-msgid "delete image?"
-msgstr "do e fshini imazhin?"
+msgid "Delete image?"
+msgstr "Do e fshini imazhin?"
 
 #: ../src/control/jobs/control_jobs.c:1754 ../src/libs/collect.c:2059
 msgid "move images"
 msgstr "lëviz imazhet"
+
+msgid "Move images"
+msgstr "Lëviz imazhet"
 
 #: ../src/control/jobs/control_jobs.c:1766
 #: ../src/control/jobs/control_jobs.c:1828
@@ -6354,10 +6363,10 @@ msgstr[1] ""
 "(do të lëvizni njëkohësisht edhe të gjitha dublikatat)"
 
 #: ../src/control/jobs/control_jobs.c:1795
-msgid "move image?"
-msgid_plural "move images?"
-msgstr[0] "do lëvizni imazhin?"
-msgstr[1] "do lëvizni imazhet?"
+msgid "Move image?"
+msgid_plural "Move images?"
+msgstr[0] "Do lëvizni imazhin?"
+msgstr[1] "Do lëvizni imazhet?"
 
 #: ../src/control/jobs/control_jobs.c:1816
 msgid "copy images"
@@ -6371,10 +6380,10 @@ msgstr[0] "vërtet do e kopjoni fizikisht %d imazh të përzgjedhur në %s?"
 msgstr[1] "vërtet do i kopjoni fizikisht %d imazhet e përzgjedhura në %s?"
 
 #: ../src/control/jobs/control_jobs.c:1854
-msgid "copy image?"
-msgid_plural "copy images?"
-msgstr[0] "do kopjoni imazhin?"
-msgstr[1] "do kopjoni imazhet?"
+msgid "Copy image?"
+msgid_plural "Copy images?"
+msgstr[0] "Do kopjoni imazhin?"
+msgstr[1] "Do kopjoni imazhet?"
 
 #: ../src/control/jobs/control_jobs.c:1874
 #: ../src/control/jobs/control_jobs.c:1882
@@ -9127,8 +9136,8 @@ msgid "failed to import preset %s"
 msgstr "e pamundur të importohej vlera e paracaktuar %s"
 
 #: ../src/gui/preferences.c:1184
-msgid "select preset(s) to import"
-msgstr "përzgjidhni vlerat e paracaktuara që do të importoni"
+msgid "Select preset(s) to import"
+msgstr "Përzgjidhni vlerat e paracaktuara që do të importoni"
 
 #: ../src/gui/preferences.c:1185 ../src/gui/actions/edit.c:305
 #: ../src/libs/collect.c:1841 ../src/libs/geotagging.c:959
@@ -9175,8 +9184,8 @@ msgid "do you really want to delete the preset `%s'?"
 msgstr "vërtet do e fshini vlerën e paracaktuar `%s'?"
 
 #: ../src/gui/presets.c:303 ../src/gui/presets.c:532 ../src/libs/lib.c:321
-msgid "delete preset?"
-msgstr "do e fshini vlerën e paracaktuar?"
+msgid "Delete preset?"
+msgstr "Do e fshini vlerën e paracaktuar?"
 
 #. add new preset
 #. then show edit dialog
@@ -9193,8 +9202,8 @@ msgid "please give preset a name"
 msgstr "lutemi t'i vini një emër vlerës së paracaktuar"
 
 #: ../src/gui/presets.c:339
-msgid "unnamed preset"
-msgstr "paracaktim pa emër"
+msgid "Unnamed preset"
+msgstr "Paracaktim pa emër"
 
 #: ../src/gui/presets.c:368
 #, c-format
@@ -9206,8 +9215,8 @@ msgstr ""
 "do e mbishkruani?"
 
 #: ../src/gui/presets.c:373
-msgid "overwrite preset?"
-msgstr "do mbishkruani vlerën e paracaktuar?"
+msgid "Overwrite preset?"
+msgstr "Do mbishkruani vlerën e paracaktuar?"
 
 #: ../src/gui/presets.c:490 ../src/imageio/storage/disk.c:154
 #: ../src/imageio/storage/gallery.c:142
@@ -9221,8 +9230,8 @@ msgstr "eksportoi me sukses vlerën e paracaktuar %s"
 
 #: ../src/gui/presets.c:565
 #, c-format
-msgid "edit `%s' for module `%s'"
-msgstr "përpunoni `%s' për modulin `%s'"
+msgid "Edit `%s' for module `%s'"
+msgstr "Përpunoni `%s' për modulin `%s'"
 
 #: ../src/gui/presets.c:568
 msgid "_export..."
@@ -9318,8 +9327,8 @@ msgid "do you really want to update the preset `%s'?"
 msgstr "vërtet do e azhurnoni vlerën e paracaktuar `%s'?"
 
 #: ../src/gui/presets.c:921 ../src/libs/lib.c:236
-msgid "update preset?"
-msgstr "do e azhurnoni vlerën e paracaktuar?"
+msgid "Update preset?"
+msgstr "Do e azhurnoni vlerën e paracaktuar?"
 
 #: ../src/gui/presets.c:1245
 msgid "(default)"
@@ -9404,16 +9413,16 @@ msgstr ""
 
 #: ../src/gui/styles_dialog.c:230 ../src/libs/styles.c:461
 #: ../src/libs/styles.c:645
-msgid "overwrite style?"
-msgstr "do e mbishkruani stilin?"
+msgid "Overwrite style?"
+msgstr "Do e mbishkruani stilin?"
 
 #: ../src/gui/styles_dialog.c:259 ../src/gui/styles_dialog.c:318
 msgid "please give style a name"
 msgstr "lutemi t'i vini një emër stilit"
 
 #: ../src/gui/styles_dialog.c:263 ../src/gui/styles_dialog.c:322
-msgid "unnamed style"
-msgstr "stil pa emër"
+msgid "Unnamed style"
+msgstr "Stil pa emër"
 
 #: ../src/gui/styles_dialog.c:310
 #, c-format
@@ -9421,8 +9430,8 @@ msgid "style %s was successfully saved"
 msgstr "regjistroi me sukses stilin %s"
 
 #: ../src/gui/styles_dialog.c:425
-msgid "edit style"
-msgstr "editoj stilin"
+msgid "Edit style"
+msgstr "Editoj stilin"
 
 #: ../src/gui/styles_dialog.c:426
 msgid "duplicate style"
@@ -9433,8 +9442,8 @@ msgid "creates a duplicate of the style before applying changes"
 msgstr "krijoni dublikatën e stilit para se të aplikoni ndryshimet"
 
 #: ../src/gui/styles_dialog.c:431
-msgid "create new style"
-msgstr "krijoni stilin e ri"
+msgid "Create new style"
+msgstr "Krijoni stilin e ri"
 
 #: ../src/gui/styles_dialog.c:467
 msgid "enter a name for the new style"
@@ -9611,8 +9620,8 @@ msgid "Paste history (parts) — merge settings"
 msgstr ""
 
 #: ../src/gui/actions/edit.c:304
-msgid "open sidecar file"
-msgstr "hap skedarin shoqërues"
+msgid "Open sidecar file"
+msgstr "Hap skedarin shoqërues"
 
 #: ../src/gui/actions/edit.c:337
 msgid "XMP sidecar files"
@@ -9838,8 +9847,8 @@ msgid "do you want to access ansel.photos ?"
 msgstr ""
 
 #: ../src/gui/actions/help.c:146
-msgid "access the online usermanual?"
-msgstr "do e hapni manualin në internet?"
+msgid "Access the online usermanual?"
+msgstr "Do e hapni manualin në internet?"
 
 #: ../src/gui/actions/help.c:158
 msgid "help url opened in web browser"
@@ -16667,8 +16676,8 @@ msgstr ""
 
 #: ../src/iop/lut3d.c:1339
 #, fuzzy
-msgid "select lut file"
-msgstr "përzgjidhni skedarin"
+msgid "Select lut file"
+msgstr "Përzgjidhni skedarin"
 
 #: ../src/iop/lut3d.c:1340
 msgid "_select"
@@ -18532,13 +18541,13 @@ msgstr "e pakategorizuar"
 
 #: ../src/libs/collect.c:1840
 #, fuzzy
-msgid "select the new location of this folder"
-msgstr "përzgjidhni tonin e nuancës së filtrit"
+msgid "Select the new location of this folder"
+msgstr "Përzgjidhni tonin e nuancës së filtrit"
 
 #: ../src/libs/collect.c:1840
 #, fuzzy
-msgid "select the new parent folder"
-msgstr "toni i nuancës"
+msgid "Select the new parent folder"
+msgstr "Toni i nuancës"
 
 #: ../src/libs/collect.c:1873
 #, fuzzy
@@ -18557,10 +18566,14 @@ msgstr[1] "shkëputni etiketën nga imazhet e përzgjedhura"
 msgid "delete tags"
 msgstr "fshij etiketën"
 
+#, fuzzy
+msgid "Delete tags"
+msgstr "Fshij etiketën"
+
 #: ../src/libs/collect.c:1906
 #, fuzzy
-msgid "rename tag"
-msgstr "krijoj etiketën"
+msgid "Rename tag"
+msgstr "Krijoj etiketën"
 
 #: ../src/libs/collect.c:1971
 #, fuzzy
@@ -18831,8 +18844,8 @@ msgid "Duplicates"
 msgstr "dublikoj stilin"
 
 #: ../src/libs/export.c:347
-msgid "export to disk"
-msgstr "eksportoj në disk"
+msgid "Export to disk"
+msgstr "Eksportoj në disk"
 
 #: ../src/libs/export.c:505
 #, c-format
@@ -19035,8 +19048,8 @@ msgid "export with current settings"
 msgstr "eksportoni me parametrat aktualë"
 
 #: ../src/libs/export_metadata.c:174
-msgid "select tag"
-msgstr "përzgjedh etiketën"
+msgid "Select tag"
+msgstr "Përzgjedh etiketën"
 
 #: ../src/libs/export_metadata.c:175
 msgid "add"
@@ -19059,8 +19072,8 @@ msgstr ""
 "e përzgjedhur me dopioklik"
 
 #: ../src/libs/export_metadata.c:302
-msgid "edit metadata exportation"
-msgstr "përpunoni eksportimin e metadatave"
+msgid "Edit metadata exportation"
+msgstr "Përpunoni eksportimin e metadatave"
 
 #: ../src/libs/export_metadata.c:303 ../src/libs/metadata.c:518
 #: ../src/libs/metadata_view.c:1188 ../src/libs/styles.c:462
@@ -19257,8 +19270,8 @@ msgid "images"
 msgstr "imazhet"
 
 #: ../src/libs/geotagging.c:956
-msgid "open GPX file"
-msgstr "hap skedarin GPX"
+msgid "Open GPX file"
+msgstr "Hap skedarin GPX"
 
 #: ../src/libs/geotagging.c:970
 msgid "GPS data exchange format"
@@ -19773,8 +19786,8 @@ msgstr ""
 
 #: ../src/libs/ioporder.c:1536
 #, fuzzy
-msgid "save module order preset"
-msgstr "radha e moduleve"
+msgid "Save module order preset"
+msgstr "Radha e moduleve"
 
 #: ../src/libs/ioporder.c:1545
 #, fuzzy
@@ -20029,8 +20042,8 @@ msgid "<leave unchanged>"
 msgstr "<lër njësoj>"
 
 #: ../src/libs/metadata.c:516 ../src/libs/metadata_view.c:1186
-msgid "metadata settings"
-msgstr "parametrat e metadatës"
+msgid "Metadata settings"
+msgstr "Parametrat e metadatës"
 
 #: ../src/libs/metadata.c:566 ../src/libs/metadata_view.c:1232
 msgid "visible"
@@ -20724,10 +20737,10 @@ msgstr[0] "vërtet do e hiqni %d stil?"
 msgstr[1] "vërtet do i hiqni %d stile?"
 
 #: ../src/libs/styles.c:344
-msgid "remove style?"
-msgid_plural "remove styles?"
-msgstr[0] "do e hiqni stilin?"
-msgstr[1] "do i hiqni stilet?"
+msgid "Remove style?"
+msgid_plural "Remove styles?"
+msgstr[0] "Do e hiqni stilin?"
+msgstr[1] "Do i hiqni stilet?"
 
 #: ../src/libs/styles.c:468 ../src/libs/styles.c:652
 #, c-format
@@ -20748,8 +20761,8 @@ msgid "style %s was successfully exported"
 msgstr "eksportoi me sukses stilin %s"
 
 #: ../src/libs/styles.c:551
-msgid "select style"
-msgstr "përzgjedh stilin"
+msgid "Select style"
+msgstr "Përzgjedh stilin"
 
 #: ../src/libs/styles.c:561
 #, fuzzy
@@ -20848,8 +20861,8 @@ msgid "detach all tags"
 msgstr "shkëput etiketën"
 
 #: ../src/libs/tagging.c:1461
-msgid "delete node?"
-msgstr "do e fshini nyjën?"
+msgid "Delete node?"
+msgstr "Do e fshini nyjën?"
 
 #: ../src/libs/tagging.c:1468 ../src/libs/tagging.c:1683
 #: ../src/libs/tagging.c:1968
@@ -20878,8 +20891,8 @@ msgid "%d tags removed"
 msgstr "hoqi %d etiketa"
 
 #: ../src/libs/tagging.c:1543
-msgid "create tag"
-msgstr "krijoj etiketën"
+msgid "Create tag"
+msgstr "Krijoj etiketën"
 
 #: ../src/libs/tagging.c:1553 ../src/libs/tagging.c:1703
 msgid "name: "
@@ -20937,16 +20950,16 @@ msgid "at least one new tagname (%s) already exists, aborting."
 msgstr "emri i të paktën një etikete të re (%s) ekziston që më parë, dalje."
 
 #: ../src/libs/tagging.c:1961
-msgid "change path"
-msgstr "ndryshoj adresën"
+msgid "Change path"
+msgstr "Ndryshoj adresën"
 
 #: ../src/libs/tagging.c:2005
 msgid "'|' misplaced, empty tag is not allowed, aborting"
 msgstr "'|' është vendosur keq, nuk lejohen etiketat boshe, ndërpritet"
 
 #: ../src/libs/tagging.c:2088
-msgid "delete tag?"
-msgstr "do e fshini etiketën?"
+msgid "Delete tag?"
+msgstr "Do e fshini etiketën?"
 
 #: ../src/libs/tagging.c:2092
 #, fuzzy, c-format
@@ -21010,8 +21023,8 @@ msgid "(private)"
 msgstr "(private)"
 
 #: ../src/libs/tagging.c:2435
-msgid "select a keyword file"
-msgstr "përzgjidhni skedarin me fjalët kyç"
+msgid "Select a keyword file"
+msgstr "Përzgjidhni skedarin me fjalët kyç"
 
 #: ../src/libs/tagging.c:2436
 msgid "_import"
@@ -21023,8 +21036,8 @@ msgid "%u tags imported"
 msgstr "importoi %zd etiketa"
 
 #: ../src/libs/tagging.c:2468
-msgid "select file to export to"
-msgstr "përzgjidhni skedarin për eksport"
+msgid "Select file to export to"
+msgstr "Përzgjidhni skedarin për eksport"
 
 #: ../src/libs/tagging.c:2469
 msgid "_export"
@@ -21098,8 +21111,8 @@ msgstr "bashkëngjitni etiketën në imazhet e përzgjedhura"
 
 #: ../src/libs/tagging.c:3248
 #, fuzzy
-msgid "manage tags"
-msgstr "etiketat gjeografike"
+msgid "Manage tags"
+msgstr "Etiketat gjeografike"
 
 #: ../src/libs/tagging.c:3263
 msgid "type to filter the tag dictionary below"
@@ -22064,7 +22077,7 @@ msgid "no LUT to save"
 msgstr "nuk keni asgjë për të regjistruar"
 
 #: ../src/common/lut_viewer.c:1207
-msgid "save 3D LUT"
+msgid "Save 3D LUT"
 msgstr ""
 
 #: ../src/common/lut_viewer.c:1222

@@ -657,6 +657,9 @@ msgstr ""
 msgid "select directory"
 msgstr "Valitse hakemisto"
 
+msgid "Select directory"
+msgstr "Valitse hakemisto"
+
 #: ../build/src/preferences_gen.h:3047
 msgid ""
 "this folder (and sub-folders) contains Lut files used by lut3d modules. "
@@ -3924,6 +3927,9 @@ msgstr "Moduuli"
 msgid "module order"
 msgstr "Moduulien järjestys"
 
+msgid "Module order"
+msgstr "Moduulien järjestys"
+
 #: ../src/common/collection.c:685 ../src/develop/lightroom.c:1505
 #: ../src/libs/tools/filter.c:119
 msgid "rating"
@@ -4699,7 +4705,7 @@ msgstr ""
 "Haluatko jatkaa vai lopettaa ja ottaa varmuuskopion?\n"
 
 #: ../src/common/database.c:2911
-msgid "ansel - schema migration"
+msgid "Ansel - schema migration"
 msgstr ""
 
 #: ../src/common/database.c:2912 ../src/common/database.c:3265
@@ -4744,7 +4750,7 @@ msgstr ""
 
 #: ../src/common/database.c:3262 ../src/common/database.c:3280
 #: ../src/common/database.c:3440 ../src/common/database.c:3458
-msgid "ansel - error opening database"
+msgid "Ansel - error opening database"
 msgstr ""
 
 #: ../src/common/database.c:3267 ../src/common/database.c:3445
@@ -4831,7 +4837,7 @@ msgstr ""
 
 #: ../src/common/database.c:3815
 #, fuzzy
-msgid "ansel - schema maintenance"
+msgid "Ansel - schema maintenance"
 msgstr "Rasterimaskin instanssi"
 
 #: ../src/common/database.c:3816
@@ -4876,8 +4882,8 @@ msgstr[0] "Haluatko poistaa tämän tyhjän hakemiston?"
 msgstr[1] "Haluatko poistaa nämä tyhjät hakemistot?"
 
 #: ../src/common/film.c:297
-msgid "remove empty directory?"
-msgid_plural "remove empty directories?"
+msgid "Remove empty directory?"
+msgid_plural "Remove empty directories?"
 msgstr[0] "Poista tyhjä hakemisto?"
 msgstr[1] "Poista tyhjät hakemistot?"
 
@@ -6004,7 +6010,7 @@ msgid "time difference"
 msgstr "Ajan poikkeama"
 
 #: ../src/control/crawler.c:785
-msgid "updated XMP sidecar files found"
+msgid "Updated XMP sidecar files found"
 msgstr "Löytyi päivitettyjä XMP-aputiedostoja."
 
 #: ../src/control/crawler.c:786
@@ -6137,11 +6143,11 @@ msgid "stop process"
 msgstr "Pysäytä prosessi"
 
 #: ../src/control/jobs/control_jobs.c:901
-msgid "trashing error"
+msgid "Trashing error"
 msgstr "Virhe roskakoriin viennissä."
 
 #: ../src/control/jobs/control_jobs.c:902
-msgid "deletion error"
+msgid "Deletion error"
 msgstr "Virhe poistossa."
 
 #: ../src/control/jobs/control_jobs.c:1044
@@ -6335,11 +6341,14 @@ msgid "do you really want to physically delete selected image from disk?"
 msgstr "Haluatko varmasti poistaa valitun kuvan levyltä?"
 
 #: ../src/control/jobs/control_jobs.c:1736
-msgid "delete image?"
+msgid "Delete image?"
 msgstr "Poista kuva?"
 
 #: ../src/control/jobs/control_jobs.c:1754 ../src/libs/collect.c:2059
 msgid "move images"
+msgstr "Siirrä kuvat"
+
+msgid "Move images"
 msgstr "Siirrä kuvat"
 
 #: ../src/control/jobs/control_jobs.c:1766
@@ -6363,8 +6372,8 @@ msgstr[1] ""
 "(kaikki kopiot siirretään kuvan mukana)."
 
 #: ../src/control/jobs/control_jobs.c:1795
-msgid "move image?"
-msgid_plural "move images?"
+msgid "Move image?"
+msgid_plural "Move images?"
 msgstr[0] "Siirrä kuva?"
 msgstr[1] "Siirrä kuvat?"
 
@@ -6380,8 +6389,8 @@ msgstr[0] "Haluatko varmasti kopioida %d valitun kuvan kohteeseen %s?"
 msgstr[1] "Haluatko varmasti kopioida %d valittua kuvaa kohteeseen %s?"
 
 #: ../src/control/jobs/control_jobs.c:1854
-msgid "copy image?"
-msgid_plural "copy images?"
+msgid "Copy image?"
+msgid_plural "Copy images?"
 msgstr[0] "Kopioi kuva?"
 msgstr[1] "Kopioi kuvat?"
 
@@ -9137,7 +9146,7 @@ msgid "failed to import preset %s"
 msgstr "Esiasetuksen %s tuonti epäonnistui"
 
 #: ../src/gui/preferences.c:1184
-msgid "select preset(s) to import"
+msgid "Select preset(s) to import"
 msgstr "Valitse tuotavat esiasetukset"
 
 #: ../src/gui/preferences.c:1185 ../src/gui/actions/edit.c:305
@@ -9185,7 +9194,7 @@ msgid "do you really want to delete the preset `%s'?"
 msgstr "Haluatko varmasti poistaa esiasetuksen `%s'?"
 
 #: ../src/gui/presets.c:303 ../src/gui/presets.c:532 ../src/libs/lib.c:321
-msgid "delete preset?"
+msgid "Delete preset?"
 msgstr "Poista esiasetus?"
 
 #. add new preset
@@ -9203,7 +9212,7 @@ msgid "please give preset a name"
 msgstr "Anna esiasetukselle nimi"
 
 #: ../src/gui/presets.c:339
-msgid "unnamed preset"
+msgid "Unnamed preset"
 msgstr "Nimeämätön esiasetus"
 
 #: ../src/gui/presets.c:368
@@ -9216,7 +9225,7 @@ msgstr ""
 "Haluatko ylikirjoittaa esiasetuksen?"
 
 #: ../src/gui/presets.c:373
-msgid "overwrite preset?"
+msgid "Overwrite preset?"
 msgstr "Ylikirjoita esiasetus?"
 
 #: ../src/gui/presets.c:490 ../src/imageio/storage/disk.c:154
@@ -9231,7 +9240,7 @@ msgstr "Esiasetus %s vietiin onnistuneesti"
 
 #: ../src/gui/presets.c:565
 #, c-format
-msgid "edit `%s' for module `%s'"
+msgid "Edit `%s' for module `%s'"
 msgstr "Muokkaa `%s' moduulille `%s'"
 
 #: ../src/gui/presets.c:568
@@ -9329,7 +9338,7 @@ msgid "do you really want to update the preset `%s'?"
 msgstr "Haluatko varmasti päivittää esiasetuksen `%s'?"
 
 #: ../src/gui/presets.c:921 ../src/libs/lib.c:236
-msgid "update preset?"
+msgid "Update preset?"
 msgstr "Päivitä esiasetus?"
 
 #: ../src/gui/presets.c:1245
@@ -9415,7 +9424,7 @@ msgstr ""
 
 #: ../src/gui/styles_dialog.c:230 ../src/libs/styles.c:461
 #: ../src/libs/styles.c:645
-msgid "overwrite style?"
+msgid "Overwrite style?"
 msgstr "Ylikirjoita tyyli?"
 
 #: ../src/gui/styles_dialog.c:259 ../src/gui/styles_dialog.c:318
@@ -9423,7 +9432,7 @@ msgid "please give style a name"
 msgstr "Anna tyylille nimi"
 
 #: ../src/gui/styles_dialog.c:263 ../src/gui/styles_dialog.c:322
-msgid "unnamed style"
+msgid "Unnamed style"
 msgstr "Nimeämätön tyyli"
 
 #: ../src/gui/styles_dialog.c:310
@@ -9432,7 +9441,7 @@ msgid "style %s was successfully saved"
 msgstr "Tyylin %s tallennus onnistui"
 
 #: ../src/gui/styles_dialog.c:425
-msgid "edit style"
+msgid "Edit style"
 msgstr "Muokkaa tyyliä"
 
 #: ../src/gui/styles_dialog.c:426
@@ -9444,7 +9453,7 @@ msgid "creates a duplicate of the style before applying changes"
 msgstr "Tyylistä luodaan kopio ennen muutosten tallentamista."
 
 #: ../src/gui/styles_dialog.c:431
-msgid "create new style"
+msgid "Create new style"
 msgstr "Luo uusi tyyli"
 
 #: ../src/gui/styles_dialog.c:467
@@ -9622,7 +9631,7 @@ msgid "Paste history (parts) — merge settings"
 msgstr ""
 
 #: ../src/gui/actions/edit.c:304
-msgid "open sidecar file"
+msgid "Open sidecar file"
 msgstr "Avaa aputiedosto"
 
 #: ../src/gui/actions/edit.c:337
@@ -9849,7 +9858,7 @@ msgid "do you want to access ansel.photos ?"
 msgstr ""
 
 #: ../src/gui/actions/help.c:146
-msgid "access the online usermanual?"
+msgid "Access the online usermanual?"
 msgstr "Käytä verkossa olevaa käyttöohjetta?"
 
 #: ../src/gui/actions/help.c:158
@@ -16680,7 +16689,7 @@ msgid "lut root folder not defined"
 msgstr ""
 
 #: ../src/iop/lut3d.c:1339
-msgid "select lut file"
+msgid "Select lut file"
 msgstr "Valitse LUT-tiedosto"
 
 #: ../src/iop/lut3d.c:1340
@@ -18543,12 +18552,12 @@ msgstr "Luokittelematon"
 
 #: ../src/libs/collect.c:1840
 #, fuzzy
-msgid "select the new location of this folder"
+msgid "Select the new location of this folder"
 msgstr "Valitse suotimen sävyn värivivahde."
 
 #: ../src/libs/collect.c:1840
 #, fuzzy
-msgid "select the new parent folder"
+msgid "Select the new parent folder"
 msgstr "Valitse sävyn värivivahde."
 
 #: ../src/libs/collect.c:1873
@@ -18568,9 +18577,13 @@ msgstr[1] "Poista tunniste valituista kuvista."
 msgid "delete tags"
 msgstr "Poista tunniste"
 
+#, fuzzy
+msgid "Delete tags"
+msgstr "Poista tunniste"
+
 #: ../src/libs/collect.c:1906
 #, fuzzy
-msgid "rename tag"
+msgid "Rename tag"
 msgstr "Luo tunniste"
 
 #: ../src/libs/collect.c:1971
@@ -18839,7 +18852,7 @@ msgid "Duplicates"
 msgstr "Kahdenna tyyli"
 
 #: ../src/libs/export.c:347
-msgid "export to disk"
+msgid "Export to disk"
 msgstr "Vie levylle"
 
 #: ../src/libs/export.c:505
@@ -19043,7 +19056,7 @@ msgid "export with current settings"
 msgstr "Vie valituilla asetuksilla."
 
 #: ../src/libs/export_metadata.c:174
-msgid "select tag"
+msgid "Select tag"
 msgstr "Valitse tunniste"
 
 #: ../src/libs/export_metadata.c:175
@@ -19067,7 +19080,7 @@ msgstr ""
 "kaksoisnapsaauta tunnistetta lisätäksesi sen."
 
 #: ../src/libs/export_metadata.c:302
-msgid "edit metadata exportation"
+msgid "Edit metadata exportation"
 msgstr "Viennin metatietojen muokkain"
 
 #: ../src/libs/export_metadata.c:303 ../src/libs/metadata.c:518
@@ -19265,7 +19278,7 @@ msgid "images"
 msgstr "Kuvat"
 
 #: ../src/libs/geotagging.c:956
-msgid "open GPX file"
+msgid "Open GPX file"
 msgstr "Avaa GPX-tiedosto"
 
 #: ../src/libs/geotagging.c:970
@@ -19782,7 +19795,7 @@ msgstr ""
 
 #: ../src/libs/ioporder.c:1536
 #, fuzzy
-msgid "save module order preset"
+msgid "Save module order preset"
 msgstr "Moduulien järjestys"
 
 #: ../src/libs/ioporder.c:1545
@@ -20039,7 +20052,7 @@ msgid "<leave unchanged>"
 msgstr "<jätä muuttumattomaksi>"
 
 #: ../src/libs/metadata.c:516 ../src/libs/metadata_view.c:1186
-msgid "metadata settings"
+msgid "Metadata settings"
 msgstr "Metatiedon asetukset"
 
 #: ../src/libs/metadata.c:566 ../src/libs/metadata_view.c:1232
@@ -20733,8 +20746,8 @@ msgstr[0] "Haluatko varmasti poistaa %d tyylin?"
 msgstr[1] "Haluatko varmasti poistaa %d tyyliä?"
 
 #: ../src/libs/styles.c:344
-msgid "remove style?"
-msgid_plural "remove styles?"
+msgid "Remove style?"
+msgid_plural "Remove styles?"
 msgstr[0] "Poista tyyli?"
 msgstr[1] "Poista tyylit?"
 
@@ -20757,7 +20770,7 @@ msgid "style %s was successfully exported"
 msgstr "Tyyli %s vietiin onnistuneesti"
 
 #: ../src/libs/styles.c:551
-msgid "select style"
+msgid "Select style"
 msgstr "Valitse tyyli"
 
 #: ../src/libs/styles.c:561
@@ -20855,7 +20868,7 @@ msgid "detach all tags"
 msgstr "Irrota tunniste"
 
 #: ../src/libs/tagging.c:1461
-msgid "delete node?"
+msgid "Delete node?"
 msgstr "Poista solmu?"
 
 #: ../src/libs/tagging.c:1468 ../src/libs/tagging.c:1683
@@ -20885,7 +20898,7 @@ msgid "%d tags removed"
 msgstr "%d tunnistetta tuotu."
 
 #: ../src/libs/tagging.c:1543
-msgid "create tag"
+msgid "Create tag"
 msgstr "Luo tunniste"
 
 #: ../src/libs/tagging.c:1553 ../src/libs/tagging.c:1703
@@ -20944,7 +20957,7 @@ msgid "at least one new tagname (%s) already exists, aborting."
 msgstr "Vähintään yksi uusi tunnisteen nimi (%s) on jo olemassa, keskeytetään"
 
 #: ../src/libs/tagging.c:1961
-msgid "change path"
+msgid "Change path"
 msgstr "Muuta polku"
 
 #: ../src/libs/tagging.c:2005
@@ -20952,7 +20965,7 @@ msgid "'|' misplaced, empty tag is not allowed, aborting"
 msgstr "'|' väärässä paikassa, tyhjä tunniste ei ole sallittu, keskeytetään."
 
 #: ../src/libs/tagging.c:2088
-msgid "delete tag?"
+msgid "Delete tag?"
 msgstr "Poista tunniste?"
 
 #: ../src/libs/tagging.c:2092
@@ -21017,7 +21030,7 @@ msgid "(private)"
 msgstr "(yksityinen)"
 
 #: ../src/libs/tagging.c:2435
-msgid "select a keyword file"
+msgid "Select a keyword file"
 msgstr "Valitse avainsanatiedosto"
 
 #: ../src/libs/tagging.c:2436
@@ -21030,7 +21043,7 @@ msgid "%u tags imported"
 msgstr "%zd tunnistetta tuotu."
 
 #: ../src/libs/tagging.c:2468
-msgid "select file to export to"
+msgid "Select file to export to"
 msgstr "Valitse vietävä tiedosto"
 
 #: ../src/libs/tagging.c:2469
@@ -21105,7 +21118,7 @@ msgstr "Liitä tunniste valittuihin kuviin."
 
 #: ../src/libs/tagging.c:3248
 #, fuzzy
-msgid "manage tags"
+msgid "Manage tags"
 msgstr "Sijantitiedot"
 
 #: ../src/libs/tagging.c:3263
@@ -22077,7 +22090,7 @@ msgid "no LUT to save"
 msgstr "Ei mitään tallennettavaa"
 
 #: ../src/common/lut_viewer.c:1207
-msgid "save 3D LUT"
+msgid "Save 3D LUT"
 msgstr ""
 
 #: ../src/common/lut_viewer.c:1222

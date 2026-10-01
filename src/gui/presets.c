@@ -204,7 +204,7 @@ static void _menuitem_delete_preset(GtkMenuItem *menuitem, dt_iop_module_t *modu
 #ifdef GDK_WINDOWING_QUARTZ
     dt_osx_disallow_fullscreen(dialog);
 #endif
-    gtk_window_set_title(GTK_WINDOW(dialog), _("delete preset?"));
+    gtk_window_set_title(GTK_WINDOW(dialog), _("Delete preset?"));
     res = gtk_dialog_run(GTK_DIALOG(dialog));
     GtkWindow *dialog_parent = gtk_window_get_transient_for(GTK_WINDOW(dialog));
     gtk_widget_destroy(dialog);
@@ -241,7 +241,7 @@ static void _edit_preset_response(GtkDialog *dialog, gint response_id, dt_gui_pr
         dt_osx_disallow_fullscreen(dlg_changename);
 #endif
 
-        gtk_window_set_title(GTK_WINDOW(dlg_changename), _("unnamed preset"));
+        gtk_window_set_title(GTK_WINDOW(dlg_changename), _("Unnamed preset"));
 
         gtk_dialog_run(GTK_DIALOG(dlg_changename));
         gtk_widget_destroy(dlg_changename);
@@ -260,7 +260,7 @@ static void _edit_preset_response(GtkDialog *dialog, gint response_id, dt_gui_pr
         dt_osx_disallow_fullscreen(dlg_overwrite);
 #endif
 
-        gtk_window_set_title(GTK_WINDOW(dlg_overwrite), _("overwrite preset?"));
+        gtk_window_set_title(GTK_WINDOW(dlg_overwrite), _("Overwrite preset?"));
 
         const gint dlg_ret = gtk_dialog_run(GTK_DIALOG(dlg_overwrite));
         gtk_widget_destroy(dlg_overwrite);
@@ -328,7 +328,7 @@ static void _edit_preset_response(GtkDialog *dialog, gint response_id, dt_gui_pr
 
     // ask for destination directory
     GtkFileChooserNative *filechooser = gtk_file_chooser_native_new(
-          _("select directory"), GTK_WINDOW(dialog), GTK_FILE_CHOOSER_ACTION_SELECT_FOLDER,
+          _("Select directory"), GTK_WINDOW(dialog), GTK_FILE_CHOOSER_ACTION_SELECT_FOLDER,
           _("_select as output destination"), _("_cancel"));
     dt_conf_get_folder_to_file_chooser("ui_last/export_path", GTK_FILE_CHOOSER(filechooser));
 
@@ -373,7 +373,7 @@ void dt_gui_presets_confirm_and_delete(GtkWidget *parent_dialog, const char *nam
   dt_osx_disallow_fullscreen(dialog);
 #endif
 
-  gtk_window_set_title(GTK_WINDOW(dialog), _("delete preset?"));
+  gtk_window_set_title(GTK_WINDOW(dialog), _("Delete preset?"));
   if(gtk_dialog_run(GTK_DIALOG(dialog)) == GTK_RESPONSE_YES)
   {
     // remove the preset from the database
@@ -401,7 +401,7 @@ static void _presets_show_edit_dialog(dt_gui_presets_edit_dialog_t *g, gboolean 
 {
   /* Create the widgets */
   char title[1024];
-  snprintf(title, sizeof(title), _("edit `%s' for module `%s'"), g->original_name, g->module_name);
+  snprintf(title, sizeof(title), _("Edit `%s' for module `%s'"), g->original_name, g->module_name);
   GtkWidget *dialog = gtk_dialog_new_with_buttons
     (title, g->parent, GTK_DIALOG_DESTROY_WITH_PARENT | GTK_DIALOG_MODAL,
      _("_cancel"), GTK_RESPONSE_CANCEL, _("_export..."), GTK_RESPONSE_YES,
@@ -739,7 +739,7 @@ static void _menuitem_update_preset(GtkMenuItem *menuitem, dt_iop_module_t *modu
 #ifdef GDK_WINDOWING_QUARTZ
     dt_osx_disallow_fullscreen(dialog);
 #endif
-    gtk_window_set_title(GTK_WINDOW(dialog), _("update preset?"));
+    gtk_window_set_title(GTK_WINDOW(dialog), _("Update preset?"));
     res = gtk_dialog_run(GTK_DIALOG(dialog));
     GtkWindow *dialog_parent = gtk_window_get_transient_for(GTK_WINDOW(dialog));
     gtk_widget_destroy(dialog);

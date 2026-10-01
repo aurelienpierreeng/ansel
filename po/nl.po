@@ -659,6 +659,9 @@ msgstr ""
 msgid "select directory"
 msgstr "selecteer map"
 
+msgid "Select directory"
+msgstr "Selecteer map"
+
 #: ../build/src/preferences_gen.h:3047
 msgid ""
 "this folder (and sub-folders) contains Lut files used by lut3d modules. "
@@ -3940,6 +3943,9 @@ msgstr "module"
 msgid "module order"
 msgstr "module volgorde"
 
+msgid "Module order"
+msgstr "Module volgorde"
+
 #: ../src/common/collection.c:685 ../src/develop/lightroom.c:1505
 #: ../src/libs/tools/filter.c:119
 msgid "rating"
@@ -4716,7 +4722,7 @@ msgstr ""
 "wilt u doorgaan of nu stoppen om een back-up te maken\n"
 
 #: ../src/common/database.c:2911
-msgid "ansel - schema migration"
+msgid "Ansel - schema migration"
 msgstr ""
 
 #: ../src/common/database.c:2912 ../src/common/database.c:3265
@@ -4761,7 +4767,7 @@ msgstr ""
 
 #: ../src/common/database.c:3262 ../src/common/database.c:3280
 #: ../src/common/database.c:3440 ../src/common/database.c:3458
-msgid "ansel - error opening database"
+msgid "Ansel - error opening database"
 msgstr ""
 
 #: ../src/common/database.c:3267 ../src/common/database.c:3445
@@ -4842,8 +4848,8 @@ msgstr ""
 
 #: ../src/common/database.c:3815
 #, fuzzy
-msgid "ansel - schema maintenance"
-msgstr "raster masker instantie"
+msgid "Ansel - schema maintenance"
+msgstr "Raster masker instantie"
 
 #: ../src/common/database.c:3816
 msgid "later"
@@ -4887,10 +4893,10 @@ msgstr[0] "wilt u deze lege map verwijderen?"
 msgstr[1] "wilt u deze lege mappen verwijderen?"
 
 #: ../src/common/film.c:297
-msgid "remove empty directory?"
-msgid_plural "remove empty directories?"
-msgstr[0] "lege map verplaatsen?"
-msgstr[1] "lege mappen verplaatsen?"
+msgid "Remove empty directory?"
+msgid_plural "Remove empty directories?"
+msgstr[0] "Lege map verplaatsen?"
+msgstr[1] "Lege mappen verplaatsen?"
 
 #: ../src/common/film.c:317 ../src/gui/preferences.c:979
 #: ../src/gui/styles_dialog.c:466 ../src/libs/collect.c:3003
@@ -6008,8 +6014,8 @@ msgid "time difference"
 msgstr "tijdsverschil"
 
 #: ../src/control/crawler.c:785
-msgid "updated XMP sidecar files found"
-msgstr "bijgewerkte xmp sidecar-bestanden gevonden"
+msgid "Updated XMP sidecar files found"
+msgstr "Bijgewerkte xmp sidecar-bestanden gevonden"
 
 #: ../src/control/crawler.c:786
 msgid "_close"
@@ -6142,12 +6148,12 @@ msgid "stop process"
 msgstr "stop bewerking"
 
 #: ../src/control/jobs/control_jobs.c:901
-msgid "trashing error"
-msgstr "prullenbak fout"
+msgid "Trashing error"
+msgstr "Prullenbak fout"
 
 #: ../src/control/jobs/control_jobs.c:902
-msgid "deletion error"
-msgstr "verwijder fout"
+msgid "Deletion error"
+msgstr "Verwijder fout"
 
 #: ../src/control/jobs/control_jobs.c:1044
 #, c-format
@@ -6341,12 +6347,15 @@ msgstr ""
 "wilt u echt de geselecteerde afbeelding fysiek van de schijf verwijderen?"
 
 #: ../src/control/jobs/control_jobs.c:1736
-msgid "delete image?"
-msgstr "afbeelding verwijderen?"
+msgid "Delete image?"
+msgstr "Afbeelding verwijderen?"
 
 #: ../src/control/jobs/control_jobs.c:1754 ../src/libs/collect.c:2059
 msgid "move images"
 msgstr "verplaats afbeeldingen"
+
+msgid "Move images"
+msgstr "Verplaats afbeeldingen"
 
 #: ../src/control/jobs/control_jobs.c:1766
 #: ../src/control/jobs/control_jobs.c:1828
@@ -6369,10 +6378,10 @@ msgstr[1] ""
 "(alle duplicaten worden meegenomen)"
 
 #: ../src/control/jobs/control_jobs.c:1795
-msgid "move image?"
-msgid_plural "move images?"
-msgstr[0] "afbeelding verplaatsen?"
-msgstr[1] "afbeeldingen verplaatsen?"
+msgid "Move image?"
+msgid_plural "Move images?"
+msgstr[0] "Afbeelding verplaatsen?"
+msgstr[1] "Afbeeldingen verplaatsen?"
 
 #: ../src/control/jobs/control_jobs.c:1816
 msgid "copy images"
@@ -6386,10 +6395,10 @@ msgstr[0] "wilt u echt %d afbeelding fysiek kopiëren naar %s?"
 msgstr[1] "wilt u echt %d afbeeldingen fysiek kopiëren naar %s?"
 
 #: ../src/control/jobs/control_jobs.c:1854
-msgid "copy image?"
-msgid_plural "copy images?"
-msgstr[0] "kopieer afbeelding?"
-msgstr[1] "kopieer afbeeldingen?"
+msgid "Copy image?"
+msgid_plural "Copy images?"
+msgstr[0] "Kopieer afbeelding?"
+msgstr[1] "Kopieer afbeeldingen?"
 
 #: ../src/control/jobs/control_jobs.c:1874
 #: ../src/control/jobs/control_jobs.c:1882
@@ -9148,8 +9157,8 @@ msgid "failed to import preset %s"
 msgstr "importeren voorkeur %s mislukt"
 
 #: ../src/gui/preferences.c:1184
-msgid "select preset(s) to import"
-msgstr "selecteer te importeren voorkeur(en)"
+msgid "Select preset(s) to import"
+msgstr "Selecteer te importeren voorkeur(en)"
 
 #: ../src/gui/preferences.c:1185 ../src/gui/actions/edit.c:305
 #: ../src/libs/collect.c:1841 ../src/libs/geotagging.c:959
@@ -9196,8 +9205,8 @@ msgid "do you really want to delete the preset `%s'?"
 msgstr "deze voorkeur `%s' verwijderen?"
 
 #: ../src/gui/presets.c:303 ../src/gui/presets.c:532 ../src/libs/lib.c:321
-msgid "delete preset?"
-msgstr "verwijder voorkeur?"
+msgid "Delete preset?"
+msgstr "Verwijder voorkeur?"
 
 #. add new preset
 #. then show edit dialog
@@ -9214,8 +9223,8 @@ msgid "please give preset a name"
 msgstr "geef deze voorkeur een naam"
 
 #: ../src/gui/presets.c:339
-msgid "unnamed preset"
-msgstr "naamloze voorkeur"
+msgid "Unnamed preset"
+msgstr "Naamloze voorkeur"
 
 #: ../src/gui/presets.c:368
 #, c-format
@@ -9227,8 +9236,8 @@ msgstr ""
 "moet die worden overschreven?"
 
 #: ../src/gui/presets.c:373
-msgid "overwrite preset?"
-msgstr "voorkeur overschrijven?"
+msgid "Overwrite preset?"
+msgstr "Voorkeur overschrijven?"
 
 #: ../src/gui/presets.c:490 ../src/imageio/storage/disk.c:154
 #: ../src/imageio/storage/gallery.c:142
@@ -9242,8 +9251,8 @@ msgstr "stijl %s was succesvol geëxporteerd"
 
 #: ../src/gui/presets.c:565
 #, c-format
-msgid "edit `%s' for module `%s'"
-msgstr "bewerk `%s' voor module `%s'"
+msgid "Edit `%s' for module `%s'"
+msgstr "Bewerk `%s' voor module `%s'"
 
 #: ../src/gui/presets.c:568
 msgid "_export..."
@@ -9341,8 +9350,8 @@ msgid "do you really want to update the preset `%s'?"
 msgstr "wil je echt de voorinstelling `%s’ updaten?"
 
 #: ../src/gui/presets.c:921 ../src/libs/lib.c:236
-msgid "update preset?"
-msgstr "update voorinstelling?"
+msgid "Update preset?"
+msgstr "Update voorinstelling?"
 
 #: ../src/gui/presets.c:1245
 msgid "(default)"
@@ -9427,16 +9436,16 @@ msgstr ""
 
 #: ../src/gui/styles_dialog.c:230 ../src/libs/styles.c:461
 #: ../src/libs/styles.c:645
-msgid "overwrite style?"
-msgstr "stijl overschrijven?"
+msgid "Overwrite style?"
+msgstr "Stijl overschrijven?"
 
 #: ../src/gui/styles_dialog.c:259 ../src/gui/styles_dialog.c:318
 msgid "please give style a name"
 msgstr "geef deze stijl een naam"
 
 #: ../src/gui/styles_dialog.c:263 ../src/gui/styles_dialog.c:322
-msgid "unnamed style"
-msgstr "naamloze stijl"
+msgid "Unnamed style"
+msgstr "Naamloze stijl"
 
 #: ../src/gui/styles_dialog.c:310
 #, c-format
@@ -9444,8 +9453,8 @@ msgid "style %s was successfully saved"
 msgstr "stijl '%s' is succesvol opgeslagen"
 
 #: ../src/gui/styles_dialog.c:425
-msgid "edit style"
-msgstr "bewerk stijl"
+msgid "Edit style"
+msgstr "Bewerk stijl"
 
 #: ../src/gui/styles_dialog.c:426
 msgid "duplicate style"
@@ -9456,8 +9465,8 @@ msgid "creates a duplicate of the style before applying changes"
 msgstr "maakt een stijlkopie voordat wijzigingen zijn toegepast"
 
 #: ../src/gui/styles_dialog.c:431
-msgid "create new style"
-msgstr "creëer nieuwe stijl"
+msgid "Create new style"
+msgstr "Creëer nieuwe stijl"
 
 #: ../src/gui/styles_dialog.c:467
 msgid "enter a name for the new style"
@@ -9636,8 +9645,8 @@ msgid "Paste history (parts) — merge settings"
 msgstr ""
 
 #: ../src/gui/actions/edit.c:304
-msgid "open sidecar file"
-msgstr "open sidecar-bestand"
+msgid "Open sidecar file"
+msgstr "Open sidecar-bestand"
 
 #: ../src/gui/actions/edit.c:337
 msgid "XMP sidecar files"
@@ -9863,8 +9872,8 @@ msgid "do you want to access ansel.photos ?"
 msgstr ""
 
 #: ../src/gui/actions/help.c:146
-msgid "access the online usermanual?"
-msgstr "online gebruikershandleiding benaderen?"
+msgid "Access the online usermanual?"
+msgstr "Online gebruikershandleiding benaderen?"
 
 #: ../src/gui/actions/help.c:158
 msgid "help url opened in web browser"
@@ -16721,8 +16730,8 @@ msgid "lut root folder not defined"
 msgstr ""
 
 #: ../src/iop/lut3d.c:1339
-msgid "select lut file"
-msgstr "selecteer lut bestand"
+msgid "Select lut file"
+msgstr "Selecteer lut bestand"
 
 #: ../src/iop/lut3d.c:1340
 msgid "_select"
@@ -18599,13 +18608,13 @@ msgstr "ongecatagoriseerd"
 
 #: ../src/libs/collect.c:1840
 #, fuzzy
-msgid "select the new location of this folder"
-msgstr "bepaal de tint van het filter"
+msgid "Select the new location of this folder"
+msgstr "Bepaal de tint van het filter"
 
 #: ../src/libs/collect.c:1840
 #, fuzzy
-msgid "select the new parent folder"
-msgstr "bepaal de tint toon"
+msgid "Select the new parent folder"
+msgstr "Bepaal de tint toon"
 
 #: ../src/libs/collect.c:1873
 #, fuzzy
@@ -18624,10 +18633,14 @@ msgstr[1] "ontkoppel label van geselecteerde afbeelding(en)"
 msgid "delete tags"
 msgstr "verwijder label"
 
+#, fuzzy
+msgid "Delete tags"
+msgstr "Verwijder label"
+
 #: ../src/libs/collect.c:1906
 #, fuzzy
-msgid "rename tag"
-msgstr "creëer label"
+msgid "Rename tag"
+msgstr "Creëer label"
 
 # of behoud kleuren
 #: ../src/libs/collect.c:1971
@@ -18898,8 +18911,8 @@ msgid "Duplicates"
 msgstr "dupliceer stijl"
 
 #: ../src/libs/export.c:347
-msgid "export to disk"
-msgstr "exporteer naar schijf"
+msgid "Export to disk"
+msgstr "Exporteer naar schijf"
 
 #: ../src/libs/export.c:505
 #, c-format
@@ -19103,8 +19116,8 @@ msgid "export with current settings"
 msgstr "exporteer met huidige instellingen"
 
 #: ../src/libs/export_metadata.c:174
-msgid "select tag"
-msgstr "selecteer label"
+msgid "Select tag"
+msgstr "Selecteer label"
 
 #: ../src/libs/export_metadata.c:175
 msgid "add"
@@ -19128,8 +19141,8 @@ msgstr ""
 "toe te voegen"
 
 #: ../src/libs/export_metadata.c:302
-msgid "edit metadata exportation"
-msgstr "bewerk metadata uitvoer"
+msgid "Edit metadata exportation"
+msgstr "Bewerk metadata uitvoer"
 
 #: ../src/libs/export_metadata.c:303 ../src/libs/metadata.c:518
 #: ../src/libs/metadata_view.c:1188 ../src/libs/styles.c:462
@@ -19327,8 +19340,8 @@ msgid "images"
 msgstr "afbeeldingen"
 
 #: ../src/libs/geotagging.c:956
-msgid "open GPX file"
-msgstr "open GPX bestand"
+msgid "Open GPX file"
+msgstr "Open GPX bestand"
 
 #: ../src/libs/geotagging.c:970
 msgid "GPS data exchange format"
@@ -19847,8 +19860,8 @@ msgstr ""
 
 #: ../src/libs/ioporder.c:1536
 #, fuzzy
-msgid "save module order preset"
-msgstr "module volgorde"
+msgid "Save module order preset"
+msgstr "Module volgorde"
 
 #: ../src/libs/ioporder.c:1545
 #, fuzzy
@@ -20104,8 +20117,8 @@ msgid "<leave unchanged>"
 msgstr "<ongewijzigd laten>"
 
 #: ../src/libs/metadata.c:516 ../src/libs/metadata_view.c:1186
-msgid "metadata settings"
-msgstr "metadata instellingen"
+msgid "Metadata settings"
+msgstr "Metadata instellingen"
 
 #: ../src/libs/metadata.c:566 ../src/libs/metadata_view.c:1232
 msgid "visible"
@@ -20799,10 +20812,10 @@ msgstr[0] "wil je echt stijl %d verwijderen?"
 msgstr[1] "wil je echt stijlen %d verwijderen?"
 
 #: ../src/libs/styles.c:344
-msgid "remove style?"
-msgid_plural "remove styles?"
-msgstr[0] "stijl verwijderen?"
-msgstr[1] "stijlen verwijderen?"
+msgid "Remove style?"
+msgid_plural "Remove styles?"
+msgstr[0] "Stijl verwijderen?"
+msgstr[1] "Stijlen verwijderen?"
 
 #: ../src/libs/styles.c:468 ../src/libs/styles.c:652
 #, c-format
@@ -20823,8 +20836,8 @@ msgid "style %s was successfully exported"
 msgstr "stijl %s was succesvol geëxporteerd"
 
 #: ../src/libs/styles.c:551
-msgid "select style"
-msgstr "selecteer stijl"
+msgid "Select style"
+msgstr "Selecteer stijl"
 
 #: ../src/libs/styles.c:561
 #, fuzzy
@@ -20923,8 +20936,8 @@ msgid "detach all tags"
 msgstr "ontkoppel label"
 
 #: ../src/libs/tagging.c:1461
-msgid "delete node?"
-msgstr "knooppunt verwijderen?"
+msgid "Delete node?"
+msgstr "Knooppunt verwijderen?"
 
 #: ../src/libs/tagging.c:1468 ../src/libs/tagging.c:1683
 #: ../src/libs/tagging.c:1968
@@ -20953,8 +20966,8 @@ msgid "%d tags removed"
 msgstr "%d labels verwijderd"
 
 #: ../src/libs/tagging.c:1543
-msgid "create tag"
-msgstr "creëer label"
+msgid "Create tag"
+msgstr "Creëer label"
 
 #: ../src/libs/tagging.c:1553 ../src/libs/tagging.c:1703
 msgid "name: "
@@ -21012,16 +21025,16 @@ msgid "at least one new tagname (%s) already exists, aborting."
 msgstr "ten minste één nieuwe tagnaam (%s) bestaat al, annuleren."
 
 #: ../src/libs/tagging.c:1961
-msgid "change path"
-msgstr "van pad veranderen"
+msgid "Change path"
+msgstr "Van pad veranderen"
 
 #: ../src/libs/tagging.c:2005
 msgid "'|' misplaced, empty tag is not allowed, aborting"
 msgstr "'|' misplaatst, lege label is niet toegestaan, afbreken"
 
 #: ../src/libs/tagging.c:2088
-msgid "delete tag?"
-msgstr "label verwijderen?"
+msgid "Delete tag?"
+msgstr "Label verwijderen?"
 
 #: ../src/libs/tagging.c:2092
 #, fuzzy, c-format
@@ -21085,8 +21098,8 @@ msgid "(private)"
 msgstr "(persoonlijk)"
 
 #: ../src/libs/tagging.c:2435
-msgid "select a keyword file"
-msgstr "selecteer trefwoordenbestand"
+msgid "Select a keyword file"
+msgstr "Selecteer trefwoordenbestand"
 
 #: ../src/libs/tagging.c:2436
 msgid "_import"
@@ -21098,8 +21111,8 @@ msgid "%u tags imported"
 msgstr "%zd  labels geïmporteerd"
 
 #: ../src/libs/tagging.c:2468
-msgid "select file to export to"
-msgstr "kies bestand om naar te exporteren"
+msgid "Select file to export to"
+msgstr "Kies bestand om naar te exporteren"
 
 #: ../src/libs/tagging.c:2469
 msgid "_export"
@@ -21173,8 +21186,8 @@ msgstr "koppel label aan geselecteerde afbeelding(en)"
 
 #: ../src/libs/tagging.c:3248
 #, fuzzy
-msgid "manage tags"
-msgstr "geo labels"
+msgid "Manage tags"
+msgstr "Geo labels"
 
 #: ../src/libs/tagging.c:3263
 msgid "type to filter the tag dictionary below"
@@ -22143,7 +22156,7 @@ msgid "no LUT to save"
 msgstr "niets om te bewaren"
 
 #: ../src/common/lut_viewer.c:1207
-msgid "save 3D LUT"
+msgid "Save 3D LUT"
 msgstr ""
 
 #: ../src/common/lut_viewer.c:1222

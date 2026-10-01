@@ -671,6 +671,9 @@ msgstr "Cartella radice lut 3D"
 msgid "select directory"
 msgstr "Seleziona cartella"
 
+msgid "Select directory"
+msgstr "Seleziona cartella"
+
 #: ../build/src/preferences_gen.h:3047
 msgid ""
 "this folder (and sub-folders) contains Lut files used by lut3d modules. "
@@ -4008,6 +4011,9 @@ msgstr "Modulo"
 msgid "module order"
 msgstr "Ordine dei moduli"
 
+msgid "Module order"
+msgstr "Ordine dei moduli"
+
 #: ../src/common/collection.c:685 ../src/develop/lightroom.c:1505
 #: ../src/libs/tools/filter.c:119
 msgid "rating"
@@ -4815,7 +4821,7 @@ msgstr ""
 "Vuoi procedere o esci ora per fare un backup\n"
 
 #: ../src/common/database.c:2911
-msgid "ansel - schema migration"
+msgid "Ansel - schema migration"
 msgstr "Ansel - migrazione schema"
 
 #: ../src/common/database.c:2912 ../src/common/database.c:3265
@@ -4868,7 +4874,7 @@ msgstr ""
 
 #: ../src/common/database.c:3262 ../src/common/database.c:3280
 #: ../src/common/database.c:3440 ../src/common/database.c:3458
-msgid "ansel - error opening database"
+msgid "Ansel - error opening database"
 msgstr "Ansel - errore nell'apertura del database"
 
 #: ../src/common/database.c:3267 ../src/common/database.c:3445
@@ -4956,7 +4962,7 @@ msgstr ""
 "globali."
 
 #: ../src/common/database.c:3815
-msgid "ansel - schema maintenance"
+msgid "Ansel - schema maintenance"
 msgstr "Ansel - manutenzione schema"
 
 #: ../src/common/database.c:3816
@@ -5004,8 +5010,8 @@ msgstr[0] "Vuoi rimuovere questa cartella vuota?"
 msgstr[1] "Vuoi rimuovere queste cartelle vuote?"
 
 #: ../src/common/film.c:297
-msgid "remove empty directory?"
-msgid_plural "remove empty directories?"
+msgid "Remove empty directory?"
+msgid_plural "Remove empty directories?"
 msgstr[0] "Rimuovo la cartella vuota?"
 msgstr[1] "Rimuovo le cartelle vuote?"
 
@@ -6198,7 +6204,7 @@ msgid "time difference"
 msgstr "Differenza d'orario"
 
 #: ../src/control/crawler.c:785
-msgid "updated XMP sidecar files found"
+msgid "Updated XMP sidecar files found"
 msgstr "Trovati file XMP aggiornati"
 
 #: ../src/control/crawler.c:786
@@ -6335,11 +6341,11 @@ msgid "stop process"
 msgstr "Ferma il processo"
 
 #: ../src/control/jobs/control_jobs.c:901
-msgid "trashing error"
+msgid "Trashing error"
 msgstr "Errore durante l'eliminazione"
 
 #: ../src/control/jobs/control_jobs.c:902
-msgid "deletion error"
+msgid "Deletion error"
 msgstr "Errore di cancellazione"
 
 #: ../src/control/jobs/control_jobs.c:1044
@@ -6533,11 +6539,14 @@ msgstr ""
 "Sei sicuro di voler eliminare fisicamente l'immagine selezionata dal disco?"
 
 #: ../src/control/jobs/control_jobs.c:1736
-msgid "delete image?"
+msgid "Delete image?"
 msgstr "Cancello l'immagine?"
 
 #: ../src/control/jobs/control_jobs.c:1754 ../src/libs/collect.c:2059
 msgid "move images"
+msgstr "Sposta immagini"
+
+msgid "Move images"
 msgstr "Sposta immagini"
 
 #: ../src/control/jobs/control_jobs.c:1766
@@ -6561,8 +6570,8 @@ msgstr[1] ""
 "(tutti i duplicati saranno spostati insieme)"
 
 #: ../src/control/jobs/control_jobs.c:1795
-msgid "move image?"
-msgid_plural "move images?"
+msgid "Move image?"
+msgid_plural "Move images?"
 msgstr[0] "Spostare l'immagine?"
 msgstr[1] "Spostare le immagini?"
 
@@ -6578,8 +6587,8 @@ msgstr[0] "Sicuro di voler copiare %d immagine in %s?"
 msgstr[1] "Sicuro di voler copiare  %d immagini in %s?"
 
 #: ../src/control/jobs/control_jobs.c:1854
-msgid "copy image?"
-msgid_plural "copy images?"
+msgid "Copy image?"
+msgid_plural "Copy images?"
 msgstr[0] "Copio immagine?"
 msgstr[1] "Copio immagini?"
 
@@ -9318,7 +9327,7 @@ msgid "failed to import preset %s"
 msgstr "Non riesco ad importare la preimpostazione %s"
 
 #: ../src/gui/preferences.c:1184
-msgid "select preset(s) to import"
+msgid "Select preset(s) to import"
 msgstr "Selezionare la/le preimpostazione/i da importare"
 
 #: ../src/gui/preferences.c:1185 ../src/gui/actions/edit.c:305
@@ -9365,7 +9374,7 @@ msgid "do you really want to delete the preset `%s'?"
 msgstr "Vuoi veramente eliminare la preimpostazione `%s'?"
 
 #: ../src/gui/presets.c:303 ../src/gui/presets.c:532 ../src/libs/lib.c:321
-msgid "delete preset?"
+msgid "Delete preset?"
 msgstr "Elimino impostazione?"
 
 #. add new preset
@@ -9383,7 +9392,7 @@ msgid "please give preset a name"
 msgstr "Per favore, dai un nome alla preimpostazione"
 
 #: ../src/gui/presets.c:339
-msgid "unnamed preset"
+msgid "Unnamed preset"
 msgstr "Preimpostazione senza nome"
 
 #: ../src/gui/presets.c:368
@@ -9396,7 +9405,7 @@ msgstr ""
 "Vuoi sovrascriverla?"
 
 #: ../src/gui/presets.c:373
-msgid "overwrite preset?"
+msgid "Overwrite preset?"
 msgstr "Sovrascrivo la preimpostazione?"
 
 #: ../src/gui/presets.c:490 ../src/imageio/storage/disk.c:154
@@ -9411,7 +9420,7 @@ msgstr "La preimpostazione %s è stata esportata con successo"
 
 #: ../src/gui/presets.c:565
 #, c-format
-msgid "edit `%s' for module `%s'"
+msgid "Edit `%s' for module `%s'"
 msgstr "Modifica '%s' per il modulo '%s'"
 
 #: ../src/gui/presets.c:568
@@ -9513,7 +9522,7 @@ msgid "do you really want to update the preset `%s'?"
 msgstr "Vuoi veramente aggiornare la preimpostazione `%s'?"
 
 #: ../src/gui/presets.c:921 ../src/libs/lib.c:236
-msgid "update preset?"
+msgid "Update preset?"
 msgstr "Aggiorno la preimpostazione?"
 
 #: ../src/gui/presets.c:1245
@@ -9601,7 +9610,7 @@ msgstr ""
 
 #: ../src/gui/styles_dialog.c:230 ../src/libs/styles.c:461
 #: ../src/libs/styles.c:645
-msgid "overwrite style?"
+msgid "Overwrite style?"
 msgstr "Sovrascrivo lo stile?"
 
 #: ../src/gui/styles_dialog.c:259 ../src/gui/styles_dialog.c:318
@@ -9609,7 +9618,7 @@ msgid "please give style a name"
 msgstr "Per favore, dai un nome allo stile"
 
 #: ../src/gui/styles_dialog.c:263 ../src/gui/styles_dialog.c:322
-msgid "unnamed style"
+msgid "Unnamed style"
 msgstr "Stile senza nome"
 
 #: ../src/gui/styles_dialog.c:310
@@ -9618,7 +9627,7 @@ msgid "style %s was successfully saved"
 msgstr "Lo stile %s è stato salvato con successo"
 
 #: ../src/gui/styles_dialog.c:425
-msgid "edit style"
+msgid "Edit style"
 msgstr "Modifica stile"
 
 #: ../src/gui/styles_dialog.c:426
@@ -9630,7 +9639,7 @@ msgid "creates a duplicate of the style before applying changes"
 msgstr "Crea un duplicato dello stile prima di applicare le modifiche"
 
 #: ../src/gui/styles_dialog.c:431
-msgid "create new style"
+msgid "Create new style"
 msgstr "Crea un nuovo stile"
 
 #: ../src/gui/styles_dialog.c:467
@@ -9790,7 +9799,7 @@ msgid "Paste history (parts) — merge settings"
 msgstr "Incolla cronologia (parziale) — unisci impostazioni"
 
 #: ../src/gui/actions/edit.c:304
-msgid "open sidecar file"
+msgid "Open sidecar file"
 msgstr "Apri file di elaborazione"
 
 #: ../src/gui/actions/edit.c:337
@@ -10015,7 +10024,7 @@ msgid "do you want to access ansel.photos ?"
 msgstr "Vuoi aprire ansel.photos?"
 
 #: ../src/gui/actions/help.c:146
-msgid "access the online usermanual?"
+msgid "Access the online usermanual?"
 msgstr "Vuoi aprire il manuale utente online?"
 
 #: ../src/gui/actions/help.c:158
@@ -16946,7 +16955,7 @@ msgid "lut root folder not defined"
 msgstr "La cartella radice dei lut non è definita"
 
 #: ../src/iop/lut3d.c:1339
-msgid "select lut file"
+msgid "Select lut file"
 msgstr "Seleziona file lut"
 
 #: ../src/iop/lut3d.c:1340
@@ -18821,11 +18830,11 @@ msgid "uncategorized"
 msgstr "Senza categoria"
 
 #: ../src/libs/collect.c:1840
-msgid "select the new location of this folder"
+msgid "Select the new location of this folder"
 msgstr "Seleziona la nuova posizione di questa cartella"
 
 #: ../src/libs/collect.c:1840
-msgid "select the new parent folder"
+msgid "Select the new parent folder"
 msgstr "Seleziona la nuova cartella principale"
 
 #: ../src/libs/collect.c:1873
@@ -18843,8 +18852,11 @@ msgstr[1] "Cancellare le etichette %d e scollegarle da tutte le immagini?"
 msgid "delete tags"
 msgstr "Elimina etichette"
 
+msgid "Delete tags"
+msgstr "Elimina etichette"
+
 #: ../src/libs/collect.c:1906
-msgid "rename tag"
+msgid "Rename tag"
 msgstr "Rinomina etichetta"
 
 #: ../src/libs/collect.c:1971
@@ -19108,7 +19120,7 @@ msgid "Duplicates"
 msgstr "Duplica"
 
 #: ../src/libs/export.c:347
-msgid "export to disk"
+msgid "Export to disk"
 msgstr "Esporta su disco"
 
 #: ../src/libs/export.c:505
@@ -19332,7 +19344,7 @@ msgid "export with current settings"
 msgstr "Esporta con impostazioni correnti"
 
 #: ../src/libs/export_metadata.c:174
-msgid "select tag"
+msgid "Select tag"
 msgstr "Seleziona etichetta"
 
 #: ../src/libs/export_metadata.c:175
@@ -19356,7 +19368,7 @@ msgstr ""
 "doppio click sull'etichetta selezionata per aggiungerla."
 
 #: ../src/libs/export_metadata.c:302
-msgid "edit metadata exportation"
+msgid "Edit metadata exportation"
 msgstr "Editor esportazione metadati"
 
 #: ../src/libs/export_metadata.c:303 ../src/libs/metadata.c:518
@@ -19564,7 +19576,7 @@ msgid "images"
 msgstr "Immagini"
 
 #: ../src/libs/geotagging.c:956
-msgid "open GPX file"
+msgid "Open GPX file"
 msgstr "Apri file GPX"
 
 #: ../src/libs/geotagging.c:970
@@ -20059,7 +20071,7 @@ msgid "No active or history modules are currently available."
 msgstr "Al momento non sono disponibili moduli attivi o in storico."
 
 #: ../src/libs/ioporder.c:1536
-msgid "save module order preset"
+msgid "Save module order preset"
 msgstr "Salva l'ordinamento delle preimpostaz. dei moduli"
 
 #: ../src/libs/ioporder.c:1545
@@ -20312,7 +20324,7 @@ msgid "<leave unchanged>"
 msgstr "<lascia invariato>"
 
 #: ../src/libs/metadata.c:516 ../src/libs/metadata_view.c:1186
-msgid "metadata settings"
+msgid "Metadata settings"
 msgstr "Impostazioni metadati"
 
 #: ../src/libs/metadata.c:566 ../src/libs/metadata_view.c:1232
@@ -21011,8 +21023,8 @@ msgstr[0] "Vuoi veramente eliminare lo stile `%d'?"
 msgstr[1] "Vuoi veramente eliminare gli stili `%d'?"
 
 #: ../src/libs/styles.c:344
-msgid "remove style?"
-msgid_plural "remove styles?"
+msgid "Remove style?"
+msgid_plural "Remove styles?"
 msgstr[0] "Elimino stile?"
 msgstr[1] "Elimino stili?"
 
@@ -21035,7 +21047,7 @@ msgid "style %s was successfully exported"
 msgstr "Lo stile %s è stato esportato con successo"
 
 #: ../src/libs/styles.c:551
-msgid "select style"
+msgid "Select style"
 msgstr "Selezione stile"
 
 #: ../src/libs/styles.c:561
@@ -21133,7 +21145,7 @@ msgid "detach all tags"
 msgstr "Rimuovi tutte le etichette"
 
 #: ../src/libs/tagging.c:1461
-msgid "delete node?"
+msgid "Delete node?"
 msgstr "Elimina il nodo?"
 
 #: ../src/libs/tagging.c:1468 ../src/libs/tagging.c:1683
@@ -21163,7 +21175,7 @@ msgid "%d tags removed"
 msgstr "Rimosse %d etichette"
 
 #: ../src/libs/tagging.c:1543
-msgid "create tag"
+msgid "Create tag"
 msgstr "Crea etichetta"
 
 #: ../src/libs/tagging.c:1553 ../src/libs/tagging.c:1703
@@ -21223,7 +21235,7 @@ msgid "at least one new tagname (%s) already exists, aborting."
 msgstr "Esiste almeno un nome di nuova etichetta (%s). Operazione annullata"
 
 #: ../src/libs/tagging.c:1961
-msgid "change path"
+msgid "Change path"
 msgstr "Tracciato di modifica"
 
 #: ../src/libs/tagging.c:2005
@@ -21233,7 +21245,7 @@ msgstr ""
 "annullata"
 
 #: ../src/libs/tagging.c:2088
-msgid "delete tag?"
+msgid "Delete tag?"
 msgstr "Eliminare etichetta?"
 
 #: ../src/libs/tagging.c:2092
@@ -21298,7 +21310,7 @@ msgid "(private)"
 msgstr "(Privato)"
 
 #: ../src/libs/tagging.c:2435
-msgid "select a keyword file"
+msgid "Select a keyword file"
 msgstr "Seleziona un file parola chiave"
 
 #: ../src/libs/tagging.c:2436
@@ -21311,7 +21323,7 @@ msgid "%u tags imported"
 msgstr "%u etichette importate"
 
 #: ../src/libs/tagging.c:2468
-msgid "select file to export to"
+msgid "Select file to export to"
 msgstr "Seleziona il file da esportare"
 
 #: ../src/libs/tagging.c:2469
@@ -21388,7 +21400,7 @@ msgid "attach this tag to the selected images"
 msgstr "Associa questa etichetta alle immagini selezionate"
 
 #: ../src/libs/tagging.c:3248
-msgid "manage tags"
+msgid "Manage tags"
 msgstr "Gestisci etichette"
 
 #: ../src/libs/tagging.c:3263
@@ -22299,7 +22311,7 @@ msgid "no LUT to save"
 msgstr "Nessuna LUT da salvare"
 
 #: ../src/common/lut_viewer.c:1207
-msgid "save 3D LUT"
+msgid "Save 3D LUT"
 msgstr "Salve 3D LUT"
 
 #: ../src/common/lut_viewer.c:1222
