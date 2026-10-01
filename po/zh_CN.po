@@ -446,11 +446,11 @@ msgstr ""
 #: ../build/src/preferences_gen.h:5064 ../build/src/preferences_gen.h:5116
 #: ../build/src/preferences_gen.h:5194 ../build/src/preferences_gen.h:5241
 #: ../tools/generate_prefs.xsl:134 ../tools/generate_prefs.xsl:490
-msgid "this setting has been modified"
+msgid "This setting has been modified"
 msgstr "此设定已被更改。"
 
 #: ../build/src/preferences_gen.h:2421 ../tools/generate_prefs.xsl:192
-msgid "views"
+msgid "Views"
 msgstr "查看"
 
 #. TODO: look for active view. Do we know it at init time ?
@@ -491,7 +491,7 @@ msgstr "隐藏模块的内置预设"
 #: ../tools/generate_prefs.xsl:694 ../tools/generate_prefs.xsl:739
 #: ../tools/generate_prefs.xsl:773 ../tools/generate_prefs.xsl:817
 #, c-format
-msgid "double click to reset to `%s'"
+msgid "Double click to reset to `%s'"
 msgstr "双击以重置到“%s”。"
 
 #: ../build/src/preferences_gen.h:2458
@@ -600,11 +600,11 @@ msgstr "幻灯片"
 
 #: ../build/src/preferences_gen.h:2837 ../src/gui/preferences.c:594
 #: ../tools/generate_prefs.xsl:270
-msgid "processing"
+msgid "Processing"
 msgstr "数据处理"
 
 #: ../build/src/preferences_gen.h:2840 ../tools/generate_prefs.xsl:274
-msgid "image processing"
+msgid "Image processing"
 msgstr "图像处理"
 
 #: ../build/src/preferences_gen.h:2860
@@ -642,7 +642,7 @@ msgid ""
 msgstr ""
 
 #: ../build/src/preferences_gen.h:3026
-msgid "3D lut root folder"
+msgid "3D LUT root folder"
 msgstr "3D LUT 根文件夹"
 
 #: ../build/src/preferences_gen.h:3031 ../src/control/jobs/control_jobs.c:1765
@@ -664,7 +664,7 @@ msgid ""
 msgstr "该目录（及其子目录）应包含 LUT 3D 模块使用的 LUT 文件。（需要重启。）"
 
 #: ../build/src/preferences_gen.h:3057 ../tools/generate_prefs.xsl:290
-msgid "cpu / gpu / memory"
+msgid "CPU / GPU / memory"
 msgstr "中央处理器/显卡处理器/内存"
 
 #: ../build/src/preferences_gen.h:3077
@@ -678,7 +678,7 @@ msgstr "CPU 核心"
 #: ../build/src/preferences_gen.h:5140 ../build/src/preferences_gen.h:5218
 #: ../build/src/preferences_gen.h:5265 ../tools/generate_prefs.xsl:717
 #, c-format
-msgid "double click to reset to `%d'"
+msgid "Double click to reset to `%d'"
 msgstr "双击以重置到“%d”。"
 
 #: ../build/src/preferences_gen.h:3100
@@ -767,18 +767,21 @@ msgstr ""
 "且无法被检测到，请在此处输入完整路径名。留空则使用默认行为。"
 
 #: ../build/src/preferences_gen.h:3357 ../tools/generate_prefs.xsl:511
-msgid "not available"
+msgid "Not available"
 msgstr "不可用"
 
 #: ../build/src/preferences_gen.h:3360 ../build/src/preferences_gen.h:3364
 #: ../tools/generate_prefs.xsl:514 ../tools/generate_prefs.xsl:518
-msgid "not available on this system"
+msgid "Not available on this system"
 msgstr "在此系统不可用"
 
 #: ../build/src/preferences_gen.h:3373 ../src/common/image.h:269
 #: ../tools/generate_prefs.xsl:309
 msgid "libraw"
 msgstr "libraw"
+
+msgid "LibRaw"
+msgstr "LibRaw"
 
 #: ../build/src/preferences_gen.h:3378 ../tools/generate_prefs.xsl:314
 msgid ""
@@ -834,12 +837,12 @@ msgstr ""
 "对你的相机支持不是很好，请使用此项。"
 
 #: ../build/src/preferences_gen.h:3523 ../tools/generate_prefs.xsl:329
-msgid "security"
+msgid "Security"
 msgstr "安全性"
 
 #: ../build/src/preferences_gen.h:3526 ../src/gui/preferences.c:329
 #: ../tools/generate_prefs.xsl:334
-msgid "general"
+msgid "General"
 msgstr "常规"
 
 #: ../build/src/preferences_gen.h:3546
@@ -927,7 +930,7 @@ msgid "Will ask for confirmation before exporting files in overwrite mode"
 msgstr "将在以覆盖模式导出前请求确认。"
 
 #: ../build/src/preferences_gen.h:3928 ../tools/generate_prefs.xsl:349
-msgid "other"
+msgid "Other"
 msgstr "其他"
 
 #: ../build/src/preferences_gen.h:3948
@@ -950,12 +953,15 @@ msgid ""
 msgstr "使用此外部程序播放相机记录的备忘音频。"
 
 #: ../build/src/preferences_gen.h:4066 ../tools/generate_prefs.xsl:364
-msgid "storage"
+msgid "Storage"
 msgstr "存储"
 
 #: ../build/src/preferences_gen.h:4069 ../src/control/crawler.c:730
 #: ../tools/generate_prefs.xsl:368
 msgid "database"
+msgstr "数据库"
+
+msgid "Database"
 msgstr "数据库"
 
 #: ../build/src/preferences_gen.h:4089
@@ -1075,7 +1081,7 @@ msgstr "启动时检查所有 XMP 文件的更改时间以判断文件是否被�
 
 #: ../build/src/preferences_gen.h:4536 ../tools/generate_prefs.xsl:394
 #, fuzzy
-msgid "privacy"
+msgid "Privacy"
 msgstr "私有"
 
 #: ../build/src/preferences_gen.h:4556
@@ -1092,11 +1098,11 @@ msgid ""
 msgstr ""
 
 #: ../build/src/preferences_gen.h:4598 ../tools/generate_prefs.xsl:409
-msgid "miscellaneous"
+msgid "Miscellaneous"
 msgstr "杂项"
 
 #: ../build/src/preferences_gen.h:4601 ../tools/generate_prefs.xsl:412
-msgid "interface"
+msgid "Interface"
 msgstr "界面"
 
 #: ../build/src/preferences_gen.h:4621
@@ -1547,6 +1553,9 @@ msgstr "偏移"
 #: ../src/gui/preferences.c:991 ../src/gui/presets.c:648
 #: ../src/libs/metadata_view.c:177
 msgid "lens"
+msgstr "镜头"
+
+msgid "Lens"
 msgstr "镜头"
 
 #: ../build/src/iop/introspection_blurs.c:221
@@ -3974,6 +3983,10 @@ msgstr "ISO"
 msgid "aperture"
 msgstr "光圈"
 
+#. aperture
+msgid "Aperture"
+msgstr "光圈"
+
 #: ../src/common/collection.c:679 ../src/libs/metadata_view.c:164
 #: ../src/libs/tools/filter.c:113
 msgid "filename"
@@ -4995,6 +5008,9 @@ msgstr[0] "删除空目录？"
 #: ../src/gui/styles_dialog.c:466 ../src/libs/collect.c:3003
 #: ../src/libs/geotagging.c:857 ../src/libs/tagging.c:3116
 msgid "name"
+msgstr "名称"
+
+msgid "Name"
 msgstr "名称"
 
 #: ../src/common/film.c:424
@@ -9022,7 +9038,7 @@ msgstr "不能从未修改的图像复制操作历史。"
 
 #. language
 #: ../src/gui/preferences.c:333
-msgid "interface language"
+msgid "Interface language"
 msgstr "界面语言"
 
 #: ../src/gui/preferences.c:348
@@ -9036,7 +9052,7 @@ msgid ""
 msgstr "设置用户界面的语言。带有 * 的项是默认值。（需要重新启动程序以生效。）"
 
 #: ../src/gui/preferences.c:359
-msgid "theme"
+msgid "Theme"
 msgstr "主题"
 
 #: ../src/gui/preferences.c:388
@@ -9077,7 +9093,7 @@ msgstr ""
 
 #. checkbox to allow user to modify theme with user.css
 #: ../src/gui/preferences.c:445
-msgid "modify selected theme with CSS tweaks below"
+msgid "Modify selected theme with CSS tweaks below"
 msgstr "使用下面的 CSS 微调选定的主题"
 
 #: ../src/gui/preferences.c:453
@@ -9086,7 +9102,7 @@ msgstr "用下面的 CSS 修改主题（保存到 user.css）。"
 
 #: ../src/gui/preferences.c:476
 msgctxt "usercss"
-msgid "save CSS and apply"
+msgid "Save CSS and apply"
 msgstr "保存 CSS 并应用"
 
 #: ../src/gui/preferences.c:482
@@ -9112,7 +9128,7 @@ msgid "Enable or disable OpenCL processing for this GPU"
 msgstr ""
 
 #: ../src/gui/preferences.c:694
-msgid "pinned memory"
+msgid "Pinned memory"
 msgstr ""
 
 #: ../src/gui/preferences.c:705
@@ -9134,7 +9150,7 @@ msgstr "Ansel 需要重新启动才能使设置生效。"
 
 #. Adding the outer container
 #: ../src/gui/preferences.c:961
-msgid "presets"
+msgid "Presets"
 msgstr "预置"
 
 #. exif
@@ -9143,9 +9159,16 @@ msgstr "预置"
 msgid "model"
 msgstr "型号"
 
+#. exif
+msgid "Model"
+msgstr "型号"
+
 #: ../src/gui/preferences.c:987 ../src/gui/presets.c:639
 #: ../src/libs/metadata_view.c:176
 msgid "maker"
+msgstr "厂商"
+
+msgid "Maker"
 msgstr "厂商"
 
 #: ../src/gui/preferences.c:1012 ../src/iop/basicadj.c:628
@@ -9157,7 +9180,7 @@ msgid "Auto"
 msgstr "自动"
 
 #: ../src/gui/preferences.c:1026
-msgid "search presets list"
+msgid "Search presets list"
 msgstr "搜索预设列表"
 
 #: ../src/gui/preferences.c:1027
@@ -9170,12 +9193,12 @@ msgstr ""
 
 #: ../src/gui/preferences.c:1033
 msgctxt "preferences"
-msgid "import..."
+msgid "Import..."
 msgstr "导入…"
 
 #: ../src/gui/preferences.c:1037
 msgctxt "preferences"
-msgid "export..."
+msgid "Export..."
 msgstr "导出…"
 
 #: ../src/gui/preferences.c:1173
@@ -9201,6 +9224,9 @@ msgstr "Ansel 预设文件"
 #: ../src/iop/lut3d.c:1371 ../src/libs/geotagging.c:975
 #: ../src/libs/styles.c:566
 msgid "all files"
+msgstr "全部文件"
+
+msgid "All files"
 msgstr "全部文件"
 
 #: ../src/gui/presets.c:107
@@ -21939,7 +21965,7 @@ msgstr "</xsl:text><xsl:value-of select="
 
 #: ../tools/generate_prefs.xsl:759
 #, c-format
-msgid "double click to reset to `%.03f'"
+msgid "Double click to reset to `%.03f'"
 msgstr "双击以重置到 `%.03f'。"
 
 #: ../tools/generate_prefs.xsl:773 ../tools/generate_prefs.xsl:790

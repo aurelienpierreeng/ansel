@@ -477,13 +477,13 @@ msgstr ""
 #: ../build/src/preferences_gen.h:5064 ../build/src/preferences_gen.h:5116
 #: ../build/src/preferences_gen.h:5194 ../build/src/preferences_gen.h:5241
 #: ../tools/generate_prefs.xsl:134 ../tools/generate_prefs.xsl:490
-msgid "this setting has been modified"
-msgstr "denna inställning har blivit ändrad"
+msgid "This setting has been modified"
+msgstr "Denna inställning har blivit ändrad"
 
 #: ../build/src/preferences_gen.h:2421 ../tools/generate_prefs.xsl:192
 #, fuzzy
-msgid "views"
-msgstr "förhandsvisning"
+msgid "Views"
+msgstr "Förhandsvisning"
 
 #. TODO: look for active view. Do we know it at init time ?
 #: ../build/src/preferences_gen.h:2424 ../src/libs/lib.c:907
@@ -525,8 +525,8 @@ msgstr "Ta bort förinställning för föråldrade moduler"
 #: ../tools/generate_prefs.xsl:694 ../tools/generate_prefs.xsl:739
 #: ../tools/generate_prefs.xsl:773 ../tools/generate_prefs.xsl:817
 #, c-format
-msgid "double click to reset to `%s'"
-msgstr "dubbelklicka för att återställa till `%s'"
+msgid "Double click to reset to `%s'"
+msgstr "Dubbelklicka för att återställa till `%s'"
 
 #: ../build/src/preferences_gen.h:2458
 msgid "Hides built-in presets of utility modules in presets menu."
@@ -635,13 +635,13 @@ msgstr "bildspel"
 
 #: ../build/src/preferences_gen.h:2837 ../src/gui/preferences.c:594
 #: ../tools/generate_prefs.xsl:270
-msgid "processing"
-msgstr "bearbetning"
+msgid "Processing"
+msgstr "Bearbetning"
 
 #: ../build/src/preferences_gen.h:2840 ../tools/generate_prefs.xsl:274
 #, fuzzy
-msgid "image processing"
-msgstr "bearbetning"
+msgid "Image processing"
+msgstr "Bearbetning"
 
 #: ../build/src/preferences_gen.h:2860
 msgid "Always use LittleCMS 2 to apply output color profile"
@@ -675,8 +675,8 @@ msgid ""
 msgstr ""
 
 #: ../build/src/preferences_gen.h:3026
-msgid "3D lut root folder"
-msgstr "mapp för 3D-lut"
+msgid "3D LUT root folder"
+msgstr "Mapp för 3D-LUT"
 
 #: ../build/src/preferences_gen.h:3031 ../src/control/jobs/control_jobs.c:1765
 #: ../src/control/jobs/control_jobs.c:1827 ../src/gui/preferences.c:1223
@@ -699,8 +699,8 @@ msgstr ""
 "moduler. (omstart behövs)."
 
 #: ../build/src/preferences_gen.h:3057 ../tools/generate_prefs.xsl:290
-msgid "cpu / gpu / memory"
-msgstr "processor/grafikkort/RAM-minne"
+msgid "CPU / GPU / memory"
+msgstr "Processor/grafikkort/RAM-minne"
 
 #: ../build/src/preferences_gen.h:3077
 msgid "CPU cores"
@@ -713,8 +713,8 @@ msgstr ""
 #: ../build/src/preferences_gen.h:5140 ../build/src/preferences_gen.h:5218
 #: ../build/src/preferences_gen.h:5265 ../tools/generate_prefs.xsl:717
 #, c-format
-msgid "double click to reset to `%d'"
-msgstr "dubbelklicka för att återställa till `%d'"
+msgid "Double click to reset to `%d'"
+msgstr "Dubbelklicka för att återställa till `%d'"
 
 #: ../build/src/preferences_gen.h:3100
 msgid ""
@@ -792,17 +792,20 @@ msgid ""
 msgstr ""
 
 #: ../build/src/preferences_gen.h:3357 ../tools/generate_prefs.xsl:511
-msgid "not available"
-msgstr "ej tillgängligt"
+msgid "Not available"
+msgstr "Ej tillgängligt"
 
 #: ../build/src/preferences_gen.h:3360 ../build/src/preferences_gen.h:3364
 #: ../tools/generate_prefs.xsl:514 ../tools/generate_prefs.xsl:518
-msgid "not available on this system"
-msgstr "ej tillgängligt i detta system"
+msgid "Not available on this system"
+msgstr "Ej tillgängligt i detta system"
 
 #: ../build/src/preferences_gen.h:3373 ../src/common/image.h:269
 #: ../tools/generate_prefs.xsl:309
 msgid "libraw"
+msgstr ""
+
+msgid "LibRaw"
 msgstr ""
 
 #: ../build/src/preferences_gen.h:3378 ../tools/generate_prefs.xsl:314
@@ -848,13 +851,13 @@ msgid ""
 msgstr ""
 
 #: ../build/src/preferences_gen.h:3523 ../tools/generate_prefs.xsl:329
-msgid "security"
-msgstr "säkerhet"
+msgid "Security"
+msgstr "Säkerhet"
 
 #: ../build/src/preferences_gen.h:3526 ../src/gui/preferences.c:329
 #: ../tools/generate_prefs.xsl:334
-msgid "general"
-msgstr "generella"
+msgid "General"
+msgstr "Generella"
 
 #: ../build/src/preferences_gen.h:3546
 msgid "Ask before removing images from the library"
@@ -949,8 +952,8 @@ msgid "Will ask for confirmation before exporting files in overwrite mode"
 msgstr "Frågar om bekräftelse innan stilar tas bort eller skrivs över"
 
 #: ../build/src/preferences_gen.h:3928 ../tools/generate_prefs.xsl:349
-msgid "other"
-msgstr "annat"
+msgid "Other"
+msgstr "Annat"
 
 #: ../build/src/preferences_gen.h:3948
 msgid "password storage backend to use"
@@ -974,7 +977,7 @@ msgstr ""
 "spara ljudnoteringar om bilderna"
 
 #: ../build/src/preferences_gen.h:4066 ../tools/generate_prefs.xsl:364
-msgid "storage"
+msgid "Storage"
 msgstr ""
 
 #: ../build/src/preferences_gen.h:4069 ../src/control/crawler.c:730
@@ -982,6 +985,10 @@ msgstr ""
 #, fuzzy
 msgid "database"
 msgstr "ta bort databas"
+
+#, fuzzy
+msgid "Database"
+msgstr "Ta bort databas"
 
 #: ../build/src/preferences_gen.h:4089
 #, fuzzy
@@ -1092,8 +1099,8 @@ msgstr ""
 
 #: ../build/src/preferences_gen.h:4536 ../tools/generate_prefs.xsl:394
 #, fuzzy
-msgid "privacy"
-msgstr "privat"
+msgid "Privacy"
+msgstr "Privat"
 
 #: ../build/src/preferences_gen.h:4556
 msgid "Send anonymous crash reports"
@@ -1109,13 +1116,13 @@ msgid ""
 msgstr ""
 
 #: ../build/src/preferences_gen.h:4598 ../tools/generate_prefs.xsl:409
-msgid "miscellaneous"
-msgstr "övrigt"
+msgid "Miscellaneous"
+msgstr "Övrigt"
 
 #: ../build/src/preferences_gen.h:4601 ../tools/generate_prefs.xsl:412
 #, fuzzy
-msgid "interface"
-msgstr "gränsnitt språk"
+msgid "Interface"
+msgstr "Gränsnitt språk"
 
 #: ../build/src/preferences_gen.h:4621
 msgid "Invert the direction of the mouse vertical scroll"
@@ -1566,6 +1573,9 @@ msgstr "Förskjutning"
 #: ../src/libs/metadata_view.c:177
 msgid "lens"
 msgstr "objektiv"
+
+msgid "Lens"
+msgstr "Objektiv"
 
 #: ../build/src/iop/introspection_blurs.c:221
 #, fuzzy
@@ -4134,6 +4144,10 @@ msgstr "ISO"
 msgid "aperture"
 msgstr "bländare"
 
+#. aperture
+msgid "Aperture"
+msgstr "Bländare"
+
 #: ../src/common/collection.c:679 ../src/libs/metadata_view.c:164
 #: ../src/libs/tools/filter.c:113
 msgid "filename"
@@ -5153,6 +5167,9 @@ msgstr[1] "Ta bort tomma kataloger?"
 msgid "name"
 msgstr "namn"
 
+msgid "Name"
+msgstr "Namn"
+
 #: ../src/common/film.c:424
 msgid ""
 "Cannot remove film roll having local copies with non accessible originals"
@@ -5322,7 +5339,7 @@ msgstr ""
 #: ../src/common/history_merge_gui.c:1397 ../src/gui/hist_dialog.c:237
 #, fuzzy
 msgid "Module"
-msgstr "modul"
+msgstr "Modul"
 
 #: ../src/common/history_merge_gui.c:1405
 #, fuzzy
@@ -6245,7 +6262,7 @@ msgstr ""
 
 #: ../src/control/crawler.c:729
 msgid "XMP"
-msgstr ""
+msgstr "Xmp"
 
 #: ../src/control/crawler.c:747
 msgid "path"
@@ -9241,8 +9258,8 @@ msgstr "Kan inte kopiera historik från en orörd bild"
 
 #. language
 #: ../src/gui/preferences.c:333
-msgid "interface language"
-msgstr "gränsnitt språk"
+msgid "Interface language"
+msgstr "Gränsnitt språk"
 
 #: ../src/gui/preferences.c:348
 #, fuzzy
@@ -9258,8 +9275,8 @@ msgstr ""
 "(kräver omstart)"
 
 #: ../src/gui/preferences.c:359
-msgid "theme"
-msgstr "tema"
+msgid "Theme"
+msgstr "Tema"
 
 #: ../src/gui/preferences.c:388
 #, fuzzy
@@ -9297,7 +9314,7 @@ msgstr ""
 
 #. checkbox to allow user to modify theme with user.css
 #: ../src/gui/preferences.c:445
-msgid "modify selected theme with CSS tweaks below"
+msgid "Modify selected theme with CSS tweaks below"
 msgstr ""
 
 #: ../src/gui/preferences.c:453
@@ -9306,8 +9323,8 @@ msgstr ""
 
 #: ../src/gui/preferences.c:476
 msgctxt "usercss"
-msgid "save CSS and apply"
-msgstr "spara CSS och tillämpa"
+msgid "Save CSS and apply"
+msgstr "Spara CSS och tillämpa"
 
 #: ../src/gui/preferences.c:482
 msgid "Click to save and apply the CSS tweaks entered in this editor"
@@ -9333,7 +9350,7 @@ msgid "Enable or disable OpenCL processing for this GPU"
 msgstr ""
 
 #: ../src/gui/preferences.c:694
-msgid "pinned memory"
+msgid "Pinned memory"
 msgstr ""
 
 #: ../src/gui/preferences.c:705
@@ -9354,8 +9371,8 @@ msgstr ""
 
 #. Adding the outer container
 #: ../src/gui/preferences.c:961
-msgid "presets"
-msgstr "fördefinierade"
+msgid "Presets"
+msgstr "Fördefinierade"
 
 #. exif
 #: ../src/gui/preferences.c:983 ../src/gui/presets.c:630
@@ -9363,10 +9380,17 @@ msgstr "fördefinierade"
 msgid "model"
 msgstr "modell"
 
+#. exif
+msgid "Model"
+msgstr "Modell"
+
 #: ../src/gui/preferences.c:987 ../src/gui/presets.c:639
 #: ../src/libs/metadata_view.c:176
 msgid "maker"
 msgstr "tillverkare"
+
+msgid "Maker"
+msgstr "Tillverkare"
 
 #: ../src/gui/preferences.c:1012 ../src/iop/basicadj.c:628
 #: ../src/iop/borders.c:1059 ../src/iop/levels.c:636 ../src/iop/rgblevels.c:867
@@ -9378,8 +9402,8 @@ msgstr "Automatisk"
 
 #: ../src/gui/preferences.c:1026
 #, fuzzy
-msgid "search presets list"
-msgstr "välj radie"
+msgid "Search presets list"
+msgstr "Välj radie"
 
 #: ../src/gui/preferences.c:1027
 msgid ""
@@ -9389,13 +9413,13 @@ msgstr ""
 
 #: ../src/gui/preferences.c:1033
 msgctxt "preferences"
-msgid "import..."
-msgstr "importera..."
+msgid "Import..."
+msgstr "Importera..."
 
 #: ../src/gui/preferences.c:1037
 msgctxt "preferences"
-msgid "export..."
-msgstr "export..."
+msgid "Export..."
+msgstr "Export..."
 
 #: ../src/gui/preferences.c:1173
 #, fuzzy, c-format
@@ -9422,6 +9446,9 @@ msgstr "välj fil"
 #: ../src/libs/styles.c:566
 msgid "all files"
 msgstr "alla filer"
+
+msgid "All files"
+msgstr "Alla filer"
 
 #: ../src/gui/presets.c:107
 msgid "non-raw"
@@ -20844,7 +20871,7 @@ msgstr "Tillämpa den markerade stilen i listan ovan till de valda bilderna"
 
 #: ../src/libs/tagging.c:144
 msgid "Tags"
-msgstr ""
+msgstr "Taggar"
 
 #: ../src/libs/tagging.c:1207
 msgid "attach tag to all"
@@ -22039,8 +22066,8 @@ msgstr ""
 
 #: ../tools/generate_prefs.xsl:759
 #, fuzzy, c-format
-msgid "double click to reset to `%.03f'"
-msgstr "dubbelklicka för att återställa till `%f'"
+msgid "Double click to reset to `%.03f'"
+msgstr "Dubbelklicka för att återställa till `%f'"
 
 #: ../tools/generate_prefs.xsl:773 ../tools/generate_prefs.xsl:790
 #: ../tools/generate_prefs.xsl:817

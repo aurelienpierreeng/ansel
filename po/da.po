@@ -453,13 +453,13 @@ msgstr ""
 #: ../build/src/preferences_gen.h:5194 ../build/src/preferences_gen.h:5241
 #: ../tools/generate_prefs.xsl:134 ../tools/generate_prefs.xsl:490
 #, fuzzy
-msgid "this setting has been modified"
+msgid "This setting has been modified"
 msgstr "%s er blevet importeret"
 
 #: ../build/src/preferences_gen.h:2421 ../tools/generate_prefs.xsl:192
 #, fuzzy
-msgid "views"
-msgstr "andet"
+msgid "Views"
+msgstr "Andet"
 
 #. TODO: look for active view. Do we know it at init time ?
 #: ../build/src/preferences_gen.h:2424 ../src/libs/lib.c:907
@@ -501,8 +501,8 @@ msgstr "Sletter forudstilling for forældet modul"
 #: ../tools/generate_prefs.xsl:694 ../tools/generate_prefs.xsl:739
 #: ../tools/generate_prefs.xsl:773 ../tools/generate_prefs.xsl:817
 #, c-format
-msgid "double click to reset to `%s'"
-msgstr "dobbeltklik for at nulstille til “%s”"
+msgid "Double click to reset to `%s'"
+msgstr "Dobbeltklik for at nulstille til “%s”"
 
 #: ../build/src/preferences_gen.h:2458
 msgid "Hides built-in presets of utility modules in presets menu."
@@ -613,13 +613,13 @@ msgstr "diasshow"
 #: ../build/src/preferences_gen.h:2837 ../src/gui/preferences.c:594
 #: ../tools/generate_prefs.xsl:270
 #, fuzzy
-msgid "processing"
-msgstr "komprimering"
+msgid "Processing"
+msgstr "Komprimering"
 
 #: ../build/src/preferences_gen.h:2840 ../tools/generate_prefs.xsl:274
 #, fuzzy
-msgid "image processing"
-msgstr "billedindstillinger"
+msgid "Image processing"
+msgstr "Billedindstillinger"
 
 #: ../build/src/preferences_gen.h:2860
 msgid "Always use LittleCMS 2 to apply output color profile"
@@ -653,8 +653,8 @@ msgid ""
 msgstr ""
 
 #: ../build/src/preferences_gen.h:3026
-msgid "3D lut root folder"
-msgstr "rodmappe for 3D lut"
+msgid "3D LUT root folder"
+msgstr "Rodmappe for 3D LUT"
 
 #: ../build/src/preferences_gen.h:3031 ../src/control/jobs/control_jobs.c:1765
 #: ../src/control/jobs/control_jobs.c:1827 ../src/gui/preferences.c:1223
@@ -675,8 +675,8 @@ msgid ""
 msgstr ""
 
 #: ../build/src/preferences_gen.h:3057 ../tools/generate_prefs.xsl:290
-msgid "cpu / gpu / memory"
-msgstr "cpu / gpu / hukommelse"
+msgid "CPU / GPU / memory"
+msgstr "CPU / GPU / hukommelse"
 
 #: ../build/src/preferences_gen.h:3077
 msgid "CPU cores"
@@ -689,8 +689,8 @@ msgstr ""
 #: ../build/src/preferences_gen.h:5140 ../build/src/preferences_gen.h:5218
 #: ../build/src/preferences_gen.h:5265 ../tools/generate_prefs.xsl:717
 #, c-format
-msgid "double click to reset to `%d'"
-msgstr "dobbeltklik for at nulstille til “%d”"
+msgid "Double click to reset to `%d'"
+msgstr "Dobbeltklik for at nulstille til “%d”"
 
 #: ../build/src/preferences_gen.h:3100
 msgid ""
@@ -768,17 +768,20 @@ msgid ""
 msgstr ""
 
 #: ../build/src/preferences_gen.h:3357 ../tools/generate_prefs.xsl:511
-msgid "not available"
-msgstr "ikke tilgængelig"
+msgid "Not available"
+msgstr "Ikke tilgængelig"
 
 #: ../build/src/preferences_gen.h:3360 ../build/src/preferences_gen.h:3364
 #: ../tools/generate_prefs.xsl:514 ../tools/generate_prefs.xsl:518
-msgid "not available on this system"
-msgstr "ikke tilgængelig på dette system"
+msgid "Not available on this system"
+msgstr "Ikke tilgængelig på dette system"
 
 #: ../build/src/preferences_gen.h:3373 ../src/common/image.h:269
 #: ../tools/generate_prefs.xsl:309
 msgid "libraw"
+msgstr ""
+
+msgid "LibRaw"
 msgstr ""
 
 #: ../build/src/preferences_gen.h:3378 ../tools/generate_prefs.xsl:314
@@ -824,13 +827,13 @@ msgid ""
 msgstr ""
 
 #: ../build/src/preferences_gen.h:3523 ../tools/generate_prefs.xsl:329
-msgid "security"
-msgstr "sikkerhed"
+msgid "Security"
+msgstr "Sikkerhed"
 
 #: ../build/src/preferences_gen.h:3526 ../src/gui/preferences.c:329
 #: ../tools/generate_prefs.xsl:334
-msgid "general"
-msgstr "generelt"
+msgid "General"
+msgstr "Generelt"
 
 #: ../build/src/preferences_gen.h:3546
 #, fuzzy
@@ -929,8 +932,8 @@ msgid "Will ask for confirmation before exporting files in overwrite mode"
 msgstr ""
 
 #: ../build/src/preferences_gen.h:3928 ../tools/generate_prefs.xsl:349
-msgid "other"
-msgstr "andet"
+msgid "Other"
+msgstr "Andet"
 
 #: ../build/src/preferences_gen.h:3948
 msgid "password storage backend to use"
@@ -955,7 +958,7 @@ msgstr ""
 "kameraer som noter til billeder"
 
 #: ../build/src/preferences_gen.h:4066 ../tools/generate_prefs.xsl:364
-msgid "storage"
+msgid "Storage"
 msgstr ""
 
 #: ../build/src/preferences_gen.h:4069 ../src/control/crawler.c:730
@@ -963,6 +966,10 @@ msgstr ""
 #, fuzzy
 msgid "database"
 msgstr "slet database"
+
+#, fuzzy
+msgid "Database"
+msgstr "Slet database"
 
 #: ../build/src/preferences_gen.h:4089
 #, fuzzy
@@ -1071,8 +1078,8 @@ msgstr ""
 
 #: ../build/src/preferences_gen.h:4536 ../tools/generate_prefs.xsl:394
 #, fuzzy
-msgid "privacy"
-msgstr "privat"
+msgid "Privacy"
+msgstr "Privat"
 
 #: ../build/src/preferences_gen.h:4556
 msgid "Send anonymous crash reports"
@@ -1088,13 +1095,13 @@ msgid ""
 msgstr ""
 
 #: ../build/src/preferences_gen.h:4598 ../tools/generate_prefs.xsl:409
-msgid "miscellaneous"
-msgstr "diverse"
+msgid "Miscellaneous"
+msgstr "Diverse"
 
 #: ../build/src/preferences_gen.h:4601 ../tools/generate_prefs.xsl:412
 #, fuzzy
-msgid "interface"
-msgstr "brugergrænsefladesprog"
+msgid "Interface"
+msgstr "Brugergrænsefladesprog"
 
 #: ../build/src/preferences_gen.h:4621
 msgid "Invert the direction of the mouse vertical scroll"
@@ -1541,6 +1548,9 @@ msgstr "X-forskydning"
 #: ../src/libs/metadata_view.c:177
 msgid "lens"
 msgstr "objektiv"
+
+msgid "Lens"
+msgstr "Objektiv"
 
 #: ../build/src/iop/introspection_blurs.c:221
 #, fuzzy
@@ -4119,6 +4129,10 @@ msgstr "ISO"
 msgid "aperture"
 msgstr "blænde"
 
+#. aperture
+msgid "Aperture"
+msgstr "Blænde"
+
 #: ../src/common/collection.c:679 ../src/libs/metadata_view.c:164
 #: ../src/libs/tools/filter.c:113
 msgid "filename"
@@ -5127,6 +5141,9 @@ msgstr[1] "Fjern tomme mapper?"
 msgid "name"
 msgstr "navn"
 
+msgid "Name"
+msgstr "Navn"
+
 #: ../src/common/film.c:424
 msgid ""
 "Cannot remove film roll having local copies with non accessible originals"
@@ -5297,7 +5314,7 @@ msgstr ""
 #: ../src/common/history_merge_gui.c:1397 ../src/gui/hist_dialog.c:237
 #, fuzzy
 msgid "Module"
-msgstr "modul"
+msgstr "Modul"
 
 #: ../src/common/history_merge_gui.c:1405
 #, fuzzy
@@ -6219,7 +6236,7 @@ msgstr ""
 
 #: ../src/control/crawler.c:729
 msgid "XMP"
-msgstr ""
+msgstr "Xmp"
 
 #: ../src/control/crawler.c:747
 msgid "path"
@@ -9211,8 +9228,8 @@ msgstr "Kan ikke kopiere historik ud fra uændret billede"
 
 #. language
 #: ../src/gui/preferences.c:333
-msgid "interface language"
-msgstr "brugergrænsefladesprog"
+msgid "Interface language"
+msgstr "Brugergrænsefladesprog"
 
 #: ../src/gui/preferences.c:348
 #, fuzzy
@@ -9228,8 +9245,8 @@ msgstr ""
 "(genstart er nødvendig)"
 
 #: ../src/gui/preferences.c:359
-msgid "theme"
-msgstr "tema"
+msgid "Theme"
+msgstr "Tema"
 
 #: ../src/gui/preferences.c:388
 msgid "Set the theme for the user interface"
@@ -9266,7 +9283,7 @@ msgstr ""
 
 #. checkbox to allow user to modify theme with user.css
 #: ../src/gui/preferences.c:445
-msgid "modify selected theme with CSS tweaks below"
+msgid "Modify selected theme with CSS tweaks below"
 msgstr ""
 
 #: ../src/gui/preferences.c:453
@@ -9275,7 +9292,7 @@ msgstr ""
 
 #: ../src/gui/preferences.c:476
 msgctxt "usercss"
-msgid "save CSS and apply"
+msgid "Save CSS and apply"
 msgstr ""
 
 #: ../src/gui/preferences.c:482
@@ -9301,7 +9318,7 @@ msgid "Enable or disable OpenCL processing for this GPU"
 msgstr ""
 
 #: ../src/gui/preferences.c:694
-msgid "pinned memory"
+msgid "Pinned memory"
 msgstr ""
 
 #: ../src/gui/preferences.c:705
@@ -9322,8 +9339,8 @@ msgstr ""
 
 #. Adding the outer container
 #: ../src/gui/preferences.c:961
-msgid "presets"
-msgstr "forudindstillinger"
+msgid "Presets"
+msgstr "Forudindstillinger"
 
 #. exif
 #: ../src/gui/preferences.c:983 ../src/gui/presets.c:630
@@ -9331,10 +9348,17 @@ msgstr "forudindstillinger"
 msgid "model"
 msgstr "model"
 
+#. exif
+msgid "Model"
+msgstr "Model"
+
 #: ../src/gui/preferences.c:987 ../src/gui/presets.c:639
 #: ../src/libs/metadata_view.c:176
 msgid "maker"
 msgstr "producent"
+
+msgid "Maker"
+msgstr "Producent"
 
 #: ../src/gui/preferences.c:1012 ../src/iop/basicadj.c:628
 #: ../src/iop/borders.c:1059 ../src/iop/levels.c:636 ../src/iop/rgblevels.c:867
@@ -9346,8 +9370,8 @@ msgstr "Auto"
 
 #: ../src/gui/preferences.c:1026
 #, fuzzy
-msgid "search presets list"
-msgstr "søgeradius"
+msgid "Search presets list"
+msgstr "Søgeradius"
 
 #: ../src/gui/preferences.c:1027
 msgid ""
@@ -9357,14 +9381,14 @@ msgstr ""
 
 #: ../src/gui/preferences.c:1033
 msgctxt "preferences"
-msgid "import..."
-msgstr "importér…"
+msgid "Import..."
+msgstr "Importér…"
 
 #: ../src/gui/preferences.c:1037
 #, fuzzy
 msgctxt "preferences"
-msgid "export..."
-msgstr "eksportér…"
+msgid "Export..."
+msgstr "Eksportér…"
 
 #: ../src/gui/preferences.c:1173
 #, fuzzy, c-format
@@ -9391,6 +9415,9 @@ msgstr "vælg fil"
 #: ../src/libs/styles.c:566
 msgid "all files"
 msgstr "alle filer"
+
+msgid "All files"
+msgstr "Alle filer"
 
 #: ../src/gui/presets.c:107
 msgid "non-raw"
@@ -20880,7 +20907,7 @@ msgstr "Opret stile fra historikstak for valgte billeder"
 
 #: ../src/libs/tagging.c:144
 msgid "Tags"
-msgstr ""
+msgstr "Mærker"
 
 #: ../src/libs/tagging.c:1207
 msgid "attach tag to all"
@@ -22073,8 +22100,8 @@ msgstr ""
 
 #: ../tools/generate_prefs.xsl:759
 #, fuzzy, c-format
-msgid "double click to reset to `%.03f'"
-msgstr "dobbeltklik for at nulstille til “%f”"
+msgid "Double click to reset to `%.03f'"
+msgstr "Dobbeltklik for at nulstille til “%f”"
 
 #: ../tools/generate_prefs.xsl:773 ../tools/generate_prefs.xsl:790
 #: ../tools/generate_prefs.xsl:817

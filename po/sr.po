@@ -456,13 +456,13 @@ msgstr ""
 #: ../build/src/preferences_gen.h:5064 ../build/src/preferences_gen.h:5116
 #: ../build/src/preferences_gen.h:5194 ../build/src/preferences_gen.h:5241
 #: ../tools/generate_prefs.xsl:134 ../tools/generate_prefs.xsl:490
-msgid "this setting has been modified"
-msgstr "ово подешавање је измењено"
+msgid "This setting has been modified"
+msgstr "Ово подешавање је измењено"
 
 #: ../build/src/preferences_gen.h:2421 ../tools/generate_prefs.xsl:192
 #, fuzzy
-msgid "views"
-msgstr "остали прегледи"
+msgid "Views"
+msgstr "Остали прегледи"
 
 #. TODO: look for active view. Do we know it at init time ?
 #: ../build/src/preferences_gen.h:2424 ../src/libs/lib.c:907
@@ -503,8 +503,8 @@ msgstr "Сакриј уграђене поставке модула"
 #: ../tools/generate_prefs.xsl:694 ../tools/generate_prefs.xsl:739
 #: ../tools/generate_prefs.xsl:773 ../tools/generate_prefs.xsl:817
 #, c-format
-msgid "double click to reset to `%s'"
-msgstr "два пута кликните са вратите „%s“"
+msgid "Double click to reset to `%s'"
+msgstr "Два пута кликните са вратите „%s“"
 
 #: ../build/src/preferences_gen.h:2458
 msgid "Hides built-in presets of utility modules in presets menu."
@@ -615,13 +615,13 @@ msgstr "слајдови"
 
 #: ../build/src/preferences_gen.h:2837 ../src/gui/preferences.c:594
 #: ../tools/generate_prefs.xsl:270
-msgid "processing"
-msgstr "обрада"
+msgid "Processing"
+msgstr "Обрада"
 
 #: ../build/src/preferences_gen.h:2840 ../tools/generate_prefs.xsl:274
 #, fuzzy
-msgid "image processing"
-msgstr "обрада"
+msgid "Image processing"
+msgstr "Обрада"
 
 #: ../build/src/preferences_gen.h:2860
 msgid "Always use LittleCMS 2 to apply output color profile"
@@ -655,8 +655,8 @@ msgid ""
 msgstr ""
 
 #: ../build/src/preferences_gen.h:3026
-msgid "3D lut root folder"
-msgstr "корена фасцикла за 3Д lut"
+msgid "3D LUT root folder"
+msgstr "Корена фасцикла за 3Д LUT"
 
 #: ../build/src/preferences_gen.h:3031 ../src/control/jobs/control_jobs.c:1765
 #: ../src/control/jobs/control_jobs.c:1827 ../src/gui/preferences.c:1223
@@ -679,8 +679,8 @@ msgstr ""
 "(потребно поновно покретање)."
 
 #: ../build/src/preferences_gen.h:3057 ../tools/generate_prefs.xsl:290
-msgid "cpu / gpu / memory"
-msgstr "ресурси"
+msgid "CPU / GPU / memory"
+msgstr "Ресурси"
 
 #: ../build/src/preferences_gen.h:3077
 msgid "CPU cores"
@@ -693,8 +693,8 @@ msgstr ""
 #: ../build/src/preferences_gen.h:5140 ../build/src/preferences_gen.h:5218
 #: ../build/src/preferences_gen.h:5265 ../tools/generate_prefs.xsl:717
 #, c-format
-msgid "double click to reset to `%d'"
-msgstr "кликните двапут да поново поставите „%d“"
+msgid "Double click to reset to `%d'"
+msgstr "Кликните двапут да поново поставите „%d“"
 
 #: ../build/src/preferences_gen.h:3100
 msgid ""
@@ -772,17 +772,20 @@ msgid ""
 msgstr ""
 
 #: ../build/src/preferences_gen.h:3357 ../tools/generate_prefs.xsl:511
-msgid "not available"
-msgstr "није доступно"
+msgid "Not available"
+msgstr "Није доступно"
 
 #: ../build/src/preferences_gen.h:3360 ../build/src/preferences_gen.h:3364
 #: ../tools/generate_prefs.xsl:514 ../tools/generate_prefs.xsl:518
-msgid "not available on this system"
-msgstr "није доступно на овом систему"
+msgid "Not available on this system"
+msgstr "Није доступно на овом систему"
 
 #: ../build/src/preferences_gen.h:3373 ../src/common/image.h:269
 #: ../tools/generate_prefs.xsl:309
 msgid "libraw"
+msgstr ""
+
+msgid "LibRaw"
 msgstr ""
 
 #: ../build/src/preferences_gen.h:3378 ../tools/generate_prefs.xsl:314
@@ -828,13 +831,13 @@ msgid ""
 msgstr ""
 
 #: ../build/src/preferences_gen.h:3523 ../tools/generate_prefs.xsl:329
-msgid "security"
-msgstr "сигурност"
+msgid "Security"
+msgstr "Сигурност"
 
 #: ../build/src/preferences_gen.h:3526 ../src/gui/preferences.c:329
 #: ../tools/generate_prefs.xsl:334
-msgid "general"
-msgstr "опште"
+msgid "General"
+msgstr "Опште"
 
 #: ../build/src/preferences_gen.h:3546
 #, fuzzy
@@ -937,8 +940,8 @@ msgstr ""
 
 #: ../build/src/preferences_gen.h:3928 ../tools/generate_prefs.xsl:349
 #, fuzzy
-msgid "other"
-msgstr "дидер"
+msgid "Other"
+msgstr "Дидер"
 
 #: ../build/src/preferences_gen.h:3948
 msgid "password storage backend to use"
@@ -964,13 +967,16 @@ msgstr ""
 "неке камере као коментар уз слику"
 
 #: ../build/src/preferences_gen.h:4066 ../tools/generate_prefs.xsl:364
-msgid "storage"
-msgstr "складиштење"
+msgid "Storage"
+msgstr "Складиштење"
 
 #: ../build/src/preferences_gen.h:4069 ../src/control/crawler.c:730
 #: ../tools/generate_prefs.xsl:368
 msgid "database"
 msgstr "база података"
+
+msgid "Database"
+msgstr "База података"
 
 #: ../build/src/preferences_gen.h:4089
 #, fuzzy
@@ -1087,8 +1093,8 @@ msgstr ""
 
 #: ../build/src/preferences_gen.h:4536 ../tools/generate_prefs.xsl:394
 #, fuzzy
-msgid "privacy"
-msgstr "приватно"
+msgid "Privacy"
+msgstr "Приватно"
 
 #: ../build/src/preferences_gen.h:4556
 msgid "Send anonymous crash reports"
@@ -1104,12 +1110,12 @@ msgid ""
 msgstr ""
 
 #: ../build/src/preferences_gen.h:4598 ../tools/generate_prefs.xsl:409
-msgid "miscellaneous"
-msgstr "разно"
+msgid "Miscellaneous"
+msgstr "Разно"
 
 #: ../build/src/preferences_gen.h:4601 ../tools/generate_prefs.xsl:412
-msgid "interface"
-msgstr "изглед"
+msgid "Interface"
+msgstr "Изглед"
 
 #: ../build/src/preferences_gen.h:4621
 msgid "Invert the direction of the mouse vertical scroll"
@@ -1555,6 +1561,9 @@ msgstr "Померај"
 #: ../src/libs/metadata_view.c:177
 msgid "lens"
 msgstr "објектив"
+
+msgid "Lens"
+msgstr "Објектив"
 
 #: ../build/src/iop/introspection_blurs.c:221
 #, fuzzy
@@ -4081,6 +4090,10 @@ msgstr "ИСО"
 msgid "aperture"
 msgstr "бленда"
 
+#. aperture
+msgid "Aperture"
+msgstr "Бленда"
+
 #: ../src/common/collection.c:679 ../src/libs/metadata_view.c:164
 #: ../src/libs/tools/filter.c:113
 msgid "filename"
@@ -5109,6 +5122,9 @@ msgstr[3] "Да уклоним празни директоријум?"
 msgid "name"
 msgstr "назив"
 
+msgid "Name"
+msgstr "Назив"
+
 #: ../src/common/film.c:424
 msgid ""
 "Cannot remove film roll having local copies with non accessible originals"
@@ -5279,7 +5295,7 @@ msgstr ""
 #: ../src/common/history_merge_gui.c:1397 ../src/gui/hist_dialog.c:237
 #, fuzzy
 msgid "Module"
-msgstr "модул"
+msgstr "Модул"
 
 #: ../src/common/history_merge_gui.c:1405
 #, fuzzy
@@ -6209,7 +6225,7 @@ msgstr ""
 
 #: ../src/control/crawler.c:729
 msgid "XMP"
-msgstr ""
+msgstr "Xmp"
 
 #: ../src/control/crawler.c:747
 msgid "path"
@@ -9291,8 +9307,8 @@ msgstr "Не могу да копирам историјат неизмењен�
 
 #. language
 #: ../src/gui/preferences.c:333
-msgid "interface language"
-msgstr "језик програма"
+msgid "Interface language"
+msgstr "Језик програма"
 
 #: ../src/gui/preferences.c:348
 #, fuzzy
@@ -9308,8 +9324,8 @@ msgstr ""
 "(потребно поновно покретање)"
 
 #: ../src/gui/preferences.c:359
-msgid "theme"
-msgstr "тема"
+msgid "Theme"
+msgstr "Тема"
 
 #: ../src/gui/preferences.c:388
 msgid "Set the theme for the user interface"
@@ -9351,8 +9367,8 @@ msgstr ""
 
 #. checkbox to allow user to modify theme with user.css
 #: ../src/gui/preferences.c:445
-msgid "modify selected theme with CSS tweaks below"
-msgstr "мења изабрану тему произвољним CSS преправкама"
+msgid "Modify selected theme with CSS tweaks below"
+msgstr "Мења изабрану тему произвољним CSS преправкама"
 
 #: ../src/gui/preferences.c:453
 msgid "Modify theme with CSS keyed below (saved to user.css)"
@@ -9360,7 +9376,7 @@ msgstr "Мења тему произвољним CSS кључевима (кој�
 
 #: ../src/gui/preferences.c:476
 msgctxt "usercss"
-msgid "save CSS and apply"
+msgid "Save CSS and apply"
 msgstr ""
 
 #: ../src/gui/preferences.c:482
@@ -9387,7 +9403,7 @@ msgid "Enable or disable OpenCL processing for this GPU"
 msgstr ""
 
 #: ../src/gui/preferences.c:694
-msgid "pinned memory"
+msgid "Pinned memory"
 msgstr ""
 
 #: ../src/gui/preferences.c:705
@@ -9408,8 +9424,8 @@ msgstr ""
 
 #. Adding the outer container
 #: ../src/gui/preferences.c:961
-msgid "presets"
-msgstr "поставке"
+msgid "Presets"
+msgstr "Поставке"
 
 #. exif
 #: ../src/gui/preferences.c:983 ../src/gui/presets.c:630
@@ -9417,10 +9433,17 @@ msgstr "поставке"
 msgid "model"
 msgstr "модел"
 
+#. exif
+msgid "Model"
+msgstr "Модел"
+
 #: ../src/gui/preferences.c:987 ../src/gui/presets.c:639
 #: ../src/libs/metadata_view.c:176
 msgid "maker"
 msgstr "произвођач"
+
+msgid "Maker"
+msgstr "Произвођач"
 
 #: ../src/gui/preferences.c:1012 ../src/iop/basicadj.c:628
 #: ../src/iop/borders.c:1059 ../src/iop/levels.c:636 ../src/iop/rgblevels.c:867
@@ -9432,8 +9455,8 @@ msgstr "Аутоматски"
 
 #: ../src/gui/preferences.c:1026
 #, fuzzy
-msgid "search presets list"
-msgstr "полупречник претраге"
+msgid "Search presets list"
+msgstr "Полупречник претраге"
 
 #: ../src/gui/preferences.c:1027
 msgid ""
@@ -9443,13 +9466,13 @@ msgstr ""
 
 #: ../src/gui/preferences.c:1033
 msgctxt "preferences"
-msgid "import..."
-msgstr "увоз…"
+msgid "Import..."
+msgstr "Увоз…"
 
 #: ../src/gui/preferences.c:1037
 msgctxt "preferences"
-msgid "export..."
-msgstr "извоз…"
+msgid "Export..."
+msgstr "Извоз…"
 
 #: ../src/gui/preferences.c:1173
 #, c-format
@@ -9476,6 +9499,9 @@ msgstr "изаберите датотеку"
 #: ../src/libs/styles.c:566
 msgid "all files"
 msgstr "све датотеке"
+
+msgid "All files"
+msgstr "Све датотеке"
 
 #: ../src/gui/presets.c:107
 msgid "non-raw"
@@ -21155,7 +21181,7 @@ msgstr "Примењује изабране стилове са горњег с�
 
 #: ../src/libs/tagging.c:144
 msgid "Tags"
-msgstr ""
+msgstr "Ознаке"
 
 #: ../src/libs/tagging.c:1207
 msgid "attach tag to all"
@@ -22373,8 +22399,8 @@ msgstr ""
 
 #: ../tools/generate_prefs.xsl:759
 #, fuzzy, c-format
-msgid "double click to reset to `%.03f'"
-msgstr "кликните двапут да вратите на „%f“"
+msgid "Double click to reset to `%.03f'"
+msgstr "Кликните двапут да вратите на „%f“"
 
 #: ../tools/generate_prefs.xsl:773 ../tools/generate_prefs.xsl:790
 #: ../tools/generate_prefs.xsl:817

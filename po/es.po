@@ -443,12 +443,12 @@ msgstr ""
 #: ../build/src/preferences_gen.h:5064 ../build/src/preferences_gen.h:5116
 #: ../build/src/preferences_gen.h:5194 ../build/src/preferences_gen.h:5241
 #: ../tools/generate_prefs.xsl:134 ../tools/generate_prefs.xsl:490
-msgid "this setting has been modified"
+msgid "This setting has been modified"
 msgstr "Este ajuste se ha modificado"
 
 #: ../build/src/preferences_gen.h:2421 ../tools/generate_prefs.xsl:192
 #, fuzzy
-msgid "views"
+msgid "Views"
 msgstr "Vista previa"
 
 #. TODO: look for active view. Do we know it at init time ?
@@ -489,7 +489,7 @@ msgstr "Ocultar los preajustes integrados para los módulos de funcionalidad"
 #: ../tools/generate_prefs.xsl:694 ../tools/generate_prefs.xsl:739
 #: ../tools/generate_prefs.xsl:773 ../tools/generate_prefs.xsl:817
 #, c-format
-msgid "double click to reset to `%s'"
+msgid "Double click to reset to `%s'"
 msgstr "Doble clic para restablecer a «%s»"
 
 #: ../build/src/preferences_gen.h:2458
@@ -611,12 +611,12 @@ msgstr "diapositivas"
 
 #: ../build/src/preferences_gen.h:2837 ../src/gui/preferences.c:594
 #: ../tools/generate_prefs.xsl:270
-msgid "processing"
-msgstr "procesamiento"
+msgid "Processing"
+msgstr "Procesamiento"
 
 #: ../build/src/preferences_gen.h:2840 ../tools/generate_prefs.xsl:274
-msgid "image processing"
-msgstr "procesamiento de imagen"
+msgid "Image processing"
+msgstr "Procesamiento de imagen"
 
 #: ../build/src/preferences_gen.h:2860
 msgid "Always use LittleCMS 2 to apply output color profile"
@@ -655,7 +655,7 @@ msgid ""
 msgstr ""
 
 #: ../build/src/preferences_gen.h:3026
-msgid "3D lut root folder"
+msgid "3D LUT root folder"
 msgstr "Carpeta raíz de LUT 3D"
 
 #: ../build/src/preferences_gen.h:3031 ../src/control/jobs/control_jobs.c:1765
@@ -679,8 +679,8 @@ msgstr ""
 "módulo lut 3D. Es necesario reiniciar darktable."
 
 #: ../build/src/preferences_gen.h:3057 ../tools/generate_prefs.xsl:290
-msgid "cpu / gpu / memory"
-msgstr "cpu/gpu/memoria"
+msgid "CPU / GPU / memory"
+msgstr "CPU/GPU/memoria"
 
 #: ../build/src/preferences_gen.h:3077
 msgid "CPU cores"
@@ -693,7 +693,7 @@ msgstr ""
 #: ../build/src/preferences_gen.h:5140 ../build/src/preferences_gen.h:5218
 #: ../build/src/preferences_gen.h:5265 ../tools/generate_prefs.xsl:717
 #, c-format
-msgid "double click to reset to `%d'"
+msgid "Double click to reset to `%d'"
 msgstr "Doble clic para restablecer a «%d»"
 
 #: ../build/src/preferences_gen.h:3100
@@ -782,17 +782,20 @@ msgid ""
 msgstr ""
 
 #: ../build/src/preferences_gen.h:3357 ../tools/generate_prefs.xsl:511
-msgid "not available"
+msgid "Not available"
 msgstr "No disponible"
 
 #: ../build/src/preferences_gen.h:3360 ../build/src/preferences_gen.h:3364
 #: ../tools/generate_prefs.xsl:514 ../tools/generate_prefs.xsl:518
-msgid "not available on this system"
+msgid "Not available on this system"
 msgstr "No disponible en este sistema"
 
 #: ../build/src/preferences_gen.h:3373 ../src/common/image.h:269
 #: ../tools/generate_prefs.xsl:309
 msgid "libraw"
+msgstr "LibRaw"
+
+msgid "LibRaw"
 msgstr "LibRaw"
 
 #: ../build/src/preferences_gen.h:3378 ../tools/generate_prefs.xsl:314
@@ -853,13 +856,13 @@ msgstr ""
 "por Rawspeed."
 
 #: ../build/src/preferences_gen.h:3523 ../tools/generate_prefs.xsl:329
-msgid "security"
-msgstr "seguridad"
+msgid "Security"
+msgstr "Seguridad"
 
 #: ../build/src/preferences_gen.h:3526 ../src/gui/preferences.c:329
 #: ../tools/generate_prefs.xsl:334
-msgid "general"
-msgstr "general"
+msgid "General"
+msgstr "General"
 
 #: ../build/src/preferences_gen.h:3546
 msgid "Ask before removing images from the library"
@@ -956,8 +959,8 @@ msgstr ""
 "esa modalidad"
 
 #: ../build/src/preferences_gen.h:3928 ../tools/generate_prefs.xsl:349
-msgid "other"
-msgstr "otros"
+msgid "Other"
+msgstr "Otros"
 
 #: ../build/src/preferences_gen.h:3948
 msgid "password storage backend to use"
@@ -983,13 +986,16 @@ msgstr ""
 "algunas cámaras graban para mantener notas de las imagenes"
 
 #: ../build/src/preferences_gen.h:4066 ../tools/generate_prefs.xsl:364
-msgid "storage"
-msgstr "almacenamiento"
+msgid "Storage"
+msgstr "Almacenamiento"
 
 #: ../build/src/preferences_gen.h:4069 ../src/control/crawler.c:730
 #: ../tools/generate_prefs.xsl:368
 msgid "database"
 msgstr "base de datos"
+
+msgid "Database"
+msgstr "Base de datos"
 
 #: ../build/src/preferences_gen.h:4089
 msgid "Database location"
@@ -1124,8 +1130,8 @@ msgstr ""
 
 #: ../build/src/preferences_gen.h:4536 ../tools/generate_prefs.xsl:394
 #, fuzzy
-msgid "privacy"
-msgstr "privado"
+msgid "Privacy"
+msgstr "Privado"
 
 #: ../build/src/preferences_gen.h:4556
 msgid "Send anonymous crash reports"
@@ -1141,12 +1147,12 @@ msgid ""
 msgstr ""
 
 #: ../build/src/preferences_gen.h:4598 ../tools/generate_prefs.xsl:409
-msgid "miscellaneous"
-msgstr "miscelánea"
+msgid "Miscellaneous"
+msgstr "Miscelánea"
 
 #: ../build/src/preferences_gen.h:4601 ../tools/generate_prefs.xsl:412
-msgid "interface"
-msgstr "interfaz"
+msgid "Interface"
+msgstr "Interfaz"
 
 #: ../build/src/preferences_gen.h:4621
 msgid "Invert the direction of the mouse vertical scroll"
@@ -1610,6 +1616,9 @@ msgstr "Desplazamiento"
 #: ../src/libs/metadata_view.c:177
 msgid "lens"
 msgstr "lente"
+
+msgid "Lens"
+msgstr "Lente"
 
 #: ../build/src/iop/introspection_blurs.c:221
 msgid "motion"
@@ -4057,6 +4066,10 @@ msgstr "ISO"
 msgid "aperture"
 msgstr "apertura"
 
+#. aperture
+msgid "Aperture"
+msgstr "Apertura"
+
 #: ../src/common/collection.c:679 ../src/libs/metadata_view.c:164
 #: ../src/libs/tools/filter.c:113
 msgid "filename"
@@ -5095,6 +5108,9 @@ msgstr[1] "¿Eliminar directorios vacíos?"
 #: ../src/libs/geotagging.c:857 ../src/libs/tagging.c:3116
 msgid "name"
 msgstr "nombre"
+
+msgid "Name"
+msgstr "Nombre"
 
 #: ../src/common/film.c:424
 msgid ""
@@ -9246,7 +9262,7 @@ msgstr "No se puede copiar el historial de una imagen no modificada"
 
 #. language
 #: ../src/gui/preferences.c:333
-msgid "interface language"
+msgid "Interface language"
 msgstr "Idioma de la interfaz"
 
 #: ../src/gui/preferences.c:348
@@ -9262,7 +9278,7 @@ msgstr ""
 "marcado con un * (necesita reiniciarse)"
 
 #: ../src/gui/preferences.c:359
-msgid "theme"
+msgid "Theme"
 msgstr "Tema"
 
 #: ../src/gui/preferences.c:388
@@ -9305,7 +9321,7 @@ msgstr ""
 
 #. checkbox to allow user to modify theme with user.css
 #: ../src/gui/preferences.c:445
-msgid "modify selected theme with CSS tweaks below"
+msgid "Modify selected theme with CSS tweaks below"
 msgstr "Modificar el tema seleccionado con el código CSS a continuación:"
 
 #: ../src/gui/preferences.c:453
@@ -9316,8 +9332,8 @@ msgstr ""
 
 #: ../src/gui/preferences.c:476
 msgctxt "usercss"
-msgid "save CSS and apply"
-msgstr "guardar CSS y aplicar"
+msgid "Save CSS and apply"
+msgstr "Guardar CSS y aplicar"
 
 #: ../src/gui/preferences.c:482
 msgid "Click to save and apply the CSS tweaks entered in this editor"
@@ -9342,7 +9358,7 @@ msgid "Enable or disable OpenCL processing for this GPU"
 msgstr ""
 
 #: ../src/gui/preferences.c:694
-msgid "pinned memory"
+msgid "Pinned memory"
 msgstr ""
 
 #: ../src/gui/preferences.c:705
@@ -9363,8 +9379,8 @@ msgstr "Se necesita reiniciar Ansel para que los cambios surtan efecto"
 
 #. Adding the outer container
 #: ../src/gui/preferences.c:961
-msgid "presets"
-msgstr "preajustes"
+msgid "Presets"
+msgstr "Preajustes"
 
 #. exif
 #: ../src/gui/preferences.c:983 ../src/gui/presets.c:630
@@ -9372,10 +9388,17 @@ msgstr "preajustes"
 msgid "model"
 msgstr "modelo"
 
+#. exif
+msgid "Model"
+msgstr "Modelo"
+
 #: ../src/gui/preferences.c:987 ../src/gui/presets.c:639
 #: ../src/libs/metadata_view.c:176
 msgid "maker"
 msgstr "fabricante"
+
+msgid "Maker"
+msgstr "Fabricante"
 
 #: ../src/gui/preferences.c:1012 ../src/iop/basicadj.c:628
 #: ../src/iop/borders.c:1059 ../src/iop/levels.c:636 ../src/iop/rgblevels.c:867
@@ -9386,7 +9409,7 @@ msgid "Auto"
 msgstr "Auto"
 
 #: ../src/gui/preferences.c:1026
-msgid "search presets list"
+msgid "Search presets list"
 msgstr "Buscar en la lista de preajustes"
 
 #: ../src/gui/preferences.c:1027
@@ -9399,12 +9422,12 @@ msgstr ""
 
 #: ../src/gui/preferences.c:1033
 msgctxt "preferences"
-msgid "import..."
-msgstr "importar..."
+msgid "Import..."
+msgstr "Importar..."
 
 #: ../src/gui/preferences.c:1037
 msgctxt "preferences"
-msgid "export..."
+msgid "Export..."
 msgstr "Exportar..."
 
 #: ../src/gui/preferences.c:1173
@@ -9431,6 +9454,9 @@ msgstr "Archivos predefinidos de Ansel"
 #: ../src/libs/styles.c:566
 msgid "all files"
 msgstr "todos los archivos"
+
+msgid "All files"
+msgstr "Todos los archivos"
 
 #: ../src/gui/presets.c:107
 msgid "non-raw"
@@ -22736,7 +22762,7 @@ msgstr "</xsl:text><xsl:value-of select="
 
 #: ../tools/generate_prefs.xsl:759
 #, c-format
-msgid "double click to reset to `%.03f'"
+msgid "Double click to reset to `%.03f'"
 msgstr "Doble clic para restablecer a '%03f'"
 
 #: ../tools/generate_prefs.xsl:773 ../tools/generate_prefs.xsl:790

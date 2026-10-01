@@ -448,13 +448,13 @@ msgstr ""
 #: ../build/src/preferences_gen.h:5064 ../build/src/preferences_gen.h:5116
 #: ../build/src/preferences_gen.h:5194 ../build/src/preferences_gen.h:5241
 #: ../tools/generate_prefs.xsl:134 ../tools/generate_prefs.xsl:490
-msgid "this setting has been modified"
-msgstr "ĉi tiu agordo estas ŝanĝita"
+msgid "This setting has been modified"
+msgstr "Ĉi tiu agordo estas ŝanĝita"
 
 #: ../build/src/preferences_gen.h:2421 ../tools/generate_prefs.xsl:192
 #, fuzzy
-msgid "views"
-msgstr "antaŭvido"
+msgid "Views"
+msgstr "Antaŭvido"
 
 #. TODO: look for active view. Do we know it at init time ?
 #: ../build/src/preferences_gen.h:2424 ../src/libs/lib.c:907
@@ -495,8 +495,8 @@ msgstr "Kaŝi enkonstruitajn zapagordarojn por utilaj moduloj"
 #: ../tools/generate_prefs.xsl:694 ../tools/generate_prefs.xsl:739
 #: ../tools/generate_prefs.xsl:773 ../tools/generate_prefs.xsl:817
 #, c-format
-msgid "double click to reset to `%s'"
-msgstr "duoble alklaku por reagordi al `%s '"
+msgid "Double click to reset to `%s'"
+msgstr "Duoble alklaku por reagordi al `%s '"
 
 #: ../build/src/preferences_gen.h:2458
 msgid "Hides built-in presets of utility modules in presets menu."
@@ -607,12 +607,12 @@ msgstr "bildoprezento"
 
 #: ../build/src/preferences_gen.h:2837 ../src/gui/preferences.c:594
 #: ../tools/generate_prefs.xsl:270
-msgid "processing"
-msgstr "prilaborante"
+msgid "Processing"
+msgstr "Prilaborante"
 
 #: ../build/src/preferences_gen.h:2840 ../tools/generate_prefs.xsl:274
-msgid "image processing"
-msgstr "prilaborante bildon"
+msgid "Image processing"
+msgstr "Prilaborante bildon"
 
 #: ../build/src/preferences_gen.h:2860
 msgid "Always use LittleCMS 2 to apply output color profile"
@@ -649,8 +649,8 @@ msgid ""
 msgstr ""
 
 #: ../build/src/preferences_gen.h:3026
-msgid "3D lut root folder"
-msgstr "radika dosierujo por 3D lut-oj"
+msgid "3D LUT root folder"
+msgstr "Radika dosierujo por 3D LUT-oj"
 
 #: ../build/src/preferences_gen.h:3031 ../src/control/jobs/control_jobs.c:1765
 #: ../src/control/jobs/control_jobs.c:1827 ../src/gui/preferences.c:1223
@@ -673,8 +673,8 @@ msgstr ""
 "moduloj. (bezonas rekomencon)."
 
 #: ../build/src/preferences_gen.h:3057 ../tools/generate_prefs.xsl:290
-msgid "cpu / gpu / memory"
-msgstr "cpu / gpu / memoro"
+msgid "CPU / GPU / memory"
+msgstr "CPU / GPU / memoro"
 
 #: ../build/src/preferences_gen.h:3077
 msgid "CPU cores"
@@ -687,8 +687,8 @@ msgstr ""
 #: ../build/src/preferences_gen.h:5140 ../build/src/preferences_gen.h:5218
 #: ../build/src/preferences_gen.h:5265 ../tools/generate_prefs.xsl:717
 #, c-format
-msgid "double click to reset to `%d'"
-msgstr "duoble alklaku por reagordi al `%d '"
+msgid "Double click to reset to `%d'"
+msgstr "Duoble alklaku por reagordi al `%d '"
 
 #: ../build/src/preferences_gen.h:3100
 msgid ""
@@ -767,18 +767,21 @@ msgid ""
 msgstr ""
 
 #: ../build/src/preferences_gen.h:3357 ../tools/generate_prefs.xsl:511
-msgid "not available"
-msgstr "ne disponebla"
+msgid "Not available"
+msgstr "Ne disponebla"
 
 #: ../build/src/preferences_gen.h:3360 ../build/src/preferences_gen.h:3364
 #: ../tools/generate_prefs.xsl:514 ../tools/generate_prefs.xsl:518
-msgid "not available on this system"
-msgstr "ne disponebla en ĉi tiu sistemo"
+msgid "Not available on this system"
+msgstr "Ne disponebla en ĉi tiu sistemo"
 
 #: ../build/src/preferences_gen.h:3373 ../src/common/image.h:269
 #: ../tools/generate_prefs.xsl:309
 msgid "libraw"
 msgstr "libraw"
+
+msgid "LibRaw"
+msgstr "LibRaw"
 
 #: ../build/src/preferences_gen.h:3378 ../tools/generate_prefs.xsl:314
 msgid ""
@@ -823,13 +826,13 @@ msgid ""
 msgstr ""
 
 #: ../build/src/preferences_gen.h:3523 ../tools/generate_prefs.xsl:329
-msgid "security"
-msgstr "sekureco"
+msgid "Security"
+msgstr "Sekureco"
 
 #: ../build/src/preferences_gen.h:3526 ../src/gui/preferences.c:329
 #: ../tools/generate_prefs.xsl:334
-msgid "general"
-msgstr "ĝenerale"
+msgid "General"
+msgstr "Ĝenerale"
 
 #: ../build/src/preferences_gen.h:3546
 msgid "Ask before removing images from the library"
@@ -923,8 +926,8 @@ msgid "Will ask for confirmation before exporting files in overwrite mode"
 msgstr "Petos konfirmon antaŭ ol eksporti dosierojn per anstataŭiga reĝimo"
 
 #: ../build/src/preferences_gen.h:3928 ../tools/generate_prefs.xsl:349
-msgid "other"
-msgstr "alia"
+msgid "Other"
+msgstr "Alia"
 
 #: ../build/src/preferences_gen.h:3948
 msgid "password storage backend to use"
@@ -949,13 +952,16 @@ msgstr ""
 "fotiloj registras, por konservi notojn por bildoj"
 
 #: ../build/src/preferences_gen.h:4066 ../tools/generate_prefs.xsl:364
-msgid "storage"
-msgstr "stokado"
+msgid "Storage"
+msgstr "Stokado"
 
 #: ../build/src/preferences_gen.h:4069 ../src/control/crawler.c:730
 #: ../tools/generate_prefs.xsl:368
 msgid "database"
 msgstr "datumbazo"
+
+msgid "Database"
+msgstr "Datumbazo"
 
 #: ../build/src/preferences_gen.h:4089
 #, fuzzy
@@ -1079,8 +1085,8 @@ msgstr ""
 
 #: ../build/src/preferences_gen.h:4536 ../tools/generate_prefs.xsl:394
 #, fuzzy
-msgid "privacy"
-msgstr "private"
+msgid "Privacy"
+msgstr "Private"
 
 #: ../build/src/preferences_gen.h:4556
 msgid "Send anonymous crash reports"
@@ -1096,12 +1102,12 @@ msgid ""
 msgstr ""
 
 #: ../build/src/preferences_gen.h:4598 ../tools/generate_prefs.xsl:409
-msgid "miscellaneous"
-msgstr "diversaĵoj"
+msgid "Miscellaneous"
+msgstr "Diversaĵoj"
 
 #: ../build/src/preferences_gen.h:4601 ../tools/generate_prefs.xsl:412
-msgid "interface"
-msgstr "interfaco"
+msgid "Interface"
+msgstr "Interfaco"
 
 #: ../build/src/preferences_gen.h:4621
 msgid "Invert the direction of the mouse vertical scroll"
@@ -1546,6 +1552,9 @@ msgstr "Ofseto"
 #: ../src/libs/metadata_view.c:177
 msgid "lens"
 msgstr "lenso"
+
+msgid "Lens"
+msgstr "Lenso"
 
 #: ../build/src/iop/introspection_blurs.c:221
 msgid "motion"
@@ -3996,6 +4005,10 @@ msgstr "ISO"
 msgid "aperture"
 msgstr "aperturo"
 
+#. aperture
+msgid "Aperture"
+msgstr "Aperturo"
+
 #: ../src/common/collection.c:679 ../src/libs/metadata_view.c:164
 #: ../src/libs/tools/filter.c:113
 msgid "filename"
@@ -4995,6 +5008,9 @@ msgstr[1] "Forigi malplenajn dosierujojn?"
 msgid "name"
 msgstr "nomo"
 
+msgid "Name"
+msgstr "Nomo"
+
 #: ../src/common/film.c:424
 msgid ""
 "Cannot remove film roll having local copies with non accessible originals"
@@ -5164,7 +5180,7 @@ msgstr ""
 #: ../src/common/history_merge_gui.c:1397 ../src/gui/hist_dialog.c:237
 #, fuzzy
 msgid "Module"
-msgstr "modulo"
+msgstr "Modulo"
 
 #: ../src/common/history_merge_gui.c:1405
 #, fuzzy
@@ -6093,7 +6109,7 @@ msgstr "%id %02dh %02dm %02ds"
 
 #: ../src/control/crawler.c:729
 msgid "XMP"
-msgstr ""
+msgstr "Xmp"
 
 #: ../src/control/crawler.c:747
 msgid "path"
@@ -9107,8 +9123,8 @@ msgstr "Ne povas kopii historion el senŝanĝa bildo"
 
 #. language
 #: ../src/gui/preferences.c:333
-msgid "interface language"
-msgstr "interfaca lingvo"
+msgid "Interface language"
+msgstr "Interfaca lingvo"
 
 #: ../src/gui/preferences.c:348
 msgid "Double-click to reset to the system language"
@@ -9123,8 +9139,8 @@ msgstr ""
 "* (bezonas rekomencon)"
 
 #: ../src/gui/preferences.c:359
-msgid "theme"
-msgstr "temo"
+msgid "Theme"
+msgstr "Temo"
 
 #: ../src/gui/preferences.c:388
 msgid "Set the theme for the user interface"
@@ -9166,8 +9182,8 @@ msgstr ""
 
 #. checkbox to allow user to modify theme with user.css
 #: ../src/gui/preferences.c:445
-msgid "modify selected theme with CSS tweaks below"
-msgstr "modifi elektitan temon per CSS-ŝanĝoj sube"
+msgid "Modify selected theme with CSS tweaks below"
+msgstr "Modifi elektitan temon per CSS-ŝanĝoj sube"
 
 #: ../src/gui/preferences.c:453
 msgid "Modify theme with CSS keyed below (saved to user.css)"
@@ -9175,8 +9191,8 @@ msgstr "Modifi temon per CSS-klavita sube (konservita en user.css)"
 
 #: ../src/gui/preferences.c:476
 msgctxt "usercss"
-msgid "save CSS and apply"
-msgstr "konservi CSS kaj apliki"
+msgid "Save CSS and apply"
+msgstr "Konservi CSS kaj apliki"
 
 #: ../src/gui/preferences.c:482
 msgid "Click to save and apply the CSS tweaks entered in this editor"
@@ -9203,7 +9219,7 @@ msgid "Enable or disable OpenCL processing for this GPU"
 msgstr ""
 
 #: ../src/gui/preferences.c:694
-msgid "pinned memory"
+msgid "Pinned memory"
 msgstr ""
 
 #: ../src/gui/preferences.c:705
@@ -9224,8 +9240,8 @@ msgstr ""
 
 #. Adding the outer container
 #: ../src/gui/preferences.c:961
-msgid "presets"
-msgstr "zapagordaroj"
+msgid "Presets"
+msgstr "Zapagordaroj"
 
 #. exif
 #: ../src/gui/preferences.c:983 ../src/gui/presets.c:630
@@ -9233,10 +9249,17 @@ msgstr "zapagordaroj"
 msgid "model"
 msgstr "modelo"
 
+#. exif
+msgid "Model"
+msgstr "Modelo"
+
 #: ../src/gui/preferences.c:987 ../src/gui/presets.c:639
 #: ../src/libs/metadata_view.c:176
 msgid "maker"
 msgstr "produktinto"
+
+msgid "Maker"
+msgstr "Produktinto"
 
 #: ../src/gui/preferences.c:1012 ../src/iop/basicadj.c:628
 #: ../src/iop/borders.c:1059 ../src/iop/levels.c:636 ../src/iop/rgblevels.c:867
@@ -9247,8 +9270,8 @@ msgid "Auto"
 msgstr "Aŭto"
 
 #: ../src/gui/preferences.c:1026
-msgid "search presets list"
-msgstr "serĉi liston de zapagordaroj"
+msgid "Search presets list"
+msgstr "Serĉi liston de zapagordaroj"
 
 #: ../src/gui/preferences.c:1027
 msgid ""
@@ -9260,13 +9283,13 @@ msgstr ""
 
 #: ../src/gui/preferences.c:1033
 msgctxt "preferences"
-msgid "import..."
-msgstr "importi..."
+msgid "Import..."
+msgstr "Importi..."
 
 #: ../src/gui/preferences.c:1037
 msgctxt "preferences"
-msgid "export..."
-msgstr "eksporti..."
+msgid "Export..."
+msgstr "Eksporti..."
 
 #: ../src/gui/preferences.c:1173
 #, c-format
@@ -9293,6 +9316,9 @@ msgstr "elekti dosieron"
 #: ../src/libs/styles.c:566
 msgid "all files"
 msgstr "ĉiuj dosieroj"
+
+msgid "All files"
+msgstr "Ĉiuj dosieroj"
 
 #: ../src/gui/presets.c:107
 msgid "non-raw"
@@ -21120,7 +21146,7 @@ msgstr "Apliki la elektitajn stilojn en la supra listo al elektitaj bildoj"
 
 #: ../src/libs/tagging.c:144
 msgid "Tags"
-msgstr ""
+msgstr "Etikedoj"
 
 #: ../src/libs/tagging.c:1207
 msgid "attach tag to all"
@@ -22340,8 +22366,8 @@ msgstr ""
 
 #: ../tools/generate_prefs.xsl:759
 #, fuzzy, c-format
-msgid "double click to reset to `%.03f'"
-msgstr "duoble klaki por reagordi al `%f'"
+msgid "Double click to reset to `%.03f'"
+msgstr "Duoble klaki por reagordi al `%f'"
 
 #: ../tools/generate_prefs.xsl:773 ../tools/generate_prefs.xsl:790
 #: ../tools/generate_prefs.xsl:817

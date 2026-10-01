@@ -454,13 +454,13 @@ msgstr ""
 #: ../build/src/preferences_gen.h:5064 ../build/src/preferences_gen.h:5116
 #: ../build/src/preferences_gen.h:5194 ../build/src/preferences_gen.h:5241
 #: ../tools/generate_prefs.xsl:134 ../tools/generate_prefs.xsl:490
-msgid "this setting has been modified"
-msgstr "toto nastavenie bolo modifikované"
+msgid "This setting has been modified"
+msgstr "Toto nastavenie bolo modifikované"
 
 #: ../build/src/preferences_gen.h:2421 ../tools/generate_prefs.xsl:192
 #, fuzzy
-msgid "views"
-msgstr "iné pohľady"
+msgid "Views"
+msgstr "Iné pohľady"
 
 #. TODO: look for active view. Do we know it at init time ?
 #: ../build/src/preferences_gen.h:2424 ../src/libs/lib.c:907
@@ -501,8 +501,8 @@ msgstr "Skryť zabudované predvoľby v podporných moduloch"
 #: ../tools/generate_prefs.xsl:694 ../tools/generate_prefs.xsl:739
 #: ../tools/generate_prefs.xsl:773 ../tools/generate_prefs.xsl:817
 #, c-format
-msgid "double click to reset to `%s'"
-msgstr "dvojitým klinutím obnovíte na „%s“"
+msgid "Double click to reset to `%s'"
+msgstr "Dvojitým klinutím obnovíte na „%s“"
 
 #: ../build/src/preferences_gen.h:2458
 msgid "Hides built-in presets of utility modules in presets menu."
@@ -612,13 +612,13 @@ msgstr "prezentácia"
 
 #: ../build/src/preferences_gen.h:2837 ../src/gui/preferences.c:594
 #: ../tools/generate_prefs.xsl:270
-msgid "processing"
-msgstr "spracovanie"
+msgid "Processing"
+msgstr "Spracovanie"
 
 #: ../build/src/preferences_gen.h:2840 ../tools/generate_prefs.xsl:274
 #, fuzzy
-msgid "image processing"
-msgstr "spracovanie"
+msgid "Image processing"
+msgstr "Spracovanie"
 
 #: ../build/src/preferences_gen.h:2860
 msgid "Always use LittleCMS 2 to apply output color profile"
@@ -652,7 +652,7 @@ msgid ""
 msgstr ""
 
 #: ../build/src/preferences_gen.h:3026
-msgid "3D lut root folder"
+msgid "3D LUT root folder"
 msgstr "3D LUT koreňový priečinok"
 
 #: ../build/src/preferences_gen.h:3031 ../src/control/jobs/control_jobs.c:1765
@@ -676,8 +676,8 @@ msgstr ""
 "lut3d. (nutný reštart)"
 
 #: ../build/src/preferences_gen.h:3057 ../tools/generate_prefs.xsl:290
-msgid "cpu / gpu / memory"
-msgstr "cpu / gpu / pamäť"
+msgid "CPU / GPU / memory"
+msgstr "CPU / GPU / pamäť"
 
 #: ../build/src/preferences_gen.h:3077
 msgid "CPU cores"
@@ -690,8 +690,8 @@ msgstr ""
 #: ../build/src/preferences_gen.h:5140 ../build/src/preferences_gen.h:5218
 #: ../build/src/preferences_gen.h:5265 ../tools/generate_prefs.xsl:717
 #, c-format
-msgid "double click to reset to `%d'"
-msgstr "dvojklikom obnovíte na „%d“"
+msgid "Double click to reset to `%d'"
+msgstr "Dvojklikom obnovíte na „%d“"
 
 #: ../build/src/preferences_gen.h:3100
 msgid ""
@@ -770,17 +770,20 @@ msgid ""
 msgstr ""
 
 #: ../build/src/preferences_gen.h:3357 ../tools/generate_prefs.xsl:511
-msgid "not available"
-msgstr "nie je k dostupné"
+msgid "Not available"
+msgstr "Nie je k dostupné"
 
 #: ../build/src/preferences_gen.h:3360 ../build/src/preferences_gen.h:3364
 #: ../tools/generate_prefs.xsl:514 ../tools/generate_prefs.xsl:518
-msgid "not available on this system"
-msgstr "nie je k dispozícii v tomto systéme"
+msgid "Not available on this system"
+msgstr "Nie je k dispozícii v tomto systéme"
 
 #: ../build/src/preferences_gen.h:3373 ../src/common/image.h:269
 #: ../tools/generate_prefs.xsl:309
 msgid "libraw"
+msgstr ""
+
+msgid "LibRaw"
 msgstr ""
 
 #: ../build/src/preferences_gen.h:3378 ../tools/generate_prefs.xsl:314
@@ -826,13 +829,13 @@ msgid ""
 msgstr ""
 
 #: ../build/src/preferences_gen.h:3523 ../tools/generate_prefs.xsl:329
-msgid "security"
-msgstr "zabezpečenie"
+msgid "Security"
+msgstr "Zabezpečenie"
 
 #: ../build/src/preferences_gen.h:3526 ../src/gui/preferences.c:329
 #: ../tools/generate_prefs.xsl:334
-msgid "general"
-msgstr "všeobecné"
+msgid "General"
+msgstr "Všeobecné"
 
 #: ../build/src/preferences_gen.h:3546
 #, fuzzy
@@ -933,8 +936,8 @@ msgstr ""
 
 #: ../build/src/preferences_gen.h:3928 ../tools/generate_prefs.xsl:349
 #, fuzzy
-msgid "other"
-msgstr "zlievať"
+msgid "Other"
+msgstr "Zlievať"
 
 #: ../build/src/preferences_gen.h:3948
 msgid "password storage backend to use"
@@ -961,13 +964,16 @@ msgstr ""
 "obrázku"
 
 #: ../build/src/preferences_gen.h:4066 ../tools/generate_prefs.xsl:364
-msgid "storage"
-msgstr "úložisko"
+msgid "Storage"
+msgstr "Úložisko"
 
 #: ../build/src/preferences_gen.h:4069 ../src/control/crawler.c:730
 #: ../tools/generate_prefs.xsl:368
 msgid "database"
 msgstr "databáza"
+
+msgid "Database"
+msgstr "Databáza"
 
 #: ../build/src/preferences_gen.h:4089
 #, fuzzy
@@ -1083,8 +1089,8 @@ msgstr ""
 
 #: ../build/src/preferences_gen.h:4536 ../tools/generate_prefs.xsl:394
 #, fuzzy
-msgid "privacy"
-msgstr "súkromný"
+msgid "Privacy"
+msgstr "Súkromný"
 
 #: ../build/src/preferences_gen.h:4556
 msgid "Send anonymous crash reports"
@@ -1100,12 +1106,12 @@ msgid ""
 msgstr ""
 
 #: ../build/src/preferences_gen.h:4598 ../tools/generate_prefs.xsl:409
-msgid "miscellaneous"
-msgstr "rôzne"
+msgid "Miscellaneous"
+msgstr "Rôzne"
 
 #: ../build/src/preferences_gen.h:4601 ../tools/generate_prefs.xsl:412
-msgid "interface"
-msgstr "rozhranie"
+msgid "Interface"
+msgstr "Rozhranie"
 
 #: ../build/src/preferences_gen.h:4621
 msgid "Invert the direction of the mouse vertical scroll"
@@ -1550,6 +1556,9 @@ msgstr "Posun"
 #: ../src/libs/metadata_view.c:177
 msgid "lens"
 msgstr "objektív"
+
+msgid "Lens"
+msgstr "Objektív"
 
 #: ../build/src/iop/introspection_blurs.c:221
 #, fuzzy
@@ -4081,6 +4090,10 @@ msgstr "ISO"
 msgid "aperture"
 msgstr "clona"
 
+#. aperture
+msgid "Aperture"
+msgstr "Clona"
+
 #: ../src/common/collection.c:679 ../src/libs/metadata_view.c:164
 #: ../src/libs/tools/filter.c:113
 msgid "filename"
@@ -5089,6 +5102,9 @@ msgstr[2] "Odstrániť prázdne priečinky?"
 msgid "name"
 msgstr "názov"
 
+msgid "Name"
+msgstr "Názov"
+
 #: ../src/common/film.c:424
 msgid ""
 "Cannot remove film roll having local copies with non accessible originals"
@@ -5257,7 +5273,7 @@ msgstr ""
 #: ../src/common/history_merge_gui.c:1397 ../src/gui/hist_dialog.c:237
 #, fuzzy
 msgid "Module"
-msgstr "modul"
+msgstr "Modul"
 
 #: ../src/common/history_merge_gui.c:1405
 #, fuzzy
@@ -6183,7 +6199,7 @@ msgstr ""
 
 #: ../src/control/crawler.c:729
 msgid "XMP"
-msgstr ""
+msgstr "Xmp"
 
 #: ../src/control/crawler.c:747
 msgid "path"
@@ -9201,8 +9217,8 @@ msgstr "Nemôžem kopírovať históriu nezmeneného obrázka"
 
 #. language
 #: ../src/gui/preferences.c:333
-msgid "interface language"
-msgstr "jazyk rozhrania"
+msgid "Interface language"
+msgstr "Jazyk rozhrania"
 
 #: ../src/gui/preferences.c:348
 #, fuzzy
@@ -9218,8 +9234,8 @@ msgstr ""
 "označené *. (vyžaduje reštart)"
 
 #: ../src/gui/preferences.c:359
-msgid "theme"
-msgstr "téma vzhľadu"
+msgid "Theme"
+msgstr "Téma vzhľadu"
 
 #: ../src/gui/preferences.c:388
 msgid "Set the theme for the user interface"
@@ -9260,8 +9276,8 @@ msgstr ""
 
 #. checkbox to allow user to modify theme with user.css
 #: ../src/gui/preferences.c:445
-msgid "modify selected theme with CSS tweaks below"
-msgstr "modifikovať vybranú tému nižšie uvedenými úpravami CSS"
+msgid "Modify selected theme with CSS tweaks below"
+msgstr "Modifikovať vybranú tému nižšie uvedenými úpravami CSS"
 
 #: ../src/gui/preferences.c:453
 msgid "Modify theme with CSS keyed below (saved to user.css)"
@@ -9269,7 +9285,7 @@ msgstr "Modifikovať tému pomocou CSS vloženým nižšie (uložené do \"user.
 
 #: ../src/gui/preferences.c:476
 msgctxt "usercss"
-msgid "save CSS and apply"
+msgid "Save CSS and apply"
 msgstr ""
 
 #: ../src/gui/preferences.c:482
@@ -9296,7 +9312,7 @@ msgid "Enable or disable OpenCL processing for this GPU"
 msgstr ""
 
 #: ../src/gui/preferences.c:694
-msgid "pinned memory"
+msgid "Pinned memory"
 msgstr ""
 
 #: ../src/gui/preferences.c:705
@@ -9317,8 +9333,8 @@ msgstr ""
 
 #. Adding the outer container
 #: ../src/gui/preferences.c:961
-msgid "presets"
-msgstr "predvoľby"
+msgid "Presets"
+msgstr "Predvoľby"
 
 #. exif
 #: ../src/gui/preferences.c:983 ../src/gui/presets.c:630
@@ -9326,10 +9342,17 @@ msgstr "predvoľby"
 msgid "model"
 msgstr "model"
 
+#. exif
+msgid "Model"
+msgstr "Model"
+
 #: ../src/gui/preferences.c:987 ../src/gui/presets.c:639
 #: ../src/libs/metadata_view.c:176
 msgid "maker"
 msgstr "výrobca"
+
+msgid "Maker"
+msgstr "Výrobca"
 
 #: ../src/gui/preferences.c:1012 ../src/iop/basicadj.c:628
 #: ../src/iop/borders.c:1059 ../src/iop/levels.c:636 ../src/iop/rgblevels.c:867
@@ -9341,8 +9364,8 @@ msgstr "Auto"
 
 #: ../src/gui/preferences.c:1026
 #, fuzzy
-msgid "search presets list"
-msgstr "polomer hľadania"
+msgid "Search presets list"
+msgstr "Polomer hľadania"
 
 #: ../src/gui/preferences.c:1027
 msgid ""
@@ -9352,14 +9375,14 @@ msgstr ""
 
 #: ../src/gui/preferences.c:1033
 msgctxt "preferences"
-msgid "import..."
-msgstr "importovať..."
+msgid "Import..."
+msgstr "Importovať..."
 
 #: ../src/gui/preferences.c:1037
 #, fuzzy
 msgctxt "preferences"
-msgid "export..."
-msgstr "exportovať..."
+msgid "Export..."
+msgstr "Exportovať..."
 
 #: ../src/gui/preferences.c:1173
 #, fuzzy, c-format
@@ -9386,6 +9409,9 @@ msgstr "vybrať súbor"
 #: ../src/libs/styles.c:566
 msgid "all files"
 msgstr "všetky súbory"
+
+msgid "All files"
+msgstr "Všetky súbory"
 
 #: ../src/gui/presets.c:107
 msgid "non-raw"
@@ -21041,7 +21067,7 @@ msgstr "Použiť štýly vybrané v zozname vyššie na vybrané snímky"
 
 #: ../src/libs/tagging.c:144
 msgid "Tags"
-msgstr ""
+msgstr "Štítky"
 
 #: ../src/libs/tagging.c:1207
 msgid "attach tag to all"
@@ -22255,8 +22281,8 @@ msgstr ""
 
 #: ../tools/generate_prefs.xsl:759
 #, fuzzy, c-format
-msgid "double click to reset to `%.03f'"
-msgstr "dvojklik obnoví `%f'"
+msgid "Double click to reset to `%.03f'"
+msgstr "Dvojklik obnoví `%f'"
 
 #: ../tools/generate_prefs.xsl:773 ../tools/generate_prefs.xsl:790
 #: ../tools/generate_prefs.xsl:817

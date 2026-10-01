@@ -443,12 +443,12 @@ msgstr ""
 #: ../build/src/preferences_gen.h:5064 ../build/src/preferences_gen.h:5116
 #: ../build/src/preferences_gen.h:5194 ../build/src/preferences_gen.h:5241
 #: ../tools/generate_prefs.xsl:134 ../tools/generate_prefs.xsl:490
-msgid "this setting has been modified"
+msgid "This setting has been modified"
 msgstr "הגדרה זו שונתה"
 
 #: ../build/src/preferences_gen.h:2421 ../tools/generate_prefs.xsl:192
 #, fuzzy
-msgid "views"
+msgid "Views"
 msgstr "תצוגה מקדימה"
 
 #. TODO: look for active view. Do we know it at init time ?
@@ -490,7 +490,7 @@ msgstr "החבא פריסטים מוטמעים עבור מודולי שירות"
 #: ../tools/generate_prefs.xsl:694 ../tools/generate_prefs.xsl:739
 #: ../tools/generate_prefs.xsl:773 ../tools/generate_prefs.xsl:817
 #, c-format
-msgid "double click to reset to `%s'"
+msgid "Double click to reset to `%s'"
 msgstr "לחיצה כפולה לאתחל ל `%s'"
 
 #: ../build/src/preferences_gen.h:2458
@@ -598,11 +598,11 @@ msgstr "מצגת שקופיות"
 
 #: ../build/src/preferences_gen.h:2837 ../src/gui/preferences.c:594
 #: ../tools/generate_prefs.xsl:270
-msgid "processing"
+msgid "Processing"
 msgstr "מעבד"
 
 #: ../build/src/preferences_gen.h:2840 ../tools/generate_prefs.xsl:274
-msgid "image processing"
+msgid "Image processing"
 msgstr "עיבוד תמונה"
 
 #: ../build/src/preferences_gen.h:2860
@@ -640,7 +640,7 @@ msgid ""
 msgstr ""
 
 #: ../build/src/preferences_gen.h:3026
-msgid "3D lut root folder"
+msgid "3D LUT root folder"
 msgstr ""
 
 #: ../build/src/preferences_gen.h:3031 ../src/control/jobs/control_jobs.c:1765
@@ -662,8 +662,8 @@ msgid ""
 msgstr ""
 
 #: ../build/src/preferences_gen.h:3057 ../tools/generate_prefs.xsl:290
-msgid "cpu / gpu / memory"
-msgstr "cpu / gpu / memory"
+msgid "CPU / GPU / memory"
+msgstr "CPU / GPU / memory"
 
 #: ../build/src/preferences_gen.h:3077
 msgid "CPU cores"
@@ -676,7 +676,7 @@ msgstr ""
 #: ../build/src/preferences_gen.h:5140 ../build/src/preferences_gen.h:5218
 #: ../build/src/preferences_gen.h:5265 ../tools/generate_prefs.xsl:717
 #, c-format
-msgid "double click to reset to `%d'"
+msgid "Double click to reset to `%d'"
 msgstr "לחיצה כפולה לאתחל ל `%d'"
 
 #: ../build/src/preferences_gen.h:3100
@@ -756,18 +756,21 @@ msgid ""
 msgstr ""
 
 #: ../build/src/preferences_gen.h:3357 ../tools/generate_prefs.xsl:511
-msgid "not available"
+msgid "Not available"
 msgstr "לא זמין"
 
 #: ../build/src/preferences_gen.h:3360 ../build/src/preferences_gen.h:3364
 #: ../tools/generate_prefs.xsl:514 ../tools/generate_prefs.xsl:518
-msgid "not available on this system"
+msgid "Not available on this system"
 msgstr "לא זמין על מערכת זו"
 
 #: ../build/src/preferences_gen.h:3373 ../src/common/image.h:269
 #: ../tools/generate_prefs.xsl:309
 msgid "libraw"
 msgstr "libraw"
+
+msgid "LibRaw"
+msgstr "LibRaw"
 
 #: ../build/src/preferences_gen.h:3378 ../tools/generate_prefs.xsl:314
 msgid ""
@@ -812,12 +815,12 @@ msgid ""
 msgstr ""
 
 #: ../build/src/preferences_gen.h:3523 ../tools/generate_prefs.xsl:329
-msgid "security"
+msgid "Security"
 msgstr "ביטחון"
 
 #: ../build/src/preferences_gen.h:3526 ../src/gui/preferences.c:329
 #: ../tools/generate_prefs.xsl:334
-msgid "general"
+msgid "General"
 msgstr "כללי"
 
 #: ../build/src/preferences_gen.h:3546
@@ -909,7 +912,7 @@ msgid "Will ask for confirmation before exporting files in overwrite mode"
 msgstr "יתבקש אשרור לפני ייצוא קבצים במצב שכתוב"
 
 #: ../build/src/preferences_gen.h:3928 ../tools/generate_prefs.xsl:349
-msgid "other"
+msgid "Other"
 msgstr "אחר"
 
 #: ../build/src/preferences_gen.h:3948
@@ -934,12 +937,15 @@ msgstr ""
 "הערות על תמונות"
 
 #: ../build/src/preferences_gen.h:4066 ../tools/generate_prefs.xsl:364
-msgid "storage"
+msgid "Storage"
 msgstr "אחסון"
 
 #: ../build/src/preferences_gen.h:4069 ../src/control/crawler.c:730
 #: ../tools/generate_prefs.xsl:368
 msgid "database"
+msgstr "מסד נתונים"
+
+msgid "Database"
 msgstr "מסד נתונים"
 
 #: ../build/src/preferences_gen.h:4089
@@ -1053,7 +1059,7 @@ msgstr ""
 
 #: ../build/src/preferences_gen.h:4536 ../tools/generate_prefs.xsl:394
 #, fuzzy
-msgid "privacy"
+msgid "Privacy"
 msgstr "פרטי"
 
 #: ../build/src/preferences_gen.h:4556
@@ -1070,11 +1076,11 @@ msgid ""
 msgstr ""
 
 #: ../build/src/preferences_gen.h:4598 ../tools/generate_prefs.xsl:409
-msgid "miscellaneous"
+msgid "Miscellaneous"
 msgstr "שונות"
 
 #: ../build/src/preferences_gen.h:4601 ../tools/generate_prefs.xsl:412
-msgid "interface"
+msgid "Interface"
 msgstr "ממשק"
 
 #: ../build/src/preferences_gen.h:4621
@@ -1514,6 +1520,9 @@ msgstr "הסחה"
 #: ../src/gui/preferences.c:991 ../src/gui/presets.c:648
 #: ../src/libs/metadata_view.c:177
 msgid "lens"
+msgstr "עדשה"
+
+msgid "Lens"
 msgstr "עדשה"
 
 #: ../build/src/iop/introspection_blurs.c:221
@@ -3957,6 +3966,10 @@ msgstr "ISO"
 msgid "aperture"
 msgstr "מפתח"
 
+#. aperture
+msgid "Aperture"
+msgstr "מפתח"
+
 #: ../src/common/collection.c:679 ../src/libs/metadata_view.c:164
 #: ../src/libs/tools/filter.c:113
 msgid "filename"
@@ -4952,6 +4965,9 @@ msgstr[1] "הסר ספריות ריקות?"
 #: ../src/gui/styles_dialog.c:466 ../src/libs/collect.c:3003
 #: ../src/libs/geotagging.c:857 ../src/libs/tagging.c:3116
 msgid "name"
+msgstr "שם"
+
+msgid "Name"
 msgstr "שם"
 
 #: ../src/common/film.c:424
@@ -9040,7 +9056,7 @@ msgstr "לא ניתן להעתיק היסטוריה מתוך תמונה שלא �
 
 #. language
 #: ../src/gui/preferences.c:333
-msgid "interface language"
+msgid "Interface language"
 msgstr "שפת ממשק"
 
 #: ../src/gui/preferences.c:348
@@ -9054,7 +9070,7 @@ msgid ""
 msgstr "קבע את שפת הממשק. ברירת המחדל של המערכת מסומנת ב * (דורש אתחול)"
 
 #: ../src/gui/preferences.c:359
-msgid "theme"
+msgid "Theme"
 msgstr "ערכת תצוגה"
 
 #: ../src/gui/preferences.c:388
@@ -9095,7 +9111,7 @@ msgstr ""
 
 #. checkbox to allow user to modify theme with user.css
 #: ../src/gui/preferences.c:445
-msgid "modify selected theme with CSS tweaks below"
+msgid "Modify selected theme with CSS tweaks below"
 msgstr "שנה ערכת תצוגה נבחרת עם כוונוני CSS למטה"
 
 #: ../src/gui/preferences.c:453
@@ -9104,7 +9120,7 @@ msgstr "שנה ערכות תצוגה עם כוונוני CSS למטה"
 
 #: ../src/gui/preferences.c:476
 msgctxt "usercss"
-msgid "save CSS and apply"
+msgid "Save CSS and apply"
 msgstr "שמור CSS ויישם"
 
 #: ../src/gui/preferences.c:482
@@ -9131,7 +9147,7 @@ msgid "Enable or disable OpenCL processing for this GPU"
 msgstr ""
 
 #: ../src/gui/preferences.c:694
-msgid "pinned memory"
+msgid "Pinned memory"
 msgstr ""
 
 #: ../src/gui/preferences.c:705
@@ -9152,7 +9168,7 @@ msgstr ""
 
 #. Adding the outer container
 #: ../src/gui/preferences.c:961
-msgid "presets"
+msgid "Presets"
 msgstr "פריסטים"
 
 #. exif
@@ -9161,9 +9177,16 @@ msgstr "פריסטים"
 msgid "model"
 msgstr "מודל"
 
+#. exif
+msgid "Model"
+msgstr "מודל"
+
 #: ../src/gui/preferences.c:987 ../src/gui/presets.c:639
 #: ../src/libs/metadata_view.c:176
 msgid "maker"
+msgstr "יצרן"
+
+msgid "Maker"
 msgstr "יצרן"
 
 #: ../src/gui/preferences.c:1012 ../src/iop/basicadj.c:628
@@ -9175,7 +9198,7 @@ msgid "Auto"
 msgstr "אוטו'"
 
 #: ../src/gui/preferences.c:1026
-msgid "search presets list"
+msgid "Search presets list"
 msgstr "חפש ברשימת פריסטים"
 
 #: ../src/gui/preferences.c:1027
@@ -9188,12 +9211,12 @@ msgstr ""
 
 #: ../src/gui/preferences.c:1033
 msgctxt "preferences"
-msgid "import..."
+msgid "Import..."
 msgstr "ייבא."
 
 #: ../src/gui/preferences.c:1037
 msgctxt "preferences"
-msgid "export..."
+msgid "Export..."
 msgstr "ייצא..."
 
 #: ../src/gui/preferences.c:1173
@@ -9220,6 +9243,9 @@ msgstr "בחר קובץ"
 #: ../src/iop/lut3d.c:1371 ../src/libs/geotagging.c:975
 #: ../src/libs/styles.c:566
 msgid "all files"
+msgstr "כל הקבצים"
+
+msgid "All files"
 msgstr "כל הקבצים"
 
 #: ../src/gui/presets.c:107
@@ -20886,7 +20912,7 @@ msgstr "יישם את הסגנונות הנבחרים מהרשימה למעלה 
 
 #: ../src/libs/tagging.c:144
 msgid "Tags"
-msgstr ""
+msgstr "תגיות"
 
 #: ../src/libs/tagging.c:1207
 msgid "attach tag to all"
@@ -22098,7 +22124,7 @@ msgstr ""
 
 #: ../tools/generate_prefs.xsl:759
 #, fuzzy, c-format
-msgid "double click to reset to `%.03f'"
+msgid "Double click to reset to `%.03f'"
 msgstr "הקלקה כפולה לאתחל ל `%f'"
 
 #: ../tools/generate_prefs.xsl:773 ../tools/generate_prefs.xsl:790

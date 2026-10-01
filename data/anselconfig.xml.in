@@ -254,8 +254,8 @@
     <name>opencl_mandatory_timeout</name>
     <type min="100">int</type>
     <default>400</default>
-    <shortdescription>Timeout period for locking mandatory opencl device</shortdescription>
-    <longdescription>Time period (in units of 5ms) after which we give up try-locking an opencl device for mandatory use. Defaults to 400 (2 seconds).</longdescription>
+    <shortdescription>Timeout period for locking mandatory OpenCL device</shortdescription>
+    <longdescription>Time period (in units of 5ms) after which we give up try-locking an OpenCL device for mandatory use. Defaults to 400 (2 seconds).</longdescription>
   </dtconfig>
   <dtconfig>
     <name>pixelpipe_synchronization_timeout</name>
@@ -2644,7 +2644,7 @@
     <name>plugins/darkroom/lut3d/def_path</name>
     <type>dir</type>
     <default>$(home)</default>
-    <shortdescription>3D lut root folder</shortdescription>
+    <shortdescription>3D LUT root folder</shortdescription>
     <longdescription>This folder (and sub-folders) contains Lut files used by lut3d modules. (need a restart).</longdescription>
   </dtconfig>
  <dtconfig>

@@ -343,11 +343,11 @@ static void init_tab_general(GtkWidget *dialog, GtkWidget *stack, dt_gui_themetw
 
   gtk_box_pack_start(GTK_BOX(container), grid, FALSE, FALSE, 0);
 
-  gtk_stack_add_titled(GTK_STACK(stack), container, _("general"), _("general"));
+  gtk_stack_add_titled(GTK_STACK(stack), container, _("General"), _("General"));
 
   // language
 
-  GtkWidget *label = gtk_label_new(_("interface language"));
+  GtkWidget *label = gtk_label_new(_("Interface language"));
   gtk_widget_set_halign(label, GTK_ALIGN_START);
   GtkWidget *labelev = gtk_event_box_new();
   gtk_widget_add_events(labelev, GDK_BUTTON_PRESS_MASK);
@@ -373,7 +373,7 @@ static void init_tab_general(GtkWidget *dialog, GtkWidget *stack, dt_gui_themetw
 
   load_themes();
 
-  label = gtk_label_new(_("theme"));
+  label = gtk_label_new(_("Theme"));
   gtk_widget_set_halign(label, GTK_ALIGN_START);
   widget = gtk_combo_box_text_new();
   labelev = gtk_event_box_new();
@@ -415,7 +415,7 @@ static void init_tab_general(GtkWidget *dialog, GtkWidget *stack, dt_gui_themetw
   else
     gtk_widget_set_state_flags(fontsize, GTK_STATE_FLAG_NORMAL, TRUE);
 
-  label = gtk_label_new(_("use system font size"));
+  label = gtk_label_new(_("Use system font size"));
   gtk_widget_set_halign(label, GTK_ALIGN_START);
   labelev = gtk_event_box_new();
   gtk_widget_add_events(labelev, GDK_BUTTON_PRESS_MASK);
@@ -431,7 +431,7 @@ static void init_tab_general(GtkWidget *dialog, GtkWidget *stack, dt_gui_themetw
   if(dt_conf_get_float("font_size") < 5.0f || dt_conf_get_float("font_size") > 20.0f)
     dt_conf_set_float("font_size", 12.0f);
 
-  label = gtk_label_new(_("font size in points"));
+  label = gtk_label_new(_("Font size in points"));
   gtk_widget_set_halign(label, GTK_ALIGN_START);
   labelev = gtk_event_box_new();
   gtk_widget_add_events(labelev, GDK_BUTTON_PRESS_MASK);
@@ -459,7 +459,7 @@ static void init_tab_general(GtkWidget *dialog, GtkWidget *stack, dt_gui_themetw
   g_signal_connect(G_OBJECT(screen_dpi_overwrite), "value_changed", G_CALLBACK(dpi_scaling_changed_callback), 0);
 
   //checkbox to allow user to modify theme with user.css
-  label = gtk_label_new(_("modify selected theme with CSS tweaks below"));
+  label = gtk_label_new(_("Modify selected theme with CSS tweaks below"));
   gtk_widget_set_halign(label, GTK_ALIGN_START);
   tw->apply_toggle = gtk_check_button_new();
   labelev = gtk_event_box_new();
@@ -490,7 +490,7 @@ static void init_tab_general(GtkWidget *dialog, GtkWidget *stack, dt_gui_themetw
   gtk_container_add(GTK_CONTAINER(scroll), tw->css_text_view);
   gtk_box_pack_start(GTK_BOX(usercssbox), scroll, TRUE, TRUE, 0);
 
-  tw->save_button = gtk_button_new_with_label(C_("usercss", "save CSS and apply"));
+  tw->save_button = gtk_button_new_with_label(C_("usercss", "Save CSS and apply"));
   g_signal_connect(G_OBJECT(tw->save_button), "clicked", G_CALLBACK(save_usercss_callback), tw);
   g_signal_connect(G_OBJECT(dialog), "response", G_CALLBACK(usercss_dialog_callback), tw);
   GtkWidget *hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
@@ -608,7 +608,7 @@ void dt_gui_preferences_show()
   // preferences. OpenCL devices are detected at runtime, therefore their per-device switches are added
   // after the generated processing tab exists.
   {
-    GtkWidget *scroll = gtk_stack_get_child_by_name(GTK_STACK(stack), _("processing"));
+    GtkWidget *scroll = gtk_stack_get_child_by_name(GTK_STACK(stack), _("Processing"));
     GtkWidget *viewport = GTK_IS_BIN(scroll) ? gtk_bin_get_child(GTK_BIN(scroll)) : NULL;
     GtkWidget *grid = GTK_IS_BIN(viewport) ? gtk_bin_get_child(GTK_BIN(viewport)) : NULL;
 
@@ -711,7 +711,7 @@ void dt_gui_preferences_show()
                          GINT_TO_POINTER(dev));
         gtk_grid_attach(GTK_GRID(grid), enable, 2, line++, 1, 1);
 
-        GtkWidget *pinned_memory_label = gtk_label_new(_("pinned memory"));
+        GtkWidget *pinned_memory_label = gtk_label_new(_("Pinned memory"));
         gtk_widget_set_halign(pinned_memory_label, GTK_ALIGN_START);
         gtk_widget_set_hexpand(pinned_memory_label, TRUE);
         gtk_widget_set_margin_start(pinned_memory_label, DT_PIXEL_APPLY_DPI(24));
@@ -1008,7 +1008,7 @@ static void init_tab_presets(GtkWidget *stack)
   GtkTreeViewColumn *column;
 
   // Adding the outer container
-  gtk_stack_add_titled(GTK_STACK(stack), container, _("presets"), _("presets"));
+  gtk_stack_add_titled(GTK_STACK(stack), container, _("Presets"), _("Presets"));
 
   tree_insert_presets(model);
 
@@ -1018,7 +1018,7 @@ static void init_tab_presets(GtkWidget *stack)
 
   // Setting up the cell renderers
   renderer = gtk_cell_renderer_text_new();
-  column = gtk_tree_view_column_new_with_attributes(_("module"), renderer, "text", P_MODULE_COLUMN, NULL);
+  column = gtk_tree_view_column_new_with_attributes(_("Module"), renderer, "text", P_MODULE_COLUMN, NULL);
   gtk_tree_view_append_column(tree, column);
 
   renderer = gtk_cell_renderer_pixbuf_new();
@@ -1026,19 +1026,19 @@ static void init_tab_presets(GtkWidget *stack)
   gtk_tree_view_append_column(tree, column);
 
   renderer = gtk_cell_renderer_text_new();
-  column = gtk_tree_view_column_new_with_attributes(_("name"), renderer, "text", P_NAME_COLUMN, NULL);
+  column = gtk_tree_view_column_new_with_attributes(_("Name"), renderer, "text", P_NAME_COLUMN, NULL);
   gtk_tree_view_append_column(tree, column);
 
   renderer = gtk_cell_renderer_text_new();
-  column = gtk_tree_view_column_new_with_attributes(_("model"), renderer, "text", P_MODEL_COLUMN, NULL);
+  column = gtk_tree_view_column_new_with_attributes(_("Model"), renderer, "text", P_MODEL_COLUMN, NULL);
   gtk_tree_view_append_column(tree, column);
 
   renderer = gtk_cell_renderer_text_new();
-  column = gtk_tree_view_column_new_with_attributes(_("maker"), renderer, "text", P_MAKER_COLUMN, NULL);
+  column = gtk_tree_view_column_new_with_attributes(_("Maker"), renderer, "text", P_MAKER_COLUMN, NULL);
   gtk_tree_view_append_column(tree, column);
 
   renderer = gtk_cell_renderer_text_new();
-  column = gtk_tree_view_column_new_with_attributes(_("lens"), renderer, "text", P_LENS_COLUMN, NULL);
+  column = gtk_tree_view_column_new_with_attributes(_("Lens"), renderer, "text", P_LENS_COLUMN, NULL);
   gtk_tree_view_append_column(tree, column);
 
   renderer = gtk_cell_renderer_text_new();
@@ -1046,20 +1046,20 @@ static void init_tab_presets(GtkWidget *stack)
   gtk_tree_view_append_column(tree, column);
 
   renderer = gtk_cell_renderer_text_new();
-  column = gtk_tree_view_column_new_with_attributes(_("exposure"), renderer, "text", P_EXPOSURE_COLUMN, NULL);
+  column = gtk_tree_view_column_new_with_attributes(_("Exposure"), renderer, "text", P_EXPOSURE_COLUMN, NULL);
   gtk_tree_view_append_column(tree, column);
 
   renderer = gtk_cell_renderer_text_new();
-  column = gtk_tree_view_column_new_with_attributes(_("aperture"), renderer, "text", P_APERTURE_COLUMN, NULL);
+  column = gtk_tree_view_column_new_with_attributes(_("Aperture"), renderer, "text", P_APERTURE_COLUMN, NULL);
   gtk_tree_view_append_column(tree, column);
 
   renderer = gtk_cell_renderer_text_new();
-  column = gtk_tree_view_column_new_with_attributes(_("focal length"), renderer, "text",
+  column = gtk_tree_view_column_new_with_attributes(_("Focal length"), renderer, "text",
                                                     P_FOCAL_LENGTH_COLUMN, NULL);
   gtk_tree_view_append_column(tree, column);
 
   renderer = gtk_cell_renderer_pixbuf_new();
-  column = gtk_tree_view_column_new_with_attributes(_("auto"), renderer, "pixbuf", P_AUTOAPPLY_COLUMN, NULL);
+  column = gtk_tree_view_column_new_with_attributes(_("Auto"), renderer, "pixbuf", P_AUTOAPPLY_COLUMN, NULL);
   gtk_tree_view_append_column(tree, column);
 
   gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(scroll), GTK_POLICY_AUTOMATIC, GTK_POLICY_AUTOMATIC);
@@ -1073,18 +1073,18 @@ static void init_tab_presets(GtkWidget *stack)
   dt_accels_disconnect_on_text_input(search_presets);
 
   gtk_box_pack_start(GTK_BOX(hbox), search_presets, FALSE, TRUE, 0);
-  gtk_entry_set_placeholder_text(GTK_ENTRY(search_presets), _("search presets list"));
+  gtk_entry_set_placeholder_text(GTK_ENTRY(search_presets), _("Search presets list"));
   gtk_widget_set_tooltip_text(GTK_WIDGET(search_presets), _("Incrementally search the list of presets\nPress up or down keys to cycle through matches"));
   g_signal_connect(G_OBJECT(search_presets), "activate", G_CALLBACK(dt_gui_search_stop), tree);
   g_signal_connect(G_OBJECT(search_presets), "stop-search", G_CALLBACK(dt_gui_search_stop), tree);
   g_signal_connect(G_OBJECT(tree), "key-press-event", G_CALLBACK(dt_gui_search_start), search_presets);
   gtk_tree_view_set_search_entry(tree, GTK_ENTRY(search_presets));
 
-  GtkWidget *button = gtk_button_new_with_label(C_("preferences", "import..."));
+  GtkWidget *button = gtk_button_new_with_label(C_("preferences", "Import..."));
   gtk_box_pack_end(GTK_BOX(hbox), button, FALSE, TRUE, 0);
   g_signal_connect(G_OBJECT(button), "clicked", G_CALLBACK(import_preset), (gpointer)model);
 
-  button = gtk_button_new_with_label(C_("preferences", "export..."));
+  button = gtk_button_new_with_label(C_("preferences", "Export..."));
   gtk_box_pack_end(GTK_BOX(hbox), button, FALSE, TRUE, 0);
   g_signal_connect(G_OBJECT(button), "clicked", G_CALLBACK(export_preset), (gpointer)model);
 
@@ -1238,7 +1238,7 @@ static void import_preset(GtkButton *button, gpointer data)
 
   filter = GTK_FILE_FILTER(gtk_file_filter_new());
   gtk_file_filter_add_pattern(filter, "*");
-  gtk_file_filter_set_name(filter, _("all files"));
+  gtk_file_filter_set_name(filter, _("All files"));
 
   gtk_file_chooser_add_filter(GTK_FILE_CHOOSER(chooser), filter);
 

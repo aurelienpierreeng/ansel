@@ -443,12 +443,12 @@ msgstr ""
 #: ../build/src/preferences_gen.h:5064 ../build/src/preferences_gen.h:5116
 #: ../build/src/preferences_gen.h:5194 ../build/src/preferences_gen.h:5241
 #: ../tools/generate_prefs.xsl:134 ../tools/generate_prefs.xsl:490
-msgid "this setting has been modified"
+msgid "This setting has been modified"
 msgstr "Изменено пользователем"
 
 #: ../build/src/preferences_gen.h:2421 ../tools/generate_prefs.xsl:192
 #, fuzzy
-msgid "views"
+msgid "Views"
 msgstr "Предпросмотр"
 
 #. TODO: look for active view. Do we know it at init time ?
@@ -490,7 +490,7 @@ msgstr "Скрыть встроенные профили модулей"
 #: ../tools/generate_prefs.xsl:694 ../tools/generate_prefs.xsl:739
 #: ../tools/generate_prefs.xsl:773 ../tools/generate_prefs.xsl:817
 #, c-format
-msgid "double click to reset to `%s'"
+msgid "Double click to reset to `%s'"
 msgstr "Двойной щелчок сбрасывает значение до «%s»"
 
 #: ../build/src/preferences_gen.h:2458
@@ -601,11 +601,11 @@ msgstr "Слайдшоу"
 
 #: ../build/src/preferences_gen.h:2837 ../src/gui/preferences.c:594
 #: ../tools/generate_prefs.xsl:270
-msgid "processing"
+msgid "Processing"
 msgstr "Обрабатывается"
 
 #: ../build/src/preferences_gen.h:2840 ../tools/generate_prefs.xsl:274
-msgid "image processing"
+msgid "Image processing"
 msgstr "Изображенние обрабатывается"
 
 #: ../build/src/preferences_gen.h:2860
@@ -644,7 +644,7 @@ msgid ""
 msgstr ""
 
 #: ../build/src/preferences_gen.h:3026
-msgid "3D lut root folder"
+msgid "3D LUT root folder"
 msgstr ""
 
 #: ../build/src/preferences_gen.h:3031 ../src/control/jobs/control_jobs.c:1765
@@ -666,7 +666,7 @@ msgid ""
 msgstr ""
 
 #: ../build/src/preferences_gen.h:3057 ../tools/generate_prefs.xsl:290
-msgid "cpu / gpu / memory"
+msgid "CPU / GPU / memory"
 msgstr "ЦПУ / Видеокарта / Память"
 
 #: ../build/src/preferences_gen.h:3077
@@ -680,7 +680,7 @@ msgstr ""
 #: ../build/src/preferences_gen.h:5140 ../build/src/preferences_gen.h:5218
 #: ../build/src/preferences_gen.h:5265 ../tools/generate_prefs.xsl:717
 #, c-format
-msgid "double click to reset to `%d'"
+msgid "Double click to reset to `%d'"
 msgstr "Двойной щелчок сбрасывает значение до «%d»"
 
 #: ../build/src/preferences_gen.h:3100
@@ -760,18 +760,21 @@ msgid ""
 msgstr ""
 
 #: ../build/src/preferences_gen.h:3357 ../tools/generate_prefs.xsl:511
-msgid "not available"
+msgid "Not available"
 msgstr "Не поддерживается"
 
 #: ../build/src/preferences_gen.h:3360 ../build/src/preferences_gen.h:3364
 #: ../tools/generate_prefs.xsl:514 ../tools/generate_prefs.xsl:518
-msgid "not available on this system"
+msgid "Not available on this system"
 msgstr "Не поддерживается в данной системе"
 
 #: ../build/src/preferences_gen.h:3373 ../src/common/image.h:269
 #: ../tools/generate_prefs.xsl:309
 msgid "libraw"
 msgstr "Libraw"
+
+msgid "LibRaw"
+msgstr "LibRaw"
 
 #: ../build/src/preferences_gen.h:3378 ../tools/generate_prefs.xsl:314
 msgid ""
@@ -816,12 +819,12 @@ msgid ""
 msgstr ""
 
 #: ../build/src/preferences_gen.h:3523 ../tools/generate_prefs.xsl:329
-msgid "security"
+msgid "Security"
 msgstr "Подтверждения"
 
 #: ../build/src/preferences_gen.h:3526 ../src/gui/preferences.c:329
 #: ../tools/generate_prefs.xsl:334
-msgid "general"
+msgid "General"
 msgstr "Общие"
 
 #: ../build/src/preferences_gen.h:3546
@@ -915,7 +918,7 @@ msgid "Will ask for confirmation before exporting files in overwrite mode"
 msgstr "Всегда запрашивать подтверждение о перезаписи файлов при экспорте"
 
 #: ../build/src/preferences_gen.h:3928 ../tools/generate_prefs.xsl:349
-msgid "other"
+msgid "Other"
 msgstr "Прочее"
 
 #: ../build/src/preferences_gen.h:3948
@@ -940,12 +943,15 @@ msgstr ""
 "некоторыми камерами для сохранения заметок о снимках"
 
 #: ../build/src/preferences_gen.h:4066 ../tools/generate_prefs.xsl:364
-msgid "storage"
+msgid "Storage"
 msgstr "Хранилище"
 
 #: ../build/src/preferences_gen.h:4069 ../src/control/crawler.c:730
 #: ../tools/generate_prefs.xsl:368
 msgid "database"
+msgstr "База данных"
+
+msgid "Database"
 msgstr "База данных"
 
 #: ../build/src/preferences_gen.h:4089
@@ -1063,7 +1069,7 @@ msgstr ""
 
 #: ../build/src/preferences_gen.h:4536 ../tools/generate_prefs.xsl:394
 #, fuzzy
-msgid "privacy"
+msgid "Privacy"
 msgstr "Персональные"
 
 #: ../build/src/preferences_gen.h:4556
@@ -1080,11 +1086,11 @@ msgid ""
 msgstr ""
 
 #: ../build/src/preferences_gen.h:4598 ../tools/generate_prefs.xsl:409
-msgid "miscellaneous"
+msgid "Miscellaneous"
 msgstr "Прочее"
 
 #: ../build/src/preferences_gen.h:4601 ../tools/generate_prefs.xsl:412
-msgid "interface"
+msgid "Interface"
 msgstr "Интерфейc"
 
 #: ../build/src/preferences_gen.h:4621
@@ -1526,6 +1532,9 @@ msgstr "Смещение"
 #: ../src/gui/preferences.c:991 ../src/gui/presets.c:648
 #: ../src/libs/metadata_view.c:177
 msgid "lens"
+msgstr "Объектив"
+
+msgid "Lens"
 msgstr "Объектив"
 
 #: ../build/src/iop/introspection_blurs.c:221
@@ -3971,6 +3980,10 @@ msgstr "ISO"
 msgid "aperture"
 msgstr "Диафрагма"
 
+#. aperture
+msgid "Aperture"
+msgstr "Диафрагма"
+
 #: ../src/common/collection.c:679 ../src/libs/metadata_view.c:164
 #: ../src/libs/tools/filter.c:113
 msgid "filename"
@@ -4969,6 +4982,9 @@ msgstr[2] "Удаление пустых каталогов"
 #: ../src/gui/styles_dialog.c:466 ../src/libs/collect.c:3003
 #: ../src/libs/geotagging.c:857 ../src/libs/tagging.c:3116
 msgid "name"
+msgstr "Имя"
+
+msgid "Name"
 msgstr "Имя"
 
 #: ../src/common/film.c:424
@@ -9115,7 +9131,7 @@ msgstr "Невозможно копировать историю изменен�
 
 #. language
 #: ../src/gui/preferences.c:333
-msgid "interface language"
+msgid "Interface language"
 msgstr "Язык интерфейса"
 
 #: ../src/gui/preferences.c:348
@@ -9132,7 +9148,7 @@ msgstr ""
 "Язык интерфейса darktable. Системный язык помечен * (требуется перезапуск)."
 
 #: ../src/gui/preferences.c:359
-msgid "theme"
+msgid "Theme"
 msgstr "Тема"
 
 #: ../src/gui/preferences.c:388
@@ -9171,7 +9187,7 @@ msgstr ""
 
 #. checkbox to allow user to modify theme with user.css
 #: ../src/gui/preferences.c:445
-msgid "modify selected theme with CSS tweaks below"
+msgid "Modify selected theme with CSS tweaks below"
 msgstr "Пользовательские изменения к выбранной теме"
 
 #: ../src/gui/preferences.c:453
@@ -9182,7 +9198,7 @@ msgstr ""
 
 #: ../src/gui/preferences.c:476
 msgctxt "usercss"
-msgid "save CSS and apply"
+msgid "Save CSS and apply"
 msgstr "Сохранить CSS и применить"
 
 #: ../src/gui/preferences.c:482
@@ -9209,7 +9225,7 @@ msgid "Enable or disable OpenCL processing for this GPU"
 msgstr ""
 
 #: ../src/gui/preferences.c:694
-msgid "pinned memory"
+msgid "Pinned memory"
 msgstr ""
 
 #: ../src/gui/preferences.c:705
@@ -9230,7 +9246,7 @@ msgstr ""
 
 #. Adding the outer container
 #: ../src/gui/preferences.c:961
-msgid "presets"
+msgid "Presets"
 msgstr "Профили"
 
 #. exif
@@ -9239,9 +9255,16 @@ msgstr "Профили"
 msgid "model"
 msgstr "Камера"
 
+#. exif
+msgid "Model"
+msgstr "Камера"
+
 #: ../src/gui/preferences.c:987 ../src/gui/presets.c:639
 #: ../src/libs/metadata_view.c:176
 msgid "maker"
+msgstr "Производитель"
+
+msgid "Maker"
 msgstr "Производитель"
 
 #: ../src/gui/preferences.c:1012 ../src/iop/basicadj.c:628
@@ -9253,8 +9276,8 @@ msgid "Auto"
 msgstr "Авто"
 
 #: ../src/gui/preferences.c:1026
-msgid "search presets list"
-msgstr "список пресетов поиска"
+msgid "Search presets list"
+msgstr "Список пресетов поиска"
 
 #: ../src/gui/preferences.c:1027
 msgid ""
@@ -9266,12 +9289,12 @@ msgstr ""
 
 #: ../src/gui/preferences.c:1033
 msgctxt "preferences"
-msgid "import..."
+msgid "Import..."
 msgstr "Импорт..."
 
 #: ../src/gui/preferences.c:1037
 msgctxt "preferences"
-msgid "export..."
+msgid "Export..."
 msgstr "Экспорт..."
 
 #: ../src/gui/preferences.c:1173
@@ -9298,6 +9321,9 @@ msgstr "Выберите файл"
 #: ../src/iop/lut3d.c:1371 ../src/libs/geotagging.c:975
 #: ../src/libs/styles.c:566
 msgid "all files"
+msgstr "Все файлы"
+
+msgid "All files"
 msgstr "Все файлы"
 
 #: ../src/gui/presets.c:107
@@ -20963,7 +20989,7 @@ msgstr "Применить стиль к выбранным снимкам"
 
 #: ../src/libs/tagging.c:144
 msgid "Tags"
-msgstr ""
+msgstr "Метки"
 
 #: ../src/libs/tagging.c:1207
 msgid "attach tag to all"
@@ -22186,7 +22212,7 @@ msgstr ""
 
 #: ../tools/generate_prefs.xsl:759
 #, fuzzy, c-format
-msgid "double click to reset to `%.03f'"
+msgid "Double click to reset to `%.03f'"
 msgstr "Двойной щелчок сбрасывает значение до «%f»"
 
 #: ../tools/generate_prefs.xsl:773 ../tools/generate_prefs.xsl:790

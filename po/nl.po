@@ -446,13 +446,13 @@ msgstr ""
 #: ../build/src/preferences_gen.h:5064 ../build/src/preferences_gen.h:5116
 #: ../build/src/preferences_gen.h:5194 ../build/src/preferences_gen.h:5241
 #: ../tools/generate_prefs.xsl:134 ../tools/generate_prefs.xsl:490
-msgid "this setting has been modified"
-msgstr "deze instelling werd gewijzigd"
+msgid "This setting has been modified"
+msgstr "Deze instelling werd gewijzigd"
 
 #: ../build/src/preferences_gen.h:2421 ../tools/generate_prefs.xsl:192
 #, fuzzy
-msgid "views"
-msgstr "vooraf bekijken"
+msgid "Views"
+msgstr "Vooraf bekijken"
 
 #. TODO: look for active view. Do we know it at init time ?
 #: ../build/src/preferences_gen.h:2424 ../src/libs/lib.c:907
@@ -493,8 +493,8 @@ msgstr "Verberg standaard voorkeuren voor hulpmodules"
 #: ../tools/generate_prefs.xsl:694 ../tools/generate_prefs.xsl:739
 #: ../tools/generate_prefs.xsl:773 ../tools/generate_prefs.xsl:817
 #, c-format
-msgid "double click to reset to `%s'"
-msgstr "dubbelklikken is resetten naar `%s'"
+msgid "Double click to reset to `%s'"
+msgstr "Dubbelklikken is resetten naar `%s'"
 
 #: ../build/src/preferences_gen.h:2458
 msgid "Hides built-in presets of utility modules in presets menu."
@@ -605,12 +605,12 @@ msgstr "presentatie"
 
 #: ../build/src/preferences_gen.h:2837 ../src/gui/preferences.c:594
 #: ../tools/generate_prefs.xsl:270
-msgid "processing"
-msgstr "verwerken"
+msgid "Processing"
+msgstr "Verwerken"
 
 #: ../build/src/preferences_gen.h:2840 ../tools/generate_prefs.xsl:274
-msgid "image processing"
-msgstr "afbeelding verwerken"
+msgid "Image processing"
+msgstr "Afbeelding verwerken"
 
 #: ../build/src/preferences_gen.h:2860
 msgid "Always use LittleCMS 2 to apply output color profile"
@@ -647,7 +647,7 @@ msgid ""
 msgstr ""
 
 #: ../build/src/preferences_gen.h:3026
-msgid "3D lut root folder"
+msgid "3D LUT root folder"
 msgstr ""
 
 #: ../build/src/preferences_gen.h:3031 ../src/control/jobs/control_jobs.c:1765
@@ -669,8 +669,8 @@ msgid ""
 msgstr ""
 
 #: ../build/src/preferences_gen.h:3057 ../tools/generate_prefs.xsl:290
-msgid "cpu / gpu / memory"
-msgstr "cpu / gpu / memory"
+msgid "CPU / GPU / memory"
+msgstr "CPU / GPU / memory"
 
 #: ../build/src/preferences_gen.h:3077
 msgid "CPU cores"
@@ -683,8 +683,8 @@ msgstr ""
 #: ../build/src/preferences_gen.h:5140 ../build/src/preferences_gen.h:5218
 #: ../build/src/preferences_gen.h:5265 ../tools/generate_prefs.xsl:717
 #, c-format
-msgid "double click to reset to `%d'"
-msgstr "dubbelklik om te resetten naar `%d'"
+msgid "Double click to reset to `%d'"
+msgstr "Dubbelklik om te resetten naar `%d'"
 
 #: ../build/src/preferences_gen.h:3100
 msgid ""
@@ -763,18 +763,21 @@ msgid ""
 msgstr ""
 
 #: ../build/src/preferences_gen.h:3357 ../tools/generate_prefs.xsl:511
-msgid "not available"
-msgstr "niet beschikbaar"
+msgid "Not available"
+msgstr "Niet beschikbaar"
 
 #: ../build/src/preferences_gen.h:3360 ../build/src/preferences_gen.h:3364
 #: ../tools/generate_prefs.xsl:514 ../tools/generate_prefs.xsl:518
-msgid "not available on this system"
-msgstr "niet beschikbaar op dit systeem"
+msgid "Not available on this system"
+msgstr "Niet beschikbaar op dit systeem"
 
 #: ../build/src/preferences_gen.h:3373 ../src/common/image.h:269
 #: ../tools/generate_prefs.xsl:309
 msgid "libraw"
 msgstr "libraw"
+
+msgid "LibRaw"
+msgstr "LibRaw"
 
 #: ../build/src/preferences_gen.h:3378 ../tools/generate_prefs.xsl:314
 msgid ""
@@ -819,13 +822,13 @@ msgid ""
 msgstr ""
 
 #: ../build/src/preferences_gen.h:3523 ../tools/generate_prefs.xsl:329
-msgid "security"
-msgstr "veiligheid"
+msgid "Security"
+msgstr "Veiligheid"
 
 #: ../build/src/preferences_gen.h:3526 ../src/gui/preferences.c:329
 #: ../tools/generate_prefs.xsl:334
-msgid "general"
-msgstr "algemeen"
+msgid "General"
+msgstr "Algemeen"
 
 #: ../build/src/preferences_gen.h:3546
 msgid "Ask before removing images from the library"
@@ -928,8 +931,8 @@ msgstr ""
 "geëxporteerd"
 
 #: ../build/src/preferences_gen.h:3928 ../tools/generate_prefs.xsl:349
-msgid "other"
-msgstr "overige"
+msgid "Other"
+msgstr "Overige"
 
 #: ../build/src/preferences_gen.h:3948
 msgid "password storage backend to use"
@@ -953,13 +956,16 @@ msgstr ""
 "sommige camera's als notitie bij de afbeelding bewaren"
 
 #: ../build/src/preferences_gen.h:4066 ../tools/generate_prefs.xsl:364
-msgid "storage"
-msgstr "opslagruimte"
+msgid "Storage"
+msgstr "Opslagruimte"
 
 #: ../build/src/preferences_gen.h:4069 ../src/control/crawler.c:730
 #: ../tools/generate_prefs.xsl:368
 msgid "database"
 msgstr "database"
+
+msgid "Database"
+msgstr "Database"
 
 #: ../build/src/preferences_gen.h:4089
 #, fuzzy
@@ -1080,8 +1086,8 @@ msgstr ""
 
 #: ../build/src/preferences_gen.h:4536 ../tools/generate_prefs.xsl:394
 #, fuzzy
-msgid "privacy"
-msgstr "persoonlijk"
+msgid "Privacy"
+msgstr "Persoonlijk"
 
 #: ../build/src/preferences_gen.h:4556
 msgid "Send anonymous crash reports"
@@ -1097,12 +1103,12 @@ msgid ""
 msgstr ""
 
 #: ../build/src/preferences_gen.h:4598 ../tools/generate_prefs.xsl:409
-msgid "miscellaneous"
-msgstr "diversen"
+msgid "Miscellaneous"
+msgstr "Diversen"
 
 #: ../build/src/preferences_gen.h:4601 ../tools/generate_prefs.xsl:412
-msgid "interface"
-msgstr "interface"
+msgid "Interface"
+msgstr "Interface"
 
 #: ../build/src/preferences_gen.h:4621
 msgid "Invert the direction of the mouse vertical scroll"
@@ -1553,6 +1559,9 @@ msgstr "Compensatie"
 #: ../src/libs/metadata_view.c:177
 msgid "lens"
 msgstr "lens"
+
+msgid "Lens"
+msgstr "Lens"
 
 #: ../build/src/iop/introspection_blurs.c:221
 msgid "motion"
@@ -4006,6 +4015,10 @@ msgstr "ISO"
 msgid "aperture"
 msgstr "diafragma"
 
+#. aperture
+msgid "Aperture"
+msgstr "Diafragma"
+
 #: ../src/common/collection.c:679 ../src/libs/metadata_view.c:164
 #: ../src/libs/tools/filter.c:113
 msgid "filename"
@@ -5007,6 +5020,9 @@ msgstr[1] "Lege mappen verplaatsen?"
 msgid "name"
 msgstr "bestandsnaam"
 
+msgid "Name"
+msgstr "Bestandsnaam"
+
 #: ../src/common/film.c:424
 msgid ""
 "Cannot remove film roll having local copies with non accessible originals"
@@ -5178,7 +5194,7 @@ msgstr ""
 #: ../src/common/history_merge_gui.c:1397 ../src/gui/hist_dialog.c:237
 #, fuzzy
 msgid "Module"
-msgstr "module"
+msgstr "Module"
 
 #: ../src/common/history_merge_gui.c:1405
 #, fuzzy
@@ -9132,8 +9148,8 @@ msgstr "Kopiëren vanuit niet-gewijzigde afbeelding lukt niet"
 
 #. language
 #: ../src/gui/preferences.c:333
-msgid "interface language"
-msgstr "interfacetaal"
+msgid "Interface language"
+msgstr "Interfacetaal"
 
 #: ../src/gui/preferences.c:348
 msgid "Double-click to reset to the system language"
@@ -9148,8 +9164,8 @@ msgstr ""
 "(opnieuw opstarten vereist)"
 
 #: ../src/gui/preferences.c:359
-msgid "theme"
-msgstr "thema"
+msgid "Theme"
+msgstr "Thema"
 
 #: ../src/gui/preferences.c:388
 msgid "Set the theme for the user interface"
@@ -9192,8 +9208,8 @@ msgstr ""
 
 #. checkbox to allow user to modify theme with user.css
 #: ../src/gui/preferences.c:445
-msgid "modify selected theme with CSS tweaks below"
-msgstr "pas geselecteerd thema aan met onderstaande CSS aanpassingen"
+msgid "Modify selected theme with CSS tweaks below"
+msgstr "Pas geselecteerd thema aan met onderstaande CSS aanpassingen"
 
 #: ../src/gui/preferences.c:453
 msgid "Modify theme with CSS keyed below (saved to user.css)"
@@ -9203,8 +9219,8 @@ msgstr ""
 
 #: ../src/gui/preferences.c:476
 msgctxt "usercss"
-msgid "save CSS and apply"
-msgstr "sla CSS op en pas toe"
+msgid "Save CSS and apply"
+msgstr "Sla CSS op en pas toe"
 
 #: ../src/gui/preferences.c:482
 msgid "Click to save and apply the CSS tweaks entered in this editor"
@@ -9232,7 +9248,7 @@ msgid "Enable or disable OpenCL processing for this GPU"
 msgstr ""
 
 #: ../src/gui/preferences.c:694
-msgid "pinned memory"
+msgid "Pinned memory"
 msgstr ""
 
 #: ../src/gui/preferences.c:705
@@ -9253,8 +9269,8 @@ msgstr ""
 
 #. Adding the outer container
 #: ../src/gui/preferences.c:961
-msgid "presets"
-msgstr "voorkeuren"
+msgid "Presets"
+msgstr "Voorkeuren"
 
 #. exif
 #: ../src/gui/preferences.c:983 ../src/gui/presets.c:630
@@ -9262,10 +9278,17 @@ msgstr "voorkeuren"
 msgid "model"
 msgstr "model"
 
+#. exif
+msgid "Model"
+msgstr "Model"
+
 #: ../src/gui/preferences.c:987 ../src/gui/presets.c:639
 #: ../src/libs/metadata_view.c:176
 msgid "maker"
 msgstr "merk"
+
+msgid "Maker"
+msgstr "Merk"
 
 #: ../src/gui/preferences.c:1012 ../src/iop/basicadj.c:628
 #: ../src/iop/borders.c:1059 ../src/iop/levels.c:636 ../src/iop/rgblevels.c:867
@@ -9276,8 +9299,8 @@ msgid "Auto"
 msgstr "Auto"
 
 #: ../src/gui/preferences.c:1026
-msgid "search presets list"
-msgstr "doorzoek de lijst met voorinstellingen"
+msgid "Search presets list"
+msgstr "Doorzoek de lijst met voorinstellingen"
 
 #: ../src/gui/preferences.c:1027
 msgid ""
@@ -9289,13 +9312,13 @@ msgstr ""
 
 #: ../src/gui/preferences.c:1033
 msgctxt "preferences"
-msgid "import..."
-msgstr "importeren ..."
+msgid "Import..."
+msgstr "Importeren ..."
 
 #: ../src/gui/preferences.c:1037
 msgctxt "preferences"
-msgid "export..."
-msgstr "exporteren..."
+msgid "Export..."
+msgstr "Exporteren..."
 
 #: ../src/gui/preferences.c:1173
 #, c-format
@@ -9322,6 +9345,9 @@ msgstr "selecteer bestand"
 #: ../src/libs/styles.c:566
 msgid "all files"
 msgstr "alle bestanden"
+
+msgid "All files"
+msgstr "Alle bestanden"
 
 #: ../src/gui/presets.c:107
 msgid "non-raw"
@@ -21184,7 +21210,7 @@ msgstr ""
 
 #: ../src/libs/tagging.c:144
 msgid "Tags"
-msgstr ""
+msgstr "Labels"
 
 #: ../src/libs/tagging.c:1207
 msgid "attach tag to all"
@@ -22401,8 +22427,8 @@ msgstr ""
 
 #: ../tools/generate_prefs.xsl:759
 #, fuzzy, c-format
-msgid "double click to reset to `%.03f'"
-msgstr "dubbelklik om te resetten naar `%f'"
+msgid "Double click to reset to `%.03f'"
+msgstr "Dubbelklik om te resetten naar `%f'"
 
 #: ../tools/generate_prefs.xsl:773 ../tools/generate_prefs.xsl:790
 #: ../tools/generate_prefs.xsl:817

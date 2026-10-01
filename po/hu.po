@@ -446,13 +446,13 @@ msgstr ""
 #: ../build/src/preferences_gen.h:5064 ../build/src/preferences_gen.h:5116
 #: ../build/src/preferences_gen.h:5194 ../build/src/preferences_gen.h:5241
 #: ../tools/generate_prefs.xsl:134 ../tools/generate_prefs.xsl:490
-msgid "this setting has been modified"
-msgstr "ez a beállítás módosult"
+msgid "This setting has been modified"
+msgstr "Ez a beállítás módosult"
 
 #: ../build/src/preferences_gen.h:2421 ../tools/generate_prefs.xsl:192
 #, fuzzy
-msgid "views"
-msgstr "előnézet"
+msgid "Views"
+msgstr "Előnézet"
 
 #. TODO: look for active view. Do we know it at init time ?
 #: ../build/src/preferences_gen.h:2424 ../src/libs/lib.c:907
@@ -493,8 +493,8 @@ msgstr "Beépített tárolt beállítások elrejtése a segédmoduloknál"
 #: ../tools/generate_prefs.xsl:694 ../tools/generate_prefs.xsl:739
 #: ../tools/generate_prefs.xsl:773 ../tools/generate_prefs.xsl:817
 #, c-format
-msgid "double click to reset to `%s'"
-msgstr "dupla kattintással visszaállítja erre: „%s”"
+msgid "Double click to reset to `%s'"
+msgstr "Dupla kattintással visszaállítja erre: „%s”"
 
 #: ../build/src/preferences_gen.h:2458
 msgid "Hides built-in presets of utility modules in presets menu."
@@ -606,12 +606,12 @@ msgstr "diavetítés"
 
 #: ../build/src/preferences_gen.h:2837 ../src/gui/preferences.c:594
 #: ../tools/generate_prefs.xsl:270
-msgid "processing"
-msgstr "feldolgozás"
+msgid "Processing"
+msgstr "Feldolgozás"
 
 #: ../build/src/preferences_gen.h:2840 ../tools/generate_prefs.xsl:274
-msgid "image processing"
-msgstr "képfeldolgozás"
+msgid "Image processing"
+msgstr "Képfeldolgozás"
 
 #: ../build/src/preferences_gen.h:2860
 msgid "Always use LittleCMS 2 to apply output color profile"
@@ -648,8 +648,8 @@ msgid ""
 msgstr ""
 
 #: ../build/src/preferences_gen.h:3026
-msgid "3D lut root folder"
-msgstr "3D lut gyökérkönyvtár"
+msgid "3D LUT root folder"
+msgstr "3D LUT gyökérkönyvtár"
 
 #: ../build/src/preferences_gen.h:3031 ../src/control/jobs/control_jobs.c:1765
 #: ../src/control/jobs/control_jobs.c:1827 ../src/gui/preferences.c:1223
@@ -672,8 +672,8 @@ msgstr ""
 "fájlokat. (újraindítást igényel)."
 
 #: ../build/src/preferences_gen.h:3057 ../tools/generate_prefs.xsl:290
-msgid "cpu / gpu / memory"
-msgstr "cpu / gpu / memória"
+msgid "CPU / GPU / memory"
+msgstr "CPU / GPU / memória"
 
 #: ../build/src/preferences_gen.h:3077
 msgid "CPU cores"
@@ -686,8 +686,8 @@ msgstr ""
 #: ../build/src/preferences_gen.h:5140 ../build/src/preferences_gen.h:5218
 #: ../build/src/preferences_gen.h:5265 ../tools/generate_prefs.xsl:717
 #, c-format
-msgid "double click to reset to `%d'"
-msgstr "dupla kattintással visszaállítja erre: „%d”"
+msgid "Double click to reset to `%d'"
+msgstr "Dupla kattintással visszaállítja erre: „%d”"
 
 #: ../build/src/preferences_gen.h:3100
 msgid ""
@@ -766,18 +766,21 @@ msgid ""
 msgstr ""
 
 #: ../build/src/preferences_gen.h:3357 ../tools/generate_prefs.xsl:511
-msgid "not available"
-msgstr "nem érhető el"
+msgid "Not available"
+msgstr "Nem érhető el"
 
 #: ../build/src/preferences_gen.h:3360 ../build/src/preferences_gen.h:3364
 #: ../tools/generate_prefs.xsl:514 ../tools/generate_prefs.xsl:518
-msgid "not available on this system"
-msgstr "nem elérhető ezen a rendszeren"
+msgid "Not available on this system"
+msgstr "Nem elérhető ezen a rendszeren"
 
 #: ../build/src/preferences_gen.h:3373 ../src/common/image.h:269
 #: ../tools/generate_prefs.xsl:309
 msgid "libraw"
 msgstr "libraw"
+
+msgid "LibRaw"
+msgstr "LibRaw"
 
 #: ../build/src/preferences_gen.h:3378 ../tools/generate_prefs.xsl:314
 msgid ""
@@ -822,13 +825,13 @@ msgid ""
 msgstr ""
 
 #: ../build/src/preferences_gen.h:3523 ../tools/generate_prefs.xsl:329
-msgid "security"
-msgstr "biztonság"
+msgid "Security"
+msgstr "Biztonság"
 
 #: ../build/src/preferences_gen.h:3526 ../src/gui/preferences.c:329
 #: ../tools/generate_prefs.xsl:334
-msgid "general"
-msgstr "általános"
+msgid "General"
+msgstr "Általános"
 
 #: ../build/src/preferences_gen.h:3546
 msgid "Ask before removing images from the library"
@@ -926,8 +929,8 @@ msgstr ""
 "van kapcsolva"
 
 #: ../build/src/preferences_gen.h:3928 ../tools/generate_prefs.xsl:349
-msgid "other"
-msgstr "többi"
+msgid "Other"
+msgstr "Többi"
 
 #: ../build/src/preferences_gen.h:3948
 msgid "password storage backend to use"
@@ -953,13 +956,16 @@ msgstr ""
 "néhány fényképező jegyzetként rögzít a képekhez"
 
 #: ../build/src/preferences_gen.h:4066 ../tools/generate_prefs.xsl:364
-msgid "storage"
-msgstr "tárolás"
+msgid "Storage"
+msgstr "Tárolás"
 
 #: ../build/src/preferences_gen.h:4069 ../src/control/crawler.c:730
 #: ../tools/generate_prefs.xsl:368
 msgid "database"
 msgstr "adatbázis"
+
+msgid "Database"
+msgstr "Adatbázis"
 
 #: ../build/src/preferences_gen.h:4089
 #, fuzzy
@@ -1083,8 +1089,8 @@ msgstr ""
 
 #: ../build/src/preferences_gen.h:4536 ../tools/generate_prefs.xsl:394
 #, fuzzy
-msgid "privacy"
-msgstr "privát"
+msgid "Privacy"
+msgstr "Privát"
 
 #: ../build/src/preferences_gen.h:4556
 msgid "Send anonymous crash reports"
@@ -1100,12 +1106,12 @@ msgid ""
 msgstr ""
 
 #: ../build/src/preferences_gen.h:4598 ../tools/generate_prefs.xsl:409
-msgid "miscellaneous"
-msgstr "vegyes"
+msgid "Miscellaneous"
+msgstr "Vegyes"
 
 #: ../build/src/preferences_gen.h:4601 ../tools/generate_prefs.xsl:412
-msgid "interface"
-msgstr "interfész"
+msgid "Interface"
+msgstr "Interfész"
 
 #: ../build/src/preferences_gen.h:4621
 msgid "Invert the direction of the mouse vertical scroll"
@@ -1551,6 +1557,9 @@ msgstr "Eltolás"
 #: ../src/libs/metadata_view.c:177
 msgid "lens"
 msgstr "objektív"
+
+msgid "Lens"
+msgstr "Objektív"
 
 #: ../build/src/iop/introspection_blurs.c:221
 msgid "motion"
@@ -4000,6 +4009,10 @@ msgstr "ISO"
 msgid "aperture"
 msgstr "blende"
 
+#. aperture
+msgid "Aperture"
+msgstr "Blende"
+
 #: ../src/common/collection.c:679 ../src/libs/metadata_view.c:164
 #: ../src/libs/tools/filter.c:113
 msgid "filename"
@@ -5002,6 +5015,9 @@ msgstr[1] "Eltávolítja az üres könyvtárakat?"
 msgid "name"
 msgstr "név"
 
+msgid "Name"
+msgstr "Név"
+
 #: ../src/common/film.c:424
 msgid ""
 "Cannot remove film roll having local copies with non accessible originals"
@@ -5172,7 +5188,7 @@ msgstr ""
 #: ../src/common/history_merge_gui.c:1397 ../src/gui/hist_dialog.c:237
 #, fuzzy
 msgid "Module"
-msgstr "modul"
+msgstr "Modul"
 
 #: ../src/common/history_merge_gui.c:1405
 #, fuzzy
@@ -9127,8 +9143,8 @@ msgstr "A módosítatlan képek előzménye nem másolható"
 
 #. language
 #: ../src/gui/preferences.c:333
-msgid "interface language"
-msgstr "a felület nyelve"
+msgid "Interface language"
+msgstr "A felület nyelve"
 
 #: ../src/gui/preferences.c:348
 msgid "Double-click to reset to the system language"
@@ -9143,8 +9159,8 @@ msgstr ""
 "gal van jelölve (újraindítást igényel)"
 
 #: ../src/gui/preferences.c:359
-msgid "theme"
-msgstr "téma"
+msgid "Theme"
+msgstr "Téma"
 
 #: ../src/gui/preferences.c:388
 msgid "Set the theme for the user interface"
@@ -9186,8 +9202,8 @@ msgstr ""
 
 #. checkbox to allow user to modify theme with user.css
 #: ../src/gui/preferences.c:445
-msgid "modify selected theme with CSS tweaks below"
-msgstr "a kiválasztott téma módosítása az alábbi CSS finomhangolással"
+msgid "Modify selected theme with CSS tweaks below"
+msgstr "A kiválasztott téma módosítása az alábbi CSS finomhangolással"
 
 #: ../src/gui/preferences.c:453
 msgid "Modify theme with CSS keyed below (saved to user.css)"
@@ -9197,7 +9213,7 @@ msgstr ""
 
 #: ../src/gui/preferences.c:476
 msgctxt "usercss"
-msgid "save CSS and apply"
+msgid "Save CSS and apply"
 msgstr "CSS mentése és alkalmazása"
 
 #: ../src/gui/preferences.c:482
@@ -9226,7 +9242,7 @@ msgid "Enable or disable OpenCL processing for this GPU"
 msgstr ""
 
 #: ../src/gui/preferences.c:694
-msgid "pinned memory"
+msgid "Pinned memory"
 msgstr ""
 
 #: ../src/gui/preferences.c:705
@@ -9247,8 +9263,8 @@ msgstr ""
 
 #. Adding the outer container
 #: ../src/gui/preferences.c:961
-msgid "presets"
-msgstr "tárolt beállítások"
+msgid "Presets"
+msgstr "Tárolt beállítások"
 
 #. exif
 #: ../src/gui/preferences.c:983 ../src/gui/presets.c:630
@@ -9256,10 +9272,17 @@ msgstr "tárolt beállítások"
 msgid "model"
 msgstr "modell"
 
+#. exif
+msgid "Model"
+msgstr "Modell"
+
 #: ../src/gui/preferences.c:987 ../src/gui/presets.c:639
 #: ../src/libs/metadata_view.c:176
 msgid "maker"
 msgstr "gyártó"
+
+msgid "Maker"
+msgstr "Gyártó"
 
 #: ../src/gui/preferences.c:1012 ../src/iop/basicadj.c:628
 #: ../src/iop/borders.c:1059 ../src/iop/levels.c:636 ../src/iop/rgblevels.c:867
@@ -9270,8 +9293,8 @@ msgid "Auto"
 msgstr "Automata"
 
 #: ../src/gui/preferences.c:1026
-msgid "search presets list"
-msgstr "tárolt beállítások keresése"
+msgid "Search presets list"
+msgstr "Tárolt beállítások keresése"
 
 #: ../src/gui/preferences.c:1027
 msgid ""
@@ -9283,13 +9306,13 @@ msgstr ""
 
 #: ../src/gui/preferences.c:1033
 msgctxt "preferences"
-msgid "import..."
-msgstr "importálás…"
+msgid "Import..."
+msgstr "Importálás…"
 
 #: ../src/gui/preferences.c:1037
 msgctxt "preferences"
-msgid "export..."
-msgstr "exportálás…"
+msgid "Export..."
+msgstr "Exportálás…"
 
 #: ../src/gui/preferences.c:1173
 #, c-format
@@ -9316,6 +9339,9 @@ msgstr "fájl kiválasztása"
 #: ../src/libs/styles.c:566
 msgid "all files"
 msgstr "összes fájl"
+
+msgid "All files"
+msgstr "Összes fájl"
 
 #: ../src/gui/presets.c:107
 msgid "non-raw"
@@ -21222,7 +21248,7 @@ msgstr "A fenti listában kiválasztott stílusok alkalmazása a kijelölt képe
 
 #: ../src/libs/tagging.c:144
 msgid "Tags"
-msgstr ""
+msgstr "Címkék"
 
 #: ../src/libs/tagging.c:1207
 msgid "attach tag to all"
@@ -22443,8 +22469,8 @@ msgstr ""
 
 #: ../tools/generate_prefs.xsl:759
 #, fuzzy, c-format
-msgid "double click to reset to `%.03f'"
-msgstr "dupla kattintás alapértelmezett értékre állítja: „%f”"
+msgid "Double click to reset to `%.03f'"
+msgstr "Dupla kattintás alapértelmezett értékre állítja: „%f”"
 
 #: ../tools/generate_prefs.xsl:773 ../tools/generate_prefs.xsl:790
 #: ../tools/generate_prefs.xsl:817

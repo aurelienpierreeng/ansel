@@ -460,13 +460,13 @@ msgstr ""
 #: ../build/src/preferences_gen.h:5194 ../build/src/preferences_gen.h:5241
 #: ../tools/generate_prefs.xsl:134 ../tools/generate_prefs.xsl:490
 #, fuzzy
-msgid "this setting has been modified"
-msgstr "s'ha importat %s"
+msgid "This setting has been modified"
+msgstr "S'ha importat %s"
 
 #: ../build/src/preferences_gen.h:2421 ../tools/generate_prefs.xsl:192
 #, fuzzy
-msgid "views"
-msgstr "altres"
+msgid "Views"
+msgstr "Altres"
 
 #. TODO: look for active view. Do we know it at init time ?
 #: ../build/src/preferences_gen.h:2424 ../src/libs/lib.c:907
@@ -508,8 +508,8 @@ msgstr "Esborrant predefinit per mòdul obsolet"
 #: ../tools/generate_prefs.xsl:694 ../tools/generate_prefs.xsl:739
 #: ../tools/generate_prefs.xsl:773 ../tools/generate_prefs.xsl:817
 #, c-format
-msgid "double click to reset to `%s'"
-msgstr "feu doble clic per reiniciar a `%s'"
+msgid "Double click to reset to `%s'"
+msgstr "Feu doble clic per reiniciar a `%s'"
 
 #: ../build/src/preferences_gen.h:2458
 msgid "Hides built-in presets of utility modules in presets menu."
@@ -621,13 +621,13 @@ msgstr "projecció"
 #: ../build/src/preferences_gen.h:2837 ../src/gui/preferences.c:594
 #: ../tools/generate_prefs.xsl:270
 #, fuzzy
-msgid "processing"
-msgstr "compressió"
+msgid "Processing"
+msgstr "Compressió"
 
 #: ../build/src/preferences_gen.h:2840 ../tools/generate_prefs.xsl:274
 #, fuzzy
-msgid "image processing"
-msgstr "ajustos d'imatge"
+msgid "Image processing"
+msgstr "Ajustos d'imatge"
 
 #: ../build/src/preferences_gen.h:2860
 msgid "Always use LittleCMS 2 to apply output color profile"
@@ -661,8 +661,8 @@ msgid ""
 msgstr ""
 
 #: ../build/src/preferences_gen.h:3026
-msgid "3D lut root folder"
-msgstr "carpeta arrel de LUT 3D"
+msgid "3D LUT root folder"
+msgstr "Carpeta arrel de LUT 3D"
 
 #: ../build/src/preferences_gen.h:3031 ../src/control/jobs/control_jobs.c:1765
 #: ../src/control/jobs/control_jobs.c:1827 ../src/gui/preferences.c:1223
@@ -683,8 +683,8 @@ msgid ""
 msgstr ""
 
 #: ../build/src/preferences_gen.h:3057 ../tools/generate_prefs.xsl:290
-msgid "cpu / gpu / memory"
-msgstr "cpu / gpu / memòria"
+msgid "CPU / GPU / memory"
+msgstr "CPU / GPU / memòria"
 
 #: ../build/src/preferences_gen.h:3077
 msgid "CPU cores"
@@ -697,8 +697,8 @@ msgstr ""
 #: ../build/src/preferences_gen.h:5140 ../build/src/preferences_gen.h:5218
 #: ../build/src/preferences_gen.h:5265 ../tools/generate_prefs.xsl:717
 #, c-format
-msgid "double click to reset to `%d'"
-msgstr "feu doble clic per reiniciar a `%d'"
+msgid "Double click to reset to `%d'"
+msgstr "Feu doble clic per reiniciar a `%d'"
 
 #: ../build/src/preferences_gen.h:3100
 msgid ""
@@ -776,17 +776,20 @@ msgid ""
 msgstr ""
 
 #: ../build/src/preferences_gen.h:3357 ../tools/generate_prefs.xsl:511
-msgid "not available"
-msgstr "no disponible"
+msgid "Not available"
+msgstr "No disponible"
 
 #: ../build/src/preferences_gen.h:3360 ../build/src/preferences_gen.h:3364
 #: ../tools/generate_prefs.xsl:514 ../tools/generate_prefs.xsl:518
-msgid "not available on this system"
-msgstr "no disponible en aquest sistema"
+msgid "Not available on this system"
+msgstr "No disponible en aquest sistema"
 
 #: ../build/src/preferences_gen.h:3373 ../src/common/image.h:269
 #: ../tools/generate_prefs.xsl:309
 msgid "libraw"
+msgstr ""
+
+msgid "LibRaw"
 msgstr ""
 
 #: ../build/src/preferences_gen.h:3378 ../tools/generate_prefs.xsl:314
@@ -832,13 +835,13 @@ msgid ""
 msgstr ""
 
 #: ../build/src/preferences_gen.h:3523 ../tools/generate_prefs.xsl:329
-msgid "security"
-msgstr "seguretat"
+msgid "Security"
+msgstr "Seguretat"
 
 #: ../build/src/preferences_gen.h:3526 ../src/gui/preferences.c:329
 #: ../tools/generate_prefs.xsl:334
-msgid "general"
-msgstr "general"
+msgid "General"
+msgstr "General"
 
 #: ../build/src/preferences_gen.h:3546
 #, fuzzy
@@ -937,8 +940,8 @@ msgid "Will ask for confirmation before exporting files in overwrite mode"
 msgstr ""
 
 #: ../build/src/preferences_gen.h:3928 ../tools/generate_prefs.xsl:349
-msgid "other"
-msgstr "altres"
+msgid "Other"
+msgstr "Altres"
 
 #: ../build/src/preferences_gen.h:3948
 msgid "password storage backend to use"
@@ -962,7 +965,7 @@ msgstr ""
 "càmeres amb notes sobre les imatges"
 
 #: ../build/src/preferences_gen.h:4066 ../tools/generate_prefs.xsl:364
-msgid "storage"
+msgid "Storage"
 msgstr ""
 
 #: ../build/src/preferences_gen.h:4069 ../src/control/crawler.c:730
@@ -970,6 +973,10 @@ msgstr ""
 #, fuzzy
 msgid "database"
 msgstr "esborrar la base de dades"
+
+#, fuzzy
+msgid "Database"
+msgstr "Esborrar la base de dades"
 
 #: ../build/src/preferences_gen.h:4089
 #, fuzzy
@@ -1078,8 +1085,8 @@ msgstr ""
 
 #: ../build/src/preferences_gen.h:4536 ../tools/generate_prefs.xsl:394
 #, fuzzy
-msgid "privacy"
-msgstr "privat"
+msgid "Privacy"
+msgstr "Privat"
 
 #: ../build/src/preferences_gen.h:4556
 msgid "Send anonymous crash reports"
@@ -1095,13 +1102,13 @@ msgid ""
 msgstr ""
 
 #: ../build/src/preferences_gen.h:4598 ../tools/generate_prefs.xsl:409
-msgid "miscellaneous"
-msgstr "miscel·lani"
+msgid "Miscellaneous"
+msgstr "Miscel·lani"
 
 #: ../build/src/preferences_gen.h:4601 ../tools/generate_prefs.xsl:412
 #, fuzzy
-msgid "interface"
-msgstr "llengua d'interfície"
+msgid "Interface"
+msgstr "Llengua d'interfície"
 
 #: ../build/src/preferences_gen.h:4621
 msgid "Invert the direction of the mouse vertical scroll"
@@ -1547,6 +1554,9 @@ msgstr "Decalatge x"
 #: ../src/libs/metadata_view.c:177
 msgid "lens"
 msgstr "lent"
+
+msgid "Lens"
+msgstr "Lent"
 
 #: ../build/src/iop/introspection_blurs.c:221
 #, fuzzy
@@ -4120,6 +4130,10 @@ msgstr "ISO"
 msgid "aperture"
 msgstr "obertura"
 
+#. aperture
+msgid "Aperture"
+msgstr "Obertura"
+
 #: ../src/common/collection.c:679 ../src/libs/metadata_view.c:164
 #: ../src/libs/tools/filter.c:113
 msgid "filename"
@@ -5127,6 +5141,9 @@ msgstr[1] "Eliminar directoris buits?"
 msgid "name"
 msgstr "nom"
 
+msgid "Name"
+msgstr "Nom"
+
 #: ../src/common/film.c:424
 msgid ""
 "Cannot remove film roll having local copies with non accessible originals"
@@ -5297,7 +5314,7 @@ msgstr ""
 #: ../src/common/history_merge_gui.c:1397 ../src/gui/hist_dialog.c:237
 #, fuzzy
 msgid "Module"
-msgstr "mòdul"
+msgstr "Mòdul"
 
 #: ../src/common/history_merge_gui.c:1405
 #, fuzzy
@@ -6220,7 +6237,7 @@ msgstr ""
 
 #: ../src/control/crawler.c:729
 msgid "XMP"
-msgstr ""
+msgstr "Xmp"
 
 #: ../src/control/crawler.c:747
 msgid "path"
@@ -9214,8 +9231,8 @@ msgstr "No es pot copiar historial d'una imatge no modificada"
 
 #. language
 #: ../src/gui/preferences.c:333
-msgid "interface language"
-msgstr "llengua d'interfície"
+msgid "Interface language"
+msgstr "Llengua d'interfície"
 
 #: ../src/gui/preferences.c:348
 #, fuzzy
@@ -9231,8 +9248,8 @@ msgstr ""
 "sistema indicat amb * (requereix reiniciar)"
 
 #: ../src/gui/preferences.c:359
-msgid "theme"
-msgstr "tema"
+msgid "Theme"
+msgstr "Tema"
 
 #: ../src/gui/preferences.c:388
 msgid "Set the theme for the user interface"
@@ -9269,7 +9286,7 @@ msgstr ""
 
 #. checkbox to allow user to modify theme with user.css
 #: ../src/gui/preferences.c:445
-msgid "modify selected theme with CSS tweaks below"
+msgid "Modify selected theme with CSS tweaks below"
 msgstr ""
 
 #: ../src/gui/preferences.c:453
@@ -9278,7 +9295,7 @@ msgstr ""
 
 #: ../src/gui/preferences.c:476
 msgctxt "usercss"
-msgid "save CSS and apply"
+msgid "Save CSS and apply"
 msgstr ""
 
 #: ../src/gui/preferences.c:482
@@ -9304,7 +9321,7 @@ msgid "Enable or disable OpenCL processing for this GPU"
 msgstr ""
 
 #: ../src/gui/preferences.c:694
-msgid "pinned memory"
+msgid "Pinned memory"
 msgstr ""
 
 #: ../src/gui/preferences.c:705
@@ -9325,8 +9342,8 @@ msgstr ""
 
 #. Adding the outer container
 #: ../src/gui/preferences.c:961
-msgid "presets"
-msgstr "predefinits"
+msgid "Presets"
+msgstr "Predefinits"
 
 #. exif
 #: ../src/gui/preferences.c:983 ../src/gui/presets.c:630
@@ -9334,10 +9351,17 @@ msgstr "predefinits"
 msgid "model"
 msgstr "model"
 
+#. exif
+msgid "Model"
+msgstr "Model"
+
 #: ../src/gui/preferences.c:987 ../src/gui/presets.c:639
 #: ../src/libs/metadata_view.c:176
 msgid "maker"
 msgstr "fabricant"
+
+msgid "Maker"
+msgstr "Fabricant"
 
 #: ../src/gui/preferences.c:1012 ../src/iop/basicadj.c:628
 #: ../src/iop/borders.c:1059 ../src/iop/levels.c:636 ../src/iop/rgblevels.c:867
@@ -9349,8 +9373,8 @@ msgstr "Auto"
 
 #: ../src/gui/preferences.c:1026
 #, fuzzy
-msgid "search presets list"
-msgstr "radi de cerca"
+msgid "Search presets list"
+msgstr "Radi de cerca"
 
 #: ../src/gui/preferences.c:1027
 msgid ""
@@ -9360,14 +9384,14 @@ msgstr ""
 
 #: ../src/gui/preferences.c:1033
 msgctxt "preferences"
-msgid "import..."
-msgstr "importa..."
+msgid "Import..."
+msgstr "Importa..."
 
 #: ../src/gui/preferences.c:1037
 #, fuzzy
 msgctxt "preferences"
-msgid "export..."
-msgstr "exporta..."
+msgid "Export..."
+msgstr "Exporta..."
 
 #: ../src/gui/preferences.c:1173
 #, fuzzy, c-format
@@ -9394,6 +9418,9 @@ msgstr "seleccioneu un arxiu"
 #: ../src/libs/styles.c:566
 msgid "all files"
 msgstr "tots els fitxers"
+
+msgid "All files"
+msgstr "Tots els fitxers"
 
 #: ../src/gui/presets.c:107
 msgid "non-raw"
@@ -20896,7 +20923,7 @@ msgstr "Crea un estil a partir de l'historial de les imatges seleccionades"
 
 #: ../src/libs/tagging.c:144
 msgid "Tags"
-msgstr ""
+msgstr "Etiquetes"
 
 #: ../src/libs/tagging.c:1207
 msgid "attach tag to all"
@@ -22090,8 +22117,8 @@ msgstr ""
 
 #: ../tools/generate_prefs.xsl:759
 #, fuzzy, c-format
-msgid "double click to reset to `%.03f'"
-msgstr "feu doble clic per reiniciar a `%f'"
+msgid "Double click to reset to `%.03f'"
+msgstr "Feu doble clic per reiniciar a `%f'"
 
 #: ../tools/generate_prefs.xsl:773 ../tools/generate_prefs.xsl:790
 #: ../tools/generate_prefs.xsl:817

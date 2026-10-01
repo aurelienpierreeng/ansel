@@ -457,11 +457,11 @@ msgstr ""
 #: ../build/src/preferences_gen.h:5194 ../build/src/preferences_gen.h:5241
 #: ../tools/generate_prefs.xsl:134 ../tools/generate_prefs.xsl:490
 #, fuzzy
-msgid "this setting has been modified"
-msgstr "έγινε εισαγωγή του %s"
+msgid "This setting has been modified"
+msgstr "Έγινε εισαγωγή του %s"
 
 #: ../build/src/preferences_gen.h:2421 ../tools/generate_prefs.xsl:192
-msgid "views"
+msgid "Views"
 msgstr ""
 
 #. TODO: look for active view. Do we know it at init time ?
@@ -504,8 +504,8 @@ msgstr "Διαγραφή προεπιλογής παρωχημένου πρόσ�
 #: ../tools/generate_prefs.xsl:694 ../tools/generate_prefs.xsl:739
 #: ../tools/generate_prefs.xsl:773 ../tools/generate_prefs.xsl:817
 #, c-format
-msgid "double click to reset to `%s'"
-msgstr "διπλό κλικ για επαναφορά σε %s"
+msgid "Double click to reset to `%s'"
+msgstr "Διπλό κλικ για επαναφορά σε %s"
 
 #: ../build/src/preferences_gen.h:2458
 msgid "Hides built-in presets of utility modules in presets menu."
@@ -614,13 +614,13 @@ msgstr "παρουσίαση"
 #: ../build/src/preferences_gen.h:2837 ../src/gui/preferences.c:594
 #: ../tools/generate_prefs.xsl:270
 #, fuzzy
-msgid "processing"
-msgstr "συμπίεση"
+msgid "Processing"
+msgstr "Συμπίεση"
 
 #: ../build/src/preferences_gen.h:2840 ../tools/generate_prefs.xsl:274
 #, fuzzy
-msgid "image processing"
-msgstr "ρυθμίσεις εικόνας"
+msgid "Image processing"
+msgstr "Ρυθμίσεις εικόνας"
 
 #: ../build/src/preferences_gen.h:2860
 msgid "Always use LittleCMS 2 to apply output color profile"
@@ -656,7 +656,7 @@ msgid ""
 msgstr ""
 
 #: ../build/src/preferences_gen.h:3026
-msgid "3D lut root folder"
+msgid "3D LUT root folder"
 msgstr ""
 
 #: ../build/src/preferences_gen.h:3031 ../src/control/jobs/control_jobs.c:1765
@@ -678,7 +678,7 @@ msgid ""
 msgstr ""
 
 #: ../build/src/preferences_gen.h:3057 ../tools/generate_prefs.xsl:290
-msgid "cpu / gpu / memory"
+msgid "CPU / GPU / memory"
 msgstr ""
 
 #: ../build/src/preferences_gen.h:3077
@@ -692,8 +692,8 @@ msgstr ""
 #: ../build/src/preferences_gen.h:5140 ../build/src/preferences_gen.h:5218
 #: ../build/src/preferences_gen.h:5265 ../tools/generate_prefs.xsl:717
 #, c-format
-msgid "double click to reset to `%d'"
-msgstr "διπλό κλίκ για επαναφορά σε %d"
+msgid "Double click to reset to `%d'"
+msgstr "Διπλό κλίκ για επαναφορά σε %d"
 
 #: ../build/src/preferences_gen.h:3100
 msgid ""
@@ -771,17 +771,20 @@ msgstr ""
 
 #: ../build/src/preferences_gen.h:3357 ../tools/generate_prefs.xsl:511
 #, fuzzy
-msgid "not available"
-msgstr "δεν είναι διαθέσιμο σε αυτό το σύστημα"
+msgid "Not available"
+msgstr "Δεν είναι διαθέσιμο σε αυτό το σύστημα"
 
 #: ../build/src/preferences_gen.h:3360 ../build/src/preferences_gen.h:3364
 #: ../tools/generate_prefs.xsl:514 ../tools/generate_prefs.xsl:518
-msgid "not available on this system"
-msgstr "δεν είναι διαθέσιμο σε αυτό το σύστημα"
+msgid "Not available on this system"
+msgstr "Δεν είναι διαθέσιμο σε αυτό το σύστημα"
 
 #: ../build/src/preferences_gen.h:3373 ../src/common/image.h:269
 #: ../tools/generate_prefs.xsl:309
 msgid "libraw"
+msgstr ""
+
+msgid "LibRaw"
 msgstr ""
 
 #: ../build/src/preferences_gen.h:3378 ../tools/generate_prefs.xsl:314
@@ -828,13 +831,13 @@ msgstr ""
 
 #: ../build/src/preferences_gen.h:3523 ../tools/generate_prefs.xsl:329
 #, fuzzy
-msgid "security"
-msgstr "διαύγεια"
+msgid "Security"
+msgstr "Διαύγεια"
 
 #: ../build/src/preferences_gen.h:3526 ../src/gui/preferences.c:329
 #: ../tools/generate_prefs.xsl:334
-msgid "general"
-msgstr "γενικά"
+msgid "General"
+msgstr "Γενικά"
 
 #: ../build/src/preferences_gen.h:3546
 #, fuzzy
@@ -934,8 +937,8 @@ msgstr ""
 
 #: ../build/src/preferences_gen.h:3928 ../tools/generate_prefs.xsl:349
 #, fuzzy
-msgid "other"
-msgstr "χρ. αντιπαράθεση"
+msgid "Other"
+msgstr "Χρ. αντιπαράθεση"
 
 #: ../build/src/preferences_gen.h:3948
 msgid "password storage backend to use"
@@ -959,7 +962,7 @@ msgstr ""
 "ήχου που μερικές μηχανές δημιουργούν ως σημειώσεις"
 
 #: ../build/src/preferences_gen.h:4066 ../tools/generate_prefs.xsl:364
-msgid "storage"
+msgid "Storage"
 msgstr ""
 
 #: ../build/src/preferences_gen.h:4069 ../src/control/crawler.c:730
@@ -967,6 +970,10 @@ msgstr ""
 #, fuzzy
 msgid "database"
 msgstr "χρονοσήμανση βάσης"
+
+#, fuzzy
+msgid "Database"
+msgstr "Χρονοσήμανση βάσης"
 
 #: ../build/src/preferences_gen.h:4089
 #, fuzzy
@@ -1074,8 +1081,8 @@ msgstr "Να γίνεται έλεγχος  πιθανώς ανανεωμένω�
 
 #: ../build/src/preferences_gen.h:4536 ../tools/generate_prefs.xsl:394
 #, fuzzy
-msgid "privacy"
-msgstr "ιδιωτικό"
+msgid "Privacy"
+msgstr "Ιδιωτικό"
 
 #: ../build/src/preferences_gen.h:4556
 msgid "Send anonymous crash reports"
@@ -1091,13 +1098,13 @@ msgid ""
 msgstr ""
 
 #: ../build/src/preferences_gen.h:4598 ../tools/generate_prefs.xsl:409
-msgid "miscellaneous"
+msgid "Miscellaneous"
 msgstr ""
 
 #: ../build/src/preferences_gen.h:4601 ../tools/generate_prefs.xsl:412
 #, fuzzy
-msgid "interface"
-msgstr "εκτυπωτής"
+msgid "Interface"
+msgstr "Εκτυπωτής"
 
 #: ../build/src/preferences_gen.h:4621
 msgid "Invert the direction of the mouse vertical scroll"
@@ -1567,6 +1574,9 @@ msgstr "Απόκλιση x"
 #: ../src/libs/metadata_view.c:177
 msgid "lens"
 msgstr "φακός"
+
+msgid "Lens"
+msgstr "Φακός"
 
 #: ../build/src/iop/introspection_blurs.c:221
 #, fuzzy
@@ -4153,6 +4163,10 @@ msgstr "ISO"
 msgid "aperture"
 msgstr "διάφραγμα"
 
+#. aperture
+msgid "Aperture"
+msgstr "Διάφραγμα"
+
 #: ../src/common/collection.c:679 ../src/libs/metadata_view.c:164
 #: ../src/libs/tools/filter.c:113
 msgid "filename"
@@ -5161,6 +5175,9 @@ msgstr[1] "Επιλογή καταλόγου"
 msgid "name"
 msgstr "όνομα"
 
+msgid "Name"
+msgstr "Όνομα"
+
 #: ../src/common/film.c:424
 msgid ""
 "Cannot remove film roll having local copies with non accessible originals"
@@ -5330,7 +5347,7 @@ msgstr ""
 #: ../src/common/history_merge_gui.c:1397 ../src/gui/hist_dialog.c:237
 #, fuzzy
 msgid "Module"
-msgstr "μονάδα"
+msgstr "Μονάδα"
 
 #: ../src/common/history_merge_gui.c:1405
 #, fuzzy
@@ -9267,7 +9284,7 @@ msgstr "Δεν είναι δυνατή η αντιγραφή ιστορικού 
 
 #. language
 #: ../src/gui/preferences.c:333
-msgid "interface language"
+msgid "Interface language"
 msgstr ""
 
 #: ../src/gui/preferences.c:348
@@ -9282,7 +9299,7 @@ msgid ""
 msgstr ""
 
 #: ../src/gui/preferences.c:359
-msgid "theme"
+msgid "Theme"
 msgstr ""
 
 #: ../src/gui/preferences.c:388
@@ -9321,7 +9338,7 @@ msgstr ""
 
 #. checkbox to allow user to modify theme with user.css
 #: ../src/gui/preferences.c:445
-msgid "modify selected theme with CSS tweaks below"
+msgid "Modify selected theme with CSS tweaks below"
 msgstr ""
 
 #: ../src/gui/preferences.c:453
@@ -9330,7 +9347,7 @@ msgstr ""
 
 #: ../src/gui/preferences.c:476
 msgctxt "usercss"
-msgid "save CSS and apply"
+msgid "Save CSS and apply"
 msgstr ""
 
 #: ../src/gui/preferences.c:482
@@ -9356,7 +9373,7 @@ msgid "Enable or disable OpenCL processing for this GPU"
 msgstr ""
 
 #: ../src/gui/preferences.c:694
-msgid "pinned memory"
+msgid "Pinned memory"
 msgstr ""
 
 #: ../src/gui/preferences.c:705
@@ -9377,8 +9394,8 @@ msgstr ""
 
 #. Adding the outer container
 #: ../src/gui/preferences.c:961
-msgid "presets"
-msgstr "προεπιλογές"
+msgid "Presets"
+msgstr "Προεπιλογές"
 
 #. exif
 #: ../src/gui/preferences.c:983 ../src/gui/presets.c:630
@@ -9386,10 +9403,17 @@ msgstr "προεπιλογές"
 msgid "model"
 msgstr "μοντέλο"
 
+#. exif
+msgid "Model"
+msgstr "Μοντέλο"
+
 #: ../src/gui/preferences.c:987 ../src/gui/presets.c:639
 #: ../src/libs/metadata_view.c:176
 msgid "maker"
 msgstr "κατασκευαστής"
+
+msgid "Maker"
+msgstr "Κατασκευαστής"
 
 #: ../src/gui/preferences.c:1012 ../src/iop/basicadj.c:628
 #: ../src/iop/borders.c:1059 ../src/iop/levels.c:636 ../src/iop/rgblevels.c:867
@@ -9400,7 +9424,7 @@ msgid "Auto"
 msgstr "Αυτόματα"
 
 #: ../src/gui/preferences.c:1026
-msgid "search presets list"
+msgid "Search presets list"
 msgstr ""
 
 #: ../src/gui/preferences.c:1027
@@ -9412,14 +9436,14 @@ msgstr ""
 #: ../src/gui/preferences.c:1033
 #, fuzzy
 msgctxt "preferences"
-msgid "import..."
-msgstr "εισαγωγή"
+msgid "Import..."
+msgstr "Εισαγωγή"
 
 #: ../src/gui/preferences.c:1037
 #, fuzzy
 msgctxt "preferences"
-msgid "export..."
-msgstr "εξαγωγή"
+msgid "Export..."
+msgstr "Εξαγωγή"
 
 #: ../src/gui/preferences.c:1173
 #, fuzzy, c-format
@@ -9446,6 +9470,9 @@ msgstr "επιλογή αρχείου"
 #: ../src/libs/styles.c:566
 msgid "all files"
 msgstr "όλα τα αρχεία"
+
+msgid "All files"
+msgstr "Όλα τα αρχεία"
 
 #: ../src/gui/presets.c:107
 msgid "non-raw"
@@ -20774,7 +20801,7 @@ msgstr "Δημιουργία στυλ από τη στοίβα ιστορικο�
 
 #: ../src/libs/tagging.c:144
 msgid "Tags"
-msgstr ""
+msgstr "Ετικέτες"
 
 #: ../src/libs/tagging.c:1207
 #, fuzzy
@@ -21968,8 +21995,8 @@ msgstr ""
 
 #: ../tools/generate_prefs.xsl:759
 #, fuzzy, c-format
-msgid "double click to reset to `%.03f'"
-msgstr "διπλό κλικ για επαναφορά σε `%f'"
+msgid "Double click to reset to `%.03f'"
+msgstr "Διπλό κλικ για επαναφορά σε `%f'"
 
 #: ../tools/generate_prefs.xsl:773 ../tools/generate_prefs.xsl:790
 #: ../tools/generate_prefs.xsl:817

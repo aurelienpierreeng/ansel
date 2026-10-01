@@ -448,13 +448,13 @@ msgstr ""
 #: ../build/src/preferences_gen.h:5064 ../build/src/preferences_gen.h:5116
 #: ../build/src/preferences_gen.h:5194 ../build/src/preferences_gen.h:5241
 #: ../tools/generate_prefs.xsl:134 ../tools/generate_prefs.xsl:490
-msgid "this setting has been modified"
-msgstr "цей параметр було змінено"
+msgid "This setting has been modified"
+msgstr "Цей параметр було змінено"
 
 #: ../build/src/preferences_gen.h:2421 ../tools/generate_prefs.xsl:192
 #, fuzzy
-msgid "views"
-msgstr "попередній перегляд"
+msgid "Views"
+msgstr "Попередній перегляд"
 
 #. TODO: look for active view. Do we know it at init time ?
 #: ../build/src/preferences_gen.h:2424 ../src/libs/lib.c:907
@@ -495,8 +495,8 @@ msgstr "Приховати вбудовані пресети сервісних 
 #: ../tools/generate_prefs.xsl:694 ../tools/generate_prefs.xsl:739
 #: ../tools/generate_prefs.xsl:773 ../tools/generate_prefs.xsl:817
 #, c-format
-msgid "double click to reset to `%s'"
-msgstr "подвійний клік для скидання до `%s'"
+msgid "Double click to reset to `%s'"
+msgstr "Подвійний клік для скидання до `%s'"
 
 #: ../build/src/preferences_gen.h:2458
 msgid "Hides built-in presets of utility modules in presets menu."
@@ -607,12 +607,12 @@ msgstr "слайд-шоу"
 
 #: ../build/src/preferences_gen.h:2837 ../src/gui/preferences.c:594
 #: ../tools/generate_prefs.xsl:270
-msgid "processing"
-msgstr "обробка"
+msgid "Processing"
+msgstr "Обробка"
 
 #: ../build/src/preferences_gen.h:2840 ../tools/generate_prefs.xsl:274
-msgid "image processing"
-msgstr "обробка зображення"
+msgid "Image processing"
+msgstr "Обробка зображення"
 
 #: ../build/src/preferences_gen.h:2860
 msgid "Always use LittleCMS 2 to apply output color profile"
@@ -651,7 +651,7 @@ msgid ""
 msgstr ""
 
 #: ../build/src/preferences_gen.h:3026
-msgid "3D lut root folder"
+msgid "3D LUT root folder"
 msgstr ""
 
 #: ../build/src/preferences_gen.h:3031 ../src/control/jobs/control_jobs.c:1765
@@ -673,8 +673,8 @@ msgid ""
 msgstr ""
 
 #: ../build/src/preferences_gen.h:3057 ../tools/generate_prefs.xsl:290
-msgid "cpu / gpu / memory"
-msgstr "cpu / gpu / пам'ять"
+msgid "CPU / GPU / memory"
+msgstr "CPU / GPU / пам'ять"
 
 #: ../build/src/preferences_gen.h:3077
 msgid "CPU cores"
@@ -687,8 +687,8 @@ msgstr ""
 #: ../build/src/preferences_gen.h:5140 ../build/src/preferences_gen.h:5218
 #: ../build/src/preferences_gen.h:5265 ../tools/generate_prefs.xsl:717
 #, c-format
-msgid "double click to reset to `%d'"
-msgstr "подвійний клік для скидання до `%d'"
+msgid "Double click to reset to `%d'"
+msgstr "Подвійний клік для скидання до `%d'"
 
 #: ../build/src/preferences_gen.h:3100
 msgid ""
@@ -767,17 +767,20 @@ msgid ""
 msgstr ""
 
 #: ../build/src/preferences_gen.h:3357 ../tools/generate_prefs.xsl:511
-msgid "not available"
-msgstr "недоступно"
+msgid "Not available"
+msgstr "Недоступно"
 
 #: ../build/src/preferences_gen.h:3360 ../build/src/preferences_gen.h:3364
 #: ../tools/generate_prefs.xsl:514 ../tools/generate_prefs.xsl:518
-msgid "not available on this system"
-msgstr "недоступно на цій системі"
+msgid "Not available on this system"
+msgstr "Недоступно на цій системі"
 
 #: ../build/src/preferences_gen.h:3373 ../src/common/image.h:269
 #: ../tools/generate_prefs.xsl:309
 msgid "libraw"
+msgstr "LibRaw"
+
+msgid "LibRaw"
 msgstr "LibRaw"
 
 #: ../build/src/preferences_gen.h:3378 ../tools/generate_prefs.xsl:314
@@ -823,13 +826,13 @@ msgid ""
 msgstr ""
 
 #: ../build/src/preferences_gen.h:3523 ../tools/generate_prefs.xsl:329
-msgid "security"
-msgstr "безпека"
+msgid "Security"
+msgstr "Безпека"
 
 #: ../build/src/preferences_gen.h:3526 ../src/gui/preferences.c:329
 #: ../tools/generate_prefs.xsl:334
-msgid "general"
-msgstr "загальні"
+msgid "General"
+msgstr "Загальні"
 
 #: ../build/src/preferences_gen.h:3546
 msgid "Ask before removing images from the library"
@@ -930,8 +933,8 @@ msgid "Will ask for confirmation before exporting files in overwrite mode"
 msgstr "Попросить підтвердження перед експортом файлів у режимі перезапису"
 
 #: ../build/src/preferences_gen.h:3928 ../tools/generate_prefs.xsl:349
-msgid "other"
-msgstr "інше"
+msgid "Other"
+msgstr "Інше"
 
 #: ../build/src/preferences_gen.h:3948
 msgid "password storage backend to use"
@@ -955,13 +958,16 @@ msgstr ""
 "камери можуть записувати, щоб зберігати нотатки до зображень"
 
 #: ../build/src/preferences_gen.h:4066 ../tools/generate_prefs.xsl:364
-msgid "storage"
-msgstr "збереження даних"
+msgid "Storage"
+msgstr "Збереження даних"
 
 #: ../build/src/preferences_gen.h:4069 ../src/control/crawler.c:730
 #: ../tools/generate_prefs.xsl:368
 msgid "database"
 msgstr "база даних"
+
+msgid "Database"
+msgstr "База даних"
 
 #: ../build/src/preferences_gen.h:4089
 #, fuzzy
@@ -1081,8 +1087,8 @@ msgstr ""
 
 #: ../build/src/preferences_gen.h:4536 ../tools/generate_prefs.xsl:394
 #, fuzzy
-msgid "privacy"
-msgstr "приватно"
+msgid "Privacy"
+msgstr "Приватно"
 
 #: ../build/src/preferences_gen.h:4556
 msgid "Send anonymous crash reports"
@@ -1098,12 +1104,12 @@ msgid ""
 msgstr ""
 
 #: ../build/src/preferences_gen.h:4598 ../tools/generate_prefs.xsl:409
-msgid "miscellaneous"
-msgstr "різне"
+msgid "Miscellaneous"
+msgstr "Різне"
 
 #: ../build/src/preferences_gen.h:4601 ../tools/generate_prefs.xsl:412
-msgid "interface"
-msgstr "інтерфейс"
+msgid "Interface"
+msgstr "Інтерфейс"
 
 #: ../build/src/preferences_gen.h:4621
 msgid "Invert the direction of the mouse vertical scroll"
@@ -1546,6 +1552,9 @@ msgstr "Зміщення"
 #: ../src/libs/metadata_view.c:177
 msgid "lens"
 msgstr "об'єктив"
+
+msgid "Lens"
+msgstr "Об'єктив"
 
 #: ../build/src/iop/introspection_blurs.c:221
 msgid "motion"
@@ -3991,6 +4000,10 @@ msgstr "ISO"
 msgid "aperture"
 msgstr "діафрагма"
 
+#. aperture
+msgid "Aperture"
+msgstr "Діафрагма"
+
 #: ../src/common/collection.c:679 ../src/libs/metadata_view.c:164
 #: ../src/libs/tools/filter.c:113
 msgid "filename"
@@ -4995,6 +5008,9 @@ msgstr[2] "Видалити порожній каталог?"
 msgid "name"
 msgstr "ім'я"
 
+msgid "Name"
+msgstr "Ім'я"
+
 #: ../src/common/film.c:424
 msgid ""
 "Cannot remove film roll having local copies with non accessible originals"
@@ -5165,7 +5181,7 @@ msgstr ""
 #: ../src/common/history_merge_gui.c:1397 ../src/gui/hist_dialog.c:237
 #, fuzzy
 msgid "Module"
-msgstr "модуль"
+msgstr "Модуль"
 
 #: ../src/common/history_merge_gui.c:1405
 #, fuzzy
@@ -9153,8 +9169,8 @@ msgstr "Неможливо копіювати історію змін із не�
 
 #. language
 #: ../src/gui/preferences.c:333
-msgid "interface language"
-msgstr "мова інтерфейсу"
+msgid "Interface language"
+msgstr "Мова інтерфейсу"
 
 #: ../src/gui/preferences.c:348
 msgid "Double-click to reset to the system language"
@@ -9170,8 +9186,8 @@ msgstr ""
 "перезапуску)"
 
 #: ../src/gui/preferences.c:359
-msgid "theme"
-msgstr "тема"
+msgid "Theme"
+msgstr "Тема"
 
 #: ../src/gui/preferences.c:388
 msgid "Set the theme for the user interface"
@@ -9214,8 +9230,8 @@ msgstr ""
 
 #. checkbox to allow user to modify theme with user.css
 #: ../src/gui/preferences.c:445
-msgid "modify selected theme with CSS tweaks below"
-msgstr "застосувати вказані нижче зміни CSS до вибраної теми"
+msgid "Modify selected theme with CSS tweaks below"
+msgstr "Застосувати вказані нижче зміни CSS до вибраної теми"
 
 #: ../src/gui/preferences.c:453
 msgid "Modify theme with CSS keyed below (saved to user.css)"
@@ -9223,8 +9239,8 @@ msgstr "Модифікувати тему з CSS введеними нижче (
 
 #: ../src/gui/preferences.c:476
 msgctxt "usercss"
-msgid "save CSS and apply"
-msgstr "зберегти CSS і застосувати"
+msgid "Save CSS and apply"
+msgstr "Зберегти CSS і застосувати"
 
 #: ../src/gui/preferences.c:482
 msgid "Click to save and apply the CSS tweaks entered in this editor"
@@ -9252,7 +9268,7 @@ msgid "Enable or disable OpenCL processing for this GPU"
 msgstr ""
 
 #: ../src/gui/preferences.c:694
-msgid "pinned memory"
+msgid "Pinned memory"
 msgstr ""
 
 #: ../src/gui/preferences.c:705
@@ -9273,8 +9289,8 @@ msgstr ""
 
 #. Adding the outer container
 #: ../src/gui/preferences.c:961
-msgid "presets"
-msgstr "пресети"
+msgid "Presets"
+msgstr "Пресети"
 
 #. exif
 #: ../src/gui/preferences.c:983 ../src/gui/presets.c:630
@@ -9282,10 +9298,17 @@ msgstr "пресети"
 msgid "model"
 msgstr "модель"
 
+#. exif
+msgid "Model"
+msgstr "Модель"
+
 #: ../src/gui/preferences.c:987 ../src/gui/presets.c:639
 #: ../src/libs/metadata_view.c:176
 msgid "maker"
 msgstr "виробник"
+
+msgid "Maker"
+msgstr "Виробник"
 
 #: ../src/gui/preferences.c:1012 ../src/iop/basicadj.c:628
 #: ../src/iop/borders.c:1059 ../src/iop/levels.c:636 ../src/iop/rgblevels.c:867
@@ -9296,8 +9319,8 @@ msgid "Auto"
 msgstr "Авто"
 
 #: ../src/gui/preferences.c:1026
-msgid "search presets list"
-msgstr "пошук у списку пресетів"
+msgid "Search presets list"
+msgstr "Пошук у списку пресетів"
 
 #: ../src/gui/preferences.c:1027
 msgid ""
@@ -9309,13 +9332,13 @@ msgstr ""
 
 #: ../src/gui/preferences.c:1033
 msgctxt "preferences"
-msgid "import..."
-msgstr "імпортувати..."
+msgid "Import..."
+msgstr "Імпортувати..."
 
 #: ../src/gui/preferences.c:1037
 msgctxt "preferences"
-msgid "export..."
-msgstr "експортувати..."
+msgid "Export..."
+msgstr "Експортувати..."
 
 #: ../src/gui/preferences.c:1173
 #, c-format
@@ -9342,6 +9365,9 @@ msgstr "вибрати файл"
 #: ../src/libs/styles.c:566
 msgid "all files"
 msgstr "всі файли"
+
+msgid "All files"
+msgstr "Всі файли"
 
 #: ../src/gui/presets.c:107
 msgid "non-raw"
@@ -21201,7 +21227,7 @@ msgstr "Застосувати вибрані стилі у списку вищ�
 
 #: ../src/libs/tagging.c:144
 msgid "Tags"
-msgstr ""
+msgstr "Теги"
 
 #: ../src/libs/tagging.c:1207
 msgid "attach tag to all"
@@ -22430,8 +22456,8 @@ msgstr ""
 
 #: ../tools/generate_prefs.xsl:759
 #, fuzzy, c-format
-msgid "double click to reset to `%.03f'"
-msgstr "подвійний клік скидає до `%f'"
+msgid "Double click to reset to `%.03f'"
+msgstr "Подвійний клік скидає до `%f'"
 
 #: ../tools/generate_prefs.xsl:773 ../tools/generate_prefs.xsl:790
 #: ../tools/generate_prefs.xsl:817
