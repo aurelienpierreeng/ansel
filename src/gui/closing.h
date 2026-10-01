@@ -21,10 +21,10 @@
 
 /** Quit, as the user asked from the window, the menu or the dock.
  *
- * While background tasks are running or queued -- those the background jobs panel shows, an
- * export, a preload -- a modal window first names them and asks whether to quit all the same or
- * go back. Nothing is cancelled either way: a quit finishes the running jobs and drops the queued
- * ones. Without background tasks, the quit starts at once. GUI thread only.
+ * While jobs are running or queued -- an export, a preload, a thumbnail being rendered: what the
+ * closing window would wait for or drop -- a modal window first names them and asks whether to
+ * quit all the same or go back. Nothing is cancelled either way: a quit finishes the running jobs
+ * and drops the queued ones. With no job, the quit starts at once. GUI thread only.
  */
 void dt_gui_closing_quit(void);
 

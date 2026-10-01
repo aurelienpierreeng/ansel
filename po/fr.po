@@ -8590,8 +8590,8 @@ msgid "Quit Ansel?"
 msgstr "Quitter Ansel ?"
 
 #: ../src/gui/closing.c:178
-msgid "Background tasks are still running"
-msgstr "Des tâches de fond sont encore en cours"
+msgid "Tasks are still running"
+msgstr "Des tâches sont encore en cours"
 
 #: ../src/gui/closing.c:195
 msgid ""
@@ -8616,12 +8616,6 @@ msgid_plural "%d other tasks, not started, would be dropped"
 msgstr[0] "%d autre tâche, non lancée, serait abandonnée"
 msgstr[1] "%d autres tâches, non lancées, seraient abandonnées"
 
-#: ../src/gui/closing.c:395
-#, c-format
-msgid "%d background task is not finished"
-msgid_plural "%d background tasks are not finished"
-msgstr[0] "%d tâche de fond n'est pas terminée"
-msgstr[1] "%d tâches de fond ne sont pas terminées"
 
 #: ../src/gui/closing.c:115
 msgid "Ansel is finishing its work before closing"

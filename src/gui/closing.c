@@ -112,7 +112,7 @@ static gboolean _closing_confirm_delete(GtkWidget *widget __attribute__((unused)
   return TRUE;
 }
 
-static gboolean _closing_confirm_key(GtkWidget *widget __attribute__((unused)), GdkEventKey *event,
+static gboolean _closing_confirm_key(GtkWidget *widget __attribute__((unused)), const GdkEventKey *event,
                                      gpointer user_data)
 {
   if(event->keyval != GDK_KEY_Escape) return FALSE;
@@ -175,7 +175,7 @@ static void _closing_window_new(dt_closing_t *closing)
   gtk_box_pack_start(GTK_BOX(box), text, TRUE, TRUE, 0);
 
   GtkWidget *title = gtk_label_new(NULL);
-  gchar *markup = g_markup_printf_escaped("<b>%s</b>", confirm ? _("Background tasks are still running")
+  gchar *markup = g_markup_printf_escaped("<b>%s</b>", confirm ? _("Tasks are still running")
                                                                : _("Ansel is finishing its work before closing"));
   gtk_label_set_markup(GTK_LABEL(title), markup);
   dt_free(markup);
@@ -370,37 +370,30 @@ static void _closing_details_update(dt_closing_t *closing)
   g_array_free(running, TRUE);
 }
 
-// The background tasks: the jobs that publish a progress, running or queued, those the background
-// jobs panel shows. Thumbnails and darkroom pipelines publish none.
-static void _closing_count_task(const gchar *message __attribute__((unused)), void *data)
+static void _closing_count_job(const char *description __attribute__((unused)),
+                              const dt_job_queue_t queue __attribute__((unused)),
+                              const gboolean reserved __attribute__((unused)), void *data)
 {
   (*(int32_t *)data)++;
 }
 
-static int32_t _closing_background_tasks(void)
+// The jobs running now, of every kind: thumbnails and darkroom pipelines too. They are what a quit
+// waits for, and what brings up the closing window once it is under way.
+static int32_t _closing_running_jobs(void)
 {
-  int32_t tasks = 0;
-  dt_control_progress_foreach(dt_control_get_global(), _closing_count_task, &tasks);
-  return tasks;
+  int32_t running = 0;
+  dt_control_running_jobs_foreach(dt_control_get_global(), _closing_count_job, &running);
+  return running;
 }
 
 static void _closing_refresh(dt_closing_t *closing)
 {
-  // Before the quit, the question is about the background tasks. During it, every running job
-  // holds the process, and the workers still alive are those jobs.
-  gchar *count = NULL;
-  if(closing->mode == DT_CLOSING_CONFIRM)
-  {
-    const int32_t tasks = _closing_background_tasks();
-    count = g_strdup_printf(ngettext("%d background task is not finished", "%d background tasks are not finished",
-                                     tasks),
-                            tasks);
-  }
-  else
-  {
-    const int32_t alive = dt_control_workers_alive();
-    count = g_strdup_printf(ngettext("%d task is still running", "%d tasks are still running", alive), alive);
-  }
+  // Before the quit, the workers are all alive, idle or not: the running jobs are counted one by
+  // one. During it, the workers still alive are those jobs.
+  const int32_t running
+      = (closing->mode == DT_CLOSING_CONFIRM) ? _closing_running_jobs() : dt_control_workers_alive();
+  gchar *count = g_strdup_printf(ngettext("%d task is still running", "%d tasks are still running", running),
+                                 running);
   gtk_label_set_text(GTK_LABEL(closing->count), count);
   dt_free(count);
 
@@ -432,16 +425,30 @@ static gboolean _closing_poll(gpointer user_data)
   return G_SOURCE_CONTINUE;
 }
 
+// Once nothing runs and nothing is queued, there is nothing left to ask about: the quit asked for
+// goes on, as if Quit anyway had been clicked.
+static gboolean _closing_nothing_pending(void)
+{
+  return _closing_running_jobs() == 0 && dt_control_queued_jobs_count(dt_control_get_global()) == 0;
+}
+
 static gboolean _closing_confirm_poll(gpointer user_data)
 {
-  _closing_refresh((dt_closing_t *)user_data);
+  dt_closing_t *closing = (dt_closing_t *)user_data;
+  if(_closing_nothing_pending())
+  {
+    _closing_answer(closing, TRUE);
+    return G_SOURCE_CONTINUE; // removed by _closing_confirm()
+  }
+  _closing_refresh(closing);
   return G_SOURCE_CONTINUE;
 }
 
-// Ask, while background tasks are running, whether to quit all the same. TRUE to quit.
+// Ask, while jobs are running or queued, whether to quit all the same. TRUE to quit. The running
+// ones are what the closing window would wait for; the queued ones, what the quit would drop.
 static gboolean _closing_confirm(void)
 {
-  if(_closing_background_tasks() == 0) return TRUE;
+  if(_closing_nothing_pending()) return TRUE;
 
   // A second request while the question is open -- the shortcut again, the dock -- does not ask
   // it twice: the window that is up answers it.
