@@ -6366,11 +6366,9 @@ msgstr[1] ""
 
 #: ../src/control/jobs/control_jobs.c:1645
 msgid "Remove image from library ?"
-msgstr ""
-
-#: ../src/control/jobs/control_jobs.c:1645
-msgid "Remove images from library ?"
-msgstr ""
+msgid_plural "Remove images from library ?"
+msgstr[0] ""
+msgstr[1] ""
 
 #: ../src/control/jobs/control_jobs.c:1662
 #: ../src/control/jobs/control_jobs.c:1709
@@ -6398,12 +6396,9 @@ msgstr[1] ""
 #: ../src/control/jobs/control_jobs.c:1693
 #, fuzzy
 msgid "Remove image from disk ?"
-msgstr "ต้องการจะย้ายรูปหรือไม่?"
-
-#: ../src/control/jobs/control_jobs.c:1693
-#, fuzzy
-msgid "Remove images from disk ?"
-msgstr "ต้องการจะย้ายรูปหรือไม่?"
+msgid_plural "Remove images from disk ?"
+msgstr[0] "ต้องการจะย้ายรูปหรือไม่?"
+msgstr[1] "ต้องการจะย้ายรูปหรือไม่?"
 
 #: ../src/control/jobs/control_jobs.c:1730
 #, fuzzy

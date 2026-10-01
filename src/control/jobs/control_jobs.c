@@ -1630,7 +1630,7 @@ gboolean dt_control_remove_images()
     dt_osx_disallow_fullscreen(dialog);
 #endif
 
-    gtk_window_set_title(GTK_WINDOW(dialog), ngettext(_("Remove image from library ?"), _("Remove images from library ?"), number));
+    gtk_window_set_title(GTK_WINDOW(dialog), ngettext("Remove image from library ?", "Remove images from library ?", number));
     gint res = gtk_dialog_run(GTK_DIALOG(dialog));
     gtk_widget_destroy(dialog);
     if(res != GTK_RESPONSE_YES)
@@ -1679,7 +1679,7 @@ void dt_control_delete_images()
     dt_osx_disallow_fullscreen(dialog);
 #endif
 
-    gtk_window_set_title(GTK_WINDOW(dialog), ngettext(_("Remove image from disk ?"), _("Remove images from disk ?"), number));
+    gtk_window_set_title(GTK_WINDOW(dialog), ngettext("Remove image from disk ?", "Remove images from disk ?", number));
     gint res = gtk_dialog_run(GTK_DIALOG(dialog));
     gtk_widget_destroy(dialog);
     if(res != GTK_RESPONSE_YES)

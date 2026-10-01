@@ -6397,12 +6397,9 @@ msgstr[1] ""
 #: ../src/control/jobs/control_jobs.c:1645
 #, fuzzy
 msgid "Remove image from library ?"
-msgstr "demandi antaŭ ol forigi bildojn el la bildaro"
-
-#: ../src/control/jobs/control_jobs.c:1645
-#, fuzzy
-msgid "Remove images from library ?"
-msgstr "demandi antaŭ ol forigi bildojn el la bildaro"
+msgid_plural "Remove images from library ?"
+msgstr[0] "demandi antaŭ ol forigi bildojn el la bildaro"
+msgstr[1] "demandi antaŭ ol forigi bildojn el la bildaro"
 
 #: ../src/control/jobs/control_jobs.c:1662
 #: ../src/control/jobs/control_jobs.c:1709
@@ -6431,12 +6428,9 @@ msgstr[1] ""
 #: ../src/control/jobs/control_jobs.c:1693
 #, fuzzy
 msgid "Remove image from disk ?"
-msgstr "forigi bildojn"
-
-#: ../src/control/jobs/control_jobs.c:1693
-#, fuzzy
-msgid "Remove images from disk ?"
-msgstr "demandi antaŭ ol forviŝi bildojn el disko"
+msgid_plural "Remove images from disk ?"
+msgstr[0] "forigi bildojn"
+msgstr[1] "demandi antaŭ ol forviŝi bildojn el disko"
 
 #: ../src/control/jobs/control_jobs.c:1730
 msgid ""

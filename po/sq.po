@@ -6395,12 +6395,9 @@ msgstr[1] ""
 #: ../src/control/jobs/control_jobs.c:1645
 #, fuzzy
 msgid "Remove image from library ?"
-msgstr "pyes para se të heq imazhet nga libraria"
-
-#: ../src/control/jobs/control_jobs.c:1645
-#, fuzzy
-msgid "Remove images from library ?"
-msgstr "pyes para se të heq imazhet nga libraria"
+msgid_plural "Remove images from library ?"
+msgstr[0] "pyes para se të heq imazhet nga libraria"
+msgstr[1] "pyes para se të heq imazhet nga libraria"
 
 #: ../src/control/jobs/control_jobs.c:1662
 #: ../src/control/jobs/control_jobs.c:1709
@@ -6431,12 +6428,9 @@ msgstr[1] ""
 #: ../src/control/jobs/control_jobs.c:1693
 #, fuzzy
 msgid "Remove image from disk ?"
-msgstr "heq imazhet"
-
-#: ../src/control/jobs/control_jobs.c:1693
-#, fuzzy
-msgid "Remove images from disk ?"
-msgstr "pyes para se të fshij imazhet nga disku"
+msgid_plural "Remove images from disk ?"
+msgstr[0] "heq imazhet"
+msgstr[1] "pyes para se të fshij imazhet nga disku"
 
 #: ../src/control/jobs/control_jobs.c:1730
 msgid ""

@@ -6388,12 +6388,9 @@ msgstr[1] ""
 #: ../src/control/jobs/control_jobs.c:1645
 #, fuzzy
 msgid "Remove image from library ?"
-msgstr "画像をライブラリから除去する前に確認する"
-
-#: ../src/control/jobs/control_jobs.c:1645
-#, fuzzy
-msgid "Remove images from library ?"
-msgstr "画像をライブラリから除去する前に確認する"
+msgid_plural "Remove images from library ?"
+msgstr[0] "画像をライブラリから除去する前に確認する"
+msgstr[1] "画像をライブラリから除去する前に確認する"
 
 #: ../src/control/jobs/control_jobs.c:1662
 #: ../src/control/jobs/control_jobs.c:1709
@@ -6424,12 +6421,9 @@ msgstr[1] ""
 #: ../src/control/jobs/control_jobs.c:1693
 #, fuzzy
 msgid "Remove image from disk ?"
-msgstr "画像を除去します"
-
-#: ../src/control/jobs/control_jobs.c:1693
-#, fuzzy
-msgid "Remove images from disk ?"
-msgstr "画像をディスクから削除する前に確認する"
+msgid_plural "Remove images from disk ?"
+msgstr[0] "画像を除去します"
+msgstr[1] "画像をディスクから削除する前に確認する"
 
 #: ../src/control/jobs/control_jobs.c:1730
 msgid ""

@@ -767,7 +767,7 @@ GtkWidget *dt_guides_popover(dt_view_t *self, GtkWidget *button)
 
   GtkWidget *contrast = vm->guides_contrast = dt_bauhaus_slider_new_with_range(dt_bauhaus_get_global(), DT_GUI_MODULE(NULL), 0, 1, 0.005, 0.5, 3);
   dt_bauhaus_widget_set_label(contrast, N_("Contrast"));
-  gtk_widget_set_tooltip_text(contrast, N_("Set the contrast between the lightest and darkest part of the guide overlays"));
+  gtk_widget_set_tooltip_text(contrast, _("Set the contrast between the lightest and darkest part of the guide overlays"));
   dt_bauhaus_slider_set(contrast, dt_conf_get_float("darkroom/ui/overlay_contrast"));
   gtk_box_pack_start(GTK_BOX(vbox), contrast, TRUE, TRUE, 0);
   g_signal_connect(G_OBJECT(contrast), "value-changed", G_CALLBACK(_settings_contrast_changed), NULL);

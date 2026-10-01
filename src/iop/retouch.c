@@ -1939,13 +1939,13 @@ static gboolean rt_select_algorithm_callback(GtkToggleButton *togglebutton, GdkE
     dt_conf_set_int("plugins/darkroom/retouch/default_algo", p->algorithm);
     // and we show a toat msg to confirm
     if(p->algorithm == DT_IOP_RETOUCH_CLONE)
-      dt_control_log(N_("Default tool changed to %s"), N_("cloning"));
+      dt_control_log(_("Default tool changed to %s"), _("cloning"));
     else if(p->algorithm == DT_IOP_RETOUCH_HEAL)
-      dt_control_log(N_("Default tool changed to %s"), N_("healing"));
+      dt_control_log(_("Default tool changed to %s"), _("healing"));
     else if(p->algorithm == DT_IOP_RETOUCH_FILL)
-      dt_control_log(N_("Default tool changed to %s"), N_("blur"));
+      dt_control_log(_("Default tool changed to %s"), _("blur"));
     else if(p->algorithm == DT_IOP_RETOUCH_BLUR)
-      dt_control_log(N_("Default tool changed to %s"), N_("fill"));
+      dt_control_log(_("Default tool changed to %s"), _("fill"));
   }
 
   return TRUE;

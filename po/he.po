@@ -6348,12 +6348,9 @@ msgstr[1] ""
 #: ../src/control/jobs/control_jobs.c:1645
 #, fuzzy
 msgid "Remove image from library ?"
-msgstr "בקש אישור לפני הסרת תמונות מהספרייה"
-
-#: ../src/control/jobs/control_jobs.c:1645
-#, fuzzy
-msgid "Remove images from library ?"
-msgstr "בקש אישור לפני הסרת תמונות מהספרייה"
+msgid_plural "Remove images from library ?"
+msgstr[0] "בקש אישור לפני הסרת תמונות מהספרייה"
+msgstr[1] "בקש אישור לפני הסרת תמונות מהספרייה"
 
 #: ../src/control/jobs/control_jobs.c:1662
 #: ../src/control/jobs/control_jobs.c:1709
@@ -6380,12 +6377,9 @@ msgstr[1] "האם אתה באמת מעוניין למחוק פיסית תמונ�
 #: ../src/control/jobs/control_jobs.c:1693
 #, fuzzy
 msgid "Remove image from disk ?"
-msgstr "הסר תמונות"
-
-#: ../src/control/jobs/control_jobs.c:1693
-#, fuzzy
-msgid "Remove images from disk ?"
-msgstr "בקש אישור לפני מחיקת תמונות מהכונן"
+msgid_plural "Remove images from disk ?"
+msgstr[0] "הסר תמונות"
+msgstr[1] "בקש אישור לפני מחיקת תמונות מהכונן"
 
 #: ../src/control/jobs/control_jobs.c:1730
 msgid ""

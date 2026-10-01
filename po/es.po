@@ -6518,11 +6518,9 @@ msgstr[1] ""
 
 #: ../src/control/jobs/control_jobs.c:1645
 msgid "Remove image from library ?"
-msgstr "¿Eliminar imagen de la fototeca?"
-
-#: ../src/control/jobs/control_jobs.c:1645
-msgid "Remove images from library ?"
-msgstr "¿Eliminar imágenes de la fototeca?"
+msgid_plural "Remove images from library ?"
+msgstr[0] "¿Eliminar imagen de la fototeca?"
+msgstr[1] "¿Eliminar imágenes de la fototeca?"
 
 #: ../src/control/jobs/control_jobs.c:1662
 #: ../src/control/jobs/control_jobs.c:1709
@@ -6552,11 +6550,9 @@ msgstr[1] ""
 
 #: ../src/control/jobs/control_jobs.c:1693
 msgid "Remove image from disk ?"
-msgstr "¿Eliminar las imágenes del disco?"
-
-#: ../src/control/jobs/control_jobs.c:1693
-msgid "Remove images from disk ?"
-msgstr "¿Eliminar las imágenes del disco?"
+msgid_plural "Remove images from disk ?"
+msgstr[0] "¿Eliminar las imágenes del disco?"
+msgstr[1] "¿Eliminar las imágenes del disco?"
 
 #: ../src/control/jobs/control_jobs.c:1730
 msgid ""

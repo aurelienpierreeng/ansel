@@ -6553,12 +6553,9 @@ msgstr[1] ""
 #: ../src/control/jobs/control_jobs.c:1645
 #, fuzzy
 msgid "Remove image from library ?"
-msgstr "fråga innan en bild tas bort från databasen"
-
-#: ../src/control/jobs/control_jobs.c:1645
-#, fuzzy
-msgid "Remove images from library ?"
-msgstr "fråga innan en bild tas bort från databasen"
+msgid_plural "Remove images from library ?"
+msgstr[0] "fråga innan en bild tas bort från databasen"
+msgstr[1] "fråga innan en bild tas bort från databasen"
 
 #: ../src/control/jobs/control_jobs.c:1662
 #: ../src/control/jobs/control_jobs.c:1709
@@ -6585,12 +6582,9 @@ msgstr[1] ""
 #: ../src/control/jobs/control_jobs.c:1693
 #, fuzzy
 msgid "Remove image from disk ?"
-msgstr "tar bort bilder"
-
-#: ../src/control/jobs/control_jobs.c:1693
-#, fuzzy
-msgid "Remove images from disk ?"
-msgstr "fråga innan en bild raderas från disken"
+msgid_plural "Remove images from disk ?"
+msgstr[0] "tar bort bilder"
+msgstr[1] "fråga innan en bild raderas från disken"
 
 #: ../src/control/jobs/control_jobs.c:1730
 #, fuzzy

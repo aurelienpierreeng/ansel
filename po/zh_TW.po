@@ -6363,12 +6363,8 @@ msgstr[0] ""
 #: ../src/control/jobs/control_jobs.c:1645
 #, fuzzy
 msgid "Remove image from library ?"
-msgstr "移除已匯入圖庫的影像前要求確認"
-
-#: ../src/control/jobs/control_jobs.c:1645
-#, fuzzy
-msgid "Remove images from library ?"
-msgstr "移除已匯入圖庫的影像前要求確認"
+msgid_plural "Remove images from library ?"
+msgstr[0] "移除已匯入圖庫的影像前要求確認"
 
 #: ../src/control/jobs/control_jobs.c:1662
 #: ../src/control/jobs/control_jobs.c:1709
@@ -6394,12 +6390,8 @@ msgstr[0] "確定要從硬碟中刪除選取的影像檔案？"
 #: ../src/control/jobs/control_jobs.c:1693
 #, fuzzy
 msgid "Remove image from disk ?"
-msgstr "移除影像"
-
-#: ../src/control/jobs/control_jobs.c:1693
-#, fuzzy
-msgid "Remove images from disk ?"
-msgstr "刪除硬碟裡的影像檔案前要求確認"
+msgid_plural "Remove images from disk ?"
+msgstr[0] "移除影像"
 
 #: ../src/control/jobs/control_jobs.c:1730
 msgid ""

@@ -1332,7 +1332,7 @@ gboolean dt_handle_dialog_enter(GtkWidget *widget, GdkEventKey *event, gpointer 
 
 GtkWidget *dt_action_button_new(dt_lib_module_t *self, const gchar *label, gpointer callback, gpointer data, const gchar *tooltip, guint accel_key, GdkModifierType mods)
 {
-  GtkWidget *button = gtk_button_new_with_label(label);
+  GtkWidget *button = gtk_button_new_with_label(_(label));
 
   gtk_widget_set_valign(GTK_WIDGET(button), GTK_ALIGN_CENTER);
   gtk_widget_set_halign(GTK_WIDGET(button), GTK_ALIGN_CENTER);

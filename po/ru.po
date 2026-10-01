@@ -6397,12 +6397,10 @@ msgstr[2] ""
 #: ../src/control/jobs/control_jobs.c:1645
 #, fuzzy
 msgid "Remove image from library ?"
-msgstr "Подтверждать удаление из коллекции"
-
-#: ../src/control/jobs/control_jobs.c:1645
-#, fuzzy
-msgid "Remove images from library ?"
-msgstr "Подтверждать удаление из коллекции"
+msgid_plural "Remove images from library ?"
+msgstr[0] "Подтверждать удаление из коллекции"
+msgstr[1] "Подтверждать удаление из коллекции"
+msgstr[2] "Подтверждать удаление из коллекции"
 
 #: ../src/control/jobs/control_jobs.c:1662
 #: ../src/control/jobs/control_jobs.c:1709
@@ -6430,12 +6428,10 @@ msgstr[2] "Вы действительно хотите переместить �
 #: ../src/control/jobs/control_jobs.c:1693
 #, fuzzy
 msgid "Remove image from disk ?"
-msgstr "Удаление из коллекции"
-
-#: ../src/control/jobs/control_jobs.c:1693
-#, fuzzy
-msgid "Remove images from disk ?"
-msgstr "Запрашивать подтверждение на удаление файлов с диска"
+msgid_plural "Remove images from disk ?"
+msgstr[0] "Удаление из коллекции"
+msgstr[1] "Запрашивать подтверждение на удаление файлов с диска"
+msgstr[2] "Запрашивать подтверждение на удаление файлов с диска"
 
 #: ../src/control/jobs/control_jobs.c:1730
 msgid ""

@@ -6523,11 +6523,9 @@ msgstr[1] ""
 
 #: ../src/control/jobs/control_jobs.c:1645
 msgid "Remove image from library ?"
-msgstr ""
-
-#: ../src/control/jobs/control_jobs.c:1645
-msgid "Remove images from library ?"
-msgstr ""
+msgid_plural "Remove images from library ?"
+msgstr[0] ""
+msgstr[1] ""
 
 #: ../src/control/jobs/control_jobs.c:1662
 #: ../src/control/jobs/control_jobs.c:1709
@@ -6554,12 +6552,9 @@ msgstr[1] ""
 #: ../src/control/jobs/control_jobs.c:1693
 #, fuzzy
 msgid "Remove image from disk ?"
-msgstr "treu imatges"
-
-#: ../src/control/jobs/control_jobs.c:1693
-#, fuzzy
-msgid "Remove images from disk ?"
-msgstr "treu imatges"
+msgid_plural "Remove images from disk ?"
+msgstr[0] "treu imatges"
+msgstr[1] "treu imatges"
 
 #: ../src/control/jobs/control_jobs.c:1730
 #, fuzzy

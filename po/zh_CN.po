@@ -6368,11 +6368,8 @@ msgstr[0] "是否要从 Ansel 照片库中移除 %d 张图像？这些文件不�
 
 #: ../src/control/jobs/control_jobs.c:1645
 msgid "Remove image from library ?"
-msgstr "从照片库中移除图像？"
-
-#: ../src/control/jobs/control_jobs.c:1645
-msgid "Remove images from library ?"
-msgstr "从照片库中移除图像？"
+msgid_plural "Remove images from library ?"
+msgstr[0] "从照片库中移除图像？"
 
 #: ../src/control/jobs/control_jobs.c:1662
 #: ../src/control/jobs/control_jobs.c:1709
@@ -6398,11 +6395,8 @@ msgstr[0] ""
 
 #: ../src/control/jobs/control_jobs.c:1693
 msgid "Remove image from disk ?"
-msgstr "从磁盘上移除图像？"
-
-#: ../src/control/jobs/control_jobs.c:1693
-msgid "Remove images from disk ?"
-msgstr "从磁盘上移除图像？"
+msgid_plural "Remove images from disk ?"
+msgstr[0] "从磁盘上移除图像？"
 
 #: ../src/control/jobs/control_jobs.c:1730
 msgid ""

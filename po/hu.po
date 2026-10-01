@@ -6403,12 +6403,9 @@ msgstr[1] ""
 #: ../src/control/jobs/control_jobs.c:1645
 #, fuzzy
 msgid "Remove image from library ?"
-msgstr "kérdezzen, mielőtt eltávolítja a képet az adatbázisból"
-
-#: ../src/control/jobs/control_jobs.c:1645
-#, fuzzy
-msgid "Remove images from library ?"
-msgstr "kérdezzen, mielőtt eltávolítja a képet az adatbázisból"
+msgid_plural "Remove images from library ?"
+msgstr[0] "kérdezzen, mielőtt eltávolítja a képet az adatbázisból"
+msgstr[1] "kérdezzen, mielőtt eltávolítja a képet az adatbázisból"
 
 #: ../src/control/jobs/control_jobs.c:1662
 #: ../src/control/jobs/control_jobs.c:1709
@@ -6439,12 +6436,9 @@ msgstr[1] ""
 #: ../src/control/jobs/control_jobs.c:1693
 #, fuzzy
 msgid "Remove image from disk ?"
-msgstr "képek eltávolítása"
-
-#: ../src/control/jobs/control_jobs.c:1693
-#, fuzzy
-msgid "Remove images from disk ?"
-msgstr "kérdezzen, mielőtt képet töröl a lemezről"
+msgid_plural "Remove images from disk ?"
+msgstr[0] "képek eltávolítása"
+msgstr[1] "kérdezzen, mielőtt képet töröl a lemezről"
 
 #: ../src/control/jobs/control_jobs.c:1730
 msgid ""

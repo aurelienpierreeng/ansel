@@ -6414,12 +6414,10 @@ msgstr[2] ""
 #: ../src/control/jobs/control_jobs.c:1645
 #, fuzzy
 msgid "Remove image from library ?"
-msgstr "zeptejte se před odebráním obrázků z knihovny"
-
-#: ../src/control/jobs/control_jobs.c:1645
-#, fuzzy
-msgid "Remove images from library ?"
-msgstr "zeptejte se před odebráním obrázků z knihovny"
+msgid_plural "Remove images from library ?"
+msgstr[0] "zeptejte se před odebráním obrázků z knihovny"
+msgstr[1] "zeptejte se před odebráním obrázků z knihovny"
+msgstr[2] "zeptejte se před odebráním obrázků z knihovny"
 
 #: ../src/control/jobs/control_jobs.c:1662
 #: ../src/control/jobs/control_jobs.c:1709
@@ -6450,12 +6448,10 @@ msgstr[2] ""
 #: ../src/control/jobs/control_jobs.c:1693
 #, fuzzy
 msgid "Remove image from disk ?"
-msgstr "odstranit obrázky"
-
-#: ../src/control/jobs/control_jobs.c:1693
-#, fuzzy
-msgid "Remove images from disk ?"
-msgstr "zeptat se před smazáním obrázků z disku"
+msgid_plural "Remove images from disk ?"
+msgstr[0] "odstranit obrázky"
+msgstr[1] "zeptat se před smazáním obrázků z disku"
+msgstr[2] "zeptat se před smazáním obrázků z disku"
 
 #: ../src/control/jobs/control_jobs.c:1730
 msgid ""

@@ -6550,11 +6550,11 @@ msgstr[3] ""
 
 #: ../src/control/jobs/control_jobs.c:1645
 msgid "Remove image from library ?"
-msgstr ""
-
-#: ../src/control/jobs/control_jobs.c:1645
-msgid "Remove images from library ?"
-msgstr ""
+msgid_plural "Remove images from library ?"
+msgstr[0] ""
+msgstr[1] ""
+msgstr[2] ""
+msgstr[3] ""
 
 #: ../src/control/jobs/control_jobs.c:1662
 #: ../src/control/jobs/control_jobs.c:1709
@@ -6591,12 +6591,11 @@ msgstr[3] ""
 #: ../src/control/jobs/control_jobs.c:1693
 #, fuzzy
 msgid "Remove image from disk ?"
-msgstr "uklanjanje slika"
-
-#: ../src/control/jobs/control_jobs.c:1693
-#, fuzzy
-msgid "Remove images from disk ?"
-msgstr "uklanjanje slika"
+msgid_plural "Remove images from disk ?"
+msgstr[0] "uklanjanje slika"
+msgstr[1] "uklanjanje slika"
+msgstr[2] "uklanjanje slika"
+msgstr[3] "uklanjanje slika"
 
 #: ../src/control/jobs/control_jobs.c:1730
 #, fuzzy

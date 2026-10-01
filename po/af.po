@@ -6495,12 +6495,9 @@ msgstr[1] ""
 #: ../src/control/jobs/control_jobs.c:1645
 #, fuzzy
 msgid "Remove image from library ?"
-msgstr "vra voordat beelde verwyder word van die biblioteek"
-
-#: ../src/control/jobs/control_jobs.c:1645
-#, fuzzy
-msgid "Remove images from library ?"
-msgstr "vra voordat beelde verwyder word van die biblioteek"
+msgid_plural "Remove images from library ?"
+msgstr[0] "vra voordat beelde verwyder word van die biblioteek"
+msgstr[1] "vra voordat beelde verwyder word van die biblioteek"
 
 #: ../src/control/jobs/control_jobs.c:1662
 #: ../src/control/jobs/control_jobs.c:1709
@@ -6527,12 +6524,9 @@ msgstr[1] "wil jy regtig die geselekteerde beeld fisies van die skyf skrap?"
 #: ../src/control/jobs/control_jobs.c:1693
 #, fuzzy
 msgid "Remove image from disk ?"
-msgstr "verwyder beelde"
-
-#: ../src/control/jobs/control_jobs.c:1693
-#, fuzzy
-msgid "Remove images from disk ?"
-msgstr "vra voordat beelde verwyder word van die skyf"
+msgid_plural "Remove images from disk ?"
+msgstr[0] "verwyder beelde"
+msgstr[1] "vra voordat beelde verwyder word van die skyf"
 
 #: ../src/control/jobs/control_jobs.c:1730
 msgid ""
