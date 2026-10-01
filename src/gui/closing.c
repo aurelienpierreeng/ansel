@@ -22,8 +22,10 @@
 #include "control/control.h"
 #include "control/jobs.h"
 #include "control/progress.h"
+#include "gui/application.h"
 #include "system/macros.h"
 #include "system/mem_alloc.h"
+#include "widgets/dialog.h"
 #include "widgets/widget_settings.h"
 #include "widgets/widget_style.h"
 
@@ -42,6 +44,14 @@
 // only the darkroom uses, comes after the queues.
 #define DT_CLOSING_KIND_DARKROOM DT_JOB_QUEUE_MAX
 
+// The same window serves twice. Before the quit, it asks whether to quit while background tasks
+// are running; once the quit is under way, it waits for the running jobs.
+typedef enum dt_closing_mode_t
+{
+  DT_CLOSING_CONFIRM,
+  DT_CLOSING_WAIT,
+} dt_closing_mode_t;
+
 enum
 {
   DT_CLOSING_COL_KIND,        // the job's kind
@@ -51,6 +61,8 @@ enum
 
 typedef struct dt_closing_t
 {
+  dt_closing_mode_t mode;
+  gboolean quit;       // the answer, in DT_CLOSING_CONFIRM
   GMainLoop *loop;
   gint64 start;
   GtkWidget *window;
@@ -76,8 +88,41 @@ static gboolean _closing_refuse_delete(GtkWidget *widget __attribute__((unused))
   return TRUE;
 }
 
+static void _closing_answer(dt_closing_t *closing, const gboolean quit)
+{
+  closing->quit = quit;
+  g_main_loop_quit(closing->loop);
+}
+
+static void _closing_quit_clicked(GtkButton *button __attribute__((unused)), gpointer user_data)
+{
+  _closing_answer((dt_closing_t *)user_data, TRUE);
+}
+
+static void _closing_back_clicked(GtkButton *button __attribute__((unused)), gpointer user_data)
+{
+  _closing_answer((dt_closing_t *)user_data, FALSE);
+}
+
+// Closing the question, by its title bar or by Escape, is going back.
+static gboolean _closing_confirm_delete(GtkWidget *widget __attribute__((unused)),
+                                        GdkEvent *event __attribute__((unused)), gpointer user_data)
+{
+  _closing_answer((dt_closing_t *)user_data, FALSE);
+  return TRUE;
+}
+
+static gboolean _closing_confirm_key(GtkWidget *widget __attribute__((unused)), GdkEventKey *event,
+                                     gpointer user_data)
+{
+  if(event->keyval != GDK_KEY_Escape) return FALSE;
+  _closing_answer((dt_closing_t *)user_data, FALSE);
+  return TRUE;
+}
+
 static void _closing_window_new(dt_closing_t *closing)
 {
+  const gboolean confirm = closing->mode == DT_CLOSING_CONFIRM;
   closing->window = gtk_window_new(GTK_WINDOW_TOPLEVEL);
 #ifdef GDK_WINDOWING_QUARTZ
   // Like every other window of ours: it must not open as a full-screen space of its own, and
@@ -85,34 +130,53 @@ static void _closing_window_new(dt_closing_t *closing)
   dt_osx_disallow_fullscreen(closing->window);
 #endif
   gtk_window_set_icon_name(GTK_WINDOW(closing->window), "ansel");
-  gtk_window_set_title(GTK_WINDOW(closing->window), _("closing Ansel..."));
-  gtk_window_set_position(GTK_WINDOW(closing->window), GTK_WIN_POS_CENTER);
+  gtk_window_set_title(GTK_WINDOW(closing->window), confirm ? _("Quit Ansel?") : _("Closing Ansel..."));
   gtk_window_set_resizable(GTK_WINDOW(closing->window), FALSE);
-  // Closing this window would stop nothing, so it offers no button to, and refuses a
-  // delete-event sent some other way (Alt+F4, a task bar).
-  gtk_window_set_deletable(GTK_WINDOW(closing->window), FALSE);
-  g_signal_connect(closing->window, "delete-event", G_CALLBACK(_closing_refuse_delete), NULL);
-  // A window group of its own. The grab of dt_gui_closing_wait() is held in the default group,
-  // the one every other window of ours is in; in there, it would take this window's clicks too,
-  // and the details could not be unfolded.
-  GtkWindowGroup *group = gtk_window_group_new();
-  gtk_window_group_add_window(group, GTK_WINDOW(closing->window));
-  g_object_unref(group);
+  if(confirm)
+  {
+    // The main window is still up, and nothing in it may change while the question is open.
+    gtk_window_set_transient_for(GTK_WINDOW(closing->window), GTK_WINDOW(dt_gui_main_window()));
+    gtk_window_set_modal(GTK_WINDOW(closing->window), TRUE);
+    gtk_window_set_position(GTK_WINDOW(closing->window), GTK_WIN_POS_CENTER_ON_PARENT);
+    g_signal_connect(closing->window, "delete-event", G_CALLBACK(_closing_confirm_delete), closing);
+    g_signal_connect(closing->window, "key-press-event", G_CALLBACK(_closing_confirm_key), closing);
+  }
+  else
+  {
+    gtk_window_set_position(GTK_WINDOW(closing->window), GTK_WIN_POS_CENTER);
+    // Closing this window would stop nothing, so it offers no button to, and refuses a
+    // delete-event sent some other way (Alt+F4, a task bar).
+    gtk_window_set_deletable(GTK_WINDOW(closing->window), FALSE);
+    g_signal_connect(closing->window, "delete-event", G_CALLBACK(_closing_refuse_delete), NULL);
+    // A window group of its own. The grab of dt_gui_closing_wait() is held in the default group,
+    // the one every other window of ours is in; in there, it would take this window's clicks
+    // too, and the details could not be unfolded.
+    GtkWindowGroup *group = gtk_window_group_new();
+    gtk_window_group_add_window(group, GTK_WINDOW(closing->window));
+    g_object_unref(group);
+  }
 
   GtkWidget *box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_PIXEL_APPLY_DPI(12));
   gtk_container_set_border_width(GTK_CONTAINER(box), DT_PIXEL_APPLY_DPI(16));
   gtk_container_add(GTK_CONTAINER(closing->window), box);
 
-  GtkWidget *spinner = gtk_spinner_new();
-  gtk_widget_set_valign(spinner, GTK_ALIGN_START);
-  gtk_spinner_start(GTK_SPINNER(spinner));
-  gtk_box_pack_start(GTK_BOX(box), spinner, FALSE, FALSE, 0);
+  GtkWidget *icon = NULL;
+  if(confirm)
+    icon = gtk_image_new_from_icon_name("dialog-warning", GTK_ICON_SIZE_DIALOG);
+  else
+  {
+    icon = gtk_spinner_new();
+    gtk_spinner_start(GTK_SPINNER(icon));
+  }
+  gtk_widget_set_valign(icon, GTK_ALIGN_START);
+  gtk_box_pack_start(GTK_BOX(box), icon, FALSE, FALSE, 0);
 
   GtkWidget *text = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_PIXEL_APPLY_DPI(8));
   gtk_box_pack_start(GTK_BOX(box), text, TRUE, TRUE, 0);
 
   GtkWidget *title = gtk_label_new(NULL);
-  gchar *markup = g_markup_printf_escaped("<b>%s</b>", _("Ansel is finishing its work before closing"));
+  gchar *markup = g_markup_printf_escaped("<b>%s</b>", confirm ? _("Background tasks are still running")
+                                                               : _("Ansel is finishing its work before closing"));
   gtk_label_set_markup(GTK_LABEL(title), markup);
   dt_free(markup);
   gtk_label_set_xalign(GTK_LABEL(title), 0.0);
@@ -127,8 +191,13 @@ static void _closing_window_new(dt_closing_t *closing)
   gtk_widget_set_no_show_all(closing->names, TRUE);
   gtk_box_pack_start(GTK_BOX(text), closing->names, FALSE, FALSE, 0);
 
-  GtkWidget *hint = gtk_label_new(_("This window closes by itself as soon as it is done."));
+  // Nothing is cancelled by a quit: a running job is finished, a queued one is dropped.
+  GtkWidget *hint = gtk_label_new(confirm ? _("If you quit now, the tasks not started yet are dropped, and Ansel "
+                                              "closes once the running ones are done.")
+                                          : _("This window closes by itself as soon as it is done."));
   gtk_label_set_xalign(GTK_LABEL(hint), 0.0);
+  gtk_label_set_line_wrap(GTK_LABEL(hint), TRUE);
+  gtk_label_set_max_width_chars(GTK_LABEL(hint), 60);
   gtk_box_pack_start(GTK_BOX(text), hint, FALSE, FALSE, 0);
 
   closing->details = gtk_expander_new(_("Details"));
@@ -177,6 +246,23 @@ static void _closing_window_new(dt_closing_t *closing)
   // dropped jobs keeps its own, and shows only when there are some.
   gtk_widget_show_all(content);
 
+  if(confirm)
+  {
+    GtkWidget *buttons = gtk_button_box_new(GTK_ORIENTATION_HORIZONTAL);
+    gtk_button_box_set_layout(GTK_BUTTON_BOX(buttons), GTK_BUTTONBOX_END);
+    gtk_box_set_spacing(GTK_BOX(buttons), DT_PIXEL_APPLY_DPI(6));
+    gtk_widget_set_margin_top(buttons, DT_PIXEL_APPLY_DPI(6));
+    GtkWidget *back = gtk_button_new_with_label(_("Go back"));
+    g_signal_connect(back, "clicked", G_CALLBACK(_closing_back_clicked), closing);
+    gtk_container_add(GTK_CONTAINER(buttons), back);
+    GtkWidget *quit = gtk_button_new_with_label(_("Quit anyway"));
+    g_signal_connect(quit, "clicked", G_CALLBACK(_closing_quit_clicked), closing);
+    gtk_container_add(GTK_CONTAINER(buttons), quit);
+    gtk_box_pack_start(GTK_BOX(text), buttons, FALSE, FALSE, 0);
+    // Going back is the default: Enter does not quit.
+    gtk_widget_grab_focus(back);
+  }
+
   gtk_widget_show_all(closing->window);
 
   // A quit does not always come from the application in front: the Dock's Quit, or Cmd+Q
@@ -188,11 +274,14 @@ static void _closing_window_new(dt_closing_t *closing)
 #endif
 }
 
+// Pango markup: the names are in italics, set apart from the sentences around them.
 static void _closing_append_name(const gchar *message, void *data)
 {
   GString *names = (GString *)data;
   if(names->len > 0) g_string_append_c(names, '\n');
-  g_string_append(names, message);
+  gchar *name = g_markup_printf_escaped("<i>%s</i>", message);
+  g_string_append(names, name);
+  dt_free(name);
 }
 
 static const char *_closing_kind_name(const int kind)
@@ -264,9 +353,13 @@ static void _closing_details_update(dt_closing_t *closing)
   const int32_t queued = dt_control_queued_jobs_count(dt_control_get_global());
   if(queued != closing->queued)
   {
-    gchar *dropped = g_strdup_printf(ngettext("%d other task, not started, is dropped",
-                                              "%d other tasks, not started, are dropped", queued),
-                                     queued);
+    gchar *dropped = (closing->mode == DT_CLOSING_CONFIRM)
+                         ? g_strdup_printf(ngettext("%d other task, not started, would be dropped",
+                                                    "%d other tasks, not started, would be dropped", queued),
+                                           queued)
+                         : g_strdup_printf(ngettext("%d other task, not started, is dropped",
+                                                    "%d other tasks, not started, are dropped", queued),
+                                           queued);
     gtk_label_set_text(GTK_LABEL(closing->dropped), dropped);
     dt_free(dropped);
     gtk_widget_set_visible(closing->dropped, queued > 0);
@@ -277,11 +370,53 @@ static void _closing_details_update(dt_closing_t *closing)
   g_array_free(running, TRUE);
 }
 
+// The background tasks: the jobs that publish a progress, running or queued, those the background
+// jobs panel shows. Thumbnails and darkroom pipelines publish none.
+static void _closing_count_task(const gchar *message __attribute__((unused)), void *data)
+{
+  (*(int32_t *)data)++;
+}
+
+static int32_t _closing_background_tasks(void)
+{
+  int32_t tasks = 0;
+  dt_control_progress_foreach(dt_control_get_global(), _closing_count_task, &tasks);
+  return tasks;
+}
+
+static void _closing_refresh(dt_closing_t *closing)
+{
+  // Before the quit, the question is about the background tasks. During it, every running job
+  // holds the process, and the workers still alive are those jobs.
+  gchar *count = NULL;
+  if(closing->mode == DT_CLOSING_CONFIRM)
+  {
+    const int32_t tasks = _closing_background_tasks();
+    count = g_strdup_printf(ngettext("%d background task is not finished", "%d background tasks are not finished",
+                                     tasks),
+                            tasks);
+  }
+  else
+  {
+    const int32_t alive = dt_control_workers_alive();
+    count = g_strdup_printf(ngettext("%d task is still running", "%d tasks are still running", alive), alive);
+  }
+  gtk_label_set_text(GTK_LABEL(closing->count), count);
+  dt_free(count);
+
+  GString *names = g_string_new(NULL);
+  dt_control_progress_foreach(dt_control_get_global(), _closing_append_name, names);
+  gtk_label_set_markup(GTK_LABEL(closing->names), names->str);
+  gtk_widget_set_visible(closing->names, names->len > 0);
+  g_string_free(names, TRUE);
+
+  _closing_details_update(closing);
+}
+
 static gboolean _closing_poll(gpointer user_data)
 {
   dt_closing_t *closing = (dt_closing_t *)user_data;
-  const int32_t alive = dt_control_workers_alive();
-  if(alive == 0)
+  if(dt_control_workers_alive() == 0)
   {
     g_main_loop_quit(closing->loop);
     return G_SOURCE_REMOVE;
@@ -293,19 +428,46 @@ static gboolean _closing_poll(gpointer user_data)
     _closing_window_new(closing);
   }
 
-  gchar *count = g_strdup_printf(ngettext("%d task is still running", "%d tasks are still running", alive), alive);
-  gtk_label_set_text(GTK_LABEL(closing->count), count);
-  dt_free(count);
-
-  GString *names = g_string_new(NULL);
-  dt_control_progress_foreach(dt_control_get_global(), _closing_append_name, names);
-  gtk_label_set_text(GTK_LABEL(closing->names), names->str);
-  gtk_widget_set_visible(closing->names, names->len > 0);
-  g_string_free(names, TRUE);
-
-  _closing_details_update(closing);
-
+  _closing_refresh(closing);
   return G_SOURCE_CONTINUE;
+}
+
+static gboolean _closing_confirm_poll(gpointer user_data)
+{
+  _closing_refresh((dt_closing_t *)user_data);
+  return G_SOURCE_CONTINUE;
+}
+
+// Ask, while background tasks are running, whether to quit all the same. TRUE to quit.
+static gboolean _closing_confirm(void)
+{
+  if(_closing_background_tasks() == 0) return TRUE;
+
+  // A second request while the question is open -- the shortcut again, the dock -- does not ask
+  // it twice: the window that is up answers it.
+  static gboolean asking = FALSE;
+  if(asking) return FALSE;
+  asking = TRUE;
+
+  dt_closing_t closing = { .mode = DT_CLOSING_CONFIRM, .loop = g_main_loop_new(NULL, FALSE), .queued = -1 };
+  _closing_window_new(&closing);
+  _closing_refresh(&closing);
+  const guint poll = g_timeout_add(DT_CLOSING_POLL_INTERVAL, _closing_confirm_poll, &closing);
+  g_main_loop_run(closing.loop);
+  g_source_remove(poll);
+  g_main_loop_unref(closing.loop);
+
+  gtk_widget_destroy(closing.window);
+  dt_free(closing.listed);
+  if(!closing.quit) dt_gui_refocus_parent(GTK_WINDOW(dt_gui_main_window()));
+
+  asking = FALSE;
+  return closing.quit;
+}
+
+void dt_gui_closing_quit(void)
+{
+  if(_closing_confirm()) dt_control_quit();
 }
 
 void dt_gui_closing_wait(void)
@@ -322,7 +484,8 @@ void dt_gui_closing_wait(void)
   gtk_widget_realize(grab);
   gtk_grab_add(grab);
 
-  dt_closing_t closing = { .loop = g_main_loop_new(NULL, FALSE), .start = g_get_monotonic_time(), .queued = -1 };
+  dt_closing_t closing = { .mode = DT_CLOSING_WAIT, .loop = g_main_loop_new(NULL, FALSE),
+                           .start = g_get_monotonic_time(), .queued = -1 };
   g_timeout_add(DT_CLOSING_POLL_INTERVAL, _closing_poll, &closing);
   g_main_loop_run(closing.loop);
   g_main_loop_unref(closing.loop);

@@ -26,6 +26,7 @@
 #include "common/usermanual_url.h"
 #include "control/signal.h"
 #include "gui/application.h"
+#include "gui/closing.h"
 #include "widgets/accelerators.h"
 #include "gui/actions/menu.h"
 #ifdef __APPLE__
@@ -387,7 +388,7 @@ MAKE_ACCEL_WRAPPER(dt_control_set_local_copy_images)
 MAKE_ACCEL_WRAPPER(dt_control_reset_local_copy_images)
 MAKE_ACCEL_WRAPPER(dt_control_remove_images)
 MAKE_ACCEL_WRAPPER(dt_control_delete_images)
-MAKE_ACCEL_WRAPPER(dt_control_quit)
+MAKE_ACCEL_WRAPPER(dt_gui_closing_quit)
 
 void append_file(GtkWidget **menus, GList **lists, const dt_menus_t index)
 {
@@ -450,5 +451,5 @@ void append_file(GtkWidget **menus, GList **lists, const dt_menus_t index)
 
   add_menu_separator(menus[index]);
 
-  add_sub_menu_entry(menus, lists, _("Quit"), index, NULL, GET_ACCEL_WRAPPER(dt_control_quit), NULL, NULL, NULL,  GDK_KEY_q, DT_PRIMARY_MASK);
+  add_sub_menu_entry(menus, lists, _("Quit"), index, NULL, GET_ACCEL_WRAPPER(dt_gui_closing_quit), NULL, NULL, NULL,  GDK_KEY_q, DT_PRIMARY_MASK);
 }
