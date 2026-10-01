@@ -386,13 +386,13 @@ static void _ensure_page_widgets(dt_lib_module_t *self)
       switch(i)
       {
         case TAB_BASIC_COLOR:
-          _modulegroups_track_widget(&d->sections[i], dt_ui_section_label_new(_("color")));
+          _modulegroups_track_widget(&d->sections[i], dt_ui_section_label_new(_("Color")));
           break;
         case TAB_BASIC_FILM:
-          _modulegroups_track_widget(&d->sections[i], dt_ui_section_label_new(_("film")));
+          _modulegroups_track_widget(&d->sections[i], dt_ui_section_label_new(_("Film")));
           break;
         case TAB_BASIC_TONES:
-          _modulegroups_track_widget(&d->sections[i], dt_ui_section_label_new(_("tones")));
+          _modulegroups_track_widget(&d->sections[i], dt_ui_section_label_new(_("Tones")));
           break;
       }
       gtk_box_pack_start(GTK_BOX(d->pages[MOD_TAB_BASIC]), d->sections[i], FALSE, FALSE, 0);
@@ -682,7 +682,7 @@ static void _modulegroups_drag_leave(GtkWidget *widget, GdkDragContext *dc, guin
 
 const char *name(struct dt_lib_module_t *self)
 {
-  return _("modulegroups");
+  return _("Modulegroups");
 }
 
 const char **views(dt_lib_module_t *self)

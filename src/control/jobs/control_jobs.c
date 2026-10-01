@@ -188,7 +188,7 @@ static int32_t _generic_dt_control_fileop_images_job_run(dt_job_t *job,
 
   if(film_id <= 0)
   {
-    dt_control_log(_("failed to create film roll for destination directory, aborting move.."));
+    dt_control_log(_("Failed to create film roll for destination directory, aborting move.."));
     return -1;
   }
 
@@ -307,13 +307,13 @@ static int32_t dt_control_save_xmps_job_run(dt_job_t *job)
         // xmp writing is off, or the setting changed mid-batch: nothing was attempted, nothing to report
         break;
       case DT_IMAGE_WRITE_SIDECAR_CACHE_BUSY:
-        dt_control_log(_("cannot write XMP file for image %i: the image cache entry is busy, try again."), imgid);
+        dt_control_log(_("Cannot write XMP file for image %i: the image cache entry is busy, try again."), imgid);
         break;
       case DT_IMAGE_WRITE_SIDECAR_NO_SOURCE_PATH:
-        dt_control_log(_("cannot write XMP file for image %i: the original file could not be found."), imgid);
+        dt_control_log(_("Cannot write XMP file for image %i: the original file could not be found."), imgid);
         break;
       case DT_IMAGE_WRITE_SIDECAR_IO_ERROR:
-        dt_control_log(_("cannot write XMP file for image %i: the target storage may be unavailable or read-only."),
+        dt_control_log(_("Cannot write XMP file for image %i: the target storage may be unavailable or read-only."),
                        imgid);
         break;
     }
@@ -435,14 +435,14 @@ static int dt_control_merge_hdr_process(dt_imageio_module_data_t *datai, const c
 
   if(image.dsc.filters == 0u || image.dsc.channels != 1 || image.dsc.datatype != TYPE_UINT16)
   {
-    dt_control_log(_("exposure bracketing only works on raw images."));
+    dt_control_log(_("Exposure bracketing only works on raw images."));
     d->abort = TRUE;
     return 1;
   }
   else if(datai->width != d->wd || datai->height != d->ht || d->first_filter != image.dsc.filters
           || d->orientation != image.orientation)
   {
-    dt_control_log(_("images have to be of same size and orientation!"));
+    dt_control_log(_("Images have to be of same size and orientation!"));
     d->abort = TRUE;
     return 1;
   }
@@ -601,7 +601,7 @@ static int32_t dt_control_merge_hdr_job_run(dt_job_t *job)
   dt_control_job_set_progress(job, 1.0);
 
   while(*c != '/' && c > pathname) c--;
-  dt_control_log(_("wrote merged HDR `%s'"), c + 1);
+  dt_control_log(_("Wrote merged HDR `%s'"), c + 1);
 
   // import new image
   gchar *directory = g_path_get_dirname((const gchar *)pathname);
@@ -777,7 +777,7 @@ static int32_t dt_control_remove_images_job_run(dt_job_t *job)
 
   if(!remove_ok)
   {
-    dt_control_log(_("cannot remove local copy when the original file is not accessible."));
+    dt_control_log(_("Cannot remove local copy when the original file is not accessible."));
     return 0;
   }
 
@@ -857,8 +857,8 @@ static gboolean _dt_delete_dialog_main_thread(gpointer user_data)
       GTK_MESSAGE_QUESTION,
       GTK_BUTTONS_NONE,
       modal_dialog->send_to_trash
-        ? _("could not send %s to trash.%s%s")
-        : _("could not physically delete %s.%s%s"),
+        ? _("Could not send %s to trash.%s%s")
+        : _("Could not physically delete %s.%s%s"),
       modal_dialog->filename,
       !IS_NULL_PTR(modal_dialog->error_message) ? "\n" : "",
       !IS_NULL_PTR(modal_dialog->error_message) ? modal_dialog->error_message : "");
@@ -1136,7 +1136,7 @@ static int32_t dt_control_gpx_apply_job_run(dt_job_t *job)
   gpx = dt_gpx_new(filename);
   if(IS_NULL_PTR(gpx))
   {
-    dt_control_log(_("failed to parse GPX file"));
+    dt_control_log(_("Failed to parse GPX file"));
     goto bail_out;
   }
 
@@ -1184,8 +1184,8 @@ static int32_t dt_control_gpx_apply_job_run(dt_job_t *job)
 
   dt_image_set_images_locations(imgs, gloc, TRUE);
 
-  dt_control_log(ngettext("applied matched GPX location onto %d image",
-                          "applied matched GPX location onto %d images", cntr), cntr);
+  dt_control_log(ngettext("Applied matched GPX location onto %d image",
+                          "Applied matched GPX location onto %d images", cntr), cntr);
 
   g_time_zone_unref(tz_camera);
   dt_gpx_destroy(gpx);
@@ -1334,7 +1334,7 @@ static gboolean _export_source_available(const int32_t imgid)
   const gboolean available = g_file_test(imgfilename, G_FILE_TEST_IS_REGULAR);
   if(!available)
   {
-    dt_control_log(_("image `%s' is currently unavailable"), image->filename);
+    dt_control_log(_("Image `%s' is currently unavailable"), image->filename);
     fprintf(stderr, "image `%s' is currently unavailable\n", imgfilename);
   }
   dt_image_cache_read_release(image);
@@ -1386,9 +1386,9 @@ static int32_t dt_control_export_job_run(dt_job_t *job)
 
   const guint total = g_list_length(t);
   if(total > 0)
-    dt_control_log(ngettext("exporting %d image..", "exporting %d images..", total), total);
+    dt_control_log(ngettext("Exporting %d image..", "Exporting %d images..", total), total);
   else
-    dt_control_log(_("no image to export"));
+    dt_control_log(_("No image to export"));
 
   double fraction = 0;
 
@@ -1601,7 +1601,7 @@ gboolean dt_control_remove_images()
   const dt_view_t *const cv = dt_view_manager_get_current_view(dt_view_manager_get_global());
   if(cv->view(cv) != DT_VIEW_LIGHTTABLE)
   {
-    dt_control_log(_("removing images from library is only possible in Lighttable view"));
+    dt_control_log(_("Removing images from library is only possible in Lighttable view"));
     return FALSE;
   }
 
@@ -1717,8 +1717,8 @@ void dt_control_delete_image(int32_t imgid)
 
     dialog = gtk_message_dialog_new(
         GTK_WINDOW(win), GTK_DIALOG_DESTROY_WITH_PARENT, GTK_MESSAGE_QUESTION, GTK_BUTTONS_YES_NO,
-        send_to_trash ? _("do you really want to physically delete selected image (using trash if possible)?")
-                      : _("do you really want to physically delete selected image from disk?"));
+        send_to_trash ? _("Do you really want to physically delete selected image (using trash if possible)?")
+                      : _("Do you really want to physically delete selected image from disk?"));
 #ifdef GDK_WINDOWING_QUARTZ
     dt_osx_disallow_fullscreen(dialog);
 #endif
@@ -1773,9 +1773,9 @@ void dt_control_move_images()
   {
     GtkWidget *dialog = gtk_message_dialog_new(GTK_WINDOW(win), GTK_DIALOG_DESTROY_WITH_PARENT,
                                                GTK_MESSAGE_QUESTION, GTK_BUTTONS_YES_NO,
-                                               ngettext("do you really want to physically move %d image to %s?\n"
+                                               ngettext("Do you really want to physically move %d image to %s?\n"
                                                         "(all duplicates will be moved along)",
-                                                        "do you really want to physically move %d images to %s?\n"
+                                                        "Do you really want to physically move %d images to %s?\n"
                                                         "(all duplicates will be moved along)",
                                                         number),
                                                number, dir);
@@ -1835,8 +1835,8 @@ void dt_control_copy_images()
   {
     GtkWidget *dialog = gtk_message_dialog_new(
         GTK_WINDOW(win), GTK_DIALOG_DESTROY_WITH_PARENT, GTK_MESSAGE_QUESTION, GTK_BUTTONS_YES_NO,
-        ngettext("do you really want to physically copy %d image to %s?",
-                 "do you really want to physically copy %d images to %s?", number),
+        ngettext("Do you really want to physically copy %d image to %s?",
+                 "Do you really want to physically copy %d images to %s?", number),
         number, dir);
 #ifdef GDK_WINDOWING_QUARTZ
     dt_osx_disallow_fullscreen(dialog);
@@ -1938,7 +1938,7 @@ void dt_control_export(GList *imgid_list, const dt_control_export_request_t *req
   dt_imageio_module_data_t *sdata = mstorage->get_params(mstorage);
   if(IS_NULL_PTR(sdata))
   {
-    dt_control_log(_("failed to get parameters from storage module `%s', aborting export.."),
+    dt_control_log(_("Failed to get parameters from storage module `%s', aborting export.."),
                    mstorage->name(mstorage));
     dt_control_job_dispose(job);
     return;

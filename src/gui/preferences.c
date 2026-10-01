@@ -362,9 +362,9 @@ static void init_tab_general(GtkWidget *dialog, GtkWidget *stack, dt_gui_themetw
 
   gtk_combo_box_set_active(GTK_COMBO_BOX(widget), dt_l10n_get_global()->selected);
   g_signal_connect(G_OBJECT(widget), "changed", G_CALLBACK(language_callback), 0);
-  gtk_widget_set_tooltip_text(labelev,  _("double-click to reset to the system language"));
+  gtk_widget_set_tooltip_text(labelev,  _("Double-click to reset to the system language"));
   gtk_event_box_set_visible_window(GTK_EVENT_BOX(labelev), FALSE);
-  gtk_widget_set_tooltip_text(widget, _("set the language of the user interface. the system default is marked with an * (needs a restart)"));
+  gtk_widget_set_tooltip_text(widget, _("Set the language of the user interface. The system default is marked with an * (needs a restart)"));
   gtk_grid_attach(GTK_GRID(grid), labelev, 0, line++, 1, 1);
   gtk_grid_attach_next_to(GTK_GRID(grid), widget, labelev, GTK_POS_RIGHT, 1, 1);
   g_signal_connect(G_OBJECT(labelev), "button-press-event", G_CALLBACK(reset_language_widget), (gpointer)widget);
@@ -402,7 +402,7 @@ static void init_tab_general(GtkWidget *dialog, GtkWidget *stack, dt_gui_themetw
   gtk_combo_box_set_active(GTK_COMBO_BOX(widget), selected);
 
   g_signal_connect(G_OBJECT(widget), "changed", G_CALLBACK(theme_callback), 0);
-  gtk_widget_set_tooltip_text(widget, _("set the theme for the user interface"));
+  gtk_widget_set_tooltip_text(widget, _("Set the theme for the user interface"));
 
   //Font size check and spin buttons
   GtkWidget *usesysfont = gtk_check_button_new();
@@ -422,7 +422,7 @@ static void init_tab_general(GtkWidget *dialog, GtkWidget *stack, dt_gui_themetw
   gtk_container_add(GTK_CONTAINER(labelev), label);
   gtk_grid_attach(GTK_GRID(grid), labelev, i, i?2:line++, 1, 1);
   gtk_grid_attach_next_to(GTK_GRID(grid), usesysfont, labelev, GTK_POS_RIGHT, 1, 1);
-  gtk_widget_set_tooltip_text(usesysfont, _("use system font size"));
+  gtk_widget_set_tooltip_text(usesysfont, _("Use system font size"));
   gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(usesysfont), dt_conf_get_bool("use_system_font"));
   g_signal_connect(G_OBJECT(usesysfont), "toggled", G_CALLBACK(use_sys_font_callback), (gpointer)fontsize);
 
@@ -438,7 +438,7 @@ static void init_tab_general(GtkWidget *dialog, GtkWidget *stack, dt_gui_themetw
   gtk_container_add(GTK_CONTAINER(labelev), label);
   gtk_grid_attach(GTK_GRID(grid), labelev, i, i?0:line++, 1, 1);
   gtk_grid_attach_next_to(GTK_GRID(grid), fontsize, labelev, GTK_POS_RIGHT, 1, 1);
-  gtk_widget_set_tooltip_text(fontsize, _("font size in points"));
+  gtk_widget_set_tooltip_text(fontsize, _("Font size in points"));
   gtk_spin_button_set_value(GTK_SPIN_BUTTON(fontsize), dt_conf_get_float("font_size"));
   g_signal_connect(G_OBJECT(fontsize), "value_changed", G_CALLBACK(font_size_changed_callback), 0);
 
@@ -450,10 +450,10 @@ static void init_tab_general(GtkWidget *dialog, GtkWidget *stack, dt_gui_themetw
   gtk_container_add(GTK_CONTAINER(labelev), label);
   gtk_grid_attach(GTK_GRID(grid), labelev, i, i?1:line++, 1, 1);
   gtk_grid_attach_next_to(GTK_GRID(grid), screen_dpi_overwrite, labelev, GTK_POS_RIGHT, 1, 1);
-  gtk_widget_set_tooltip_text(screen_dpi_overwrite, _("adjust the global GUI resolution to rescale controls, buttons, labels, etc.\n"
-                                                      "increase for a magnified GUI, decrease to fit more content in window.\n"
-                                                      "set to -1 to use the system-defined global resolution.\n"
-                                                      "default is 96 DPI on most systems.\n"
+  gtk_widget_set_tooltip_text(screen_dpi_overwrite, _("Adjust the global GUI resolution to rescale controls, buttons, labels, etc.\n"
+                                                      "Increase for a magnified GUI, decrease to fit more content in window.\n"
+                                                      "Set to -1 to use the system-defined global resolution.\n"
+                                                      "Default is 96 DPI on most systems.\n"
                                                       "(needs a restart)."));
   gtk_spin_button_set_value(GTK_SPIN_BUTTON(screen_dpi_overwrite), dt_conf_get_float("screen_dpi_overwrite"));
   g_signal_connect(G_OBJECT(screen_dpi_overwrite), "value_changed", G_CALLBACK(dpi_scaling_changed_callback), 0);
@@ -467,7 +467,7 @@ static void init_tab_general(GtkWidget *dialog, GtkWidget *stack, dt_gui_themetw
   gtk_container_add(GTK_CONTAINER(labelev), label);
   gtk_grid_attach(GTK_GRID(grid), labelev, 0, line++, 1, 1);
   gtk_grid_attach_next_to(GTK_GRID(grid), tw->apply_toggle, labelev, GTK_POS_RIGHT, 1, 1);
-  gtk_widget_set_tooltip_text(tw->apply_toggle, _("modify theme with CSS keyed below (saved to user.css)"));
+  gtk_widget_set_tooltip_text(tw->apply_toggle, _("Modify theme with CSS keyed below (saved to user.css)"));
   gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(tw->apply_toggle), dt_conf_get_bool("themes/usercss"));
   g_signal_connect(G_OBJECT(tw->apply_toggle), "toggled", G_CALLBACK(usercss_callback), 0);
 
@@ -496,7 +496,7 @@ static void init_tab_general(GtkWidget *dialog, GtkWidget *stack, dt_gui_themetw
   GtkWidget *hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
   gtk_box_pack_end(GTK_BOX(hbox), tw->save_button, FALSE, TRUE, 0);
   gtk_box_pack_start(GTK_BOX(usercssbox), hbox, FALSE, FALSE, 0);
-  gtk_widget_set_tooltip_text(tw->save_button, _("click to save and apply the CSS tweaks entered in this editor"));
+  gtk_widget_set_tooltip_text(tw->save_button, _("Click to save and apply the CSS tweaks entered in this editor"));
 
   //set textarea text from file or default
   char usercsspath[DT_PATH_MAX] = { 0 }, configdir[DT_PATH_MAX] = { 0 };
@@ -1074,7 +1074,7 @@ static void init_tab_presets(GtkWidget *stack)
 
   gtk_box_pack_start(GTK_BOX(hbox), search_presets, FALSE, TRUE, 0);
   gtk_entry_set_placeholder_text(GTK_ENTRY(search_presets), _("search presets list"));
-  gtk_widget_set_tooltip_text(GTK_WIDGET(search_presets), _("incrementally search the list of presets\npress up or down keys to cycle through matches"));
+  gtk_widget_set_tooltip_text(GTK_WIDGET(search_presets), _("Incrementally search the list of presets\nPress up or down keys to cycle through matches"));
   g_signal_connect(G_OBJECT(search_presets), "activate", G_CALLBACK(dt_gui_search_stop), tree);
   g_signal_connect(G_OBJECT(search_presets), "stop-search", G_CALLBACK(dt_gui_search_stop), tree);
   g_signal_connect(G_OBJECT(tree), "key-press-event", G_CALLBACK(dt_gui_search_start), search_presets);
@@ -1212,7 +1212,7 @@ static void _import_preset_from_file(const gchar* filename)
 {
   if(!dt_presets_import_from_file(filename))
   {
-    dt_control_log(_("failed to import preset %s"), filename);
+    dt_control_log(_("Failed to import preset %s"), filename);
   }
 }
 

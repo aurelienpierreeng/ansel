@@ -335,7 +335,7 @@ GtkWidget *dt_iop_togglebutton_new(dt_iop_module_t *self, const char *section, c
     gtk_widget_set_tooltip_text(w, _(label));
   else
   {
-    gchar *tooltip = g_strdup_printf(_("%s\nctrl+click to %s"), _(label), _(ctrl_label));
+    gchar *tooltip = g_strdup_printf(_("%s\nCtrl+click to %s"), _(label), _(ctrl_label));
     gtk_widget_set_tooltip_text(w, tooltip);
     dt_free(tooltip);
   }
@@ -360,7 +360,7 @@ GtkWidget *dt_iop_togglebutton_new_no_register(dt_iop_module_t *self, const char
     gtk_widget_set_tooltip_text(w, _(label));
   else
   {
-    gchar *tooltip = g_strdup_printf(_("%s\nctrl+click to %s"), _(label), _(ctrl_label));
+    gchar *tooltip = g_strdup_printf(_("%s\nCtrl+click to %s"), _(label), _(ctrl_label));
     gtk_widget_set_tooltip_text(w, tooltip);
     dt_free(tooltip);
   }
@@ -841,19 +841,19 @@ static gboolean _gui_multiinstance_callback(GtkButton *button, GdkEventButton *e
   GtkWidget *item;
 
   item = gtk_menu_item_new_with_label(_("new instance"));
-  // gtk_widget_set_tooltip_text(item, _("add a new instance of this module to the pipe"));
+  // gtk_widget_set_tooltip_text(item, _("Add a new instance of this module to the pipe"));
   g_signal_connect(G_OBJECT(item), "activate", G_CALLBACK(_gui_copy_callback), module);
   gtk_widget_set_sensitive(item, module->gui->multi_show_new);
   gtk_menu_shell_append(menu, item);
 
   item = gtk_menu_item_new_with_label(_("duplicate instance"));
-  // gtk_widget_set_tooltip_text(item, _("add a copy of this instance to the pipe"));
+  // gtk_widget_set_tooltip_text(item, _("Add a copy of this instance to the pipe"));
   g_signal_connect(G_OBJECT(item), "activate", G_CALLBACK(_gui_duplicate_callback), module);
   gtk_widget_set_sensitive(item, module->gui->multi_show_new);
   gtk_menu_shell_append(menu, item);
 
   item = gtk_menu_item_new_with_label(_("delete"));
-  // gtk_widget_set_tooltip_text(item, _("delete this instance"));
+  // gtk_widget_set_tooltip_text(item, _("Delete this instance"));
   g_signal_connect(G_OBJECT(item), "activate", G_CALLBACK(_gui_delete_callback), module);
   gtk_widget_set_sensitive(item, module->gui->multi_show_close);
   gtk_menu_shell_append(menu, item);
@@ -1920,7 +1920,7 @@ void dt_iop_gui_set_expander(dt_iop_module_t *module)
   hw[IOP_MODULE_INSTANCE] = dtgtk_button_new(dtgtk_cairo_paint_multiinstance, 0, NULL);
   module->gui->multimenu_button = GTK_WIDGET(hw[IOP_MODULE_INSTANCE]);
   gtk_widget_set_tooltip_text(GTK_WIDGET(hw[IOP_MODULE_INSTANCE]),
-                              _("multiple instance actions\nright-click creates new instance"));
+                              _("Multiple instance actions\nRight-click creates new instance"));
   g_signal_connect(G_OBJECT(hw[IOP_MODULE_INSTANCE]), "button-press-event",
                    G_CALLBACK(_iop_plugin_header_child_button_press), module);
   g_signal_connect(G_OBJECT(hw[IOP_MODULE_INSTANCE]), "button-press-event", G_CALLBACK(_gui_multiinstance_callback),
@@ -1931,7 +1931,7 @@ void dt_iop_gui_set_expander(dt_iop_module_t *module)
   /* add reset button */
   hw[IOP_MODULE_RESET] = dtgtk_button_new(dtgtk_cairo_paint_reset, 0, NULL);
   module->gui->reset_button = GTK_WIDGET(hw[IOP_MODULE_RESET]);
-  gtk_widget_set_tooltip_text(GTK_WIDGET(hw[IOP_MODULE_RESET]), _("reset parameters\nctrl+click to reapply any automatic presets"));
+  gtk_widget_set_tooltip_text(GTK_WIDGET(hw[IOP_MODULE_RESET]), _("Reset parameters\nCtrl+click to reapply any automatic presets"));
   g_signal_connect(G_OBJECT(hw[IOP_MODULE_RESET]), "button-press-event",
                    G_CALLBACK(_iop_plugin_header_child_button_press), module);
   g_signal_connect(G_OBJECT(hw[IOP_MODULE_RESET]), "button-press-event", G_CALLBACK(_gui_reset_callback), module);
@@ -1940,7 +1940,7 @@ void dt_iop_gui_set_expander(dt_iop_module_t *module)
   hw[IOP_MODULE_PRESETS] = dtgtk_button_new(dtgtk_cairo_paint_presets, 0, NULL);
   module->gui->presets_button = GTK_WIDGET(hw[IOP_MODULE_PRESETS]);
   if(!(module->flags() & IOP_FLAGS_ONE_INSTANCE))
-    gtk_widget_set_tooltip_text(GTK_WIDGET(hw[IOP_MODULE_PRESETS]), _("presets\nright-click to apply on new instance"));
+    gtk_widget_set_tooltip_text(GTK_WIDGET(hw[IOP_MODULE_PRESETS]), _("Presets\nRight-click to apply on new instance"));
   g_signal_connect(G_OBJECT(hw[IOP_MODULE_PRESETS]), "button-press-event",
                    G_CALLBACK(_iop_plugin_header_child_button_press), module);
   g_signal_connect(G_OBJECT(hw[IOP_MODULE_PRESETS]), "clicked", G_CALLBACK(_presets_popup_callback), module);

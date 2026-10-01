@@ -1162,7 +1162,7 @@ void _menuitem_preferences(GtkMenuItem *menuitem, dt_lib_module_t *self)
   gtk_tree_view_append_column(GTK_TREE_VIEW(view), column);
   GtkWidget *header = gtk_tree_view_column_get_button(column);
   gtk_widget_set_tooltip_text(header,
-                _("drag and drop one row at a time until you get the desired order"
+                _("Drag and drop one row at a time until you get the desired order"
                 "\nuntick to hide metadata which are not of interest for you"
                 "\nif different settings are needed, use presets"));
   renderer = gtk_cell_renderer_toggle_new();

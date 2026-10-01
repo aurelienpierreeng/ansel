@@ -83,7 +83,7 @@ static void adjust_aabb(const float *p, float *aabb)
 
 const char *name()
 {
-  return C_("modulename", "rotate pixels");
+  return C_("modulename", "Rotate pixels");
 }
 
 int flags()

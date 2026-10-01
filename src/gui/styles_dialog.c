@@ -214,7 +214,7 @@ static void _gui_styles_new_style_response(GtkDialog *dialog, gint response_id, 
         GtkWidget *window = dt_gui_main_window();
         GtkWidget *dlg_overwrite = gtk_message_dialog_new(
             GTK_WINDOW(window), GTK_DIALOG_DESTROY_WITH_PARENT, GTK_MESSAGE_WARNING, GTK_BUTTONS_YES_NO,
-            _("style `%s' already exists.\ndo you want to overwrite?"), name);
+            _("Style `%s' already exists.\nDo you want to overwrite?"), name);
 #ifdef GDK_WINDOWING_QUARTZ
         dt_osx_disallow_fullscreen(dlg_overwrite);
 #endif
@@ -239,7 +239,7 @@ static void _gui_styles_new_style_response(GtkDialog *dialog, gint response_id, 
       if(dt_styles_create_from_image(name, gtk_entry_get_text(GTK_ENTRY(g->description)),
                                      g->imgid, result, _gui_styles_is_copy_module_order_set(g)))
       {
-        dt_control_log(_("style named '%s' successfully created"), name);
+        dt_control_log(_("Style named '%s' successfully created"), name);
       };
     }
     else
@@ -248,7 +248,7 @@ static void _gui_styles_new_style_response(GtkDialog *dialog, gint response_id, 
       GtkWidget *window = dt_gui_main_window();
       GtkWidget *dlg_changename
                     = gtk_message_dialog_new(GTK_WINDOW(window), GTK_DIALOG_DESTROY_WITH_PARENT, GTK_MESSAGE_WARNING,
-                                             GTK_BUTTONS_OK, _("please give style a name"));
+                                             GTK_BUTTONS_OK, _("Please give style a name"));
 #ifdef GDK_WINDOWING_QUARTZ
       dt_osx_disallow_fullscreen(dlg_changename);
 #endif
@@ -299,7 +299,7 @@ static void _gui_styles_edit_style_response(GtkDialog *dialog, gint response_id,
                          _gui_styles_is_copy_module_order_set(g),
                          _gui_styles_is_update_module_order_set(g));
       }
-      dt_control_log(_("style %s was successfully saved"), name);
+      dt_control_log(_("Style %s was successfully saved"), name);
     }
     else
     {
@@ -307,7 +307,7 @@ static void _gui_styles_edit_style_response(GtkDialog *dialog, gint response_id,
       GtkWidget *window = dt_gui_main_window();
       GtkWidget *dlg_changename
                     = gtk_message_dialog_new(GTK_WINDOW(window), GTK_DIALOG_DESTROY_WITH_PARENT, GTK_MESSAGE_WARNING,
-                                             GTK_BUTTONS_OK, _("please give style a name"));
+                                             GTK_BUTTONS_OK, _("Please give style a name"));
 #ifdef GDK_WINDOWING_QUARTZ
       dt_osx_disallow_fullscreen(dlg_changename);
 #endif
@@ -416,7 +416,7 @@ static void _gui_styles_dialog_run(gboolean edit, const char *name, int32_t imgi
   {
     snprintf(title, sizeof(title), "%s \"%s\"", _("Edit style"), name);
     sd->duplicate = gtk_check_button_new_with_label(_("duplicate style"));
-    gtk_widget_set_tooltip_text(sd->duplicate, _("creates a duplicate of the style before applying changes"));
+    gtk_widget_set_tooltip_text(sd->duplicate, _("Creates a duplicate of the style before applying changes"));
   }
   else
   {
@@ -456,13 +456,13 @@ static void _gui_styles_dialog_run(gboolean edit, const char *name, int32_t imgi
   sd->name = gtk_entry_new();
   dt_accels_disconnect_on_text_input(sd->name);
   gtk_entry_set_placeholder_text(GTK_ENTRY(sd->name), _("name"));
-  gtk_widget_set_tooltip_text(sd->name, _("enter a name for the new style"));
+  gtk_widget_set_tooltip_text(sd->name, _("Enter a name for the new style"));
 
   sd->description = gtk_entry_new();
   dt_accels_disconnect_on_text_input(sd->description);
   gtk_entry_set_placeholder_text(GTK_ENTRY(sd->description), _("description"));
   gtk_widget_set_tooltip_text(sd->description,
-                              _("enter a description for the new style, this description is searchable"));
+                              _("Enter a description for the new style, this description is searchable"));
 
   /*set values*/
   if(edit && name)
@@ -667,7 +667,7 @@ static void _gui_styles_dialog_run(gboolean edit, const char *name, int32_t imgi
     }
     else
     {
-      dt_control_log(_("can't create style out of unaltered image"));
+      dt_control_log(_("Can't create style out of unaltered image"));
       return;
     }
   }

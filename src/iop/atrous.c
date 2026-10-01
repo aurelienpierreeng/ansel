@@ -169,7 +169,7 @@ typedef struct dt_iop_atrous_data_t
 
 const char *name()
 {
-  return _("contrast equalizer");
+  return _("Contrast equalizer");
 }
 
 const char *aliases()
@@ -1626,9 +1626,9 @@ void gui_init(struct dt_iop_module_t *self)
   self->gui->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
 
   c->channel_tabs = dt_ui_notebook_new();
-  dt_ui_notebook_page(c->channel_tabs, N_("luma"), _("change lightness at each feature size"));
-  dt_ui_notebook_page(c->channel_tabs, N_("chroma"), _("change color saturation at each feature size"));
-  dt_ui_notebook_page(c->channel_tabs, N_("edges"), _("change edge halos at each feature size\nonly changes results of luma and chroma tabs"));
+  dt_ui_notebook_page(c->channel_tabs, N_("Luma"), _("Change lightness at each feature size"));
+  dt_ui_notebook_page(c->channel_tabs, N_("Chroma"), _("Change color saturation at each feature size"));
+  dt_ui_notebook_page(c->channel_tabs, N_("Edges"), _("Change edge halos at each feature size\nonly changes results of luma and chroma tabs"));
   gtk_widget_show(gtk_notebook_get_nth_page(c->channel_tabs, c->channel));
   gtk_notebook_set_current_page(c->channel_tabs, c->channel);
   g_signal_connect(G_OBJECT(c->channel_tabs), "switch_page", G_CALLBACK(tab_switch), self);
@@ -1658,7 +1658,7 @@ void gui_init(struct dt_iop_module_t *self)
 
   // mix slider
   c->mix = dt_bauhaus_slider_from_params(self, N_("mix"));
-  gtk_widget_set_tooltip_text(c->mix, _("make effect stronger or weaker"));
+  gtk_widget_set_tooltip_text(c->mix, _("Make effect stronger or weaker"));
   g_signal_connect(G_OBJECT(c->mix), "value-changed", G_CALLBACK(mix_callback), self);
 }
 

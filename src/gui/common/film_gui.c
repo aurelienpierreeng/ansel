@@ -47,8 +47,8 @@ static gboolean _ask_and_delete(gpointer user_data)
   GtkWidget *win = dt_gui_main_window();
   GtkWidget *dialog = gtk_message_dialog_new(GTK_WINDOW(win), GTK_DIALOG_DESTROY_WITH_PARENT,
                                              GTK_MESSAGE_QUESTION, GTK_BUTTONS_YES_NO,
-                                             ngettext("do you want to remove this empty directory?",
-                                                      "do you want to remove these empty directories?",
+                                             ngettext("Do you want to remove this empty directory?",
+                                                      "Do you want to remove these empty directories?",
                                                       n_empty_dirs));
 #ifdef GDK_WINDOWING_QUARTZ
   dt_osx_disallow_fullscreen(dialog);

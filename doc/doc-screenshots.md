@@ -113,8 +113,8 @@ Put a file named `screenshots.map` at the root of the destination folder:
 
 ```
 # <row label as the tree shows it> = <path of the illustration, relative to this file>
-exposure          = content/modules/exposure/exposure.jpg
-tone equalizer    = content/modules/tone-equalizer/tone-equalizer.jpg
+Exposure          = content/modules/exposure/exposure.jpg
+Tone equalizer    = content/modules/tone-equalizer/tone-equalizer.jpg
 Left panel        = content/interface/left-panel.png
 Main window       = content/interface/overview.jpg
 ```

@@ -89,12 +89,12 @@ DT_MODULE_INTROSPECTION(1, dt_iop_graduatednd_params_t)
 
 typedef struct dt_iop_graduatednd_params_t
 {
-  float density;     // $MIN: -8.0 $MAX: 8.0 $DEFAULT: 1.0 $DESCRIPTION: "density" The density of filter 0-8 EV
-  float hardness;    // $MIN: 0.0 $MAX: 100.0 $DEFAULT: 0.0 $DESCRIPTION: "hardness" 0% = soft and 100% = hard
-  float rotation;    // $MIN: -180.0 $MAX: 180.0 $DEFAULT: 0.0 $DESCRIPTION: "rotation" 2*PI -180 - +180
-  float offset;      // $DEFAULT: 50.0 $DESCRIPTION: "offset" centered, can be offsetted...
-  float hue;         // $MIN: 0.0 $MAX: 1.0 $DEFAULT: 0.0 $DESCRIPTION: "hue"
-  float saturation;  // $MIN: 0.0 $MAX: 1.0 $DEFAULT: 0.0 $DESCRIPTION: "saturation"
+  float density;     // $MIN: -8.0 $MAX: 8.0 $DEFAULT: 1.0 $DESCRIPTION: "Density" The density of filter 0-8 EV
+  float hardness;    // $MIN: 0.0 $MAX: 100.0 $DEFAULT: 0.0 $DESCRIPTION: "Hardness" 0% = soft and 100% = hard
+  float rotation;    // $MIN: -180.0 $MAX: 180.0 $DEFAULT: 0.0 $DESCRIPTION: "Rotation" 2*PI -180 - +180
+  float offset;      // $DEFAULT: 50.0 $DESCRIPTION: "Offset" centered, can be offsetted...
+  float hue;         // $MIN: 0.0 $MAX: 1.0 $DEFAULT: 0.0 $DESCRIPTION: "Hue"
+  float saturation;  // $MIN: 0.0 $MAX: 1.0 $DEFAULT: 0.0 $DESCRIPTION: "Saturation"
 } dt_iop_graduatednd_params_t;
 
 typedef struct dt_iop_graduatednd_global_data_t
@@ -189,7 +189,7 @@ typedef struct dt_iop_graduatednd_data_t
 
 const char *name()
 {
-  return _("graduated density");
+  return _("Graduated density");
 }
 
 const char **description(struct dt_iop_module_t *self)
@@ -921,16 +921,16 @@ void gui_init(struct dt_iop_module_t *self)
 
   g->density = dt_bauhaus_slider_from_params(self, "density");
   dt_bauhaus_slider_set_format(g->density, _(" EV"));
-  gtk_widget_set_tooltip_text(g->density, _("the density in EV for the filter"));
+  gtk_widget_set_tooltip_text(g->density, _("The density in EV for the filter"));
 
   g->hardness = dt_bauhaus_slider_from_params(self, "hardness");
   dt_bauhaus_slider_set_format(g->hardness, "%");
   /* xgettext:no-c-format */
-  gtk_widget_set_tooltip_text(g->hardness, _("hardness of graduation:\n0% = soft, 100% = hard"));
+  gtk_widget_set_tooltip_text(g->hardness, _("Hardness of graduation:\n0% = soft, 100% = hard"));
 
   g->rotation = dt_bauhaus_slider_from_params(self, "rotation");
   dt_bauhaus_slider_set_format(g->rotation, "\302\260");
-  gtk_widget_set_tooltip_text(g->rotation, _("rotation of filter -180 to 180 degrees"));
+  gtk_widget_set_tooltip_text(g->rotation, _("Rotation of filter -180 to 180 degrees"));
 
   g->hue = dt_color_picker_new(self, DT_COLOR_PICKER_POINT, dt_bauhaus_slider_from_params(self, "hue"));
   dt_bauhaus_slider_set_feedback(g->hue, 0);
@@ -943,13 +943,13 @@ void gui_init(struct dt_iop_module_t *self)
   dt_bauhaus_slider_set_stop(g->hue, 0.664f, 0.0f, 0.0f, 1.0f);
   dt_bauhaus_slider_set_stop(g->hue, 0.830f, 1.0f, 0.0f, 1.0f);
   dt_bauhaus_slider_set_stop(g->hue, 1.0f, 1.0f, 0.0f, 0.0f);
-  gtk_widget_set_tooltip_text(g->hue, _("select the hue tone of filter"));
+  gtk_widget_set_tooltip_text(g->hue, _("Select the hue tone of filter"));
 
   g->saturation = dt_bauhaus_slider_from_params(self, "saturation");
   dt_bauhaus_slider_set_format(g->saturation, "%");
   dt_bauhaus_slider_set_stop(g->saturation, 0.0f, 0.2f, 0.2f, 0.2f);
   dt_bauhaus_slider_set_stop(g->saturation, 1.0f, 1.0f, 1.0f, 1.0f);
-  gtk_widget_set_tooltip_text(g->saturation, _("select the saturation of filter"));
+  gtk_widget_set_tooltip_text(g->saturation, _("Select the saturation of filter"));
 
   g->selected = 0;
   g->dragging = 0;

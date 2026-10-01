@@ -99,7 +99,7 @@ static void adjust_aabb(const int32_t *p, int32_t *aabb)
 
 const char *name()
 {
-  return _("orientation");
+  return _("Orientation");
 }
 
 const char *aliases()
@@ -683,18 +683,18 @@ void gui_init(struct dt_iop_module_t *self)
   GtkWidget *label = dt_iop_gui_reset_label_new(_("transform"), self, &p->orientation, sizeof(int32_t));
   gtk_box_pack_start(GTK_BOX(self->gui->widget), label, TRUE, TRUE, 0);
 
-  dt_iop_button_new(self, N_("rotate 90 degrees CCW."),
+  dt_iop_button_new(self, N_("Rotate 90 degrees CCW."),
                     G_CALLBACK(rotate_ccw), FALSE, GDK_KEY_bracketleft, 0,
                     dtgtk_cairo_paint_refresh, 0, self->gui->widget);
 
-  dt_iop_button_new(self, N_("rotate 90 degrees CW."),
+  dt_iop_button_new(self, N_("Rotate 90 degrees CW."),
                     G_CALLBACK(rotate_cw), FALSE, GDK_KEY_bracketright, 0,
                     dtgtk_cairo_paint_refresh, 1, self->gui->widget);
 
-  dt_iop_button_new(self, N_("flip horizontally."), G_CALLBACK(_flip_h), FALSE, 0, 0, dtgtk_cairo_paint_flip, 1,
+  dt_iop_button_new(self, N_("Flip horizontally."), G_CALLBACK(_flip_h), FALSE, 0, 0, dtgtk_cairo_paint_flip, 1,
                     self->gui->widget);
 
-  dt_iop_button_new(self, N_("flip vertically."), G_CALLBACK(_flip_v), FALSE, 0, 0, dtgtk_cairo_paint_flip, 0,
+  dt_iop_button_new(self, N_("Flip vertically."), G_CALLBACK(_flip_v), FALSE, 0, 0, dtgtk_cairo_paint_flip, 0,
                     self->gui->widget);
 }
 

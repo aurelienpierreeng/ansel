@@ -143,7 +143,7 @@ static int _filter_get_items(const dt_collection_sort_t sort)
 
 const char *name(struct dt_lib_module_t *self)
 {
-  return _("filter");
+  return _("Filter");
 }
 
 const char **views(dt_lib_module_t *self)

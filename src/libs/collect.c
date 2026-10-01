@@ -1964,7 +1964,7 @@ static void _act_folders_relocate(dt_lib_collect_t *d, GList *rows)
       dt_free(chosen);
     }
     else
-      dt_control_log(_("problem selecting new path for the folder"));
+      dt_control_log(_("Problem selecting new path for the folder"));
   }
   g_object_unref(fc);
 }
@@ -2179,7 +2179,7 @@ static gboolean _drop_move_to_folder(dt_lib_collect_t *d, const char *folder, GL
   dt_film_cleanup(&film);
   if(filmid <= 0)
   {
-    dt_control_log(_("could not access the destination folder"));
+    dt_control_log(_("Could not access the destination folder"));
     return FALSE;
   }
 
@@ -2369,37 +2369,37 @@ static void _set_tooltip(dt_lib_collect_rule_t *dr)
 
   if(property == DT_COLLECTION_PROP_APERTURE || property == DT_COLLECTION_PROP_FOCAL_LENGTH
      || property == DT_COLLECTION_PROP_ISO || property == DT_COLLECTION_PROP_EXPOSURE)
-    gtk_widget_set_tooltip_text(dr->text, _("use <, <=, >, >=, <>, =, [;] as operators"));
+    gtk_widget_set_tooltip_text(dr->text, _("Use <, <=, >, >=, <>, =, [;] as operators"));
   else if(property == DT_COLLECTION_PROP_RATING)
-    gtk_widget_set_tooltip_text(dr->text, _("use <, <=, >, >=, <>, =, [;] as operators\n"
+    gtk_widget_set_tooltip_text(dr->text, _("Use <, <=, >, >=, <>, =, [;] as operators\n"
                                             "star rating: 0-5\n"
                                             "rejected images: -1"));
   else if(property == DT_COLLECTION_PROP_DAY || is_time_property(property))
     gtk_widget_set_tooltip_text(dr->text,
-                                _("use <, <=, >, >=, <>, =, [;] as operators\n"
+                                _("Use <, <=, >, >=, <>, =, [;] as operators\n"
                                   "type dates in the form: YYYY:MM:DD hh:mm:ss.sss (only the year is mandatory)"));
   else if(property == DT_COLLECTION_PROP_FILENAME)
     /* xgettext:no-c-format */
-    gtk_widget_set_tooltip_text(dr->text, _("use `%' as wildcard and `,' to separate values"));
+    gtk_widget_set_tooltip_text(dr->text, _("Use `%' as wildcard and `,' to separate values"));
   else if(property == DT_COLLECTION_PROP_TAG)
     /* xgettext:no-c-format */
-    gtk_widget_set_tooltip_text(dr->text, _("use `%' as wildcard\n"
-                                            "click to include hierarchy + sub-hierarchies (suffix `*')\n"
-                                            "shift+click to include only the current hierarchy (no suffix)\n"
-                                            "ctrl+click to include only sub-hierarchies (suffix `|%')"));
+    gtk_widget_set_tooltip_text(dr->text, _("Use `%' as wildcard\n"
+                                            "Click to include hierarchy + sub-hierarchies (suffix `*')\n"
+                                            "Shift+click to include only the current hierarchy (no suffix)\n"
+                                            "Ctrl+click to include only sub-hierarchies (suffix `|%')"));
   else if(property == DT_COLLECTION_PROP_GEOTAGGING)
     /* xgettext:no-c-format */
-    gtk_widget_set_tooltip_text(dr->text, _("use `%' as wildcard\n"
-                                            "click to include location + sub-locations (suffix `*')\n"
-                                            "shift+click to include only the current location (no suffix)\n"
-                                            "ctrl+click to include only sub-locations (suffix `|%')"));
+    gtk_widget_set_tooltip_text(dr->text, _("Use `%' as wildcard\n"
+                                            "Click to include location + sub-locations (suffix `*')\n"
+                                            "Shift+click to include only the current location (no suffix)\n"
+                                            "Ctrl+click to include only sub-locations (suffix `|%')"));
   else if(property == DT_COLLECTION_PROP_FOLDERS)
     /* xgettext:no-c-format */
     gtk_widget_set_tooltip_text(dr->text,
-                                _("use `%' as wildcard and append `*' to match sub-folders"));
+                                _("Use `%' as wildcard and append `*' to match sub-folders"));
   else
     /* xgettext:no-c-format */
-    gtk_widget_set_tooltip_text(dr->text, _("use `%' as wildcard"));
+    gtk_widget_set_tooltip_text(dr->text, _("Use `%' as wildcard"));
 
   gchar *tip = gtk_widget_get_tooltip_text(dr->text);
   gtk_widget_set_tooltip_text(GTK_WIDGET(dr->combo), tip);
@@ -2736,12 +2736,12 @@ static void _set_rule_button(dt_lib_collect_rule_t *dr, gboolean last, gboolean 
   if(last)
   {
     gtk_button_set_label(GTK_BUTTON(dr->button), "-");
-    gtk_widget_set_tooltip_text(GTK_WIDGET(dr->button), _("clear this rule"));
+    gtk_widget_set_tooltip_text(GTK_WIDGET(dr->button), _("Clear this rule"));
   }
   else if(active)
   {
     gtk_button_set_label(GTK_BUTTON(dr->button), "+");
-    gtk_widget_set_tooltip_text(GTK_WIDGET(dr->button), _("clear this rule or add new rules"));
+    gtk_widget_set_tooltip_text(GTK_WIDGET(dr->button), _("Clear this rule or add new rules"));
   }
   else
   {
@@ -2749,7 +2749,7 @@ static void _set_rule_button(dt_lib_collect_rule_t *dr, gboolean last, gboolean 
     gtk_button_set_label(GTK_BUTTON(dr->button), mode == DT_LIB_COLLECT_MODE_AND  ? _("AND")
                                                  : mode == DT_LIB_COLLECT_MODE_OR ? _("OR")
                                                                                   : _("AND NOT"));
-    gtk_widget_set_tooltip_text(GTK_WIDGET(dr->button), _("clear this rule"));
+    gtk_widget_set_tooltip_text(GTK_WIDGET(dr->button), _("Clear this rule"));
   }
 }
 
@@ -3137,7 +3137,7 @@ void gui_init(dt_lib_module_t *self)
       gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(d->rule[i].op_combo), OP_LABELS[o]);
     gtk_combo_box_set_active(GTK_COMBO_BOX(d->rule[i].op_combo), 0);
     gtk_widget_set_no_show_all(d->rule[i].op_combo, TRUE);
-    gtk_widget_set_tooltip_text(d->rule[i].op_combo, _("comparison operator"));
+    gtk_widget_set_tooltip_text(d->rule[i].op_combo, _("Comparison operator"));
     g_signal_connect(G_OBJECT(d->rule[i].op_combo), "changed", G_CALLBACK(_op_changed), d->rule + i);
     gtk_box_pack_start(hbox, d->rule[i].op_combo, FALSE, FALSE, 0);
 
@@ -3170,7 +3170,7 @@ void gui_init(dt_lib_module_t *self)
   gtk_box_pack_start(GTK_BOX(d->folders_controls), d->recursive_check, FALSE, FALSE, 0);
 
   d->sort_by = dt_bauhaus_combobox_new(dt_bauhaus_get_global(), DT_GUI_MODULE(NULL));
-  dt_bauhaus_widget_set_label(d->sort_by, _("sort by"));
+  dt_bauhaus_widget_set_label(d->sort_by, _("Sort by"));
   dt_bauhaus_combobox_add(d->sort_by, _("name"));
   dt_bauhaus_combobox_add(d->sort_by, _("id"));
   // bauhaus widgets render at their own (short) natural height; in this horizontal row they would
@@ -3181,13 +3181,13 @@ void gui_init(dt_lib_module_t *self)
 
   d->sort_dir = dtgtk_togglebutton_new(dtgtk_cairo_paint_sortby, CPF_DIRECTION_UP, NULL);
   dt_gui_add_class(d->sort_dir, "dt_ignore_fg_state");
-  gtk_widget_set_tooltip_text(d->sort_dir, _("toggle ascending / descending order"));
+  gtk_widget_set_tooltip_text(d->sort_dir, _("Toggle ascending / descending order"));
   g_signal_connect(G_OBJECT(d->sort_dir), "toggled", G_CALLBACK(_sort_dir_toggled), d);
   gtk_box_pack_start(GTK_BOX(d->folders_controls), d->sort_dir, FALSE, FALSE, 0);
 
   d->folder_levels = gtk_spin_button_new_with_range(1, 5, 1);
   gtk_widget_set_tooltip_text(d->folder_levels,
-                              _("number of folder levels to show in film-roll names, from the right"));
+                              _("Number of folder levels to show in film-roll names, from the right"));
   g_signal_connect(G_OBJECT(d->folder_levels), "value-changed", G_CALLBACK(_folder_levels_changed), d);
   gtk_box_pack_start(GTK_BOX(d->folders_controls), d->folder_levels, FALSE, FALSE, 0);
   gtk_box_pack_start(GTK_BOX(self->widget), d->folders_controls, FALSE, FALSE, 0);
@@ -3196,7 +3196,7 @@ void gui_init(dt_lib_module_t *self)
   d->collections_controls = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
   d->no_uncategorized = gtk_check_button_new_with_label(_("no 'uncategorized' group"));
   gtk_widget_set_tooltip_text(d->no_uncategorized,
-                              _("do not group childless tags under an 'uncategorized' entry"));
+                              _("Do not group childless tags under an 'uncategorized' entry"));
   g_signal_connect(G_OBJECT(d->no_uncategorized), "toggled", G_CALLBACK(_no_uncategorized_toggled), d);
   gtk_box_pack_start(GTK_BOX(d->collections_controls), d->no_uncategorized, FALSE, FALSE, 0);
   gtk_box_pack_start(GTK_BOX(self->widget), d->collections_controls, FALSE, FALSE, 0);

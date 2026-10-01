@@ -78,7 +78,7 @@ DT_MODULE(4)
 
 const char *name(struct dt_lib_module_t *self)
 {
-  return _("print settings");
+  return _("Print settings");
 }
 
 const char **views(dt_lib_module_t *self)
@@ -366,7 +366,7 @@ static int _export_image(dt_job_t *job, dt_image_box *img)
 
   // let the user know something is happening
   dt_control_job_set_progress(job, 0.05);
-  dt_control_log(_("processing `%s' for `%s'"), params->job_title, params->prt.printer.name);
+  dt_control_log(_("Processing `%s' for `%s'"), params->job_title, params->prt.printer.name);
 
   const gboolean export_masks = FALSE;
   const double no_scale_factor = 0.0; // the print size is fitted in dat's max_width x max_height
@@ -392,7 +392,7 @@ static int _export_image(dt_job_t *job, dt_image_box *img)
                                  DT_PROFILE_ROLE_OUTPUT);
     if(IS_NULL_PTR(pprof))
     {
-      dt_control_log(_("cannot open printer profile `%s'"), params->p_icc_profile);
+      dt_control_log(_("Cannot open printer profile `%s'"), params->p_icc_profile);
       fprintf(stderr, "cannot open printer profile `%s'\n", params->p_icc_profile);
       dt_control_queue_redraw();
       return 1;
@@ -401,7 +401,7 @@ static int _export_image(dt_job_t *job, dt_image_box *img)
     {
       if(IS_NULL_PTR(buf_profile) || IS_NULL_PTR(buf_profile->profile))
       {
-        dt_control_log(_("error getting output profile for image %d"), img->imgid);
+        dt_control_log(_("Error getting output profile for image %d"), img->imgid);
         fprintf(stderr, "error getting output profile for image %d\n", img->imgid);
         dt_control_queue_redraw();
         return 1;
@@ -410,7 +410,7 @@ static int _export_image(dt_job_t *job, dt_image_box *img)
          ((void **)&(params->buf), dat.head.width, dat.head.height, dat.bpp, buf_profile->profile,
           pprof->profile, params->p_icc_intent, params->black_point_compensation))
       {
-        dt_control_log(_("cannot apply printer profile `%s'"), params->p_icc_profile);
+        dt_control_log(_("Cannot apply printer profile `%s'"), params->p_icc_profile);
         fprintf(stderr, "cannot apply printer profile `%s'\n", params->p_icc_profile);
         dt_control_queue_redraw();
         return 1;
@@ -562,7 +562,7 @@ static int _print_job_run(dt_job_t *job)
   const gint fd = g_mkstemp(params->pdf_filename);
   if(fd == -1)
   {
-    dt_control_log(_("failed to create temporary pdf for printing"));
+    dt_control_log(_("Failed to create temporary pdf for printing"));
     fprintf(stderr, "failed to create temporary pdf for printing\n");
     return 1;
   }
@@ -608,7 +608,7 @@ static void _page_new_area_clicked(GtkWidget *widget, gpointer user_data)
 
   if(ps->imgs.count == MAX_IMAGE_PER_PAGE)
   {
-    dt_control_log(_("maximum image per page reached"));
+    dt_control_log(_("Maximum image per page reached"));
     return;
   }
 
@@ -695,17 +695,17 @@ static void _print_button_clicked(GtkWidget *widget, gpointer user_data)
 
   if(imgid == UNKNOWN_IMAGE)
   {
-    dt_control_log(_("cannot print until a picture is selected"));
+    dt_control_log(_("Cannot print until a picture is selected"));
     return;
   }
   if(strlen(ps->prt.printer.name) == 0 || ps->prt.printer.resolution == 0)
   {
-    dt_control_log(_("cannot print until a printer is selected"));
+    dt_control_log(_("Cannot print until a printer is selected"));
     return;
   }
   if(ps->prt.paper.width == 0 || ps->prt.paper.height == 0)
   {
-    dt_control_log(_("cannot print until a paper is selected"));
+    dt_control_log(_("Cannot print until a paper is selected"));
     return;
   }
 
@@ -733,7 +733,7 @@ static void _print_button_clicked(GtkWidget *widget, gpointer user_data)
     if(IS_NULL_PTR(img))
     {
       // in this case no need to release from cache what we couldn't get
-      dt_control_log(_("cannot get image %d for printing"), imgid);
+      dt_control_log(_("Cannot get image %d for printing"), imgid);
       dt_control_job_dispose(job);
       return;
     }
@@ -2226,7 +2226,7 @@ void gui_init(dt_lib_module_t *self)
   // create papers combo as filled when adding printers
   d->papers = dt_bauhaus_combobox_new(dt_bauhaus_get_global(), DT_GUI_MODULE(NULL));
 
-  label = dt_ui_section_label_new(_("printer"));
+  label = dt_ui_section_label_new(_("Printer"));
   gtk_box_pack_start(GTK_BOX(self->widget), label, TRUE, TRUE, 0);
   dt_gui_add_help_link(self->widget, dt_get_help_url("print_settings_printer"));
   d->printers = dt_bauhaus_combobox_new(dt_bauhaus_get_global(), DT_GUI_MODULE(NULL));
@@ -2238,7 +2238,7 @@ void gui_init(dt_lib_module_t *self)
 
   d->media = dt_bauhaus_combobox_new(dt_bauhaus_get_global(), DT_GUI_MODULE(NULL));
 
-  dt_bauhaus_widget_set_label(d->media, N_("media"));
+  dt_bauhaus_widget_set_label(d->media, N_("Media"));
 
   g_signal_connect(G_OBJECT(d->media), "value-changed", G_CALLBACK(_media_changed), self);
   gtk_box_pack_start(GTK_BOX(self->widget), GTK_WIDGET(d->media), TRUE, TRUE, 0);
@@ -2246,7 +2246,7 @@ void gui_init(dt_lib_module_t *self)
   //  Add printer profile combo
 
   d->pprofile = dt_bauhaus_combobox_new(dt_bauhaus_get_global(), DT_GUI_MODULE(NULL));
-  dt_bauhaus_widget_set_label(d->pprofile, N_("profile"));
+  dt_bauhaus_widget_set_label(d->pprofile, N_("Profile"));
 
   int combo_idx, n;
 
@@ -2288,7 +2288,7 @@ void gui_init(dt_lib_module_t *self)
   }
   dt_bauhaus_combobox_set(d->pprofile, combo_idx);
 
-  char *tooltip = g_strdup_printf(_("printer ICC profiles in %s or %s"), user_profile_dir, system_profile_dir);
+  char *tooltip = g_strdup_printf(_("Printer ICC profiles in %s or %s"), user_profile_dir, system_profile_dir);
   gtk_widget_set_tooltip_text(d->pprofile, tooltip);
   dt_free(tooltip);
 
@@ -2297,7 +2297,7 @@ void gui_init(dt_lib_module_t *self)
   //  Add printer intent combo
 
   d->pintent = dt_bauhaus_combobox_new(dt_bauhaus_get_global(), DT_GUI_MODULE(NULL));
-  dt_bauhaus_widget_set_label(d->pintent, N_("intent"));
+  dt_bauhaus_widget_set_label(d->pintent, N_("Intent"));
   dt_bauhaus_combobox_add(d->pintent, _("perceptual"));
   dt_bauhaus_combobox_add(d->pintent, _("relative colorimetric"));
   dt_bauhaus_combobox_add(d->pintent, C_("rendering intent", "saturation"));
@@ -2318,19 +2318,19 @@ void gui_init(dt_lib_module_t *self)
   gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(d->black_point_compensation), d->v_black_point_compensation);
 
   gtk_widget_set_tooltip_text(d->black_point_compensation,
-                              _("activate black point compensation when applying the printer profile"));
+                              _("Activate black point compensation when applying the printer profile"));
 
   gtk_widget_set_sensitive(GTK_WIDGET(d->black_point_compensation), combo_idx==0?FALSE:TRUE);
 
   ////////////////////////// PAGE SETTINGS
 
-  label = dt_ui_section_label_new(_("page"));
+  label = dt_ui_section_label_new(_("Page"));
   gtk_box_pack_start(GTK_BOX(self->widget), label, TRUE, TRUE, 0);
   dt_gui_add_help_link(self->widget, dt_get_help_url("print_settings_page"));
 
   //// papers
 
-  dt_bauhaus_widget_set_label(d->papers, N_("paper size"));
+  dt_bauhaus_widget_set_label(d->papers, N_("Paper size"));
 
   g_signal_connect(G_OBJECT(d->papers), "value-changed", G_CALLBACK(_paper_changed), self);
   gtk_box_pack_start(GTK_BOX(self->widget), GTK_WIDGET(d->papers), TRUE, TRUE, 0);
@@ -2338,7 +2338,7 @@ void gui_init(dt_lib_module_t *self)
   //// portrait / landscape
 
   d->orientation = dt_bauhaus_combobox_new(dt_bauhaus_get_global(), DT_GUI_MODULE(NULL));
-  dt_bauhaus_widget_set_label(d->orientation, N_("orientation"));
+  dt_bauhaus_widget_set_label(d->orientation, N_("Orientation"));
   dt_bauhaus_combobox_add(d->orientation, _("portrait"));
   dt_bauhaus_combobox_add(d->orientation, _("landscape"));
   g_signal_connect(G_OBJECT(d->orientation), "value-changed", G_CALLBACK(_orientation_changed), self);
@@ -2346,7 +2346,7 @@ void gui_init(dt_lib_module_t *self)
   gtk_box_pack_start(GTK_BOX(self->widget), GTK_WIDGET(d->orientation), TRUE, TRUE, 0);
 
   // NOTE: units has no label, which makes for cleaner UI but means that no action can be assigned
-  GtkWidget *ucomb = dt_bauhaus_combobox_new_full(dt_bauhaus_get_global(), DT_GUI_MODULE(NULL), _("measurement units"), NULL, (int)d->unit,
+  GtkWidget *ucomb = dt_bauhaus_combobox_new_full(dt_bauhaus_get_global(), DT_GUI_MODULE(NULL), _("Measurement units"), NULL, (int)d->unit,
                                                   (GtkCallback)_unit_changed, self, _unit_names);
   gtk_box_pack_start(GTK_BOX(self->widget), ucomb, TRUE, TRUE, 0);
 
@@ -2370,7 +2370,7 @@ void gui_init(dt_lib_module_t *self)
   d->info = gtk_label_new("1.0");
   gtk_box_pack_start(GTK_BOX(hboxinfo), GTK_WIDGET(d->info), TRUE, TRUE, 0);
   gtk_widget_set_tooltip_text(hboxinfo,
-               _("image scale factor from native printer DPI:\n"
+               _("Image scale factor from native printer DPI:\n"
                  " < 1 means that it is downscaled (best quality)\n"
                  " > 1 means that the image is upscaled\n"
                  " a too large value may result in poor print quality"));
@@ -2384,23 +2384,23 @@ void gui_init(dt_lib_module_t *self)
   d->lock_activated = FALSE;
 
   //d->b_top  = gtk_spin_button_new_with_range(0, 10000, 1);
-  gtk_widget_set_tooltip_text(GTK_WIDGET(d->b_top), _("top margin"));
+  gtk_widget_set_tooltip_text(GTK_WIDGET(d->b_top), _("Top margin"));
   gtk_grid_attach(bds, GTK_WIDGET(d->b_top), 1, 0, 1, 1);
 
   //d->b_left  = gtk_spin_button_new_with_range(0, 10000, 1);
-  gtk_widget_set_tooltip_text(GTK_WIDGET(d->b_left), _("left margin"));
+  gtk_widget_set_tooltip_text(GTK_WIDGET(d->b_left), _("Left margin"));
   gtk_grid_attach(bds, GTK_WIDGET(d->b_left), 0, 1, 1, 1);
 
   d->lock_button = GTK_TOGGLE_BUTTON(gtk_toggle_button_new_with_label(_("lock")));
-  gtk_widget_set_tooltip_text(GTK_WIDGET(d->lock_button), _("change all margins uniformly"));
+  gtk_widget_set_tooltip_text(GTK_WIDGET(d->lock_button), _("Change all margins uniformly"));
   gtk_grid_attach(bds, GTK_WIDGET(d->lock_button), 1, 1, 1, 1);
 
   //d->b_right  = gtk_spin_button_new_with_range(0, 10000, 1);
-  gtk_widget_set_tooltip_text(GTK_WIDGET(d->b_right), _("right margin"));
+  gtk_widget_set_tooltip_text(GTK_WIDGET(d->b_right), _("Right margin"));
   gtk_grid_attach(bds, GTK_WIDGET(d->b_right), 2, 1, 1, 1);
 
   //d->b_bottom  = gtk_spin_button_new_with_range(0, 10000, 1);
-  gtk_widget_set_tooltip_text(GTK_WIDGET(d->b_bottom), _("bottom margin"));
+  gtk_widget_set_tooltip_text(GTK_WIDGET(d->b_bottom), _("Bottom margin"));
   gtk_grid_attach(bds, GTK_WIDGET(d->b_bottom), 1, 2, 1, 1);
 
   gtk_widget_set_halign(GTK_WIDGET(bds), GTK_ALIGN_CENTER);
@@ -2456,14 +2456,14 @@ void gui_init(dt_lib_module_t *self)
   d->borderless = gtk_check_button_new_with_label(_("borderless mode required"));
   gtk_box_pack_start(GTK_BOX(self->widget), GTK_WIDGET(d->borderless), TRUE, TRUE, 0);
   gtk_widget_set_tooltip_text(d->borderless,
-                              _("indicates that the borderless mode should be activated\n"
+                              _("Indicates that the borderless mode should be activated\n"
                                 "in the printer driver because the selected margins are\n"
                                 "below the printer hardware margins"));
   gtk_widget_set_sensitive(d->borderless, FALSE);
 
   // pack image dimension hbox here
 
-  label = dt_ui_section_label_new(_("image layout"));
+  label = dt_ui_section_label_new(_("Image layout"));
   gtk_box_pack_start(GTK_BOX(self->widget), label, TRUE, TRUE, 0);
   dt_gui_add_help_link(self->widget, dt_get_help_url("print_image_layout"));
 
@@ -2501,17 +2501,17 @@ void gui_init(dt_lib_module_t *self)
   gtk_grid_set_column_homogeneous(fitbut, TRUE);
   gtk_grid_set_row_homogeneous(fitbut, TRUE);
 
-  GtkWidget *bnew = dt_action_button_new(self, N_("new image area"), _page_new_area_clicked, self,
-                                         _("add a new image area on the page\n"
-                                           "click and drag on the page to place the area\n"
-                                           "drag&drop image from film strip on it"), 0, 0);
+  GtkWidget *bnew = dt_action_button_new(self, N_("New image area"), _page_new_area_clicked, self,
+                                         _("Add a new image area on the page\n"
+                                           "Click and drag on the page to place the area\n"
+                                           "Drag&drop image from film strip on it"), 0, 0);
 
-  d->del = dt_action_button_new(self, N_("delete image area"), _page_delete_area_clicked, self,
-                                _("delete the currently selected image area"), 0, 0);
+  d->del = dt_action_button_new(self, N_("Delete image area"), _page_delete_area_clicked, self,
+                                _("Delete the currently selected image area"), 0, 0);
   gtk_widget_set_sensitive(d->del, FALSE);
 
-  GtkWidget *bclear = dt_action_button_new(self, N_("clear layout"), _page_clear_area_clicked, self,
-                                           _("remove all image areas from the page"), 0, 0);
+  GtkWidget *bclear = dt_action_button_new(self, N_("Clear layout"), _page_clear_area_clicked, self,
+                                           _("Remove all image areas from the page"), 0, 0);
 
   gtk_grid_attach(fitbut, GTK_WIDGET(bnew), 0, 0, 2, 1);
   gtk_grid_attach(fitbut, GTK_WIDGET(d->del), 0, 1, 1, 1);
@@ -2526,11 +2526,11 @@ void gui_init(dt_lib_module_t *self)
 
   box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
   // d->b_x = gtk_spin_button_new_with_range(0, 1000, 1);
-  gtk_widget_set_tooltip_text(d->b_x, _("image area x origin (in current unit)"));
+  gtk_widget_set_tooltip_text(d->b_x, _("Image area x origin (in current unit)"));
   gtk_entry_set_width_chars(GTK_ENTRY(d->b_x), 5);
 
   // d->b_y = gtk_spin_button_new_with_range(0, 1000, 1);
-  gtk_widget_set_tooltip_text(d->b_y, _("image area y origin (in current unit)"));
+  gtk_widget_set_tooltip_text(d->b_y, _("Image area y origin (in current unit)"));
   gtk_entry_set_width_chars(GTK_ENTRY(d->b_y), 5);
 
   gtk_box_pack_start(GTK_BOX(box), GTK_WIDGET(d->b_x), TRUE, TRUE, 0);
@@ -2541,11 +2541,11 @@ void gui_init(dt_lib_module_t *self)
   // width x height
   box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
   // d->b_width = gtk_spin_button_new_with_range(0, 1000, 1);
-  gtk_widget_set_tooltip_text(d->b_width, _("image area width (in current unit)"));
+  gtk_widget_set_tooltip_text(d->b_width, _("Image area width (in current unit)"));
   gtk_entry_set_width_chars(GTK_ENTRY(d->b_width), 5);
 
   // d->b_height = gtk_spin_button_new_with_range(0, 1000, 1);
-  gtk_widget_set_tooltip_text(d->b_height, _("image area height (in current unit)"));
+  gtk_widget_set_tooltip_text(d->b_height, _("Image area height (in current unit)"));
   gtk_entry_set_width_chars(GTK_ENTRY(d->b_height), 5);
 
   gtk_box_pack_start(GTK_BOX(box), GTK_WIDGET(d->b_width), TRUE, TRUE, 0);
@@ -2567,14 +2567,14 @@ void gui_init(dt_lib_module_t *self)
 
   ////////////////////////// PRINT SETTINGS
 
-  label = dt_ui_section_label_new(_("print settings"));
+  label = dt_ui_section_label_new(_("Print settings"));
   gtk_box_pack_start(GTK_BOX(self->widget), label, TRUE, TRUE, 0);
   dt_gui_add_help_link(self->widget, dt_get_help_url("print_settings"));
 
   //  Add export profile combo
 
   d->profile = dt_bauhaus_combobox_new(dt_bauhaus_get_global(), DT_GUI_MODULE(NULL));
-  dt_bauhaus_widget_set_label(d->profile, N_("profile"));
+  dt_bauhaus_widget_set_label(d->profile, N_("Profile"));
 
   gtk_box_pack_start(GTK_BOX(self->widget), GTK_WIDGET(d->profile), TRUE, TRUE, 0);
   dt_bauhaus_combobox_add(d->profile, _("image settings"));
@@ -2611,7 +2611,7 @@ void gui_init(dt_lib_module_t *self)
 
   dt_bauhaus_combobox_set(d->profile, combo_idx);
 
-  tooltip = g_strdup_printf(_("output ICC profiles in %s or %s"), user_profile_dir, system_profile_dir);
+  tooltip = g_strdup_printf(_("Output ICC profiles in %s or %s"), user_profile_dir, system_profile_dir);
   gtk_widget_set_tooltip_text(d->profile, tooltip);
   dt_free(tooltip);
 
@@ -2620,7 +2620,7 @@ void gui_init(dt_lib_module_t *self)
   //  Add export intent combo
 
   d->intent = dt_bauhaus_combobox_new(dt_bauhaus_get_global(), DT_GUI_MODULE(NULL));
-  dt_bauhaus_widget_set_label(d->intent, N_("intent"));
+  dt_bauhaus_widget_set_label(d->intent, N_("Intent"));
 
   dt_bauhaus_combobox_add(d->intent, _("image settings"));
   dt_bauhaus_combobox_add(d->intent, _("perceptual"));
@@ -2636,7 +2636,7 @@ void gui_init(dt_lib_module_t *self)
   //  Add export style combo
 
   d->style = dt_bauhaus_combobox_new(dt_bauhaus_get_global(), DT_GUI_MODULE(NULL));
-  dt_bauhaus_widget_set_label(d->style, N_("style"));
+  dt_bauhaus_widget_set_label(d->style, N_("Style"));
 
   dt_bauhaus_combobox_add(d->style, _("none"));
 
@@ -2659,7 +2659,7 @@ void gui_init(dt_lib_module_t *self)
   g_list_free_full(styles, dt_style_free);
   styles = NULL;
   gtk_box_pack_start(GTK_BOX(self->widget), GTK_WIDGET(d->style), TRUE, TRUE, 0);
-  gtk_widget_set_tooltip_text(d->style, _("temporary style to use while printing"));
+  gtk_widget_set_tooltip_text(d->style, _("Temporary style to use while printing"));
 
   // style not found, maybe a style has been removed? revert to none
   if(combo_idx == -1)
@@ -2677,8 +2677,8 @@ void gui_init(dt_lib_module_t *self)
 
   // Print button
 
-  GtkWidget *button = dt_action_button_new(self, N_("print"), _print_button_clicked, self,
-                                           _("print with current settings"), GDK_KEY_p, DT_PRIMARY_MASK);
+  GtkWidget *button = dt_action_button_new(self, N_("Print"), _print_button_clicked, self,
+                                           _("Print with current settings"), GDK_KEY_p, DT_PRIMARY_MASK);
   d->print_button = GTK_BUTTON(button);
   gtk_box_pack_start(GTK_BOX(self->widget), button, TRUE, TRUE, 0);
   dt_gui_add_help_link(button, dt_get_help_url("print_settings_button"));

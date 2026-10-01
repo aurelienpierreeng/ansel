@@ -157,7 +157,7 @@ static void _main_do_event_help(GdkEvent *event, gpointer data)
           GtkWidget *dialog = gtk_message_dialog_new
             (GTK_WINDOW(win), GTK_DIALOG_DESTROY_WITH_PARENT,
               GTK_MESSAGE_QUESTION, GTK_BUTTONS_YES_NO,
-              _("do you want to access ansel.photos ?"));
+              _("Do you want to access ansel.photos ?"));
 #ifdef GDK_WINDOWING_QUARTZ
             dt_osx_disallow_fullscreen(dialog);
 #endif
@@ -174,11 +174,11 @@ static void _main_do_event_help(GdkEvent *event, gpointer data)
 
             if(uri_success)
             {
-              dt_control_log(_("help url opened in web browser"));
+              dt_control_log(_("Help url opened in web browser"));
             }
             else
             {
-              dt_control_log(_("error while opening help url in web browser"));
+              dt_control_log(_("Error while opening help url in web browser"));
               if (!IS_NULL_PTR(error)) // uri_success being FALSE should guarantee that
               {
                 fprintf (stderr, "unable to read file: %s\n", error->message);
@@ -189,7 +189,7 @@ static void _main_do_event_help(GdkEvent *event, gpointer data)
         }
         else
         {
-          dt_control_log(_("there is no help available for this element"));
+          dt_control_log(_("There is no help available for this element"));
         }
       }
       handled = TRUE;

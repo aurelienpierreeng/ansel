@@ -99,7 +99,7 @@ static JsonParser *_noiseprofile_load(const char *alternative)
   // run over the file once to verify that it is sane
   if(!dt_noiseprofile_verify(parser))
   {
-    dt_control_log(_("noiseprofile file `%s' is not valid"), filename);
+    dt_control_log(_("Noiseprofile file `%s' is not valid"), filename);
     fprintf(stderr, "[noiseprofile] error: `%s' is not a valid noiseprofile file. run with -d control for details\n", filename);
     g_object_unref(parser);
     return NULL;

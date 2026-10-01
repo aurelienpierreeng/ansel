@@ -251,7 +251,7 @@ typedef struct dt_iop_retouch_global_data_t
 // this returns a translatable name
 const char *name()
 {
-  return _("re_touch");
+  return _("Re_touch");
 }
 
 const char *aliases()
@@ -318,15 +318,15 @@ int legacy_params(dt_iop_module_t *self, const void *const old_params, const int
 
       float preview_levels[3];
 
-      dt_iop_retouch_blur_types_t blur_type; // $DEFAULT: DT_IOP_RETOUCH_BLUR_GAUSSIAN $DESCRIPTION: "blur type"
+      dt_iop_retouch_blur_types_t blur_type; // $DEFAULT: DT_IOP_RETOUCH_BLUR_GAUSSIAN $DESCRIPTION: "Blur type"
                                              // gaussian, bilateral
-      float blur_radius; // $MIN: 0.1 $MAX: 200.0 $DEFAULT: 10.0 $DESCRIPTION: "blur radius" radius for blur
+      float blur_radius; // $MIN: 0.1 $MAX: 200.0 $DEFAULT: 10.0 $DESCRIPTION: "Blur radius" radius for blur
                          // algorithm
 
-      dt_iop_retouch_fill_modes_t fill_mode; // $DEFAULT: DT_IOP_RETOUCH_FILL_ERASE $DESCRIPTION: "fill mode" mode
+      dt_iop_retouch_fill_modes_t fill_mode; // $DEFAULT: DT_IOP_RETOUCH_FILL_ERASE $DESCRIPTION: "Fill mode" mode
                                              // for fill algorithm, erase or fill with color
       float fill_color[3];                   // $DEFAULT: 0.0 color for fill algorithm
-      float fill_brightness; // $MIN: -1.0 $MAX: 1.0 $DESCRIPTION: "brightness" value to be added to the color
+      float fill_brightness; // $MIN: -1.0 $MAX: 1.0 $DESCRIPTION: "Brightness" value to be added to the color
     } dt_iop_retouch_params_v1_t;
 
     dt_iop_retouch_params_v1_t *o = (dt_iop_retouch_params_v1_t *)old_params;
@@ -383,12 +383,12 @@ int legacy_params(dt_iop_module_t *self, const void *const old_params, const int
 
       float preview_levels[3];
 
-      dt_iop_retouch_blur_types_t blur_type; // $DEFAULT: DT_IOP_RETOUCH_BLUR_GAUSSIAN $DESCRIPTION: "blur type" gaussian, bilateral
-      float blur_radius; // $MIN: 0.1 $MAX: 200.0 $DEFAULT: 10.0 $DESCRIPTION: "blur radius" radius for blur algorithm
+      dt_iop_retouch_blur_types_t blur_type; // $DEFAULT: DT_IOP_RETOUCH_BLUR_GAUSSIAN $DESCRIPTION: "Blur type" gaussian, bilateral
+      float blur_radius; // $MIN: 0.1 $MAX: 200.0 $DEFAULT: 10.0 $DESCRIPTION: "Blur radius" radius for blur algorithm
 
-      dt_iop_retouch_fill_modes_t fill_mode; // $DEFAULT: DT_IOP_RETOUCH_FILL_ERASE $DESCRIPTION: "fill mode" mode for fill algorithm, erase or fill with color
+      dt_iop_retouch_fill_modes_t fill_mode; // $DEFAULT: DT_IOP_RETOUCH_FILL_ERASE $DESCRIPTION: "Fill mode" mode for fill algorithm, erase or fill with color
       float fill_color[3];   // $DEFAULT: 0.0 color for fill algorithm
-      float fill_brightness; // $MIN: -1.0 $MAX: 1.0 $DESCRIPTION: "brightness" value to be added to the color
+      float fill_brightness; // $MIN: -1.0 $MAX: 1.0 $DESCRIPTION: "Brightness" value to be added to the color
     } dt_iop_retouch_params_v2_t;
 
     dt_iop_retouch_params_v2_t *o = (dt_iop_retouch_params_v2_t *)old_params;
@@ -1649,7 +1649,7 @@ static gboolean rt_display_wavelet_scale_callback(GtkToggleButton *togglebutton,
   // if blend module is displaying mask do not display wavelet scales
   if(rt_blend_mask_conflicts(self, g))
   {
-    dt_control_log(_("cannot display scales when the blending mask is displayed"));
+    dt_control_log(_("Cannot display scales when the blending mask is displayed"));
 
     dt_gui_freeze_begin();
     gtk_toggle_button_set_active(togglebutton, FALSE);
@@ -1939,13 +1939,13 @@ static gboolean rt_select_algorithm_callback(GtkToggleButton *togglebutton, GdkE
     dt_conf_set_int("plugins/darkroom/retouch/default_algo", p->algorithm);
     // and we show a toat msg to confirm
     if(p->algorithm == DT_IOP_RETOUCH_CLONE)
-      dt_control_log(N_("default tool changed to %s"), N_("cloning"));
+      dt_control_log(N_("Default tool changed to %s"), N_("cloning"));
     else if(p->algorithm == DT_IOP_RETOUCH_HEAL)
-      dt_control_log(N_("default tool changed to %s"), N_("healing"));
+      dt_control_log(N_("Default tool changed to %s"), N_("healing"));
     else if(p->algorithm == DT_IOP_RETOUCH_FILL)
-      dt_control_log(N_("default tool changed to %s"), N_("blur"));
+      dt_control_log(N_("Default tool changed to %s"), N_("blur"));
     else if(p->algorithm == DT_IOP_RETOUCH_BLUR)
-      dt_control_log(N_("default tool changed to %s"), N_("fill"));
+      dt_control_log(N_("Default tool changed to %s"), N_("fill"));
   }
 
   return TRUE;
@@ -1960,7 +1960,7 @@ static gboolean rt_showmask_callback(GtkToggleButton *togglebutton, GdkEventButt
   // if blend module is displaying mask do not display it here
   if(rt_blend_mask_conflicts(module, g))
   {
-    dt_control_log(_("cannot display masks when the blending mask is displayed"));
+    dt_control_log(_("Cannot display masks when the blending mask is displayed"));
 
     gtk_toggle_button_set_active(togglebutton, FALSE);
     return TRUE;
@@ -2297,7 +2297,7 @@ void gui_init(dt_iop_module_t *self)
   // shapes toolbar
   GtkWidget *hbox_shapes = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
 
-  gtk_box_pack_start(GTK_BOX(hbox_shapes), dt_ui_label_new(_("shapes:")), FALSE, TRUE, 0);
+  gtk_box_pack_start(GTK_BOX(hbox_shapes), dt_ui_label_new(_("Shapes:")), FALSE, TRUE, 0);
   g->label_form = GTK_LABEL(gtk_label_new("-1"));
   gtk_box_pack_start(GTK_BOX(hbox_shapes), GTK_WIDGET(g->label_form), FALSE, TRUE, DT_PIXEL_APPLY_DPI(5));
   gtk_widget_set_tooltip_text(hbox_shapes,
@@ -2336,7 +2336,7 @@ void gui_init(dt_iop_module_t *self)
   // algorithm toolbar
   GtkWidget *hbox_algo = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
 
-  gtk_box_pack_start(GTK_BOX(hbox_algo), dt_ui_label_new(_("algorithms:")), FALSE, TRUE, 0);
+  gtk_box_pack_start(GTK_BOX(hbox_algo), dt_ui_label_new(_("Algorithms:")), FALSE, TRUE, 0);
 
   g->bt_blur = dt_iop_togglebutton_new(
       self, N_("tools"), N_("Activate blur tool"), N_("change algorithm for current form"),
@@ -2375,17 +2375,17 @@ void gui_init(dt_iop_module_t *self)
   GtkWidget *grid_wd_labels = gtk_grid_new();
   gtk_grid_set_column_homogeneous(GTK_GRID(grid_wd_labels), FALSE);
 
-  gtk_grid_attach(GTK_GRID(grid_wd_labels), dt_ui_label_new(_("scales:")), 0, 0, 1, 1);
+  gtk_grid_attach(GTK_GRID(grid_wd_labels), dt_ui_label_new(_("Scales:")), 0, 0, 1, 1);
   g->lbl_num_scales = GTK_LABEL(dt_ui_label_new(NULL));
   gtk_label_set_width_chars(g->lbl_num_scales, 2);
   gtk_grid_attach(GTK_GRID(grid_wd_labels), GTK_WIDGET(g->lbl_num_scales), 1, 0, 1, 1);
 
-  gtk_grid_attach(GTK_GRID(grid_wd_labels), dt_ui_label_new(_("current:")), 0, 1, 1, 1);
+  gtk_grid_attach(GTK_GRID(grid_wd_labels), dt_ui_label_new(_("Current:")), 0, 1, 1, 1);
   g->lbl_curr_scale = GTK_LABEL(dt_ui_label_new(NULL));
   gtk_label_set_width_chars(g->lbl_curr_scale, 2);
   gtk_grid_attach(GTK_GRID(grid_wd_labels), GTK_WIDGET(g->lbl_curr_scale), 1, 1, 1, 1);
 
-  gtk_grid_attach(GTK_GRID(grid_wd_labels), dt_ui_label_new(_("merge from:")), 0, 2, 1, 1);
+  gtk_grid_attach(GTK_GRID(grid_wd_labels), dt_ui_label_new(_("Merge from:")), 0, 2, 1, 1);
   g->lbl_merge_from_scale = GTK_LABEL(dt_ui_label_new(NULL));
   gtk_label_set_width_chars(g->lbl_merge_from_scale, 2);
   gtk_grid_attach(GTK_GRID(grid_wd_labels), GTK_WIDGET(g->lbl_merge_from_scale), 1, 2, 1, 1);
@@ -2445,7 +2445,7 @@ void gui_init(dt_iop_module_t *self)
   // preview single scale
   g->vbox_preview_scale = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
 
-  GtkWidget *lbl_psc = dt_ui_section_label_new(_("preview single scale"));
+  GtkWidget *lbl_psc = dt_ui_section_label_new(_("Preview single scale"));
   gtk_box_pack_start(GTK_BOX(g->vbox_preview_scale), lbl_psc, FALSE, TRUE, 0);
 
   GtkWidget *prev_lvl = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
@@ -2498,7 +2498,7 @@ void gui_init(dt_iop_module_t *self)
       = (GdkRGBA){.red = p->fill_color[0], .green = p->fill_color[1], .blue = p->fill_color[2], .alpha = 1.0 };
 
   g->hbox_color_pick = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
-  GtkWidget *lbl_fill_color = dt_ui_label_new(_("fill color: "));
+  GtkWidget *lbl_fill_color = dt_ui_label_new(_("Fill color: "));
   gtk_box_pack_start(GTK_BOX(g->hbox_color_pick), lbl_fill_color, FALSE, TRUE, 0);
 
   g->colorpick = gtk_color_button_new_with_rgba(&color);
@@ -2539,7 +2539,7 @@ void gui_init(dt_iop_module_t *self)
   // start building top level widget
   self->gui->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
 
-  GtkWidget *lbl_rt_tools = dt_ui_section_label_new(_("retouch tools"));
+  GtkWidget *lbl_rt_tools = dt_ui_section_label_new(_("Retouch tools"));
   gtk_box_pack_start(GTK_BOX(self->gui->widget), lbl_rt_tools, FALSE, TRUE, 0);
 
   // shapes toolbar
@@ -2554,7 +2554,7 @@ void gui_init(dt_iop_module_t *self)
                                 "- Square root: the source noise is scaled to the brightness of the target"));
 
   // wavelet decompose
-  GtkWidget *lbl_wd = dt_ui_section_label_new(_("wavelet decompose"));
+  GtkWidget *lbl_wd = dt_ui_section_label_new(_("Wavelet decompose"));
   gtk_box_pack_start(GTK_BOX(self->gui->widget), lbl_wd, FALSE, TRUE, 0);
 
   // wavelet decompose bar & labels
@@ -2568,7 +2568,7 @@ void gui_init(dt_iop_module_t *self)
   gtk_box_pack_start(GTK_BOX(self->gui->widget), g->vbox_preview_scale, TRUE, TRUE, 0);
 
   // shapes
-  GtkWidget *lbl_shapes = dt_ui_section_label_new(_("shapes"));
+  GtkWidget *lbl_shapes = dt_ui_section_label_new(_("Shapes"));
   gtk_box_pack_start(GTK_BOX(self->gui->widget), lbl_shapes, FALSE, TRUE, 0);
 
   // shape selected
@@ -3998,7 +3998,7 @@ static int process_internal(struct dt_iop_module_t *self, const dt_dev_pixelpipe
       const int max_scales = dwt_get_max_scale(dwt_p);
       if(dwt_p->scales > max_scales)
       {
-        dt_control_log(_("max scale is %i for this image size"), max_scales);
+        dt_control_log(_("Max scale is %i for this image size"), max_scales);
       }
     }
     // get first scale visible at this zoom level
@@ -4775,7 +4775,7 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
       const int max_scales = dwt_get_max_scale_cl(dwt_p);
       if(dwt_p->scales > max_scales)
       {
-        dt_control_log(_("max scale is %i for this image size"), max_scales);
+        dt_control_log(_("Max scale is %i for this image size"), max_scales);
       }
     }
     // get first scale visible at this zoom level

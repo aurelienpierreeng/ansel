@@ -101,7 +101,7 @@ typedef struct dt_iop_colorcorrection_global_data_t
 
 const char *name()
 {
-  return _("color correction");
+  return _("Color correction");
 }
 
 const char **description(struct dt_iop_module_t *self)
@@ -291,9 +291,9 @@ void gui_init(struct dt_iop_module_t *self)
   g->area = GTK_DRAWING_AREA(dtgtk_drawing_area_new_with_aspect_ratio(1.0));
   g_object_set_data(G_OBJECT(g->area), "iop-instance", self);
   gtk_box_pack_start(GTK_BOX(self->gui->widget), GTK_WIDGET(g->area), TRUE, TRUE, 0);
-  gtk_widget_set_tooltip_text(GTK_WIDGET(g->area), _("drag the line for split-toning. "
-                                                     "bright means highlights, dark means shadows. "
-                                                     "use mouse wheel to change saturation."));
+  gtk_widget_set_tooltip_text(GTK_WIDGET(g->area), _("Drag the line for split-toning. "
+                                                     "Bright means highlights, dark means shadows. "
+                                                     "Use mouse wheel to change saturation."));
 
   gtk_widget_add_events(GTK_WIDGET(g->area), GDK_POINTER_MOTION_MASK | dt_widget_scroll_mask()
                                            | GDK_BUTTON_PRESS_MASK | GDK_BUTTON_RELEASE_MASK
@@ -310,7 +310,7 @@ void gui_init(struct dt_iop_module_t *self)
   g_signal_connect(G_OBJECT(g->area), "key-press-event", G_CALLBACK(dt_iop_colorcorrection_key_press), self);
 
   g->slider = dt_bauhaus_slider_from_params(self, N_("saturation"));
-  gtk_widget_set_tooltip_text(g->slider, _("set the global saturation"));
+  gtk_widget_set_tooltip_text(g->slider, _("Set the global saturation"));
 
   cmsHPROFILE hsRGB = dt_colorspaces_get_profile(DT_COLORSPACE_SRGB, "", DT_PROFILE_ROLE_INPUT)->profile;
   cmsHPROFILE hLab = dt_colorspaces_get_profile(DT_COLORSPACE_LAB, "", DT_PROFILE_ROLE_ANY)->profile;

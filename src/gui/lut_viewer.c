@@ -1205,7 +1205,7 @@ static void _save_clut_callback(GtkWidget *widget, gpointer user_data)
   dt_lut_viewer_t *viewer = (dt_lut_viewer_t *)user_data;
   if(IS_NULL_PTR(viewer) || IS_NULL_PTR(viewer->clut) || viewer->clut_level < 2)
   {
-    dt_control_log(_("no LUT to save"));
+    dt_control_log(_("No LUT to save"));
     return;
   }
 
@@ -1242,7 +1242,7 @@ static void _save_clut_callback(GtkWidget *widget, gpointer user_data)
     cube_file = g_fopen(path, "wb");
     if(IS_NULL_PTR(cube_file))
     {
-      dt_control_log(_("failed to save LUT file"));
+      dt_control_log(_("Failed to save LUT file"));
     }
     else
     {
@@ -1267,7 +1267,7 @@ static void _save_clut_callback(GtkWidget *widget, gpointer user_data)
           }
 
       fclose(cube_file);
-      dt_control_log(_("saved LUT to %s"), path);
+      dt_control_log(_("Saved LUT to %s"), path);
       dt_conf_set_folder_from_file_chooser("ui_last/export_path", GTK_FILE_CHOOSER(filechooser));
     }
 
@@ -1300,35 +1300,35 @@ dt_lut_viewer_t *dt_lut_viewer_new(dt_gui_module_t *module)
 
   viewer->rotation_around_axis
       = dt_bauhaus_slider_new_with_range(dt_bauhaus_get_global(), module, -180.f, 180.f, 1.f, 35.f, 0);
-  dt_bauhaus_widget_set_label(viewer->rotation_around_axis, _("azimuth"));
+  dt_bauhaus_widget_set_label(viewer->rotation_around_axis, _("Azimuth"));
   dt_bauhaus_slider_set_format(viewer->rotation_around_axis, _("°"));
   gtk_box_pack_start(GTK_BOX(viewer->controls), viewer->rotation_around_axis, FALSE, FALSE, 0);
   g_signal_connect(G_OBJECT(viewer->rotation_around_axis), "value-changed", G_CALLBACK(_control_changed), viewer);
 
   viewer->rotation_of_axis
       = dt_bauhaus_slider_new_with_range(dt_bauhaus_get_global(), module, 0.f, 90.f, 1.f, 0.f, 0);
-  dt_bauhaus_widget_set_label(viewer->rotation_of_axis, _("axis tilt"));
+  dt_bauhaus_widget_set_label(viewer->rotation_of_axis, _("Axis tilt"));
   dt_bauhaus_slider_set_format(viewer->rotation_of_axis, _("°"));
   gtk_box_pack_start(GTK_BOX(viewer->controls), viewer->rotation_of_axis, FALSE, FALSE, 0);
   g_signal_connect(G_OBJECT(viewer->rotation_of_axis), "value-changed", G_CALLBACK(_control_changed), viewer);
 
   viewer->slice_depth
       = dt_bauhaus_slider_new_with_range(dt_bauhaus_get_global(), module, 0.f, 100.f, 1.f, 50.f, 0);
-  dt_bauhaus_widget_set_label(viewer->slice_depth, _("slice depth"));
+  dt_bauhaus_widget_set_label(viewer->slice_depth, _("Slice depth"));
   dt_bauhaus_slider_set_format(viewer->slice_depth, _(" %"));
   gtk_box_pack_start(GTK_BOX(viewer->controls), viewer->slice_depth, FALSE, FALSE, 0);
   g_signal_connect(G_OBJECT(viewer->slice_depth), "value-changed", G_CALLBACK(_control_changed), viewer);
 
   viewer->slice_thickness
       = dt_bauhaus_slider_new_with_range(dt_bauhaus_get_global(), module, 0.f, 100.f, 1.f, 100.f, 0);
-  dt_bauhaus_widget_set_label(viewer->slice_thickness, _("slice thickness"));
+  dt_bauhaus_widget_set_label(viewer->slice_thickness, _("Slice thickness"));
   dt_bauhaus_slider_set_format(viewer->slice_thickness, _(" %"));
   gtk_box_pack_start(GTK_BOX(viewer->controls), viewer->slice_thickness, FALSE, FALSE, 0);
   g_signal_connect(G_OBJECT(viewer->slice_thickness), "value-changed", G_CALLBACK(_control_changed), viewer);
 
   viewer->shift_threshold
       = dt_bauhaus_slider_new_with_range(dt_bauhaus_get_global(), module, 0.f, 100.f, 0.1f, 0.1f, 1);
-  dt_bauhaus_widget_set_label(viewer->shift_threshold, _("color shift threshold"));
+  dt_bauhaus_widget_set_label(viewer->shift_threshold, _("Color shift threshold"));
   dt_bauhaus_slider_set_format(viewer->shift_threshold, _(" %"));
   gtk_box_pack_start(GTK_BOX(viewer->controls), viewer->shift_threshold, FALSE, FALSE, 0);
   g_signal_connect(G_OBJECT(viewer->shift_threshold), "value-changed", G_CALLBACK(_control_changed), viewer);
@@ -1339,7 +1339,7 @@ dt_lut_viewer_t *dt_lut_viewer_new(dt_gui_module_t *module)
   g_signal_connect(G_OBJECT(viewer->show_control_nodes), "toggled", G_CALLBACK(_control_changed), viewer);
 
   viewer->gamut = dt_bauhaus_combobox_new(dt_bauhaus_get_global(), module);
-  dt_bauhaus_widget_set_label(viewer->gamut, _("target gamut"));
+  dt_bauhaus_widget_set_label(viewer->gamut, _("Target gamut"));
   dt_bauhaus_combobox_add(viewer->gamut, _("sRGB/Rec709"));
   dt_bauhaus_combobox_add(viewer->gamut, _("Adobe RGB"));
   dt_bauhaus_combobox_add(viewer->gamut, _("Display P3"));

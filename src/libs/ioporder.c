@@ -812,9 +812,9 @@ static dt_ioporder_graph_node_t *_ioporder_create_graph_node(dt_iop_module_t *mo
   gtk_widget_set_valign(mask, GTK_ALIGN_CENTER);
   gtk_widget_set_valign(presets, GTK_ALIGN_CENTER);
 
-  gtk_widget_set_tooltip_text(enable, _("toggle module"));
-  gtk_widget_set_tooltip_text(mask, _("display mask"));
-  gtk_widget_set_tooltip_text(presets, _("module presets"));
+  gtk_widget_set_tooltip_text(enable, _("Toggle module"));
+  gtk_widget_set_tooltip_text(mask, _("Display mask"));
+  gtk_widget_set_tooltip_text(presets, _("Module presets"));
 
   gtk_box_pack_start(GTK_BOX(header), enable, FALSE, FALSE, 0);
   gtk_box_pack_start(GTK_BOX(header), label, TRUE, TRUE, 0);
@@ -988,14 +988,14 @@ static void _ioporder_rebuild_graph(dt_lib_module_t *self)
   if(module_header_center_y > 0)
     endpoint_y = module_header_center_y - endpoint_height / 2;
 
-  dt_ioporder_graph_node_t *base_node = _ioporder_create_endpoint_node(_("base image"));
+  dt_ioporder_graph_node_t *base_node = _ioporder_create_endpoint_node(_("Base image"));
   d->nodes = g_list_prepend(d->nodes, base_node);
   gtk_fixed_put(GTK_FIXED(d->graph_fixed), base_node->event_box, base_x, endpoint_y);
   gtk_widget_show_all(base_node->event_box);
   visible_count++;
 
   screen_x = x;
-  dt_ioporder_graph_node_t *screen_node = _ioporder_create_endpoint_node(_("screen"));
+  dt_ioporder_graph_node_t *screen_node = _ioporder_create_endpoint_node(_("Screen"));
   d->nodes = g_list_append(d->nodes, screen_node);
   gtk_fixed_put(GTK_FIXED(d->graph_fixed), screen_node->event_box, screen_x, endpoint_y);
   gtk_widget_show_all(screen_node->event_box);
@@ -1534,7 +1534,7 @@ static void _ioporder_add_preset(GtkButton *button, gpointer user_data)
 
   gtk_entry_set_activates_default(GTK_ENTRY(entry), TRUE);
   gtk_widget_set_hexpand(entry, TRUE);
-  gtk_widget_set_tooltip_text(entry, _("preset name"));
+  gtk_widget_set_tooltip_text(entry, _("Preset name"));
   gtk_box_pack_start(GTK_BOX(content), entry, FALSE, FALSE, DT_PIXEL_APPLY_DPI(8));
   gtk_widget_show_all(dialog);
 
@@ -1720,7 +1720,7 @@ static void _ioporder_presets_changed_callback(gpointer instance, gpointer modul
 
 const char *name(struct dt_lib_module_t *self)
 {
-  return _("module order");
+  return _("Module order");
 }
 
 const char **views(dt_lib_module_t *self)

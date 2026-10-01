@@ -73,7 +73,7 @@ DT_MODULE_INTROSPECTION(2, dt_iop_velvia_params_t)
 typedef struct dt_iop_velvia_params_t
 {
   float strength; // $MIN: 0.0 $MAX: 100.0 $DEFAULT: 25.0
-  float bias;     // $MIN: 0.0 $MAX: 1.0 $DEFAULT: 1.0 $DESCRIPTION: "mid-tones bias"
+  float bias;     // $MIN: 0.0 $MAX: 1.0 $DEFAULT: 1.0 $DESCRIPTION: "Mid-tones bias"
 } dt_iop_velvia_params_t;
 
 /* legacy version 1 params */
@@ -100,7 +100,7 @@ typedef struct dt_iop_velvia_data_t
 
 const char *name()
 {
-  return _("velvia");
+  return _("Velvia");
 }
 
 const char *aliases()
@@ -235,10 +235,10 @@ void gui_init(struct dt_iop_module_t *self)
 
   g->strength_scale = dt_bauhaus_slider_from_params(self, N_("strength"));
   dt_bauhaus_slider_set_format(g->strength_scale, "%");
-  gtk_widget_set_tooltip_text(g->strength_scale, _("the strength of saturation boost"));
+  gtk_widget_set_tooltip_text(g->strength_scale, _("The strength of saturation boost"));
 
   g->bias_scale = dt_bauhaus_slider_from_params(self, "bias");
-  gtk_widget_set_tooltip_text(g->bias_scale, _("how much to spare highlights and shadows"));
+  gtk_widget_set_tooltip_text(g->bias_scale, _("How much to spare highlights and shadows"));
 }
 
 // clang-format off

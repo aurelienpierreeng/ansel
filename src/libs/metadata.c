@@ -605,7 +605,7 @@ void _menuitem_preferences(GtkMenuItem *menuitem, dt_lib_module_t *self)
   gtk_tree_view_append_column(GTK_TREE_VIEW(view), column);
   GtkWidget *header = gtk_tree_view_column_get_button(column);
   gtk_widget_set_tooltip_text(header,
-                _("tick if the corresponding metadata is of interest for you"
+                _("Tick if the corresponding metadata is of interest for you"
                 "\nit will be visible from metadata editor, collection and import module"
                 "\nit will be also exported"));
   renderer = gtk_cell_renderer_toggle_new();
@@ -615,7 +615,7 @@ void _menuitem_preferences(GtkMenuItem *menuitem, dt_lib_module_t *self)
   gtk_tree_view_append_column(GTK_TREE_VIEW(view), column);
   header = gtk_tree_view_column_get_button(column);
   gtk_widget_set_tooltip_text(header,
-                _("tick if you want to keep this information private (not exported with images)"));
+                _("Tick if you want to keep this information private (not exported with images)"));
 
   gtk_container_add(GTK_CONTAINER(w), view);
 
@@ -759,11 +759,11 @@ void gui_init(dt_lib_module_t *self)
     gtk_container_add(GTK_CONTAINER(labelev), label);
     gtk_grid_attach(grid, labelev, 0, i, 1, 1);
     gtk_widget_set_tooltip_text(GTK_WIDGET(label),
-              _("metadata text. ctrl-wheel scroll to resize the text box"
+              _("Metadata text. Ctrl-wheel scroll to resize the text box"
               "\n ctrl-enter inserts a new line (caution, may not be compatible with standard metadata)."
-              "\nif <leave unchanged> selected images have different metadata."
-              "\nin that case, right-click gives the possibility to choose one of them."
-              "\npress escape to exit the popup window"));
+              "\nIf <leave unchanged> selected images have different metadata."
+              "\nIn that case, right-click gives the possibility to choose one of them."
+              "\nPress escape to exit the popup window"));
 
     GtkWidget *textview = gtk_text_view_new();
     dt_gui_textview_set_padding(GTK_TEXT_VIEW(textview));
@@ -798,8 +798,8 @@ void gui_init(dt_lib_module_t *self)
   }
 
   // apply button
-  d->apply_button = dt_action_button_new(self, N_("apply"), _apply_button_clicked, self,
-                                         _("write metadata for selected images"), 0, 0);
+  d->apply_button = dt_action_button_new(self, N_("Apply"), _apply_button_clicked, self,
+                                         _("Write metadata for selected images"), 0, 0);
 
   gtk_grid_attach(GTK_GRID(self->widget), GTK_WIDGET(d->apply_button), 0, DT_METADATA_NUMBER, 2, 1);
 

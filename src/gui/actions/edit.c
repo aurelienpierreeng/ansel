@@ -383,7 +383,7 @@ static gboolean load_xmp_callback(GtkAccelGroup *group, GObject *acceleratable, 
     {
       GtkWidget *dialog
           = gtk_message_dialog_new(GTK_WINDOW(win), GTK_DIALOG_DESTROY_WITH_PARENT, GTK_MESSAGE_ERROR,
-                                   GTK_BUTTONS_CLOSE, _("error loading file '%s'"), dtfilename);
+                                   GTK_BUTTONS_CLOSE, _("Error loading file '%s'"), dtfilename);
 #ifdef GDK_WINDOWING_QUARTZ
       dt_osx_disallow_fullscreen(dialog);
 #endif
