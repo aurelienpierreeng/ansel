@@ -328,6 +328,13 @@ static void _closing_details_update(dt_closing_t *closing)
   g_array_set_clear_func(running, _closing_job_clear);
   dt_control_running_jobs_foreach(dt_control_get_global(), _closing_collect_job, running);
 
+  // Before the quit, the list says what the question counts: not the darkroom's service loop,
+  // which is not counted (see _closing_count_job()). Walk backwards so removals keep the indices.
+  if(closing->mode == DT_CLOSING_CONFIRM)
+    for(guint i = running->len; i > 0; i--)
+      if(g_array_index(running, dt_closing_job_t, i - 1).kind == DT_CLOSING_KIND_DARKROOM)
+        g_array_remove_index(running, i - 1);
+
   GString *listed = g_string_new(NULL);
   for(guint i = 0; i < running->len; i++)
   {
@@ -371,14 +378,19 @@ static void _closing_details_update(dt_closing_t *closing)
 }
 
 static void _closing_count_job(const char *description __attribute__((unused)),
-                              const dt_job_queue_t queue __attribute__((unused)),
-                              const gboolean reserved __attribute__((unused)), void *data)
+                              const dt_job_queue_t queue __attribute__((unused)), const gboolean reserved,
+                              void *data)
 {
+  // The reserved worker's job is the darkroom's service loop: it runs from entering the view to
+  // leaving it, idle or not, and leaving the view is part of the quit. Counted here, it would hold
+  // the question up for as long as the darkroom is open. It is the only reserved job there is
+  // (DT_CTL_WORKER_RESERVED is 1); a second one that does real work would need telling apart.
+  if(reserved) return;
   (*(int32_t *)data)++;
 }
 
-// The jobs running now, of every kind: thumbnails and darkroom pipelines too. They are what a quit
-// waits for, and what brings up the closing window once it is under way.
+// The jobs running now that the quit would wait for, thumbnails included, but not the darkroom's
+// service loop, which the quit ends itself. Only the question before the quit counts them so.
 static int32_t _closing_running_jobs(void)
 {
   int32_t running = 0;
