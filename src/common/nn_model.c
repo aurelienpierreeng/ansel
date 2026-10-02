@@ -80,6 +80,14 @@ void dt_nn_set_allocator(dt_nn_alloc_f alloc_fn, dt_nn_free_f free_fn)
   _nn_free_fn = free_fn;
 }
 
+/* injected cancellation test (see nn_model.h); unset, nothing cancels */
+static dt_nn_cancel_f _nn_cancel_fn = NULL;
+
+void dt_nn_set_cancel(dt_nn_cancel_f cancel_fn)
+{
+  _nn_cancel_fn = cancel_fn;
+}
+
 /* Pixel buffers come from the injected arena — the pixelpipe cache memory
  * arena in the application — and ONLY from it: the arena is the application's
  * memory-budget control, and a malloc escape hatch would simply move the
@@ -892,8 +900,18 @@ static int _unet_forward(const nn_unet_t *u, const float *in, float *out, int wi
   int cw = width, chh = height;
   float *cur = NULL;
   int ok = 1;
+  int cancelled = 0;
+  /* The cancel hook is asked once per level: a level quarters the pixels and
+   * doubles the channels, so each costs about the same and the forward is cut
+   * into 2 * depth + 2 roughly equal steps. */
   for(int l = 0; l < u->depth && ok; l++)
   {
+    if(_nn_cancel_fn && _nn_cancel_fn())
+    {
+      cancelled = 1;
+      ok = 0;
+      break;
+    }
     const size_t lvl = base * wh >> l;
     float *tmp = _nn_alloc(lvl, 0);
     skips[l] = _nn_alloc(lvl, 1);
@@ -919,6 +937,11 @@ static int _unet_forward(const nn_unet_t *u, const float *in, float *out, int wi
   }
 
   // bottleneck: (base<<depth) channels at wh >> 2*depth px
+  if(ok && _nn_cancel_fn && _nn_cancel_fn())
+  {
+    cancelled = 1;
+    ok = 0;
+  }
   if(ok)
   {
     const size_t bot = base * wh >> u->depth;
@@ -949,6 +972,12 @@ static int _unet_forward(const nn_unet_t *u, const float *in, float *out, int wi
   // tensor (the physical 2*w_skip concat) is never allocated at all.
   for(int i = 0; i < u->depth && ok; i++)
   {
+    if(_nn_cancel_fn && _nn_cancel_fn())
+    {
+      cancelled = 1;
+      ok = 0;
+      break;
+    }
     const int l = u->depth - 1 - i;
     const size_t w_skip = base << l;
     const size_t half = w_skip * (size_t)(2 * cw) * (size_t)(2 * chh); // one concat half
@@ -974,6 +1003,11 @@ static int _unet_forward(const nn_unet_t *u, const float *in, float *out, int wi
     cur = d2;
   }
 
+  if(ok && _nn_cancel_fn && _nn_cancel_fn())
+  {
+    cancelled = 1;
+    ok = 0;
+  }
   if(ok)
   {
     float *head = _nn_alloc((size_t)u->out_ch * wh, 0);
@@ -998,6 +1032,7 @@ static int _unet_forward(const nn_unet_t *u, const float *in, float *out, int wi
 
   for(int l = 0; l < u->depth; l++) _nn_free(skips[l]);
   _nn_free(cur);
+  if(cancelled) return DT_NN_CANCELLED;
   return ok ? 0 : 1;
 }
 
