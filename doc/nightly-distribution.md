@@ -195,8 +195,11 @@ the prefetch had marked `✘` — both then failed on DNS (`Could not resolve ho
   the shorter-abbreviation form at the patch's cached location — but only when it reproduces
   the formula's own sha256, which brew then verifies itself. `install-deps-macos.sh` (Intel)
   and `mac-brew-cache.yml` run it for `llvm` before installing. Tested 2026-10-02 against the
-  real patch, outside brew; the `brew ruby` half that lists the patches has not yet run on a
-  Mac.
+  real patch, outside brew. Its first run on a Mac (mac-brew-cache run 37020674433, 2026-10-02,
+  `d4a2120092`) seeded nothing: brew refuses to load a formula from a file outside a tap
+  (`Homebrew requires formulae to be in a tap, rejecting: …/llvm.rb`), so the script reported
+  `could not list its patches` and the build failed on the same checksum. The source now goes
+  into a throwaway local tap (`ansel/brew-seed`, removed on exit); that version has not yet run.
 
 **None of this is what a failing Intel job used to cost.** `upload_to_release` carried `needs:
 MacOS` over the whole matrix with no `if:`, and `fail-fast` is off — so arm64 succeeded on

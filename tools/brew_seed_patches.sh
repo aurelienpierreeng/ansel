@@ -37,21 +37,44 @@ if ! command -v brew >/dev/null 2>&1; then
 fi
 
 work="$(mktemp -d)"
-trap 'rm -rf "${work}"' EXIT
+
+# Homebrew refuses to load a formula from a file outside a tap ("Homebrew requires formulae to be
+# in a tap, rejecting: ..."), measured on the warm-up run of 2026-10-02, so the sources go into a
+# throwaway local tap, removed on exit. Only the patch list is read from it; nothing is installed.
+tap="ansel/brew-seed"
+tap_created=no
+if [ ! -d "$(brew --repository "${tap}")" ]; then
+  if ! brew tap-new --no-git "${tap}" >/dev/null 2>&1; then
+    echo "note: could not create the local tap ${tap} -- nothing was seeded." >&2
+    rm -rf "${work}"
+    exit 0
+  fi
+  tap_created=yes
+fi
+tap_formulae="$(brew --repository "${tap}")/Formula"
+mkdir -p "${tap_formulae}"
+cleanup() {
+  rm -rf "${work}"
+  if [ "${tap_created}" = yes ]; then
+    brew untap --force "${tap}" >/dev/null 2>&1 || true
+  fi
+}
+trap cleanup EXIT
 
 for formula in "$@"; do
   # Loaded from its Ruby source rather than from the JSON API, which does not carry the patches
   # with their URLs and checksums. `brew cat' fetches that source when brew runs from the API.
-  src="${work}/${formula}.rb"
+  src="${tap_formulae}/${formula}.rb"
   if ! brew cat "${formula}" > "${src}" 2>/dev/null; then
     echo "note: ${formula}: no formula source -- skipped." >&2
     continue
   fi
 
   # One line per external patch: URL, expected sha256, the path brew looks for it at. The path
-  # is brew's own answer, so this script never has to know the cache's naming scheme.
+  # is brew's own answer, so this script never has to know the cache's naming scheme -- and it
+  # does not depend on the tap: the downloads are named after the URL, not the formula.
   if ! brew ruby -e "
-      f = Formulary.factory('${src}')
+      f = Formulary.factory('${tap}/${formula}')
       f.stable.patches.select(&:external?).each do |p|
         puts [p.url, p.resource.checksum.hexdigest, p.cached_download].join(\"\t\")
       end" > "${work}/${formula}.patches"; then
