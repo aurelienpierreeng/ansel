@@ -40,10 +40,21 @@ not reached the end of its list.
 ## Before the quit
 
 While jobs are running or queued, `dt_gui_closing_quit()` asks before it quits. The reasons are
-those of the closing window: the running jobs, of every kind — exports, preloads, thumbnails,
-darkroom pipelines — counted with `dt_control_running_jobs_foreach()`, are what the quit would
-wait for; the queued ones, from `dt_control_queued_jobs_count()`, are what it would drop. The
-workers' count cannot serve here: before the quit, every worker is alive, idle or not.
+those of the closing window: the running jobs — exports, preloads, thumbnails — counted with
+`dt_control_running_jobs_foreach()`, are what the quit would wait for; the queued ones, from
+`dt_control_queued_jobs_count()`, are what it would drop. The workers' count cannot serve here:
+before the quit, every worker is alive, idle or not.
+
+The reserved worker's job is left out of the question, count and list alike. It is *develop
+process image*, the darkroom's service loop (`dt_dev_darkroom_pipeline()`), and it runs from
+entering the darkroom to leaving it: `while(!dev->exit && dt_control_running())`, napping when
+there is nothing to do. Neither condition can change while the question is up — `running` is
+cleared by the quit, `dev->exit` set by leaving the view, inside `dt_cleanup()` — so, counted, it
+kept the question open for as long as the darkroom was, and the question never closed on its own.
+Read from the code on 2026-10-02 against `9dea2adcc3`, after the report of a question that would
+not go away from the darkroom; not traced with `-d control`. During the quit it is still counted:
+leaving the view ends it, in the 0.49 – 0.51 s of the darkroom row below. It is the only reserved
+job (`DT_CTL_WORKER_RESERVED` is 1); a second one that did real work would need telling apart.
 
 The question is the closing window in another mode (`DT_CLOSING_CONFIRM`): a warning icon in
 place of the spinner, *Tasks are still running*, the count of running jobs, the progress messages
