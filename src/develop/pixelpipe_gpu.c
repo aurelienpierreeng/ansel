@@ -52,6 +52,12 @@ static int _gpu_init_input(dt_dev_pixelpipe_t *pipe,
 {
   dt_iop_module_t *module = piece->module;
 
+  // An input that only lives in RAM (its producer ran on CPU, or it came from the cache) is
+  // already the authoritative copy, and there is no device buffer to read back.
+  // dt_dev_pixelpipe_cache_sync_cl_buffer() fails on a NULL device buffer, which sent every such
+  // input of an OpenCL-tiled module to the CPU.
+  if(!IS_NULL_PTR(*input) && IS_NULL_PTR(*cl_mem_input)) return 0;
+
   if(IS_NULL_PTR(*input))
   {
     dt_dev_pixelpipe_cache_wrlock_entry(TRUE, input_entry);
