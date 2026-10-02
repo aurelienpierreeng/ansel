@@ -875,6 +875,27 @@ void dt_mipmap_cache_init(const dt_mipmap_cache_settings_t *settings, const gboo
       = _get_entry_size(4 * sizeof(float) * cache->max_width[DT_MIPMAP_F] * cache->max_height[DT_MIPMAP_F]);
 }
 
+void dt_mipmap_cache_flush_to_disk(void)
+{
+  dt_mipmap_cache_t *cache = _mipmap_cache;
+  if(IS_NULL_PTR(cache)) return;
+
+  /* A fill ratio of 0 walks the whole LRU: the walk's only stopping condition is
+   * `cost < cost_quota * fill_ratio`, which no non-negative cost satisfies at 0. Reusing the
+   * eviction walk rather than writing a second one is the point -- it already skips entries it
+   * cannot trywrlock, honours _lock_demoting, and runs the cleanup callback that does the writing.
+   * A bespoke "flush but keep" pass would need its own answer to each of those, plus a way to not
+   * write every entry twice when the cache is torn down later.
+   *
+   * Only mip_thumbs: DT_MIPMAP_F and DT_MIPMAP_FULL are RAM-only -- every disk write is gated on
+   * mip < DT_MIPMAP_F -- so there is nothing to bank for them, and dropping the decoded raw here
+   * would only cost the next reader a re-read. */
+  const size_t reclaimed = dt_cache_gc_locked(&cache->mip_thumbs.cache, 0.0f);
+
+  _cache_print(DT_DEBUG_CACHE, "[mipmap_cache] flushed to disk: %.2f MB banked\n",
+               reclaimed / (1024.0 * 1024.0));
+}
+
 void dt_mipmap_cache_cleanup(void)
 {
   dt_mipmap_cache_t *cache = _mipmap_cache;

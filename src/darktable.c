@@ -1865,11 +1865,6 @@ void dt_cleanup()
 {
   const int init_gui = (!IS_NULL_PTR(darktable.gui));
 
-  // Flush crash reporting and mark this session as a clean exit. Done early so
-  // events are sent while the rest of the app is still up; the clean-session
-  // counter it writes is persisted later by dt_conf_cleanup().
-  dt_sentry_shutdown();
-
   // Stop the update check first: it is the one that may still post to the GUI thread.
   dt_updates_shutdown();
 
@@ -1898,6 +1893,23 @@ void dt_cleanup()
 #endif
 
   // anything that asks user for input should be placed before this line
+
+  /* Everything below this line can fail, and two things must not be lost when it does.
+   *
+   * dt_conf_set_*() only writes the in-memory table: the settings file is written by
+   * dt_conf_save(), whose only caller on the normal path was dt_conf_cleanup(), at the very tail
+   * of this function. And a thumbnail reaches the disk cache only when its cache entry is
+   * released, which for everything still resident happened in dt_mipmap_cache_cleanup(), a
+   * hundred lines below. So a session's preferences AND its whole thumbnail cache both depended
+   * on reaching the end of a long serial teardown behind an already-hidden window -- which is why
+   * "no cache on disk", "my settings are not saved" and "it crashes on exit" arrive as one report
+   * (#1476, #1481, #1482) and are in fact one event.
+   *
+   * Both are banked here instead. Neither call is required again below; the ones that remain are
+   * there to catch what the teardown itself writes (window geometry, panel sizes, sentry's
+   * session counters) and whatever thumbnails were still locked by another thread. */
+  dt_conf_flush();
+  dt_mipmap_cache_flush_to_disk();
 
   if(init_gui)
   {
@@ -1970,6 +1982,15 @@ void dt_cleanup()
   dt_gui_throttle_cleanup();
   // Needs conf alive: a clean exit with OpenCL running is what clears the driver-crash streak.
   dt_opencl_clear_driver_crash_streak();
+
+  /* Last, not first. sentry_close() uninstalls the crash handler, so every line of teardown after
+   * it runs unreported -- and this used to be the FIRST statement of dt_cleanup(), which left the
+   * whole of it invisible: an exit crash produced no event at all, which is why there was no crash
+   * data for #1476 to work from. It has to stay ahead of dt_conf_cleanup() below, because it
+   * writes the clean-session counter and the session duration through dt_conf_set_*() and that
+   * save is what puts them on disk. */
+  dt_sentry_shutdown();
+
   dt_conf_cleanup(darktable.conf);
   dt_free(darktable.conf);
   dt_points_cleanup(darktable.points);
