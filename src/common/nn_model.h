@@ -71,7 +71,9 @@ void dt_nn_set_allocator(dt_nn_alloc_f alloc_fn, dt_nn_free_f free_fn);
  * between modules, so without this a stale forward always runs to the end.
  * The executor asks the hook between U-Net levels, on the calling thread
  * (never inside an OpenMP region); a non-zero answer abandons the forward,
- * which then returns DT_NN_CANCELLED. Unset, a forward is never cancelled
+ * which then returns DT_NN_CANCELLED. The OpenCL executor asks at the same
+ * points but first waits for the device queue, which costs one sync per
+ * level while a hook is set. Unset, a forward is never cancelled
  * (the standalone fixture test). */
 #define DT_NN_CANCELLED 2
 typedef int (*dt_nn_cancel_f)(void);
