@@ -81,9 +81,12 @@ if [ -n "$repo_root" ]; then
   # not just dE > 2.3. --keep leaves tests/image_test/results/ (per-image logs, including
   # ones that passed) for inspection instead of wiping it on success. Run the full bank by
   # hand before landing pipeline/IOP changes; this is only a fast sanity check (8 raws).
-  # Skip with SKIP_IMAGE_TEST=1 or --no-verify.
+  # Skip with SKIP_IMAGE_TEST=1 or --no-verify. Skipped too when the commit stages nothing
+  # under src/, tests/ or data/kernels/ (the OpenCL kernels, which --opencl renders with), so
+  # a commit of docs or CI does not pay for a run.
   image_test_script="$repo_root/tests/image_test.sh"
-  if [ -z "${SKIP_IMAGE_TEST:-}" ] && [ -x "$image_test_script" ]; then
+  if [ -z "${SKIP_IMAGE_TEST:-}" ] && [ -x "$image_test_script" ] &&
+     [ -n "$(git diff --cached --name-only -- src/ tests/ data/kernels/)" ]; then
     if ! "$image_test_script" run --if-configured --quiet --keep --opencl; then
       echo -e "\033[1;31mimage_test smoke test failed -- see above, or re-run: tests/image_test.sh\033[0m"
       echo "Skip with SKIP_IMAGE_TEST=1 git commit, or git commit --no-verify"
