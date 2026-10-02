@@ -708,6 +708,17 @@ void dt_dev_darkroom_pipeline(dt_develop_t *dev)
         continue;
       }
 
+      // Both pipes were resynced before the preview ran, so a history change committed while the
+      // preview was running (a module switched off mid-render, #1519) finds the main pipe planned
+      // from the old history: its killswitch is raised and its changed flag left set. The reset
+      // below would swallow that killswitch and render the stale history to completion, heavy
+      // modules included. The flag survives the skip, so the next iteration resyncs and runs the
+      // current state. Main pipe only: the preview runs first, right after the resync, and the
+      // configure-event ZOOMED flag landing inside that resync must not starve it (see above).
+      if(pipe == dev->pipe && dt_atomic_get_int(&pipe->shutdown)
+         && dt_dev_pixelpipe_get_changed(pipe) != DT_DEV_PIPE_UNCHANGED)
+        continue;
+
       dt_print(DT_DEBUG_PIPE | DT_DEBUG_DEV, "PIPE %s needs update\n", pipe->type == DT_DEV_PIXELPIPE_FULL ? "full" : "preview");
 
       dt_pthread_mutex_lock(&pipe->busy_mutex);
