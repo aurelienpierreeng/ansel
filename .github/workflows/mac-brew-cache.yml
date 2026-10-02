@@ -124,8 +124,25 @@ jobs:
         run: |
           # Already-installed formulae are reported and skipped, so re-dispatching after a
           # partial warm-up costs a minute rather than another build.
+          # brew's status is not the verdict, the Cellar is -- as in install-deps-macos.sh. Run
+          # 37028120640 (2026-10-02) built llvm 23.1.2 in 3h31, then exited 1 because a
+          # dependency, openssl@3, could not link over the runner image's openssl@1.1; the
+          # save steps were skipped and the four hours were lost.
+          status=0
           # shellcheck disable=SC2086
-          brew install ${FORMULAE}
+          brew install ${FORMULAE} || status=$?
+          missing=""
+          # shellcheck disable=SC2086
+          for f in ${FORMULAE}; do
+            brew list --formula "${f}" >/dev/null 2>&1 || missing="${missing} ${f}"
+          done
+          if [ -n "${missing}" ]; then
+            echo "Missing after brew install:${missing}" >&2
+            exit "$(( status ? status : 1 ))"
+          fi
+          if [ "${status}" -ne 0 ]; then
+            echo "brew install exited ${status}, but every requested formula is installed." >&2
+          fi
       # The kegs are banked here, as soon as they exist, and not by actions/cache's own save --
       # that is a post-step at the end of the job, and a job cancelled at the 6-hour ceiling
       # never reaches it. On the nightly of 2026-09-10 the dependency step SUCCEEDED at 5h52

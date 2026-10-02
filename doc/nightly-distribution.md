@@ -202,7 +202,13 @@ the prefetch had marked `✘` — both then failed on DNS (`Could not resolve ho
   into a throwaway local tap (`ansel/brew-seed`, removed on exit). Its run (37025480414,
   `9dea2adcc3`) got past that and was refused at the next guard: `Refusing to load formula
   ansel/brew-seed/llvm from untrusted tap`. The script now runs `brew trust` on the tap, and
-  `brew untrust` on exit; that version has not yet run.
+  `brew untrust` on exit. That version (run 37028120640, `ae160c645b`) worked: the log shows
+  `served with 15-character index hashes; the 13-character form matches the formula -- seeded
+  at …`, then `✔︎ Patch 1381ad49…40a8c7c0.diff`, the patch applied, and llvm 23.1.2 built in
+  3 h 31. The step still exited 1, because openssl@3, rebuilt as a dependency, could not link
+  over the runner image's `openssl@1.1` (`Could not symlink bin/openssl`); the save steps were
+  skipped and the keg was lost. The build step now judges by the Cellar, not by brew's status,
+  as `install-deps-macos.sh` already did.
 
 **None of this is what a failing Intel job used to cost.** `upload_to_release` carried `needs:
 MacOS` over the whole matrix with no `if:`, and `fail-fast` is off — so arm64 succeeded on
