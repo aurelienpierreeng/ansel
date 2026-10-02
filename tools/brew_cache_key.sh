@@ -27,7 +27,7 @@
 # cannot carry it: llvm@22 -> llvm_22_key.
 #
 # Usage:
-#   tools/brew_cache_key.sh llvm llvm@22 rust
+#   tools/brew_cache_key.sh llvm rust
 
 set -uo pipefail
 

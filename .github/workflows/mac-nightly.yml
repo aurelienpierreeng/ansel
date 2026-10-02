@@ -95,9 +95,10 @@ jobs:
           fetch-tags: true
           path: ${{ env.SRC_DIR }}
       # Homebrew publishes no bottles for Intel macOS any more, so a large part of the tree
-      # is built from source there, and two formulae eat the job's 6-hour budget: llvm@22
-      # (3h43 to over 4h54) and rust (1h05 to 1h29). Both are librsvg's -- it is written in Rust --
-      # and so neither can be dropped the way our own llvm was. Their kegs are cached between
+      # is built from source there, and two formulae eat the job's 6-hour budget: llvm
+      # (3h43 to over 4h54, measured as llvm@22) and rust (1h05 to 1h29). Both are librsvg's --
+      # it is written in Rust, and since rust 1.99.0 rust builds against the unversioned llvm
+      # rather than llvm@22 -- so neither can be dropped. Their kegs are cached between
       # runs; tools/brew_cache_key.sh carries the reasoning and owns the keys. arm64 pours
       # bottles in 77 seconds and needs none of it, so the cache steps are Intel-only and the
       # quota is left to the architecture that cannot do without it.
@@ -109,20 +110,20 @@ jobs:
         if: ${{ runner.arch == 'X64' }}
         run: |
           brew update
-          "${SRC_DIR}/tools/brew_cache_key.sh" llvm@22 rust
+          "${SRC_DIR}/tools/brew_cache_key.sh" llvm rust
           {
             echo "cellar=$(brew --cellar)"
             echo "opt=$(brew --prefix)/opt"
           } >> "$GITHUB_OUTPUT"
-      - name: Restore the llvm@22 keg
-        id: keg-llvm_22
+      - name: Restore the llvm keg
+        id: keg-llvm
         if: ${{ runner.arch == 'X64' }}
         uses: actions/cache/restore@v4
         with:
           path: |
-            ${{ steps.brewcache.outputs.cellar }}/llvm@22
-            ${{ steps.brewcache.outputs.opt }}/llvm@22
-          key: ${{ steps.brewcache.outputs.llvm_22_key }}
+            ${{ steps.brewcache.outputs.cellar }}/llvm
+            ${{ steps.brewcache.outputs.opt }}/llvm
+          key: ${{ steps.brewcache.outputs.llvm_key }}
       - name: Restore the rust keg
         id: keg-rust
         if: ${{ runner.arch == 'X64' }}
@@ -135,7 +136,7 @@ jobs:
       # Two different situations used to collapse into one tolerated `brew link' failure, and
       # both printed `Error:' lines that read like a broken step: a keg that was never restored
       # (a cache miss, the ordinary cold case) and a keg-only formula, which needs no link at
-      # all because its opt link travelled inside the cached keg. llvm@22 is keg-only, so even a
+      # all because its opt link travelled inside the cached keg. llvm is keg-only, so even a
       # cache HIT produced an error. Each case is now asked about before brew is called, so the
       # log says what happened and a genuine link failure is a genuine failure of the step.
       #
@@ -145,7 +146,7 @@ jobs:
         if: ${{ runner.arch == 'X64' }}
         run: |
           cellar="$(brew --cellar)"
-          for f in llvm@22 rust; do
+          for f in llvm rust; do
             if [ ! -d "${cellar}/${f}" ]; then
               echo "${f}: not in the cache -- it will be built"
               continue
@@ -168,14 +169,14 @@ jobs:
       # and the budget then ran out during the build, so the four hours it had just spent on
       # llvm were thrown away with the job. Saving at this point means a run that gets this far
       # warms the cache for the next one even when it dies afterwards.
-      - name: Save the llvm@22 keg
-        if: ${{ runner.arch == 'X64' && steps.keg-llvm_22.outputs.cache-hit != 'true' }}
+      - name: Save the llvm keg
+        if: ${{ runner.arch == 'X64' && steps.keg-llvm.outputs.cache-hit != 'true' }}
         uses: actions/cache/save@v4
         with:
           path: |
-            ${{ steps.brewcache.outputs.cellar }}/llvm@22
-            ${{ steps.brewcache.outputs.opt }}/llvm@22
-          key: ${{ steps.brewcache.outputs.llvm_22_key }}
+            ${{ steps.brewcache.outputs.cellar }}/llvm
+            ${{ steps.brewcache.outputs.opt }}/llvm
+          key: ${{ steps.brewcache.outputs.llvm_key }}
       - name: Save the rust keg
         if: ${{ runner.arch == 'X64' && steps.keg-rust.outputs.cache-hit != 'true' }}
         uses: actions/cache/save@v4

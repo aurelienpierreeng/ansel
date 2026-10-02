@@ -161,6 +161,43 @@ whole 6 hours. Warm in two dispatches, `llvm@22` then `rust`: their 5 h 41 toget
 under one timeout, and the second dispatch restores `llvm@22` from the cache instead of building
 it again. Asking for both at once is the situation the workflow exists to escape.
 
+**The cached llvm is now `llvm`, not `llvm@22`** (2026-10-02, against `a4eac9fe11`). homebrew-core
+bumped `rust` to 1.99.0 on 2026-10-01, three days after "rust: do not hardcode LLVM version": it
+now `depends_on "llvm"` (23.1.2). The nightly of 10-02 restored `llvm@22` from the cache and then
+scheduled `llvm` beside it — `Installing librsvg dependency: llvm`, then `rust`, which died on
+`/usr/local/opt/llvm not present or broken`. `llvm@22` left the tree; the keys, the cache steps
+and `mac-brew-cache.yml`'s default now name `llvm`, and the skip in `install-deps-macos.sh` saves
+nothing while rust shares it. **The cache needs warming again: `llvm`, then `rust`.**
+
+**Homebrew builds with network access denied, so a download that failed the prefetch is lost.**
+`brew install` fetches everything first (`Fetching downloads for: …`), then builds each formula
+in a sandbox; homebrew-core added `deny_network_access!` to `llvm` on 2026-09-21. Anything not
+fetched up front is retried inside the build, where DNS does not resolve. Measured on the nightly
+of 10-02: exactly two downloads were attempted after the prefetch, and they were exactly the two
+the prefetch had marked `✘` — both then failed on DNS (`Could not resolve host: github.com`,
+`nodename nor servname provided`), while every prefetched one worked. The two causes:
+
+- **netpbm is fetched with `svn`**, and `svn` did not exist yet at prefetch time (`You must: brew
+  install svn`). It is in the tree because `libsoup` 3.8.0 has no Intel bottle, so its build
+  dependency `vala` brings `graphviz` → `netpbm`: osm-gps-map's plan went from 23 dependencies on
+  09-30 to 40 on 10-01. This alone killed 10-01. `install-deps-macos.sh` now installs
+  `subversion` on its own first, on Intel.
+- **`llvm` 23.1.2 carries a patch whose checksum no longer matches** (`Patch reports different
+  checksum: f6dafd76…`, the `compare/1381ad49…40a8c7c0.diff` from GitHub — a generated diff, not
+  a stable file). **The content did not change, only the abbreviation**: GitHub now writes the
+  blob hashes on its `index` lines with 14 characters instead of 13. Measured 2026-10-02: the
+  diff as served hashes to `fa40bc0a…`, and the same diff with those hashes truncated to 13
+  characters hashes to exactly `f6dafd76…`. `?full_index=1` has no effect on a compare `.diff`,
+  and the compare `.patch` form is a different file altogether (15-character hashes, other blobs).
+  Homebrew closed the only report of the symptom (homebrew-core #314418, 2026-09-30) as an
+  unsupported configuration, without the cause. `tools/brew_seed_patches.sh` works around it:
+  it downloads each external patch outside the sandbox and, when the checksum differs, writes
+  the shorter-abbreviation form at the patch's cached location — but only when it reproduces
+  the formula's own sha256, which brew then verifies itself. `install-deps-macos.sh` (Intel)
+  and `mac-brew-cache.yml` run it for `llvm` before installing. Tested 2026-10-02 against the
+  real patch, outside brew; the `brew ruby` half that lists the patches has not yet run on a
+  Mac.
+
 **None of this is what a failing Intel job used to cost.** `upload_to_release` carried `needs:
 MacOS` over the whole matrix with no `if:`, and `fail-fast` is off — so arm64 succeeded on
 09-10 through 09-14 and all five of its DMGs were discarded with the Intel job, and no macOS

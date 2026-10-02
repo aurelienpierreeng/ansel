@@ -73,11 +73,23 @@ HB_PACKAGES=(
 # the arm64 CI does that on every commit. So Intel does without it, and mac-nightly.yml passes
 # -DTESTBUILD_OPENCL_PROGRAMS=OFF there to say so rather than lean on the fallback.
 #
-# This does NOT remove the other four-hour llvm build. librsvg and adwaita-icon-theme pull in
-# llvm@22, a different formula that no list here mentions, and it was scheduled alongside this
-# one on every measured nightly -- which is why the keg cache is the load-bearing fix and this
-# is only the margin on top of it. See doc/nightly-distribution.md.
+# Since rust 1.99.0 (homebrew-core, 2026-10-01) this skip saves nothing: rust now builds
+# against this same llvm instead of llvm@22, and librsvg pulls rust in, so llvm is installed
+# anyway -- from the keg cache, which is the load-bearing fix. The skip stays only so that the
+# day rust moves to a versioned llvm again, ours is not built on top of it.
+# See doc/nightly-distribution.md.
+#
+# subversion is installed first, on its own. Homebrew fetches every download before building
+# anything, and builds with network access denied; netpbm (graphviz -> vala -> libsoup, which
+# has no Intel bottle since 3.8.0) is fetched with svn, so a fetch attempted before svn exists
+# is deferred into the sandboxed build and fails there on DNS. Nightlies of 2026-10-01 and 02.
+#
+# Then llvm's patches are seeded into brew's download cache: one of them is a GitHub compare diff
+# that GitHub now serves with a checksum the formula rejects, which the same sandbox turns into a
+# DNS failure. tools/brew_seed_patches.sh has the measurement and the reasoning.
 if [ "$(uname -s)" = "Darwin" ] && [ "$(uname -m)" = "x86_64" ]; then
+  brew install subversion
+  "$(dirname "$0")/../tools/brew_seed_patches.sh" llvm
   echo "Intel macOS: skipping llvm, a ~4 h source build here. It only enables OpenCL kernel"
   echo "test-compilation, which the arm64 CI performs on every commit."
   _kept=()
