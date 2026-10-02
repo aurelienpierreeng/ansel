@@ -782,7 +782,6 @@ static dt_ioporder_graph_node_t *_ioporder_create_graph_node(dt_iop_module_t *mo
   gtk_widget_set_hexpand(event_box, FALSE);
   gtk_widget_set_halign(event_box, GTK_ALIGN_START);
 
-  dt_capitalize_label(module_name);
   gtk_label_set_text(GTK_LABEL(label), module_name);
   gtk_widget_set_halign(label, GTK_ALIGN_START);
   gtk_widget_set_valign(label, GTK_ALIGN_CENTER);
@@ -812,9 +811,9 @@ static dt_ioporder_graph_node_t *_ioporder_create_graph_node(dt_iop_module_t *mo
   gtk_widget_set_valign(mask, GTK_ALIGN_CENTER);
   gtk_widget_set_valign(presets, GTK_ALIGN_CENTER);
 
-  gtk_widget_set_tooltip_text(enable, _("toggle module"));
-  gtk_widget_set_tooltip_text(mask, _("display mask"));
-  gtk_widget_set_tooltip_text(presets, _("module presets"));
+  gtk_widget_set_tooltip_text(enable, _("Toggle module"));
+  gtk_widget_set_tooltip_text(mask, _("Display mask"));
+  gtk_widget_set_tooltip_text(presets, _("Module presets"));
 
   gtk_box_pack_start(GTK_BOX(header), enable, FALSE, FALSE, 0);
   gtk_box_pack_start(GTK_BOX(header), label, TRUE, TRUE, 0);
@@ -894,7 +893,6 @@ static dt_ioporder_graph_node_t *_ioporder_create_endpoint_node(const char *labe
   gtk_widget_set_margin_end(body, DT_PIXEL_APPLY_DPI(12));
   gtk_widget_set_name(body, "ioporder-endpoint");
 
-  dt_capitalize_label(node->endpoint_label);
   gtk_label_set_text(GTK_LABEL(title), node->endpoint_label);
   gtk_widget_set_halign(title, GTK_ALIGN_CENTER);
   gtk_widget_set_valign(title, GTK_ALIGN_CENTER);
@@ -988,14 +986,14 @@ static void _ioporder_rebuild_graph(dt_lib_module_t *self)
   if(module_header_center_y > 0)
     endpoint_y = module_header_center_y - endpoint_height / 2;
 
-  dt_ioporder_graph_node_t *base_node = _ioporder_create_endpoint_node(_("base image"));
+  dt_ioporder_graph_node_t *base_node = _ioporder_create_endpoint_node(_("Base image"));
   d->nodes = g_list_prepend(d->nodes, base_node);
   gtk_fixed_put(GTK_FIXED(d->graph_fixed), base_node->event_box, base_x, endpoint_y);
   gtk_widget_show_all(base_node->event_box);
   visible_count++;
 
   screen_x = x;
-  dt_ioporder_graph_node_t *screen_node = _ioporder_create_endpoint_node(_("screen"));
+  dt_ioporder_graph_node_t *screen_node = _ioporder_create_endpoint_node(_("Screen"));
   d->nodes = g_list_append(d->nodes, screen_node);
   gtk_fixed_put(GTK_FIXED(d->graph_fixed), screen_node->event_box, screen_x, endpoint_y);
   gtk_widget_show_all(screen_node->event_box);
@@ -1525,7 +1523,7 @@ static void _ioporder_add_preset(GtkButton *button, gpointer user_data)
   dt_lib_module_t *self = (dt_lib_module_t *)user_data;
   dt_lib_ioporder_t *d = (dt_lib_ioporder_t *)self->data;
   GtkWindow *parent = GTK_WINDOW(d->window ? d->window : dt_gui_main_window());
-  GtkWidget *dialog = gtk_dialog_new_with_buttons(_("save module order preset"), parent,
+  GtkWidget *dialog = gtk_dialog_new_with_buttons(_("Save module order preset"), parent,
                                                   GTK_DIALOG_DESTROY_WITH_PARENT,
                                                   _("_cancel"), GTK_RESPONSE_CANCEL,
                                                   _("_save"), GTK_RESPONSE_ACCEPT, NULL);
@@ -1534,7 +1532,7 @@ static void _ioporder_add_preset(GtkButton *button, gpointer user_data)
 
   gtk_entry_set_activates_default(GTK_ENTRY(entry), TRUE);
   gtk_widget_set_hexpand(entry, TRUE);
-  gtk_widget_set_tooltip_text(entry, _("preset name"));
+  gtk_widget_set_tooltip_text(entry, _("Preset name"));
   gtk_box_pack_start(GTK_BOX(content), entry, FALSE, FALSE, DT_PIXEL_APPLY_DPI(8));
   gtk_widget_show_all(dialog);
 
@@ -1617,7 +1615,7 @@ static void _ioporder_init_popup(dt_lib_module_t *self)
   GtkWidget *drawing = gtk_drawing_area_new();
   GtkWidget *fixed = gtk_fixed_new();
 
-  gtk_window_set_title(GTK_WINDOW(window), _("module order"));
+  gtk_window_set_title(GTK_WINDOW(window), _("Module order"));
   gtk_window_set_default_size(GTK_WINDOW(window), DT_PIXEL_APPLY_DPI(1120), DT_PIXEL_APPLY_DPI(440));
   gtk_window_set_transient_for(GTK_WINDOW(window), GTK_WINDOW(dt_gui_main_window()));
   gtk_window_set_destroy_with_parent(GTK_WINDOW(window), TRUE);
@@ -1720,7 +1718,7 @@ static void _ioporder_presets_changed_callback(gpointer instance, gpointer modul
 
 const char *name(struct dt_lib_module_t *self)
 {
-  return _("module order");
+  return _("Module order");
 }
 
 const char **views(dt_lib_module_t *self)

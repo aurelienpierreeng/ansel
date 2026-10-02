@@ -170,7 +170,7 @@ static void _tag_name_changed(GtkEntry *entry, dt_lib_export_metadata_t *d)
 // dialog to add metadata tag into the formula list
 static void _add_tag_button_clicked(GtkButton *button, dt_lib_export_metadata_t *d)
 {
-  GtkWidget *dialog = gtk_dialog_new_with_buttons(_("select tag"), GTK_WINDOW(d->dialog), GTK_DIALOG_DESTROY_WITH_PARENT,
+  GtkWidget *dialog = gtk_dialog_new_with_buttons(_("Select tag"), GTK_WINDOW(d->dialog), GTK_DIALOG_DESTROY_WITH_PARENT,
                                        _("add"), GTK_RESPONSE_ACCEPT, _("done"), GTK_RESPONSE_NONE, NULL);
   g_signal_connect(dialog, "key-press-event", G_CALLBACK(dt_handle_dialog_enter), NULL);
   gtk_window_set_default_size(GTK_WINDOW(dialog), 300, -1);
@@ -183,7 +183,7 @@ static void _add_tag_button_clicked(GtkButton *button, dt_lib_export_metadata_t 
   dt_accels_disconnect_on_text_input(entry);
   d->sel_entry = entry;
   gtk_entry_set_text(GTK_ENTRY(entry), "");
-  gtk_widget_set_tooltip_text(entry, _("list filter"));
+  gtk_widget_set_tooltip_text(entry, _("List filter"));
   gtk_box_pack_start(GTK_BOX(vbox), entry, TRUE, TRUE, 0);
   g_signal_connect(G_OBJECT(entry), "changed", G_CALLBACK(_tag_name_changed), d);
 
@@ -195,7 +195,7 @@ static void _add_tag_button_clicked(GtkButton *button, dt_lib_export_metadata_t 
   GtkTreeView *view = GTK_TREE_VIEW(gtk_tree_view_new());
   d->sel_view = view;
   gtk_container_add(GTK_CONTAINER(w), GTK_WIDGET(view));
-  gtk_widget_set_tooltip_text(GTK_WIDGET(view), _("list of available tags. click 'add' button or double-click on tag to add the selected one"));
+  gtk_widget_set_tooltip_text(GTK_WIDGET(view), _("List of available tags. Click 'add' button or double-click on tag to add the selected one"));
   gtk_tree_selection_set_mode(gtk_tree_view_get_selection(view), GTK_SELECTION_SINGLE);
   GtkCellRenderer *renderer = gtk_cell_renderer_text_new();
   GtkTreeViewColumn *col = gtk_tree_view_column_new_with_attributes(_("tag"), renderer, "text", 0, NULL);
@@ -298,7 +298,7 @@ char *dt_lib_export_metadata_configuration_dialog(char *metadata_presets, const 
   dt_lib_export_metadata_t *d = calloc(1, sizeof(dt_lib_export_metadata_t));
 
   GtkWidget *win = dt_gui_main_window();
-  GtkWidget *dialog = gtk_dialog_new_with_buttons(_("edit metadata exportation"), GTK_WINDOW(win), GTK_DIALOG_DESTROY_WITH_PARENT,
+  GtkWidget *dialog = gtk_dialog_new_with_buttons(_("Edit metadata exportation"), GTK_WINDOW(win), GTK_DIALOG_DESTROY_WITH_PARENT,
                                        _("cancel"), GTK_RESPONSE_NONE, _("save"), GTK_RESPONSE_ACCEPT, NULL);
   d->dialog = dialog;
   g_signal_connect(dialog, "key-press-event", G_CALLBACK(dt_handle_dialog_enter), NULL);
@@ -319,10 +319,10 @@ char *dt_lib_export_metadata_configuration_dialog(char *metadata_presets, const 
   gtk_box_pack_start(GTK_BOX(vbox), vbox2, FALSE, TRUE, 0);
 
   GtkWidget *exiftag = gtk_check_button_new_with_label(_("EXIF data"));
-  gtk_widget_set_tooltip_text(exiftag, _("export EXIF metadata"));
+  gtk_widget_set_tooltip_text(exiftag, _("Export EXIF metadata"));
   gtk_box_pack_start(GTK_BOX(vbox2), exiftag, FALSE, TRUE, 0);
   GtkWidget *dtmetadata = gtk_check_button_new_with_label(_("metadata"));
-  gtk_widget_set_tooltip_text(dtmetadata, _("export dt xmp metadata (from metadata editor module)"));
+  gtk_widget_set_tooltip_text(dtmetadata, _("Export dt xmp metadata (from metadata editor module)"));
   gtk_box_pack_start(GTK_BOX(vbox2), dtmetadata, FALSE, TRUE, 0);
 
   GtkWidget *calculated;
@@ -333,17 +333,17 @@ char *dt_lib_export_metadata_configuration_dialog(char *metadata_presets, const 
     GtkWidget *vbox3 = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
     gtk_box_pack_start(GTK_BOX(box), vbox3, FALSE, TRUE, 10);
     calculated = gtk_check_button_new_with_label(_("only embedded"));
-    gtk_widget_set_tooltip_text(calculated, _("per default the interface sends some (limited) metadata beside the image to remote storage.\n"
-        "to avoid this and let only image embedded dt xmp metadata, check this flag.\n"
-        "if remote storage doesn't understand dt xmp metadata, you can use calculated metadata instead"));
+    gtk_widget_set_tooltip_text(calculated, _("Per default the interface sends some (limited) metadata beside the image to remote storage.\n"
+        "To avoid this and let only image embedded dt xmp metadata, check this flag.\n"
+        "If remote storage doesn't understand dt xmp metadata, you can use calculated metadata instead"));
     gtk_box_pack_start(GTK_BOX(vbox3), calculated, FALSE, TRUE, 0);
   }
 
   GtkWidget *geotag = gtk_check_button_new_with_label(_("geo tags"));
-  gtk_widget_set_tooltip_text(geotag, _("export geo tags"));
+  gtk_widget_set_tooltip_text(geotag, _("Export geo tags"));
   gtk_box_pack_start(GTK_BOX(vbox2), geotag, FALSE, TRUE, 0);
   GtkWidget *dttag = gtk_check_button_new_with_label(_("tags"));
-  gtk_widget_set_tooltip_text(dttag, _("export tags (to Xmp.dc.Subject)"));
+  gtk_widget_set_tooltip_text(dttag, _("Export tags (to Xmp.dc.Subject)"));
   gtk_box_pack_start(GTK_BOX(vbox2), dttag, FALSE, TRUE, 0);
   g_signal_connect(G_OBJECT(dttag), "clicked", G_CALLBACK(_tags_toggled), (gpointer)d);
 
@@ -352,20 +352,20 @@ char *dt_lib_export_metadata_configuration_dialog(char *metadata_presets, const 
   GtkWidget *vbox3 = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
   gtk_box_pack_start(GTK_BOX(box), vbox3, FALSE, TRUE, 10);
   d->private = gtk_check_button_new_with_label(_("private tags"));
-  gtk_widget_set_tooltip_text(d->private, _("export private tags"));
+  gtk_widget_set_tooltip_text(d->private, _("Export private tags"));
   gtk_box_pack_start(GTK_BOX(vbox3), d->private, FALSE, TRUE, 0);
   d->synonyms = gtk_check_button_new_with_label(_("synonyms"));
-  gtk_widget_set_tooltip_text(d->synonyms, _("export tags synonyms"));
+  gtk_widget_set_tooltip_text(d->synonyms, _("Export tags synonyms"));
   gtk_box_pack_start(GTK_BOX(vbox3), d->synonyms, FALSE, TRUE, 0);
   d->omithierarchy = gtk_check_button_new_with_label(_("omit hierarchy"));
-  gtk_widget_set_tooltip_text(d->omithierarchy, _("only the last part of the hierarchical tags is included. can be useful if categories are not used"));
+  gtk_widget_set_tooltip_text(d->omithierarchy, _("Only the last part of the hierarchical tags is included. Can be useful if categories are not used"));
   gtk_box_pack_start(GTK_BOX(vbox3), d->omithierarchy, FALSE, TRUE, 0);
 
   GtkWidget *hierarchical = gtk_check_button_new_with_label(_("hierarchical tags"));
-  gtk_widget_set_tooltip_text(hierarchical, _("export hierarchical tags (to Xmp.lr.Hierarchical Subject)"));
+  gtk_widget_set_tooltip_text(hierarchical, _("Export hierarchical tags (to Xmp.lr.Hierarchical Subject)"));
   gtk_box_pack_start(GTK_BOX(vbox2), hierarchical, FALSE, TRUE, 0);
   GtkWidget *dthistory = gtk_check_button_new_with_label(_("develop history"));
-  gtk_widget_set_tooltip_text(dthistory, _("export dt development data (recovery purpose in case of loss of database or xmp file)"));
+  gtk_widget_set_tooltip_text(dthistory, _("Export dt development data (recovery purpose in case of loss of database or xmp file)"));
   gtk_box_pack_start(GTK_BOX(vbox2), dthistory, FALSE, TRUE, 0);
 
   // specific rules
@@ -395,12 +395,12 @@ char *dt_lib_export_metadata_configuration_dialog(char *metadata_presets, const 
   col = gtk_tree_view_column_new_with_attributes(_("formula"), renderer, "text", 2, NULL);
   gtk_tree_view_append_column(view, col);
   gtk_widget_set_tooltip_text(GTK_WIDGET(view),
-                _("list of calculated metadata\n"
-                "click on '+' button to select and add new metadata\n"
+                _("List of calculated metadata\n"
+                "Click on '+' button to select and add new metadata\n"
                 "if formula is empty, the corresponding metadata is removed from exported file,\n"
                 "if formula is \'=\', the EXIF metadata is exported even if EXIF data are disabled\n"
                 "otherwise the corresponding metadata is calculated and added to exported file\n"
-                "click on formula cell to edit\n"
+                "Click on formula cell to edit\n"
                 "type '$(' to activate the completion and see the list of variables"));
   g_signal_connect(G_OBJECT(view), "key_press_event", G_CALLBACK(_key_press_on_list), (gpointer)d);
 
@@ -453,12 +453,12 @@ char *dt_lib_export_metadata_configuration_dialog(char *metadata_presets, const 
   gtk_box_pack_start(GTK_BOX(vbox), box, FALSE, TRUE, 0);
 
   GtkWidget *button = dtgtk_button_new(dtgtk_cairo_paint_plus_simple, 0, NULL);
-  gtk_widget_set_tooltip_text(button, _("add an output metadata tag"));
+  gtk_widget_set_tooltip_text(button, _("Add an output metadata tag"));
   gtk_box_pack_end(GTK_BOX(box), button, FALSE, TRUE, 0);
   g_signal_connect(G_OBJECT(button), "clicked", G_CALLBACK(_add_tag_button_clicked), (gpointer)d);
 
   button = dtgtk_button_new(dtgtk_cairo_paint_minus_simple, 0, NULL);
-  gtk_widget_set_tooltip_text(button, _("delete metadata tag"));
+  gtk_widget_set_tooltip_text(button, _("Delete metadata tag"));
   gtk_box_pack_end(GTK_BOX(box), button, FALSE, TRUE, 0);
   g_signal_connect(G_OBJECT(button), "clicked", G_CALLBACK(_delete_tag_button_clicked), (gpointer)d);
 

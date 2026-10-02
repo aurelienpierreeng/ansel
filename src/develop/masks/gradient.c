@@ -370,7 +370,7 @@ static int _find_closest_handle(dt_masks_form_t *mask_form, dt_masks_form_gui_t 
 static int _init_extent(dt_masks_form_t *form, const float amount, const dt_masks_increment_t increment, const int flow)
 {
   dt_masks_get_set_conf_value_with_toast(form, "extent", amount, extent_MIN, extent_MAX,
-                                         increment, flow, _("extent: %3.2f%%"), 100.0f);
+                                         increment, flow, _("Extent: %3.2f%%"), 100.0f);
   return 1;
 }
 

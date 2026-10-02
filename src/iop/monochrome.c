@@ -105,7 +105,7 @@ typedef struct dt_iop_monochrome_gui_data_t
 
 const char *name()
 {
-  return _("monochrome");
+  return _("Monochrome");
 }
 
 int default_group()
@@ -502,7 +502,7 @@ void gui_init(struct dt_iop_module_t *self)
 
   g->area = GTK_DRAWING_AREA(dtgtk_drawing_area_new_with_aspect_ratio(1.0));
   gtk_box_pack_start(GTK_BOX(self->gui->widget), GTK_WIDGET(g->area), TRUE, TRUE, 0);
-  gtk_widget_set_tooltip_text(GTK_WIDGET(g->area), _("drag and scroll mouse wheel to adjust the virtual color filter"));
+  gtk_widget_set_tooltip_text(GTK_WIDGET(g->area), _("Drag and scroll mouse wheel to adjust the virtual color filter"));
 
   gtk_widget_add_events(GTK_WIDGET(g->area), GDK_POINTER_MOTION_MASK
                                              | GDK_BUTTON_PRESS_MASK | GDK_BUTTON_RELEASE_MASK
@@ -518,7 +518,7 @@ void gui_init(struct dt_iop_module_t *self)
 
   g->highlights
       = dt_color_picker_new(self, DT_COLOR_PICKER_AREA, dt_bauhaus_slider_from_params(self, N_("highlights")));
-  gtk_widget_set_tooltip_text(g->highlights, _("how much to keep highlights"));
+  gtk_widget_set_tooltip_text(g->highlights, _("How much to keep highlights"));
 
   cmsHPROFILE hsRGB = dt_colorspaces_get_profile(DT_COLORSPACE_SRGB, "", DT_PROFILE_ROLE_INPUT)->profile;
   cmsHPROFILE hLab = dt_colorspaces_get_profile(DT_COLORSPACE_LAB, "", DT_PROFILE_ROLE_ANY)->profile;

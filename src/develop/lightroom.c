@@ -1061,7 +1061,7 @@ gboolean dt_lightroom_import(int32_t imgid, dt_develop_t *dev, gboolean iauto)
 
   if(IS_NULL_PTR(pathname))
   {
-    if(!iauto) dt_control_log(_("cannot find lightroom XMP!"));
+    if(!iauto) dt_control_log(_("Cannot find lightroom XMP!"));
     return FALSE;
   }
 

@@ -572,7 +572,7 @@ static void _open_uri(const char *uri)
   const gboolean ok = gtk_show_uri_on_window(win, uri, GDK_CURRENT_TIME, &error);
   if(!ok && error)
   {
-    dt_control_log(_("could not open link: %s"), error->message);
+    dt_control_log(_("Could not open link: %s"), error->message);
     g_clear_error(&error);
   }
 }
@@ -1839,7 +1839,7 @@ static void _save_and_render(dt_lib_module_t *self)
   GError *error = NULL;
   if(!g_file_set_contents(d->path, text, -1, &error))
   {
-    dt_control_log(_("failed to save text notes to %s: %s"), d->path, error->message);
+    dt_control_log(_("Failed to save text notes to %s: %s"), d->path, error->message);
     g_clear_error(&error);
     goto done;
   }
@@ -2055,7 +2055,7 @@ void gui_init(dt_lib_module_t *self)
   gtk_box_pack_start(GTK_BOX(vbox), toolbar, FALSE, FALSE, 0);
 
   d->mode_toggle = gtk_toggle_button_new_with_label(_("preview"));
-  gtk_widget_set_tooltip_text(d->mode_toggle, _("toggle Markdown preview"));
+  gtk_widget_set_tooltip_text(d->mode_toggle, _("Toggle Markdown preview"));
   gtk_box_pack_end(GTK_BOX(toolbar), d->mode_toggle, FALSE, FALSE, 0);
   g_signal_connect(G_OBJECT(d->mode_toggle), "toggled", G_CALLBACK(_toggle_mode), self);
 

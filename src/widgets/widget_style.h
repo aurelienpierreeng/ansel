@@ -5,6 +5,7 @@
  *    Copyright (C) 2020 Pascal Obry.
  *    Copyright (C) 2021 Sakari Kapanen.
  *    Copyright (C) 2022 Martin Bařinka.
+ *    Copyright (C) 2026 Guillaume Stutin.
  *    
  *    darktable is free software: you can redistribute it and/or modify
  *    it under the terms of the GNU General Public License as published by
@@ -37,10 +38,6 @@ void dt_gui_add_class(GtkWidget *widget, const gchar *class_name);
 
 /** Remove `class_name` from `widget`'s style context if present, and queue a redraw. */
 void dt_gui_remove_class(GtkWidget *widget, const gchar *class_name);
-
-/** Capitalise the first character of a label in place, honouring a leading mnemonic
- *  underscore and multi-byte UTF-8. Pure string work; no application involved. */
-void dt_capitalize_label(gchar *text);
 
 /** Copy GTK's resolved text-rendering options (anti-aliasing, hinting, subpixel order) onto
  *  `cr`, sourced from `widget`'s Pango context, else the host root window, else the screen --

@@ -269,9 +269,6 @@ gboolean dt_ui_panel_visible(dt_ui_t *ui, const dt_ui_panel_t);
 /** \brief get the toast message widget */
 
 
-// capitalize strings. Because grammar says sentences start with a capital,
-// and typography says it makes it easier to extract the structure of the text.
-
 #define dt_accels_new_global_action(a, b, w, c, d, e, f, g) dt_accels_new_action_shortcut(dt_gui_get_global()->accels, a, b, w, dt_gui_get_global()->accels->global_accels, c, d, e, f, FALSE, g)
 
 // dt_accels_new_darkroom_action() now lives in widgets/accelerators.h

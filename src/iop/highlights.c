@@ -104,7 +104,7 @@ typedef struct dt_iop_highlights_gui_data_t
 
 const char *name()
 {
-  return _("_highlight reconstruction");
+  return _("_Highlight reconstruction");
 }
 
 const char **description(struct dt_iop_module_t *self)
@@ -819,7 +819,7 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
              "[highlights] mode \"%s\" has no reconstruction path for this image; falling back to clipping\n",
              _highlights_mode_name(d->mode));
     if(self->dev->gui_attached && pipe == self->dev->pipe)
-      dt_control_log(_("highlight reconstruction: \"%s\" is not available for this image type; clipping instead"),
+      dt_control_log(_("Highlight reconstruction: \"%s\" is not available for this image type; clipping instead"),
                      _(_highlights_mode_name(d->mode)));
   }
 
@@ -1312,11 +1312,11 @@ void gui_init(struct dt_iop_module_t *self)
   GtkWidget *box_raw = self->gui->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
 
   g->mode = dt_bauhaus_combobox_from_params(self, "mode");
-  gtk_widget_set_tooltip_text(g->mode, _("highlight reconstruction method"));
+  gtk_widget_set_tooltip_text(g->mode, _("Highlight reconstruction method"));
 
   g->clip = dt_bauhaus_slider_from_params(self, "clip");
   dt_bauhaus_slider_set_digits(g->clip, 3);
-  gtk_widget_set_tooltip_text(g->clip, _("manually adjust the clipping threshold against "
+  gtk_widget_set_tooltip_text(g->clip, _("Manually adjust the clipping threshold against "
                                          "magenta highlights\nthe mask icon shows the clipped area\n"
                                          "(you shouldn't ever need to touch this)"));
   dt_bauhaus_widget_set_quad_paint(g->clip, dtgtk_cairo_paint_showmask, 0, NULL);
@@ -1325,26 +1325,26 @@ void gui_init(struct dt_iop_module_t *self)
   g_signal_connect(G_OBJECT(g->clip), "quad-pressed", G_CALLBACK(_visualize_callback), self);
 
   g->noise_level = dt_bauhaus_slider_from_params(self, "noise_level");
-  gtk_widget_set_tooltip_text(g->noise_level, _("add noise to visually blend the reconstructed areas\n"
-                                                "into the rest of the noisy image. useful at high ISO."));
+  gtk_widget_set_tooltip_text(g->noise_level, _("Add noise to visually blend the reconstructed areas\n"
+                                                "into the rest of the noisy image. Useful at high ISO."));
 
   g->iterations = dt_bauhaus_slider_from_params(self, "iterations");
   dt_bauhaus_slider_set_soft_range(g->iterations, 1, 256);
-  gtk_widget_set_tooltip_text(g->iterations, _("increase if magenta highlights don't get fully corrected\n"
+  gtk_widget_set_tooltip_text(g->iterations, _("Increase if magenta highlights don't get fully corrected\n"
                                                "each new iteration brings a performance penalty."));
 
   g->solid_color = dt_bauhaus_slider_from_params(self, "solid_color");
   dt_bauhaus_slider_set_format(g->solid_color, "%");
   gtk_widget_set_tooltip_text(g->solid_color,
-                              _("increase if magenta highlights don't get fully corrected.\n"
-                                "this may produce non-smooth boundaries between valid and clipped regions."));
+                              _("Increase if magenta highlights don't get fully corrected.\n"
+                                "This may produce non-smooth boundaries between valid and clipped regions."));
 
   g->scales = dt_bauhaus_combobox_from_params(self, "scales");
-  gtk_widget_set_tooltip_text(g->scales, _("increase to correct larger clipped areas.\n"
-                                           "large values bring huge performance penalties"));
+  gtk_widget_set_tooltip_text(g->scales, _("Increase to correct larger clipped areas.\n"
+                                           "Large values bring huge performance penalties"));
 
-  GtkWidget *monochromes = dt_ui_label_new(_("not applicable"));
-  gtk_widget_set_tooltip_text(monochromes, _("no highlights reconstruction for monochrome images"));
+  GtkWidget *monochromes = dt_ui_label_new(_("Not applicable"));
+  gtk_widget_set_tooltip_text(monochromes, _("No highlights reconstruction for monochrome images"));
 
   // start building top level widget
   self->gui->widget = gtk_stack_new();

@@ -76,18 +76,18 @@ DT_MODULE_INTROSPECTION(2, dt_iop_diffuse_params_t)
 typedef struct dt_iop_diffuse_params_t
 {
   // global parameters
-  int iterations;           // $MIN: 0    $MAX: 500  $DEFAULT: 1  $DESCRIPTION: "iterations"
-  float sharpness;          // $MIN: -1.  $MAX: 1.   $DEFAULT: 0. $DESCRIPTION: "sharpness"
-  int radius;               // $MIN: 0    $MAX: 2048 $DEFAULT: 8  $DESCRIPTION: "radius span"
-  float regularization;     // $MIN: 0.   $MAX: 6.   $DEFAULT: 0. $DESCRIPTION: "edge sensitivity"
-  float variance_threshold; // $MIN: -2.  $MAX: 2.   $DEFAULT: 0. $DESCRIPTION: "edge threshold"
+  int iterations;           // $MIN: 0    $MAX: 500  $DEFAULT: 1  $DESCRIPTION: "Iterations"
+  float sharpness;          // $MIN: -1.  $MAX: 1.   $DEFAULT: 0. $DESCRIPTION: "Sharpness"
+  int radius;               // $MIN: 0    $MAX: 2048 $DEFAULT: 8  $DESCRIPTION: "Radius span"
+  float regularization;     // $MIN: 0.   $MAX: 6.   $DEFAULT: 0. $DESCRIPTION: "Edge sensitivity"
+  float variance_threshold; // $MIN: -2.  $MAX: 2.   $DEFAULT: 0. $DESCRIPTION: "Edge threshold"
 
   float anisotropy_first;   // $MIN: -10. $MAX: 10.  $DEFAULT: 0. $DESCRIPTION: "1st order anisotropy"
   float anisotropy_second;  // $MIN: -10. $MAX: 10.  $DEFAULT: 0. $DESCRIPTION: "2nd order anisotropy"
   float anisotropy_third;   // $MIN: -10. $MAX: 10.  $DEFAULT: 0. $DESCRIPTION: "3rd order anisotropy"
   float anisotropy_fourth;  // $MIN: -10. $MAX: 10.  $DEFAULT: 0. $DESCRIPTION: "4th order anisotropy"
 
-  float threshold;          // $MIN: 0.   $MAX: 8.   $DEFAULT: 0. $DESCRIPTION: "luminance masking threshold"
+  float threshold;          // $MIN: 0.   $MAX: 8.   $DEFAULT: 0. $DESCRIPTION: "Luminance masking threshold"
 
   float first;              // $MIN: -1.  $MAX: 1.   $DEFAULT: 0. $DESCRIPTION: "1st order speed"
   float second;             // $MIN: -1.  $MAX: 1.   $DEFAULT: 0. $DESCRIPTION: "2nd order speed"
@@ -95,7 +95,7 @@ typedef struct dt_iop_diffuse_params_t
   float fourth;             // $MIN: -1.  $MAX: 1.   $DEFAULT: 0. $DESCRIPTION: "4th order speed"
 
   // v2
-  int radius_center;        // $MIN: 0    $MAX: 1024 $DEFAULT: 0  $DESCRIPTION: "central radius"
+  int radius_center;        // $MIN: 0    $MAX: 1024 $DEFAULT: 0  $DESCRIPTION: "Central radius"
 
   // new versions add params mandatorily at the end, so we can memcpy old parameters at the beginning
 
@@ -163,7 +163,7 @@ static inline dt_isotropy_t check_isotropy_mode(const float anisotropy)
 
 const char *name()
 {
-  return _("diffuse or _sharpen");
+  return _("Diffuse or _sharpen");
 }
 
 const char *aliases()
@@ -251,18 +251,18 @@ int legacy_params(dt_iop_module_t *self, const void *const old_params, const int
     typedef struct dt_iop_diffuse_params_v2_t
     {
       // global parameters
-      int iterations;           // $MIN: 0    $MAX: 500  $DEFAULT: 1  $DESCRIPTION: "iterations"
-      float sharpness;          // $MIN: -1.  $MAX: 1.   $DEFAULT: 0. $DESCRIPTION: "sharpness"
-      int radius;               // $MIN: 0    $MAX: 2048 $DEFAULT: 8  $DESCRIPTION: "radius span"
-      float regularization;     // $MIN: 0.   $MAX: 8.   $DEFAULT: 0. $DESCRIPTION: "edge sensitivity"
-      float variance_threshold; // $MIN: -3.  $MAX: 3.   $DEFAULT: 0. $DESCRIPTION: "edge threshold"
+      int iterations;           // $MIN: 0    $MAX: 500  $DEFAULT: 1  $DESCRIPTION: "Iterations"
+      float sharpness;          // $MIN: -1.  $MAX: 1.   $DEFAULT: 0. $DESCRIPTION: "Sharpness"
+      int radius;               // $MIN: 0    $MAX: 2048 $DEFAULT: 8  $DESCRIPTION: "Radius span"
+      float regularization;     // $MIN: 0.   $MAX: 8.   $DEFAULT: 0. $DESCRIPTION: "Edge sensitivity"
+      float variance_threshold; // $MIN: -3.  $MAX: 3.   $DEFAULT: 0. $DESCRIPTION: "Edge threshold"
 
       float anisotropy_first;   // $MIN: -100. $MAX: 100.  $DEFAULT: 0. $DESCRIPTION: "1st order anisotropy"
       float anisotropy_second;  // $MIN: -100. $MAX: 100.  $DEFAULT: 0. $DESCRIPTION: "2nd order anisotropy"
       float anisotropy_third;   // $MIN: -100. $MAX: 100.  $DEFAULT: 0. $DESCRIPTION: "3rd order anisotropy"
       float anisotropy_fourth;  // $MIN: -100. $MAX: 100.  $DEFAULT: 0. $DESCRIPTION: "4th order anisotropy"
 
-      float threshold;          // $MIN: 0.   $MAX: 8.   $DEFAULT: 0. $DESCRIPTION: "luminance masking threshold"
+      float threshold;          // $MIN: 0.   $MAX: 8.   $DEFAULT: 0. $DESCRIPTION: "Luminance masking threshold"
 
       float first;              // $MIN: -1.  $MAX: 1.   $DEFAULT: 0. $DESCRIPTION: "1st order speed"
       float second;             // $MIN: -1.  $MAX: 1.   $DEFAULT: 0. $DESCRIPTION: "2nd order speed"
@@ -270,7 +270,7 @@ int legacy_params(dt_iop_module_t *self, const void *const old_params, const int
       float fourth;             // $MIN: -1.  $MAX: 1.   $DEFAULT: 0. $DESCRIPTION: "4th order speed"
 
       // v2
-      int radius_center;        // $MIN: 0    $MAX: 1024 $DEFAULT: 0  $DESCRIPTION: "central radius"
+      int radius_center;        // $MIN: 0    $MAX: 1024 $DEFAULT: 0  $DESCRIPTION: "Central radius"
 
     } dt_iop_diffuse_params_v2_t;
 
@@ -1640,143 +1640,143 @@ void gui_init(struct dt_iop_module_t *self)
   dt_iop_diffuse_gui_data_t *g = IOP_GUI_ALLOC(diffuse);
   self->gui->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
 
-  gtk_box_pack_start(GTK_BOX(self->gui->widget), dt_ui_section_label_new(_("properties")), FALSE, FALSE, 0);
+  gtk_box_pack_start(GTK_BOX(self->gui->widget), dt_ui_section_label_new(_("Properties")), FALSE, FALSE, 0);
 
   g->iterations = dt_bauhaus_slider_from_params(self, "iterations");
   dt_bauhaus_slider_set_soft_range(g->iterations, 1., 128);
   gtk_widget_set_tooltip_text(g->iterations,
-                              _("more iterations make the effect stronger but the module slower.\n"
-                                "this is analogous to giving more time to the diffusion reaction.\n"
-                                "if you plan on sharpening or inpainting, \n"
+                              _("More iterations make the effect stronger but the module slower.\n"
+                                "This is analogous to giving more time to the diffusion reaction.\n"
+                                "If you plan on sharpening or inpainting, \n"
                                 "more iterations help reconstruction."));
 
   g->radius_center = dt_bauhaus_slider_from_params(self, "radius_center");
   dt_bauhaus_slider_set_soft_range(g->radius_center, 0., 512.);
   dt_bauhaus_slider_set_format(g->radius_center, " px");
   gtk_widget_set_tooltip_text(
-      g->radius_center, _("main scale of the diffusion.\n"
-                          "zero makes diffusion act on the finest details more heavily.\n"
-                          "non-zero defines the size of the details to diffuse heavily.\n"
-                          "for deblurring and denoising, set to zero.\n"
-                          "increase to act on local contrast instead."));
+      g->radius_center, _("Main scale of the diffusion.\n"
+                          "Zero makes diffusion act on the finest details more heavily.\n"
+                          "Non-zero defines the size of the details to diffuse heavily.\n"
+                          "For deblurring and denoising, set to zero.\n"
+                          "Increase to act on local contrast instead."));
 
   g->radius = dt_bauhaus_slider_from_params(self, "radius");
   dt_bauhaus_slider_set_soft_range(g->radius, 1., 512.);
   dt_bauhaus_slider_set_format(g->radius, " px");
   gtk_widget_set_tooltip_text(
-      g->radius, _("width of the diffusion around the central radius.\n"
-                   "high values diffuse on a large band of radii.\n"
-                   "low values diffuse closer to the central radius.\n"
-                   "if you plan on deblurring, \n"
+      g->radius, _("Width of the diffusion around the central radius.\n"
+                   "High values diffuse on a large band of radii.\n"
+                   "Low values diffuse closer to the central radius.\n"
+                   "If you plan on deblurring, \n"
                    "the radius should be around the width of your lens blur."));
 
-  GtkWidget *label_speed = dt_ui_section_label_new(_("speed (sharpen \342\206\224 diffuse)"));
+  GtkWidget *label_speed = dt_ui_section_label_new(_("Speed (sharpen \342\206\224 diffuse)"));
   gtk_box_pack_start(GTK_BOX(self->gui->widget), label_speed, FALSE, FALSE, 0);
 
   g->first = dt_bauhaus_slider_from_params(self, "first");
   dt_bauhaus_slider_set_digits(g->first, 4);
   dt_bauhaus_slider_set_format(g->first, "%");
-  gtk_widget_set_tooltip_text(g->first, _("diffusion speed of low-frequency wavelet layers\n"
+  gtk_widget_set_tooltip_text(g->first, _("Diffusion speed of low-frequency wavelet layers\n"
                   "in the direction of 1st order anisotropy (set below).\n\n"
-                  "negative values sharpen, \n"
+                  "Negative values sharpen, \n"
                   "positive values diffuse and blur, \n"
                   "zero does nothing."));
 
   g->second = dt_bauhaus_slider_from_params(self, "second");
   dt_bauhaus_slider_set_digits(g->second, 4);
   dt_bauhaus_slider_set_format(g->second, "%");
-  gtk_widget_set_tooltip_text(g->second, _("diffusion speed of low-frequency wavelet layers\n"
+  gtk_widget_set_tooltip_text(g->second, _("Diffusion speed of low-frequency wavelet layers\n"
                   "in the direction of 2nd order anisotropy (set below).\n\n"
-                  "negative values sharpen, \n"
+                  "Negative values sharpen, \n"
                   "positive values diffuse and blur, \n"
                   "zero does nothing."));
 
   g->third = dt_bauhaus_slider_from_params(self, "third");
   dt_bauhaus_slider_set_digits(g->third, 4);
   dt_bauhaus_slider_set_format(g->third, "%");
-  gtk_widget_set_tooltip_text(g->third, _("diffusion speed of high-frequency wavelet layers\n"
+  gtk_widget_set_tooltip_text(g->third, _("Diffusion speed of high-frequency wavelet layers\n"
                   "in the direction of 3rd order anisotropy (set below).\n\n"
-                  "negative values sharpen, \n"
+                  "Negative values sharpen, \n"
                   "positive values diffuse and blur, \n"
                   "zero does nothing."));
 
   g->fourth = dt_bauhaus_slider_from_params(self, "fourth");
   dt_bauhaus_slider_set_digits(g->fourth, 4);
   dt_bauhaus_slider_set_format(g->fourth, "%");
-  gtk_widget_set_tooltip_text(g->fourth, _("diffusion speed of high-frequency wavelet layers\n"
+  gtk_widget_set_tooltip_text(g->fourth, _("Diffusion speed of high-frequency wavelet layers\n"
                   "in the direction of 4th order anisotropy (set below).\n\n"
-                  "negative values sharpen, \n"
+                  "Negative values sharpen, \n"
                   "positive values diffuse and blur, \n"
                   "zero does nothing."));
 
-  GtkWidget *label_direction = dt_ui_section_label_new(_("direction"));
+  GtkWidget *label_direction = dt_ui_section_label_new(_("Direction"));
   gtk_box_pack_start(GTK_BOX(self->gui->widget), label_direction, FALSE, FALSE, 0);
 
   g->anisotropy_first = dt_bauhaus_slider_from_params(self, "anisotropy_first");
   dt_bauhaus_slider_set_digits(g->anisotropy_first, 4);
   dt_bauhaus_slider_set_format(g->anisotropy_first, "%");
-  gtk_widget_set_tooltip_text(g->anisotropy_first, _("direction of 1st order speed (set above).\n\n"
-                  "negative values follow gradients more closely, \n"
+  gtk_widget_set_tooltip_text(g->anisotropy_first, _("Direction of 1st order speed (set above).\n\n"
+                  "Negative values follow gradients more closely, \n"
                   "positive values rather avoid edges (isophotes), \n"
                   "zero affects both equally (isotropic)."));
 
   g->anisotropy_second = dt_bauhaus_slider_from_params(self, "anisotropy_second");
   dt_bauhaus_slider_set_digits(g->anisotropy_second, 4);
   dt_bauhaus_slider_set_format(g->anisotropy_second, "%");
-  gtk_widget_set_tooltip_text(g->anisotropy_second,_("direction of 2nd order speed (set above).\n\n"
-                  "negative values follow gradients more closely, \n"
+  gtk_widget_set_tooltip_text(g->anisotropy_second,_("Direction of 2nd order speed (set above).\n\n"
+                  "Negative values follow gradients more closely, \n"
                   "positive values rather avoid edges (isophotes), \n"
                   "zero affects both equally (isotropic)."));
 
   g->anisotropy_third = dt_bauhaus_slider_from_params(self, "anisotropy_third");
   dt_bauhaus_slider_set_digits(g->anisotropy_third, 4);
   dt_bauhaus_slider_set_format(g->anisotropy_third, "%");
-  gtk_widget_set_tooltip_text(g->anisotropy_third,_("direction of 3rd order speed (set above).\n\n"
-                  "negative values follow gradients more closely, \n"
+  gtk_widget_set_tooltip_text(g->anisotropy_third,_("Direction of 3rd order speed (set above).\n\n"
+                  "Negative values follow gradients more closely, \n"
                   "positive values rather avoid edges (isophotes), \n"
                   "zero affects both equally (isotropic)."));
 
   g->anisotropy_fourth = dt_bauhaus_slider_from_params(self, "anisotropy_fourth");
   dt_bauhaus_slider_set_digits(g->anisotropy_fourth, 4);
   dt_bauhaus_slider_set_format(g->anisotropy_fourth, "%");
-  gtk_widget_set_tooltip_text(g->anisotropy_fourth,_("direction of 4th order speed (set above).\n\n"
-                  "negative values follow gradients more closely, \n"
+  gtk_widget_set_tooltip_text(g->anisotropy_fourth,_("Direction of 4th order speed (set above).\n\n"
+                  "Negative values follow gradients more closely, \n"
                   "positive values rather avoid edges (isophotes), \n"
                   "zero affects both equally (isotropic)."));
 
-  gtk_box_pack_start(GTK_BOX(self->gui->widget), dt_ui_section_label_new(_("edge management")), FALSE, FALSE, 0);
+  gtk_box_pack_start(GTK_BOX(self->gui->widget), dt_ui_section_label_new(_("Edge management")), FALSE, FALSE, 0);
 
   g->sharpness = dt_bauhaus_slider_from_params(self, "sharpness");
   dt_bauhaus_slider_set_format(g->sharpness, "%");
   gtk_widget_set_tooltip_text(g->sharpness,
-                              _("increase or decrease the sharpness of the highest frequencies.\n"
-                              "can be used to keep details after blooming,\n"
+                              _("Increase or decrease the sharpness of the highest frequencies.\n"
+                              "Can be used to keep details after blooming,\n"
                               "for standalone sharpening set speed to negative values."));
 
   g->regularization = dt_bauhaus_slider_from_params(self, "regularization");
   gtk_widget_set_tooltip_text(g->regularization,
-                              _("define the sensitivity of the variance penalty for edges.\n"
-                                "increase to exclude more edges from diffusion,\n"
+                              _("Define the sensitivity of the variance penalty for edges.\n"
+                                "Increase to exclude more edges from diffusion,\n"
                                 "if fringes or halos appear."));
 
   g->variance_threshold = dt_bauhaus_slider_from_params(self, "variance_threshold");
   gtk_widget_set_tooltip_text(g->variance_threshold,
-                              _("define the variance threshold between edge amplification and penalty.\n"
-                                "decrease if you want pixels on smooth surfaces get a boost,\n"
+                              _("Define the variance threshold between edge amplification and penalty.\n"
+                                "Decrease if you want pixels on smooth surfaces get a boost,\n"
                                 "increase if you see noise appear on smooth surfaces or\n"
                                 "if dark areas seem oversharpened compared to bright areas."));
 
 
-  gtk_box_pack_start(GTK_BOX(self->gui->widget), dt_ui_section_label_new(_("diffusion spatiality")), FALSE, FALSE, 0);
+  gtk_box_pack_start(GTK_BOX(self->gui->widget), dt_ui_section_label_new(_("Diffusion spatiality")), FALSE, FALSE, 0);
 
   g->threshold = dt_bauhaus_slider_from_params(self, "threshold");
   dt_bauhaus_slider_set_format(g->threshold, "%");
   dt_bauhaus_slider_set_digits(g->threshold, 2);
   gtk_widget_set_tooltip_text(g->threshold,
-                              _("luminance threshold for the mask.\n"
+                              _("Luminance threshold for the mask.\n"
                                 "0. disables the luminance masking and applies the module on the whole image.\n"
-                                "any higher value excludes pixels with luminance lower than the threshold.\n"
-                                "this can be used to inpaint highlights."));
+                                "Any higher value excludes pixels with luminance lower than the threshold.\n"
+                                "This can be used to inpaint highlights."));
 }
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

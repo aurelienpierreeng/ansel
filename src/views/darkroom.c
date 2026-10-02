@@ -1904,7 +1904,7 @@ void gui_init(dt_view_t *self)
   }
 
   _darkroom_ioporder_button = dtgtk_button_new(dtgtk_cairo_paint_flowchart, 0, NULL);
-  gtk_widget_set_tooltip_text(_darkroom_ioporder_button, _("show the pipeline node graph"));
+  gtk_widget_set_tooltip_text(_darkroom_ioporder_button, _("Show the pipeline node graph"));
   g_signal_connect(G_OBJECT(_darkroom_ioporder_button), "clicked",
                    G_CALLBACK(_darkroom_ioporder_quickbutton_clicked), dev);
   dt_view_manager_module_toolbox_add(dt_view_manager_get_global(), _darkroom_ioporder_button, DT_VIEW_DARKROOM);
@@ -1919,7 +1919,7 @@ void gui_init(dt_view_t *self)
     dt_view_manager_t *vm = dt_view_manager_get_global();
     vm->guides_toggle = dtgtk_togglebutton_new(dtgtk_cairo_paint_grid, 0, NULL);
     gtk_widget_set_tooltip_text(vm->guides_toggle,
-                                _("toggle guide lines\nright click for guides options"));
+                                _("Toggle guide lines\nRight click for guides options"));
     vm->guides_popover = dt_guides_popover(self, vm->guides_toggle);
     g_object_ref(vm->guides_popover);
     g_signal_connect(G_OBJECT(vm->guides_toggle), "clicked",

@@ -258,7 +258,7 @@ static void _film_import1(dt_job_t *job, dt_film_t *film, GList *images)
     images = _film_recursive_get_files(film->dirname, recursive, &images);
     if(IS_NULL_PTR(images))
     {
-      dt_control_log(_("no supported images were found to be imported"));
+      dt_control_log(_("No supported images were found to be imported"));
       return;
     }
   }

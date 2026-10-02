@@ -70,7 +70,7 @@ typedef struct dt_iop_scalepixels_data_t {
 
 const char *name()
 {
-  return C_("modulename", "scale pixels");
+  return C_("modulename", "Scale pixels");
 }
 
 int flags()

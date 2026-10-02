@@ -1566,9 +1566,12 @@ void _for_each_accel_create_treeview_row(gpointer key, gpointer value, gpointer 
       g_hash_table_insert(node_cache, g_strdup(accum), iter);
     }
 
-    // Capitalize first letter for GUI purposes
-    gchar *label = g_strdup(parts[i]);
-    dt_capitalize_label(label);
+    // An action's name is its path's last word, and some are lowercase data (instance names,
+    // older action names kept so saved shortcuts still find them): the row starts it with a capital.
+    const gsize first = *parts[i] ? g_utf8_next_char(parts[i]) - parts[i] : 0;
+    gchar *head = g_utf8_strup(parts[i], first);
+    gchar *label = g_strconcat(head, parts[i] + first, NULL);
+    dt_free(head);
 
     // Write the shortcut only if we are at the terminating point of the path
     if(!g_strcmp0(accum, path))

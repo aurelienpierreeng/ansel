@@ -44,7 +44,7 @@ typedef dt_iop_basebuffer_params_t dt_iop_basebuffer_data_t;
 
 const char *name()
 {
-  return _("base buffer");
+  return _("Base buffer");
 }
 
 int default_group()

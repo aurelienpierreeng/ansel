@@ -192,10 +192,10 @@ typedef struct dt_iop_tonecurve_params_t
                                                                    // of nodes
   int tonecurve_nodes[3];
   int tonecurve_type[3]; // $DEFAULT: MONOTONE_HERMITE
-  dt_iop_tonecurve_autoscale_t tonecurve_autoscale_ab; //$DEFAULT: DT_S_SCALE_AUTOMATIC_RGB $DESCRIPTION: "color space"
+  dt_iop_tonecurve_autoscale_t tonecurve_autoscale_ab; //$DEFAULT: DT_S_SCALE_AUTOMATIC_RGB $DESCRIPTION: "Color space"
   int tonecurve_preset; // $DEFAULT: 0
   int tonecurve_unbound_ab; // $DEFAULT: 1
-  dt_iop_rgb_norms_t preserve_colors; // $DEFAULT: DT_RGB_NORM_AVERAGE $DESCRIPTION: "preserve colors"
+  dt_iop_rgb_norms_t preserve_colors; // $DEFAULT: DT_RGB_NORM_AVERAGE $DESCRIPTION: "Preserve colors"
 } dt_iop_tonecurve_params_t;
 
 typedef struct dt_iop_tonecurve_gui_data_t
@@ -246,7 +246,7 @@ typedef struct dt_iop_tonecurve_global_data_t
 
 const char *name()
 {
-  return _("tone curve");
+  return _("Tone curve");
 }
 
 int default_group()
@@ -1107,23 +1107,23 @@ void gui_init(struct dt_iop_module_t *self)
   self->gui->timeout_handle = 0;
 
   c->autoscale_ab = dt_bauhaus_combobox_from_params(self, "tonecurve_autoscale_ab");
-  gtk_widget_set_tooltip_text(c->autoscale_ab, _("if set to auto, a and b curves have no effect and are "
-                                                 "not displayed. chroma values (a and b) of each pixel are "
-                                                 "then adjusted based on L curve data. auto XYZ is similar "
+  gtk_widget_set_tooltip_text(c->autoscale_ab, _("If set to auto, a and b curves have no effect and are "
+                                                 "not displayed. Chroma values (a and b) of each pixel are "
+                                                 "then adjusted based on L curve data. Auto XYZ is similar "
                                                  "but applies the saturation changes in XYZ space."));
   GtkWidget *hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
 
   c->channel_tabs = dt_ui_notebook_new();
-  dt_ui_notebook_page(c->channel_tabs, N_("L"), _("tonecurve for L channel"));
-  dt_ui_notebook_page(c->channel_tabs, N_("a"), _("tonecurve for a channel"));
-  dt_ui_notebook_page(c->channel_tabs, N_("b"), _("tonecurve for b channel"));
+  dt_ui_notebook_page(c->channel_tabs, N_("L"), _("Tonecurve for L channel"));
+  dt_ui_notebook_page(c->channel_tabs, N_("a"), _("Tonecurve for a channel"));
+  dt_ui_notebook_page(c->channel_tabs, N_("b"), _("Tonecurve for b channel"));
   g_signal_connect(G_OBJECT(c->channel_tabs), "switch_page", G_CALLBACK(tab_switch), self);
   dt_ui_notebook_set_picker_owner(c->channel_tabs, self);
   gtk_box_pack_start(GTK_BOX(hbox), GTK_WIDGET(c->channel_tabs), TRUE, TRUE, 0);
   gtk_box_pack_start(GTK_BOX(hbox), gtk_grid_new(), TRUE, TRUE, 0);
 
   c->colorpicker = dt_color_picker_new(self, DT_COLOR_PICKER_POINT_AREA, hbox);
-  gtk_widget_set_tooltip_text(c->colorpicker, _("pick GUI color from image\nctrl+click or right-click to select an area"));
+  gtk_widget_set_tooltip_text(c->colorpicker, _("Pick GUI color from image\nCtrl+click or right-click to select an area"));
 
   gtk_box_pack_start(GTK_BOX(self->gui->widget), hbox, FALSE, FALSE, 0);
 
@@ -1157,22 +1157,22 @@ void gui_init(struct dt_iop_module_t *self)
     #define MONOTONE_HERMITE 2
   */
   c->interpolator = dt_bauhaus_combobox_new(dt_bauhaus_get_global(), DT_GUI_MODULE(self));
-  dt_bauhaus_widget_set_label(c->interpolator, N_("interpolation method"));
+  dt_bauhaus_widget_set_label(c->interpolator, N_("Interpolation method"));
   dt_bauhaus_combobox_add(c->interpolator, _("cubic spline"));
   dt_bauhaus_combobox_add(c->interpolator, _("centripetal spline"));
   dt_bauhaus_combobox_add(c->interpolator, _("monotonic spline"));
   gtk_box_pack_start(GTK_BOX(self->gui->widget), c->interpolator , TRUE, TRUE, 0);
-  gtk_widget_set_tooltip_text(c->interpolator, _("change this method if you see oscillations or cusps in the curve\n"
+  gtk_widget_set_tooltip_text(c->interpolator, _("Change this method if you see oscillations or cusps in the curve\n"
                                                  "- cubic spline is better to produce smooth curves but oscillates when nodes are too close\n"
                                                  "- centripetal is better to avoids cusps and oscillations with close nodes but is less smooth\n"
                                                  "- monotonic is better for accuracy of pure analytical functions (log, gamma, exp)\n"));
   g_signal_connect(G_OBJECT(c->interpolator), "value-changed", G_CALLBACK(interpolator_callback), self);
 
   c->preserve_colors = dt_bauhaus_combobox_from_params(self, "preserve_colors");
-  gtk_widget_set_tooltip_text(c->preserve_colors, _("method to preserve colors when applying contrast"));
+  gtk_widget_set_tooltip_text(c->preserve_colors, _("Method to preserve colors when applying contrast"));
 
   c->logbase = dt_bauhaus_slider_new_with_range(dt_bauhaus_get_global(), DT_GUI_MODULE(self), 0.0f, 40.0f, 0, 0.0f, 2);
-  dt_bauhaus_widget_set_label(c->logbase, N_("scale for graph"));
+  dt_bauhaus_widget_set_label(c->logbase, N_("Scale for graph"));
   gtk_box_pack_start(GTK_BOX(self->gui->widget), c->logbase , TRUE, TRUE, 0);
   g_signal_connect(G_OBJECT(c->logbase), "value-changed", G_CALLBACK(logbase_callback), self);
 

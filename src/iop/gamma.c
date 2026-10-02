@@ -104,7 +104,7 @@ typedef enum dt_iop_gamma_false_color_t
 
 const char *name()
 {
-  return C_("modulename", "display encoding");
+  return C_("modulename", "Display encoding");
 }
 
 int default_group()

@@ -550,7 +550,7 @@ static void _private_toggled_callback(GtkCellRendererToggle *cell_renderer, gcha
 void _menuitem_preferences(GtkMenuItem *menuitem, dt_lib_module_t *self)
 {
   GtkWidget *win = dt_gui_main_window();
-  GtkWidget *dialog = gtk_dialog_new_with_buttons(_("metadata settings"), GTK_WINDOW(win),
+  GtkWidget *dialog = gtk_dialog_new_with_buttons(_("Metadata settings"), GTK_WINDOW(win),
                                        GTK_DIALOG_DESTROY_WITH_PARENT, _("default"), GTK_RESPONSE_YES,
                                        _("cancel"), GTK_RESPONSE_NONE, _("save"), GTK_RESPONSE_ACCEPT, NULL);
   g_signal_connect(dialog, "key-press-event", G_CALLBACK(dt_handle_dialog_enter), NULL);
@@ -605,7 +605,7 @@ void _menuitem_preferences(GtkMenuItem *menuitem, dt_lib_module_t *self)
   gtk_tree_view_append_column(GTK_TREE_VIEW(view), column);
   GtkWidget *header = gtk_tree_view_column_get_button(column);
   gtk_widget_set_tooltip_text(header,
-                _("tick if the corresponding metadata is of interest for you"
+                _("Tick if the corresponding metadata is of interest for you"
                 "\nit will be visible from metadata editor, collection and import module"
                 "\nit will be also exported"));
   renderer = gtk_cell_renderer_toggle_new();
@@ -615,7 +615,7 @@ void _menuitem_preferences(GtkMenuItem *menuitem, dt_lib_module_t *self)
   gtk_tree_view_append_column(GTK_TREE_VIEW(view), column);
   header = gtk_tree_view_column_get_button(column);
   gtk_widget_set_tooltip_text(header,
-                _("tick if you want to keep this information private (not exported with images)"));
+                _("Tick if you want to keep this information private (not exported with images)"));
 
   gtk_container_add(GTK_CONTAINER(w), view);
 
@@ -753,17 +753,24 @@ void gui_init(dt_lib_module_t *self)
   {
     if(dt_metadata_get_type_by_display_order(i) == DT_METADATA_TYPE_INTERNAL)
       continue;
-    GtkWidget *label = dt_ui_label_new(_(dt_metadata_get_name_by_display_order(i)));
+    // The metadata names double as keys, so they stay lowercase there: the label starts with a capital.
+    const char *name = _(dt_metadata_get_name_by_display_order(i));
+    const gsize first = *name ? g_utf8_next_char(name) - name : 0;
+    gchar *head = g_utf8_strup(name, first);
+    gchar *capitalised = g_strconcat(head, name + first, NULL);
+    GtkWidget *label = dt_ui_label_new(capitalised);
+    dt_free(head);
+    dt_free(capitalised);
     GtkWidget *labelev = gtk_event_box_new();
     gtk_widget_add_events(labelev, GDK_BUTTON_PRESS_MASK);
     gtk_container_add(GTK_CONTAINER(labelev), label);
     gtk_grid_attach(grid, labelev, 0, i, 1, 1);
     gtk_widget_set_tooltip_text(GTK_WIDGET(label),
-              _("metadata text. ctrl-wheel scroll to resize the text box"
+              _("Metadata text. Ctrl-wheel scroll to resize the text box"
               "\n ctrl-enter inserts a new line (caution, may not be compatible with standard metadata)."
-              "\nif <leave unchanged> selected images have different metadata."
-              "\nin that case, right-click gives the possibility to choose one of them."
-              "\npress escape to exit the popup window"));
+              "\nIf <leave unchanged> selected images have different metadata."
+              "\nIn that case, right-click gives the possibility to choose one of them."
+              "\nPress escape to exit the popup window"));
 
     GtkWidget *textview = gtk_text_view_new();
     dt_gui_textview_set_padding(GTK_TEXT_VIEW(textview));
@@ -798,8 +805,8 @@ void gui_init(dt_lib_module_t *self)
   }
 
   // apply button
-  d->apply_button = dt_action_button_new(self, N_("apply"), _apply_button_clicked, self,
-                                         _("write metadata for selected images"), 0, 0);
+  d->apply_button = dt_action_button_new(self, N_("Apply"), &_apply_button_clicked, self,
+                                         _("Write metadata for selected images"), 0, 0);
 
   gtk_grid_attach(GTK_GRID(self->widget), GTK_WIDGET(d->apply_button), 0, DT_METADATA_NUMBER, 2, 1);
 

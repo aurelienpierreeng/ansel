@@ -130,12 +130,12 @@ int legacy_params(dt_iop_module_t *self, const void *const old_params, const int
 
 const char *name()
 {
-  return _("invert");
+  return _("Invert");
 }
 
 const char *deprecated_msg()
 {
-  return _("this module is deprecated. please use the negadoctor module instead.");
+  return _("This module is deprecated. Please use the negadoctor module instead.");
 }
 
 const char **description(struct dt_iop_module_t *self)

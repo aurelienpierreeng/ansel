@@ -59,7 +59,7 @@ DT_MODULE_INTROSPECTION(2, dt_iop_vibrance_params_t)
 
 typedef struct dt_iop_vibrance_params_t
 {
-  float amount; // $MIN: 0.0 $MAX: 100.0 $DEFAULT: 25.0 $DESCRIPTION: "vibrance"
+  float amount; // $MIN: 0.0 $MAX: 100.0 $DEFAULT: 25.0 $DESCRIPTION: "Vibrance"
 } dt_iop_vibrance_params_t;
 
 typedef struct dt_iop_vibrance_gui_data_t
@@ -74,12 +74,12 @@ typedef struct dt_iop_vibrance_data_t
 
 const char *deprecated_msg()
 {
-  return _("this module is deprecated. please use the vibrance slider in the color balance rgb module instead.");
+  return _("This module is deprecated. Please use the vibrance slider in the color balance rgb module instead.");
 }
 
 const char *name()
 {
-  return _("vibrance");
+  return _("Vibrance");
 }
 
 const char *aliases()
@@ -175,7 +175,7 @@ void gui_init(struct dt_iop_module_t *self)
 
   g->amount_scale = dt_bauhaus_slider_from_params(self, "amount");
   dt_bauhaus_slider_set_format(g->amount_scale, "%");
-  gtk_widget_set_tooltip_text(g->amount_scale, _("the amount of vibrance"));
+  gtk_widget_set_tooltip_text(g->amount_scale, _("The amount of vibrance"));
 }
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

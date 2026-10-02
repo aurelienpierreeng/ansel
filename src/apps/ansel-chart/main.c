@@ -518,7 +518,7 @@ static char *get_export_filename(dt_lut_t *self, const char *extension, char **n
 {
   GtkWidget *name_entry = NULL, *description_entry = NULL;
   GtkWidget *dialog
-      = gtk_file_chooser_dialog_new("save file", GTK_WINDOW(self->window), GTK_FILE_CHOOSER_ACTION_SAVE,
+      = gtk_file_chooser_dialog_new("Save file", GTK_WINDOW(self->window), GTK_FILE_CHOOSER_ACTION_SAVE,
                                     _("_cancel"), GTK_RESPONSE_CANCEL, _("_save"), GTK_RESPONSE_ACCEPT, NULL);
 
   gtk_file_chooser_set_do_overwrite_confirmation(GTK_FILE_CHOOSER(dialog), TRUE);

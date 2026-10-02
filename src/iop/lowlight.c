@@ -78,7 +78,7 @@ DT_MODULE_INTROSPECTION(1, dt_iop_lowlight_params_t)
 
 typedef struct dt_iop_lowlight_params_t
 {
-  float blueness; // $MIN: 0.0 $MAX: 100.0 $DEFAULT: 0.0 $DESCRIPTION: "blue shift"
+  float blueness; // $MIN: 0.0 $MAX: 100.0 $DEFAULT: 0.0 $DESCRIPTION: "Blue shift"
   float transition_x[DT_IOP_LOWLIGHT_BANDS];
   float transition_y[DT_IOP_LOWLIGHT_BANDS]; // $DEFAULT: 0.5
 } dt_iop_lowlight_params_t;
@@ -108,7 +108,7 @@ typedef struct dt_iop_lowlight_data_t
 
 const char *name()
 {
-  return _("lowlight vision");
+  return _("Lowlight vision");
 }
 
 const char **description(struct dt_iop_module_t *self)
@@ -812,7 +812,7 @@ void gui_init(struct dt_iop_module_t *self)
 
   c->scale_blueness = dt_bauhaus_slider_from_params(self, "blueness");
   dt_bauhaus_slider_set_format(c->scale_blueness, "%");
-  gtk_widget_set_tooltip_text(c->scale_blueness, _("blueness in shadows"));
+  gtk_widget_set_tooltip_text(c->scale_blueness, _("Blueness in shadows"));
 }
 
 void gui_cleanup(struct dt_iop_module_t *self)

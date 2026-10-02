@@ -133,7 +133,7 @@ static dt_database_response_t _prompt_upgrade(const dt_database_prompt_context_t
                                              context->dbfilename);
 
   const gboolean proceed =
-    dt_gui_show_standalone_yes_no_dialog(_("ansel - schema migration"), label_text,
+    dt_gui_show_standalone_yes_no_dialog(_("Ansel - schema migration"), label_text,
                                          _("close Ansel"), _("upgrade database"));
 
   dt_free(label_text);
@@ -164,7 +164,7 @@ static dt_database_response_t _prompt_maintenance(const dt_database_prompt_conte
                                              size_info, later_info);
 
   const gboolean proceed =
-    dt_gui_show_standalone_yes_no_dialog(_("ansel - schema maintenance"), label_text,
+    dt_gui_show_standalone_yes_no_dialog(_("Ansel - schema maintenance"), label_text,
                                          _("later"), _("yes"));
 
   dt_free(label_text);
@@ -208,7 +208,7 @@ static dt_database_response_t _database_prompt(const dt_database_prompt_context_
     const char *label_options;
     if(snapshot_available)
     {
-      dialog = gtk_dialog_new_with_buttons(_("ansel - error opening database"), NULL, dflags,
+      dialog = gtk_dialog_new_with_buttons(_("Ansel - error opening database"), NULL, dflags,
                                            _("close Ansel"), GTK_RESPONSE_CLOSE,
                                            _("attempt restore"), GTK_RESPONSE_ACCEPT,
                                            _("delete database"), GTK_RESPONSE_REJECT, NULL);
@@ -220,7 +220,7 @@ static dt_database_response_t _database_prompt(const dt_database_prompt_context_
     }
     else
     {
-      dialog = gtk_dialog_new_with_buttons(_("ansel - error opening database"), NULL, dflags,
+      dialog = gtk_dialog_new_with_buttons(_("Ansel - error opening database"), NULL, dflags,
                                            _("close Ansel"), GTK_RESPONSE_CLOSE,
                                            _("delete database"), GTK_RESPONSE_REJECT, NULL);
       gtk_dialog_set_default_response(GTK_DIALOG(dialog), GTK_RESPONSE_CLOSE);

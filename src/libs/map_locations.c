@@ -53,7 +53,7 @@ DT_MODULE(1)
 
 const char *name(struct dt_lib_module_t *self)
 {
-  return _("locations");
+  return _("Locations");
 }
 
 const char **views(dt_lib_module_t *self)
@@ -628,7 +628,7 @@ static void _name_editing_done(GtkCellEditable *editable, dt_lib_module_t *self)
       }
       else
       {
-        dt_control_log(_("location name \'%s\' already exists"), new_path);
+        dt_control_log(_("Location name \'%s\' already exists"), new_path);
         canceled = TRUE;
       }
       dt_free(new_path);
@@ -885,7 +885,7 @@ static gboolean _click_on_view(GtkWidget *view, GdkEventButton *event, dt_lib_mo
   g_object_get(G_OBJECT(d->renderer), "editing", &editing, NULL);
   if(editing)
   {
-    dt_control_log(_("terminate edit (press enter or escape) before selecting another location"));
+    dt_control_log(_("Terminate edit (press enter or escape) before selecting another location"));
     return TRUE;
   }
 
@@ -980,7 +980,7 @@ void gui_init(dt_lib_module_t *self)
   g_signal_connect(G_OBJECT(view), "scroll-event", G_CALLBACK(_mouse_scroll), self);
   gtk_container_add(GTK_CONTAINER(w), GTK_WIDGET(view));
   gtk_widget_set_tooltip_text(GTK_WIDGET(view),
-                              _("list of user locations,"
+                              _("List of user locations,"
                                 "\nclick to show or hide a location on the map:"
                                 "\n - wheel scroll inside the shape to resize it"
                                 "\n - <shift> or <ctrl> scroll to modify the width or the height"
@@ -990,7 +990,7 @@ void gui_init(dt_lib_module_t *self)
                                 "\n - a pipe \'|\' symbol breaks the name into several levels"
                                 "\n - to remove a group of locations clear its name"
                                 "\n - press enter to validate the new name, escape to cancel the edit"
-                                "\nright-click for other actions: delete location and go to collection,"
+                                "\nRight-click for other actions: delete location and go to collection,"
                                 "\nctrl-wheel scroll to resize the window"));
 
   // buttons
@@ -1007,18 +1007,18 @@ void gui_init(dt_lib_module_t *self)
   d->shape_button_handler = g_signal_connect(G_OBJECT(d->shape_button), "clicked",
                                              G_CALLBACK(_shape_button_clicked), self);
   gtk_widget_set_tooltip_text(GTK_WIDGET(d->shape_button ),
-                              _("select the shape of the location\'s limits on the map, circle or rectangle"
+                              _("Select the shape of the location\'s limits on the map, circle or rectangle"
                                 "\nor even polygon if available (select first a polygon place in 'find location' module)"));
 
-  d->new_button = dt_action_button_new(self, N_("new location"), _new_button_clicked, self,
-                                       _("add a new location on the center of the visible map"), 0, 0);
+  d->new_button = dt_action_button_new(self, N_("New location"), _new_button_clicked, self,
+                                       _("Add a new location on the center of the visible map"), 0, 0);
   gtk_box_pack_start(hbox, d->new_button, TRUE, TRUE, 0);
 
   dt_conf_set_bool("plugins/map/showalllocations", FALSE);
   d->show_all_button = gtk_check_button_new_with_label(_("show all"));
   gtk_label_set_ellipsize(GTK_LABEL(gtk_bin_get_child(GTK_BIN(d->show_all_button))), PANGO_ELLIPSIZE_END);
   gtk_widget_set_tooltip_text(d->show_all_button,
-                              _("show all locations which are on the visible map"));
+                              _("Show all locations which are on the visible map"));
   gtk_box_pack_end(hbox, d->show_all_button, FALSE, FALSE, 8);
   g_signal_connect(G_OBJECT(d->show_all_button), "clicked", G_CALLBACK(_show_all_button_clicked), self);
 

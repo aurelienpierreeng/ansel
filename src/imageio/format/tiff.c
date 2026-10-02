@@ -257,7 +257,7 @@ int write_image(dt_imageio_module_data_t *d_tmp, const char *filename, const voi
   }
   checkdone:
   if(layers == 1)
-    dt_control_log(_("will export as a grayscale image"));
+    dt_control_log(_("Will export as a grayscale image"));
 
   TIFFSetField(tif, TIFFTAG_SAMPLESPERPIXEL, layers);
   TIFFSetField(tif, TIFFTAG_BITSPERSAMPLE, (uint16_t)d->bpp);
@@ -828,7 +828,7 @@ void gui_init(dt_imageio_module_format_t *self)
 
   // Bit depth combo box
   gui->bpp = dt_bauhaus_combobox_new(dt_bauhaus_get_global(), DT_GUI_MODULE(NULL));
-  dt_bauhaus_widget_set_label(gui->bpp, N_("bit depth"));
+  dt_bauhaus_widget_set_label(gui->bpp, N_("Bit depth"));
   dt_bauhaus_combobox_add(gui->bpp, _("8 bit"));
   dt_bauhaus_combobox_add(gui->bpp, _("16 bit"));
   dt_bauhaus_combobox_add(gui->bpp, _("32 bit (float)"));
@@ -843,7 +843,7 @@ void gui_init(dt_imageio_module_format_t *self)
 
   // Compression method combo box
   gui->compress = dt_bauhaus_combobox_new(dt_bauhaus_get_global(), DT_GUI_MODULE(NULL));
-  dt_bauhaus_widget_set_label(gui->compress, N_("compression"));
+  dt_bauhaus_widget_set_label(gui->compress, N_("Compression"));
   dt_bauhaus_combobox_add(gui->compress, _("uncompressed"));
   dt_bauhaus_combobox_add(gui->compress, _("deflate"));
   dt_bauhaus_combobox_add(gui->compress, _("deflate with predictor"));
@@ -857,7 +857,7 @@ void gui_init(dt_imageio_module_format_t *self)
                                                       1,
                                                       dt_confgen_get_int("plugins/imageio/format/tiff/compresslevel", DT_DEFAULT),
                                                       0);
-  dt_bauhaus_widget_set_label(gui->compresslevel, N_("compression level"));
+  dt_bauhaus_widget_set_label(gui->compresslevel, N_("Compression level"));
   dt_bauhaus_slider_set(gui->compresslevel, compresslevel);
   gtk_box_pack_start(GTK_BOX(self->widget), GTK_WIDGET(gui->compresslevel), TRUE, TRUE, 0);
   g_signal_connect(G_OBJECT(gui->compresslevel), "value-changed", G_CALLBACK(compress_level_changed), NULL);
@@ -869,7 +869,7 @@ void gui_init(dt_imageio_module_format_t *self)
 
   // shortfile option combo box
   gui->shortfiles = dt_bauhaus_combobox_new(dt_bauhaus_get_global(), DT_GUI_MODULE(NULL));
-  dt_bauhaus_widget_set_label(gui->shortfiles, N_("b&w image"));
+  dt_bauhaus_widget_set_label(gui->shortfiles, N_("B&W image"));
   dt_bauhaus_combobox_add(gui->shortfiles, _("write rgb colors"));
   dt_bauhaus_combobox_add(gui->shortfiles, _("write grayscale"));
   dt_bauhaus_combobox_set(gui->shortfiles, shortmode);

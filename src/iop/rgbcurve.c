@@ -106,9 +106,9 @@ typedef struct dt_iop_rgbcurve_params_t
                                     [DT_IOP_RGBCURVE_MAXNODES]; // actual nodes for each curve
   int curve_num_nodes[DT_IOP_RGBCURVE_MAX_CHANNELS]; // $DEFAULT: 2 number of nodes per curve
   int curve_type[DT_IOP_RGBCURVE_MAX_CHANNELS]; // $DEFAULT: MONOTONE_HERMITE (CATMULL_ROM, MONOTONE_HERMITE, CUBIC_SPLINE)
-  dt_iop_rgbcurve_autoscale_t curve_autoscale;  // $DEFAULT: DT_S_SCALE_AUTOMATIC_RGB $DESCRIPTION: "mode"
-  gboolean compensate_middle_grey; // $DEFAULT: 0  $DESCRIPTION: "compensate middle gray" scale the curve and histogram so middle gray is at .5
-  dt_iop_rgb_norms_t preserve_colors; // $DEFAULT: DT_RGB_NORM_LUMINANCE $DESCRIPTION: "preserve colors"
+  dt_iop_rgbcurve_autoscale_t curve_autoscale;  // $DEFAULT: DT_S_SCALE_AUTOMATIC_RGB $DESCRIPTION: "Mode"
+  gboolean compensate_middle_grey; // $DEFAULT: 0  $DESCRIPTION: "Compensate middle gray" scale the curve and histogram so middle gray is at .5
+  dt_iop_rgb_norms_t preserve_colors; // $DEFAULT: DT_RGB_NORM_LUMINANCE $DESCRIPTION: "Preserve colors"
 } dt_iop_rgbcurve_params_t;
 
 typedef struct dt_iop_rgbcurve_gui_data_t
@@ -151,7 +151,7 @@ typedef float (*_coeffs_table_ptr)[3];
 
 const char *name()
 {
-  return _("curve");
+  return _("Curve");
 }
 
 int default_group()
@@ -1303,14 +1303,14 @@ void gui_init(struct dt_iop_module_t *self)
   change_image(self);
 
   g->autoscale = dt_bauhaus_combobox_from_params(self, "curve_autoscale");
-  gtk_widget_set_tooltip_text(g->autoscale, _("choose between linked and independent channels."));
+  gtk_widget_set_tooltip_text(g->autoscale, _("Choose between linked and independent channels."));
 
   GtkWidget *hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
 
   g->channel_tabs = GTK_NOTEBOOK(gtk_notebook_new());
-  dt_ui_notebook_page(g->channel_tabs, N_("R"), _("curve nodes for r channel"));
-  dt_ui_notebook_page(g->channel_tabs, N_("G"), _("curve nodes for g channel"));
-  dt_ui_notebook_page(g->channel_tabs, N_("B"), _("curve nodes for b channel"));
+  dt_ui_notebook_page(g->channel_tabs, N_("R"), _("Curve nodes for r channel"));
+  dt_ui_notebook_page(g->channel_tabs, N_("G"), _("Curve nodes for g channel"));
+  dt_ui_notebook_page(g->channel_tabs, N_("B"), _("Curve nodes for b channel"));
   g_signal_connect(G_OBJECT(g->channel_tabs), "switch_page", G_CALLBACK(tab_switch_callback), self);
   dt_ui_notebook_set_picker_owner(g->channel_tabs, self);
   gtk_box_pack_start(GTK_BOX(hbox), GTK_WIDGET(g->channel_tabs), TRUE, TRUE, 0);
@@ -1318,16 +1318,16 @@ void gui_init(struct dt_iop_module_t *self)
 
   // color pickers
   g->colorpicker = dt_color_picker_new(self, DT_COLOR_PICKER_POINT_AREA, hbox);
-  gtk_widget_set_tooltip_text(g->colorpicker, _("pick GUI color from image\nctrl+click or right-click to select an area"));
+  gtk_widget_set_tooltip_text(g->colorpicker, _("Pick GUI color from image\nCtrl+click or right-click to select an area"));
   g->colorpicker_set_values = dt_color_picker_new(self, DT_COLOR_PICKER_AREA, hbox);
   dtgtk_togglebutton_set_paint(DTGTK_TOGGLEBUTTON(g->colorpicker_set_values),
                                dtgtk_cairo_paint_colorpicker, CPF_ALTER, NULL);
 
   gtk_widget_set_size_request(g->colorpicker_set_values, DT_PIXEL_APPLY_DPI(14), DT_PIXEL_APPLY_DPI(14));
-  gtk_widget_set_tooltip_text(g->colorpicker_set_values, _("create a curve based on an area from the image\n"
-                                                           "drag to create a flat curve\n"
-                                                           "ctrl+drag to create a positive curve\n"
-                                                           "shift+drag to create a negative curve"));
+  gtk_widget_set_tooltip_text(g->colorpicker_set_values, _("Create a curve based on an area from the image\n"
+                                                           "Drag to create a flat curve\n"
+                                                           "Ctrl+drag to create a positive curve\n"
+                                                           "Shift+drag to create a negative curve"));
 
   GtkWidget *vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
   gtk_box_pack_start(GTK_BOX(self->gui->widget), vbox, FALSE, FALSE, 0);
@@ -1363,23 +1363,23 @@ void gui_init(struct dt_iop_module_t *self)
     #define MONOTONE_HERMITE 2
   */
   g->interpolator = dt_bauhaus_combobox_new(dt_bauhaus_get_global(), DT_GUI_MODULE(self));
-  dt_bauhaus_widget_set_label(g->interpolator, N_("interpolation method"));
+  dt_bauhaus_widget_set_label(g->interpolator, N_("Interpolation method"));
   dt_bauhaus_combobox_add(g->interpolator, _("cubic spline"));
   dt_bauhaus_combobox_add(g->interpolator, _("centripetal spline"));
   dt_bauhaus_combobox_add(g->interpolator, _("monotonic spline"));
   gtk_box_pack_start(GTK_BOX(self->gui->widget), g->interpolator, TRUE, TRUE, 0);
   gtk_widget_set_tooltip_text(g->interpolator,
-      _("change this method if you see oscillations or cusps in the curve\n"
+      _("Change this method if you see oscillations or cusps in the curve\n"
         "- cubic spline is better to produce smooth curves but oscillates when nodes are too close\n"
         "- centripetal is better to avoids cusps and oscillations with close nodes but is less smooth\n"
         "- monotonic is better for accuracy of pure analytical functions (log, gamma, exp)\n"));
   g_signal_connect(G_OBJECT(g->interpolator), "value-changed", G_CALLBACK(interpolator_callback), self);
 
   g->chk_compensate_middle_grey = dt_bauhaus_toggle_from_params(self, "compensate_middle_grey");
-  gtk_widget_set_tooltip_text(g->chk_compensate_middle_grey, _("compensate middle gray"));
+  gtk_widget_set_tooltip_text(g->chk_compensate_middle_grey, _("Compensate middle gray"));
 
   g->cmb_preserve_colors = dt_bauhaus_combobox_from_params(self, "preserve_colors");
-  gtk_widget_set_tooltip_text(g->cmb_preserve_colors, _("method to preserve colors when applying contrast"));
+  gtk_widget_set_tooltip_text(g->cmb_preserve_colors, _("Method to preserve colors when applying contrast"));
 }
 
 void gui_update(struct dt_iop_module_t *self)

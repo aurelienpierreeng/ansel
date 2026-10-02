@@ -88,10 +88,10 @@ DT_MODULE_INTROSPECTION(1, dt_iop_splittoning_params_t)
 
 typedef struct dt_iop_splittoning_params_t
 {
-  float shadow_hue;           // $MIN: 0.0 $MAX: 1.0 $DEFAULT: 0.0 $DESCRIPTION: "hue"
-  float shadow_saturation;    // $MIN: 0.0 $MAX: 1.0 $DEFAULT: 0.5 $DESCRIPTION: "saturation"
-  float highlight_hue;        // $MIN: 0.0 $MAX: 1.0 $DEFAULT: 0.2 $DESCRIPTION: "hue"
-  float highlight_saturation; // $MIN: 0.0 $MAX: 1.0 $DEFAULT: 0.5 $DESCRIPTION: "saturation"
+  float shadow_hue;           // $MIN: 0.0 $MAX: 1.0 $DEFAULT: 0.0 $DESCRIPTION: "Hue"
+  float shadow_saturation;    // $MIN: 0.0 $MAX: 1.0 $DEFAULT: 0.5 $DESCRIPTION: "Saturation"
+  float highlight_hue;        // $MIN: 0.0 $MAX: 1.0 $DEFAULT: 0.2 $DESCRIPTION: "Hue"
+  float highlight_saturation; // $MIN: 0.0 $MAX: 1.0 $DEFAULT: 0.5 $DESCRIPTION: "Saturation"
   float balance;              // $MIN: 0.0 $MAX: 1.0 $DEFAULT: 0.5 center luminance of gradient
   float compress;             // $MIN: 0.0 $MAX: 100.0 $DEFAULT: 33.0 Compress range
 } dt_iop_splittoning_params_t;
@@ -116,7 +116,7 @@ typedef struct dt_iop_splittoning_data_t
 
 const char *name()
 {
-  return _("split-toning (legacy)");
+  return _("Split-toning (legacy)");
 }
 
 int flags()
@@ -445,7 +445,7 @@ static inline void gui_init_section(struct dt_iop_module_t *self, char *section,
 
   gtk_box_pack_start(GTK_BOX(self->gui->widget), label, FALSE, FALSE, 0);
 
-  dt_bauhaus_widget_set_label(hue, N_("hue"));
+  dt_bauhaus_widget_set_label(hue, N_("Hue"));
   dt_bauhaus_slider_set_feedback(hue, 0);
   dt_bauhaus_slider_set_stop(hue, 0.0f  , 1.0f, 0.0f, 0.0f);
   dt_bauhaus_slider_set_stop(hue, 0.166f, 1.0f, 1.0f, 0.0f);
@@ -454,13 +454,13 @@ static inline void gui_init_section(struct dt_iop_module_t *self, char *section,
   dt_bauhaus_slider_set_stop(hue, 0.664f, 0.0f, 0.0f, 1.0f);
   dt_bauhaus_slider_set_stop(hue, 0.830f, 1.0f, 0.0f, 1.0f);
   dt_bauhaus_slider_set_stop(hue, 1.0f  , 1.0f, 0.0f, 0.0f);
-  gtk_widget_set_tooltip_text(hue, _("select the hue tone"));
+  gtk_widget_set_tooltip_text(hue, _("Select the hue tone"));
   dt_color_picker_new(self, DT_COLOR_PICKER_POINT, hue);
 
-  dt_bauhaus_widget_set_label(saturation, N_("saturation"));
+  dt_bauhaus_widget_set_label(saturation, N_("Saturation"));
   dt_bauhaus_slider_set_stop(saturation, 0.0f, 0.2f, 0.2f, 0.2f);
   dt_bauhaus_slider_set_stop(saturation, 1.0f, 1.0f, 1.0f, 1.0f);
-  gtk_widget_set_tooltip_text(saturation, _("select the saturation tone"));
+  gtk_widget_set_tooltip_text(saturation, _("Select the saturation tone"));
 
   *picker = gtk_color_button_new();
   gtk_color_chooser_set_use_alpha(GTK_COLOR_CHOOSER(*picker), FALSE);
@@ -492,12 +492,12 @@ void gui_init(struct dt_iop_module_t *self)
   // start building top level widget
   self->gui->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
 
-  gui_init_section(self, N_("shadows"), shadows_box, g->shadow_hue_gslider, g->shadow_sat_gslider, &g->shadow_colorpick, TRUE);
+  gui_init_section(self, N_("Shadows"), shadows_box, g->shadow_hue_gslider, g->shadow_sat_gslider, &g->shadow_colorpick, TRUE);
 
-  gui_init_section(self, N_("highlights"), highlights_box, g->highlight_hue_gslider, g->highlight_sat_gslider, &g->highlight_colorpick, FALSE);
+  gui_init_section(self, N_("Highlights"), highlights_box, g->highlight_hue_gslider, g->highlight_sat_gslider, &g->highlight_colorpick, FALSE);
 
   // Additional parameters
-  gtk_box_pack_start(GTK_BOX(self->gui->widget), dt_ui_section_label_new(_("properties")), FALSE, FALSE, 0);
+  gtk_box_pack_start(GTK_BOX(self->gui->widget), dt_ui_section_label_new(_("Properties")), FALSE, FALSE, 0);
 
   g->balance_scale = dt_bauhaus_slider_from_params(self, N_("balance"));
   dt_bauhaus_slider_set_feedback(g->balance_scale, 0);
@@ -506,11 +506,11 @@ void gui_init(struct dt_iop_module_t *self)
   dt_bauhaus_slider_set_offset(g->balance_scale, +100.0);
   dt_bauhaus_slider_set_stop(g->balance_scale, 0.0f, 0.5f, 0.5f, 0.5f);
   dt_bauhaus_slider_set_stop(g->balance_scale, 1.0f, 0.5f, 0.5f, 0.5f);
-  gtk_widget_set_tooltip_text(g->balance_scale, _("the balance of center of split-toning"));
+  gtk_widget_set_tooltip_text(g->balance_scale, _("The balance of center of split-toning"));
 
   g->compress_scale = dt_bauhaus_slider_from_params(self, N_("compress"));
   dt_bauhaus_slider_set_format(g->compress_scale, "%");
-  gtk_widget_set_tooltip_text(g->compress_scale, _("compress the effect on highlights/shadows and\npreserve mid-tones"));
+  gtk_widget_set_tooltip_text(g->compress_scale, _("Compress the effect on highlights/shadows and\npreserve mid-tones"));
 }
 
 // clang-format off
