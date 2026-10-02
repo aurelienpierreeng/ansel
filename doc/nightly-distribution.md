@@ -199,7 +199,10 @@ the prefetch had marked `✘` — both then failed on DNS (`Could not resolve ho
   `d4a2120092`) seeded nothing: brew refuses to load a formula from a file outside a tap
   (`Homebrew requires formulae to be in a tap, rejecting: …/llvm.rb`), so the script reported
   `could not list its patches` and the build failed on the same checksum. The source now goes
-  into a throwaway local tap (`ansel/brew-seed`, removed on exit); that version has not yet run.
+  into a throwaway local tap (`ansel/brew-seed`, removed on exit). Its run (37025480414,
+  `9dea2adcc3`) got past that and was refused at the next guard: `Refusing to load formula
+  ansel/brew-seed/llvm from untrusted tap`. The script now runs `brew trust` on the tap, and
+  `brew untrust` on exit; that version has not yet run.
 
 **None of this is what a failing Intel job used to cost.** `upload_to_release` carried `needs:
 MacOS` over the whole matrix with no `if:`, and `fail-fast` is off — so arm64 succeeded on

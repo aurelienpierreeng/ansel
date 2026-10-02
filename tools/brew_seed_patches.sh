@@ -53,8 +53,14 @@ if [ ! -d "$(brew --repository "${tap}")" ]; then
 fi
 tap_formulae="$(brew --repository "${tap}")/Formula"
 mkdir -p "${tap_formulae}"
+# A tap is then refused as untrusted ("Refusing to load formula ansel/brew-seed/llvm from untrusted
+# tap", same run of 2026-10-02 once the tap was in place) until `brew trust' is run on it. It
+# holds nothing but homebrew-core's own formula sources as `brew cat' prints them, and the trust
+# is withdrawn on exit. A brew too old to have `brew trust' has no such check either.
+brew trust "${tap}" </dev/null >/dev/null 2>&1 || true
 cleanup() {
   rm -rf "${work}"
+  brew untrust "${tap}" </dev/null >/dev/null 2>&1 || true
   if [ "${tap_created}" = yes ]; then
     brew untap --force "${tap}" >/dev/null 2>&1 || true
   fi
