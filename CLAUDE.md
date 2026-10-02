@@ -83,6 +83,19 @@ This tree's history is full of plausible-but-wrong theories that survived source
 died on the first measurement. Several entries in `doc/` exist only to record which theories
 were killed and how. When you write a finding down, write down the number and the method.
 
+### 8. What needs the user's attention goes in an alert window, not a toast
+
+A toast (`dt_control_log()`, `dt_pipeline_message()`) fades within seconds, while what such a
+message says — a module failed, an image was not updated, an export will not come — stays true.
+Use `dt_gui_alert()` from [`src/gui/alert.h`](src/gui/alert.h): a small window with one OK
+button, kept above the others until it is clicked, callable from any thread. A window that needs
+more than OK — other buttons, a list, a question — is a `dt_gui_alert_t` object
+(`dt_gui_alert_new()` with a kind, then `_add_text/_add_widget/_add_button/_show/_destroy`), as
+`gui/closing.c` uses it. The window itself — frame, modality, Escape, title bar, focus, the macOS
+specifics — lives entirely in `gui/alert.c`; a caller never builds or configures it. Toasts
+remain right for what is fine to miss: progress, confirmation, a passing state.
+→ [`doc/pipeline-cache.md`](doc/pipeline-cache.md) (the first user: the memory pressure valve)
+
 ---
 
 ## Where the knowledge is

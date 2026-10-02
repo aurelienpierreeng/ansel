@@ -249,6 +249,7 @@ FILE(GLOB SOURCE_FILES
   "gui/dtgtk/filemanager.c"
   "gui/dtgtk/filmstrip.c"
   "gui/guides.c"
+  "gui/alert.c"
   "gui/application.c"
   "gui/closing.c"
   "gui/splash.c"
