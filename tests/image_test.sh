@@ -56,7 +56,8 @@
 #                            to compare against.
 #   --keep                  Keep this run's outputs/logs even on full success
 #   --if-configured         Exit 0 silently instead of erroring when no bank is
-#                            configured (used by the pre-commit hook)
+#                            configured, and with a warning when no ansel-cli is
+#                            installed or it does not start (used by the pre-commit hook)
 #   -q, --quiet             Only print the summary and failures
 #   -h, --help              Show this help
 #
@@ -140,7 +141,7 @@ err() { echo "$*" >&2; }
 # the remaining arguments are counted without expanding $2 first.
 need_arg() { [ $# -ge 2 ] || { err "option $1 needs a value"; usage; exit 2; }; }
 
-usage() { sed -n '2,61p' "$0" | sed 's/^#$//; s/^# //'; }
+usage() { sed -n '2,62p' "$0" | sed 's/^#$//; s/^# //'; }
 
 if [ -t 1 ]; then
   C_GREEN=$'\033[32m'
@@ -387,9 +388,21 @@ installed_cli_for() {
   return 1
 }
 
+# No usable ansel-cli means the test cannot run, which is not a regression: under
+# --if-configured (the pre-commit hook) that is a warning and the commit goes on, as it does
+# when no bank is configured; run by hand, it is an error.
+cli_unusable() {
+  if [ "$IF_CONFIGURED" = yes ]; then
+    err "${C_ORANGE}image_test: skipped -- $1${C_RESET}"
+    exit 0
+  fi
+  err "${C_RED}$1${C_RESET}"
+  exit 1
+}
+
 CLI_WAS_EXPLICIT=no
 [ -n "$CLI_BIN" ] && CLI_WAS_EXPLICIT=yes
-CLI_BIN="$(find_cli)" || { err "no installed ansel-cli found; run build.sh --install, or pass --cli <path>"; exit 1; }
+CLI_BIN="$(find_cli)" || cli_unusable "no installed ansel-cli found; run build.sh --install, or pass --cli <path>"
 # toolchain_bin_dir_for() below needs the raw build tree (it walks up looking for
 # CMakeCache.txt) -- capture it before installed_cli_for() potentially swaps
 # CLI_BIN to an installed binary that lives outside any build tree entirely.
@@ -424,6 +437,40 @@ if [ -n "$LIBDIR" ]; then
 fi
 if TOOLCHAIN_BIN="$(toolchain_bin_dir_for "$RAW_CLI_BIN")" && [ -d "$TOOLCHAIN_BIN" ]; then
   export PATH="$TOOLCHAIN_BIN:$PATH"
+fi
+
+# --- does it start, and what was it built from ------------------------------
+
+# Establish ONCE that the binary starts, before exporting anything. One that cannot load used
+# to surface as every image reporting CRASH(127) with an empty log -- a fleet of crashes blamed
+# on the raws, when the export never began. Seen 2026-10-02: no build was installed any more,
+# and find_cli() fell back to a month-old ASAN install whose libraries had since been upgraded.
+CLI_VERSION_OUT="$(timeout --kill-after=10 60 "$CLI_BIN" --version 2>&1)"
+CLI_RC=$?
+if [ "$CLI_RC" -ne 0 ]; then
+  why="it exits with status $CLI_RC"
+  # 127 with no output is the loader refusing the binary: a library, or a symbol in one, that
+  # is not there -- typically a build older than the libraries it was linked against.
+  [ "$CLI_RC" -eq 127 ] && why+=", before running anything: a library or one of its symbols could not be loaded -- rebuild it"
+  [ -n "$CLI_VERSION_OUT" ] && why+=$'\n'"$(printf '%s\n' "$CLI_VERSION_OUT" | head -5)"
+  cli_unusable "$CLI_BIN does not start ($why)"
+fi
+CLI_VERSION="$(printf '%s\n' "$CLI_VERSION_OUT" | sed -n 's/^this is ansel-cli //p' | head -1)"
+
+# The results describe the build, not the tree: warn when the build is not from HEAD. The
+# version carries its commit after "~g" (tools/get_git_version_string.sh). At pre-commit time
+# HEAD is the previous commit, so a build of the changes being committed reads as HEAD too.
+cli_commit="$(printf '%s\n' "$CLI_VERSION" | sed -n 's/.*~g\([0-9a-f]\{7,\}\).*/\1/p')"
+if [ -n "$cli_commit" ] && head_commit="$(git -C "$REPO_ROOT" rev-parse -q --verify HEAD 2>/dev/null)"; then
+  if built_commit="$(git -C "$REPO_ROOT" rev-parse -q --verify "$cli_commit^{commit}" 2>/dev/null)"; then
+    if [ "$built_commit" != "$head_commit" ]; then
+      behind="$(git -C "$REPO_ROOT" rev-list --count "$built_commit..$head_commit")"
+      built_date="$(git -C "$REPO_ROOT" log -1 --format=%cs "$built_commit")"
+      err "${C_ORANGE}warning: $CLI_BIN was built from $cli_commit ($built_date), $behind commit(s) behind HEAD -- these results test that build, not this tree${C_RESET}"
+    fi
+  else
+    err "${C_ORANGE}warning: $CLI_BIN was built from $cli_commit, a commit this repository does not have -- these results may not describe this tree${C_RESET}"
+  fi
 fi
 
 # --- per-image export + verdict -------------------------------------------
@@ -692,7 +739,7 @@ run_bank() {
   fi
 
   log "Testing ${#raws[@]} raw file(s) from $BANK_DIR"
-  log "  cli:      $CLI_BIN"
+  log "  cli:      $CLI_BIN${CLI_VERSION:+ ($CLI_VERSION)}"
   log "  jobs:     $jobs (x $THREADS threads)"
   [ -d "$BASELINE_DIR" ] && log "  baseline: $BASELINE_DIR"
 
