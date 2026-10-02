@@ -106,6 +106,7 @@ gboolean dt_dev_pixelpipe_cache_is_ready(void)
 /* Installed by the orchestrator; see dt_dev_pixelpipe_cache_set_handlers(). NULL means
  * nobody is listening, which is a working configuration, not an error. */
 static dt_pixelpipe_cache_warn_handler_t _warn_handler = NULL;
+static dt_pixelpipe_cache_alert_handler_t _alert_handler = NULL;
 static dt_pixelpipe_cache_ready_handler_t _ready_handler = NULL;
 static const dt_pixelpipe_cache_observer_t *_observer = NULL;
 
@@ -118,17 +119,29 @@ void dt_dev_pixelpipe_cache_set_handlers(dt_pixelpipe_cache_warn_handler_t warn,
   _observer = observer;
 }
 
-/* printf-style, so the call sites keep reading as they did; the formatting happens here and
- * the handler receives a finished string. */
-static void _warn_user(const char *format, ...) __attribute__((format(printf, 1, 2)));
-static void _warn_user(const char *format, ...)
+void dt_dev_pixelpipe_cache_set_alert_handler(dt_pixelpipe_cache_alert_handler_t alert)
 {
-  if(!_warn_handler) return;
+  _alert_handler = alert;
+}
+
+/* printf-style, so the call sites keep reading as they did; the formatting happens here and
+ * the handler receives a finished string.
+ * Everything the cache tells the user is an allocation it could not serve: the module that asked
+ * fails, and its pipe publishes nothing. That stays true long after a toast is gone, so it goes to
+ * the alert handler, and to the warn handler only when no GUI installed one. */
+static void _alert_user(const char *format, ...) __attribute__((format(printf, 1, 2)));
+static void _alert_user(const char *format, ...)
+{
+  if(IS_NULL_PTR(_alert_handler) && IS_NULL_PTR(_warn_handler)) return;
   va_list ap;
   va_start(ap, format);
   char *message = g_strdup_vprintf(format, ap);
   va_end(ap);
-  if(message) _warn_handler(message);
+  if(IS_NULL_PTR(message)) return;
+  if(!IS_NULL_PTR(_alert_handler))
+    _alert_handler(message);
+  else
+    _warn_handler(message);
   g_free(message);
 }
 
@@ -1769,14 +1782,18 @@ static gboolean _system_memory_pressure_valve(dt_dev_pixelpipe_cache_t *cache, s
   }
   else
   {
-    // Warn the user at most every 10 s: this fires per failed allocation, on a
-    // system that is already drowning.
+    // Alert the user at most every 10 s: this fires per failed allocation, on a
+    // system that is already drowning. The refused allocation makes the module that asked
+    // for it fail, and a pipe that failed publishes nothing: say so where it cannot be
+    // missed, or the user waits for an image that will not come.
     static gint64 last_warning_us = 0;
     if(now - last_warning_us > 10000000)
     {
       last_warning_us = now;
-      _warn_user(_("Your system is running out of memory. "
-                       "Close other applications or add more RAM to your system."));
+      _alert_user(_("Your system is running out of memory: %" G_GSIZE_FORMAT " MiB could not be reserved, "
+                    "so the module that needed them will fail and the image will not be updated.\n "
+                    "Close other applications or add more RAM to your system."),
+                  request_size / (1024 * 1024));
     }
     fprintf(stdout,
             "[pixelpipe_cache] refusing to allocate %" G_GSIZE_FORMAT " MiB: the system has only "
@@ -1871,16 +1888,16 @@ static inline void _log_arena_allocation_failure(dt_dev_pixelpipe_cache_t *cache
             cache->current_memory / (1024 * 1024), cache->max_memory / (1024 * 1024));
 
   if(!IS_NULL_PTR(entry_name) && !IS_NULL_PTR(module))
-    _warn_user(_("The pipeline cache is full while allocating `%s` (module `%s`). Either your RAM settings are too frugal or your RAM is too small."),
+    _alert_user(_("The pipeline cache is full while allocating `%s` (module `%s`). Either your RAM settings are too frugal or your RAM is too small."),
                    entry_name, module);
   else if(!IS_NULL_PTR(entry_name))
-    _warn_user(_("The pipeline cache is full while allocating `%s`. Either your RAM settings are too frugal or your RAM is too small."),
+    _alert_user(_("The pipeline cache is full while allocating `%s`. Either your RAM settings are too frugal or your RAM is too small."),
                    entry_name);
   else if(!IS_NULL_PTR(module))
-    _warn_user(_("The pipeline cache is full while processing module `%s`. Either your RAM settings are too frugal or your RAM is too small."),
+    _alert_user(_("The pipeline cache is full while processing module `%s`. Either your RAM settings are too frugal or your RAM is too small."),
                    module);
   else
-    _warn_user(_("The pipeline cache is full. Either your RAM settings are too frugal or your RAM is too small."));
+    _alert_user(_("The pipeline cache is full. Either your RAM settings are too frugal or your RAM is too small."));
 
   (void)name_is_file; // kept for signature symmetry if future callers need it.
 }
@@ -2074,13 +2091,13 @@ static int _free_space_to_alloc(dt_dev_pixelpipe_cache_t *cache, const size_t si
     else
       fprintf(stdout, "[pixelpipe] cache is full, cannot allocate new entry (%s)\n", name);
     if(!IS_NULL_PTR(name) && !IS_NULL_PTR(module) && name_is_file)
-      _warn_user(_("The pipeline cache is full while allocating `%s` (module `%s`). Either your RAM settings are too frugal or your RAM is too small."), name, module);
+      _alert_user(_("The pipeline cache is full while allocating `%s` (module `%s`). Either your RAM settings are too frugal or your RAM is too small."), name, module);
     else if(!IS_NULL_PTR(name))
-      _warn_user(_("The pipeline cache is full while allocating `%s`. Either your RAM settings are too frugal or your RAM is too small."), name);
+      _alert_user(_("The pipeline cache is full while allocating `%s`. Either your RAM settings are too frugal or your RAM is too small."), name);
     else if(!IS_NULL_PTR(module))
-      _warn_user(_("The pipeline cache is full while processing module `%s`. Either your RAM settings are too frugal or your RAM is too small."), module);
+      _alert_user(_("The pipeline cache is full while processing module `%s`. Either your RAM settings are too frugal or your RAM is too small."), module);
     else
-      _warn_user(_("The pipeline cache is full. Either your RAM settings are too frugal or your RAM is too small."));
+      _alert_user(_("The pipeline cache is full. Either your RAM settings are too frugal or your RAM is too small."));
   }
 
   // Both callers return NULL on an error: the allocation is refused.
