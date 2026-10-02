@@ -724,6 +724,22 @@ error:
 
   dt_dev_pixelpipe_cache_release_cl_buffer(&cl_mem_output, output_entry, NULL, FALSE);
 
+  // The pipe abandoned this run while the module was on the device: a module that checks the
+  // killswitch mid-process (rawdenoiseai) fails for it. Rerunning it on CPU would redo work nobody
+  // wants and tell the user OpenCL failed, so abort as the killswitch does.
+  if(dt_dev_pixelpipe_has_shutdown(pipe))
+  {
+    if(borrowed_cl_mem_input)
+    {
+      dt_dev_pixelpipe_cache_return_cl_payload(cpu_input_entry, cl_mem_input);
+      cl_mem_input = NULL;
+    }
+    else
+      dt_dev_pixelpipe_cache_release_cl_buffer(&cl_mem_input, cpu_input_entry, input,
+                                        dt_dev_pixelpipe_cache_gpu_device_buffer(pipe, cpu_input_entry));
+    return 1;
+  }
+
   if(module->flags() & IOP_FLAGS_TAKE_NO_INPUT)
   {
     /* Root modules build their own input from external storage. If the OpenCL pre-check
