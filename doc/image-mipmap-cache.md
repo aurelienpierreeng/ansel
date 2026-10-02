@@ -12,6 +12,34 @@
 > that is recorded rather than quietly corrected: how a claim was wrong is usually the more
 > useful thing to know.
 
+## Where the on-disk thumbnail cache lives, and the one way to ask
+
+> **Established 2026-09-30 against `aac2ee1321`.**
+
+`dt_loc_cachedir()` is the answer, always — or `dt_loc_default_user_cache_dir()`
+(`src/common/file_location.c`) for the two callers that run before `dt_loc_init()` has set the
+global. **Never `g_get_user_cache_dir()` directly**, for two independent reasons:
+
+- **It is the wrong directory on Windows.** GLib returns `FOLDERID_InternetCache` there —
+  `%LOCALAPPDATA%\Microsoft\Windows\INetCache`, the shell folder still labelled "Temporary
+  Internet Files" — which Storage Sense clears by default on Windows 11 and Disk Cleanup targets.
+  A thumbnail cache written there is deleted by the OS behind the user's back, which reads as "the
+  disk cache never works on Windows", and it is invisible to a user who goes looking (#1473). The
+  default is now `%LOCALAPPDATA%\ansel\cache` on Windows and `g_get_user_cache_dir()/ansel`
+  elsewhere, with an absolute `XDG_CACHE_HOME` winning on every platform. `%LOCALAPPDATA%` is read
+  from the environment rather than through `g_get_user_data_dir()`, which resolves to the same
+  folder but takes `XDG_DATA_HOME` first — a variable that says where data goes and must not steer
+  a cache.
+- **It ignores `--cachedir`.** That is how `libs/textnotes.c` came to build a download's path under
+  `g_get_user_cache_dir()/ansel/downloads` while creating the directory under
+  `dt_loc_cachedir()/downloads`: with `--cachedir` given, it made one directory and wrote into
+  another, which did not exist.
+
+`tests/unittests/test_loc_cache_dir.c` pins the XDG precedence and that the default is not a
+shell-managed temporary folder. The thumbnail cache path itself is built on top of this by
+`dt_mipmap_cache_get_filename()`, which hashes the library's absolute path into the directory
+name so two libraries do not share thumbnails.
+
 ## Mipmap invalidation is explicit, not hash-driven
 
 *Found `22f623c0be`, 2026-06-25.*

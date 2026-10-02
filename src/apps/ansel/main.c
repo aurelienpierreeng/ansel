@@ -37,6 +37,9 @@
 #ifdef _WIN32
 #include "win/main_wrapper.h"
 #include "common/datetime.h"
+// Placed unconditionally this is an unused include on every other platform, which
+// tools/check_unused_includes.sh rightly rejects.
+#include "common/file_location.h"   // conditional-ok: dt_loc_default_user_cache_dir() is called only by the log redirection in this same #ifdef
 #endif
 
 int main(int argc, char *argv[])
@@ -67,9 +70,13 @@ int main(int argc, char *argv[])
 
   for(int k = 1; k < argc; k++)
   {
-    // For simple arguments do not redirect stdout
-    if(!strcmp(argv[k], "--help") || !strcmp(argv[k], "-h") || !strcmp(argv[k], "/?") || !strcmp(argv[k], "--version")
-    || !strcmp(argv[k], "-d") || !strcmp(argv[k], "--debug"))
+    // These print one thing and exit, so they want whatever the caller arranged, not a log file.
+    // `-d`/`--debug` used to be in this list and must NOT come back: this binary has no console of
+    // its own, so cancelling the redirection for the flags that PRODUCE output sent every debug
+    // channel nowhere at all, which is why Windows reports arrived with no log (#1472). A caller
+    // who does want the output on a handle of their own still gets it -- the test above declines to
+    // redirect as soon as stdout or stderr is a file or a pipe.
+    if(!strcmp(argv[k], "--help") || !strcmp(argv[k], "-h") || !strcmp(argv[k], "/?") || !strcmp(argv[k], "--version"))
     {
       redirect_output = FALSE;
       break;
@@ -78,8 +85,10 @@ int main(int argc, char *argv[])
 
   if(redirect_output)
   {
-    // something like C:\Users\username\AppData\Local\Microsoft\Windows\Temporary Internet Files\ansel\ansel-log.txt
-    char *logdir = g_build_filename(g_get_user_cache_dir(), "ansel", NULL);
+    // C:\Users\<username>\AppData\Local\ansel\cache\ansel-log.txt. dt_loc_init() has not run
+    // yet, so this resolves the same default it will, without setting any global -- and without
+    // honouring --cachedir, which is not parsed yet either.
+    char *logdir = dt_loc_default_user_cache_dir();
     char *logfile = g_build_filename(logdir, "ansel-log.txt", NULL);
 
     g_mkdir_with_parents(logdir, 0700);

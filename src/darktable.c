@@ -261,7 +261,10 @@ static GLogWriterOutput _gtk_log_writer_filter(GLogLevelFlags log_level, const G
 static int usage(const char *argv0)
 {
 #ifdef _WIN32
-  char *logfile = g_build_filename(g_get_user_cache_dir(), "ansel", "ansel-log.txt", NULL);
+  /* Same resolution as main()'s redirection, so the two cannot name different files. */
+  char *logdir = dt_loc_default_user_cache_dir();
+  char *logfile = g_build_filename(logdir, "ansel-log.txt", NULL);
+  dt_free(logdir);
 #endif
   // clang-format off
   printf("usage: %s [options] [IMG_1234.{RAW,..}|image_folder/]\n", argv0);
