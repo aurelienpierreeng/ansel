@@ -1288,11 +1288,21 @@ static int _unet_forward_cl(const dt_nn_model_t *m, const nn_unet_t *u, dt_nn_cl
     var = NULL;                                                                                               \
   } while(0)
 
+  /* Cancellation, as in _unet_forward and at the same points. The host enqueues
+   * the whole forward in milliseconds and only waits once it is all queued, so
+   * a check at enqueue time would always come before the device started:
+   * each check first waits for what is already queued (one level's work), and
+   * OpenCL cannot abort enqueued kernels anyway. */
   // encoder
   cl_mem src = dev_in;
   int cw = width, chh = height;
   for(int l = 0; l < u->depth && err == CL_SUCCESS; l++)
   {
+    if(_nn_cancel_fn && dt_opencl_finish(devid) && _nn_cancel_fn())
+    {
+      err = DT_NN_CANCELLED;
+      goto cleanup;
+    }
     const size_t lvl = base * wh >> l;
     cl_mem next = NULL;
     NN_CL_ALLOC(tmp, lvl);
@@ -1312,6 +1322,11 @@ static int _unet_forward_cl(const dt_nn_model_t *m, const nn_unet_t *u, dt_nn_cl
   // bottleneck (bout reuses the `v` slot so cleanup covers it)
   if(err == CL_SUCCESS)
   {
+    if(_nn_cancel_fn && dt_opencl_finish(devid) && _nn_cancel_fn())
+    {
+      err = DT_NN_CANCELLED;
+      goto cleanup;
+    }
     const size_t bot = base * wh >> u->depth;
     NN_CL_ALLOC(tmp, bot);
     NN_CL_ALLOC(v, bot);
@@ -1327,6 +1342,11 @@ static int _unet_forward_cl(const dt_nn_model_t *m, const nn_unet_t *u, dt_nn_cl
   // up-conv runs on the coarse grid, then upsamples (see the doc comment)
   for(int i = 0; i < u->depth && err == CL_SUCCESS; i++)
   {
+    if(_nn_cancel_fn && dt_opencl_finish(devid) && _nn_cancel_fn())
+    {
+      err = DT_NN_CANCELLED;
+      goto cleanup;
+    }
     const int l = u->depth - 1 - i;
     const size_t w_skip = base << l;
     const size_t half = w_skip * (size_t)(2 * cw) * (size_t)(2 * chh);
@@ -1353,6 +1373,8 @@ static int _unet_forward_cl(const dt_nn_model_t *m, const nn_unet_t *u, dt_nn_cl
   }
 
   // head: raw prediction (no activation) into dev_out
+  if(err == CL_SUCCESS && _nn_cancel_fn && dt_opencl_finish(devid) && _nn_cancel_fn())
+    err = DT_NN_CANCELLED;
   if(err == CL_SUCCESS)
     err |= _conv_cl(cl, devid, weights, m->blob, cur, dev_out, width, height, &u->head, 1, 1, 0);
 
