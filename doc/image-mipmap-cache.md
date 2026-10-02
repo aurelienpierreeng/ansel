@@ -12,6 +12,47 @@
 > that is recorded rather than quietly corrected: how a claim was wrong is usually the more
 > useful thing to know.
 
+## A transient database error used to become a permanent skull
+
+> **Established 2026-09-30 against `aac2ee1321`.**
+
+The chain, top to bottom, for one momentary `SQLITE_BUSY`:
+
+1. `dt_image_repository_load()` tested `sqlite3_step(stmt) == SQLITE_ROW` and treated **everything
+   else** as "no such image" — `SQLITE_BUSY`, `SQLITE_LOCKED`, `SQLITE_IOERR` included — writing
+   `img->id = -1` and logging "failed to open image N from database".
+2. Its only caller is the image cache's allocate callback, which **keeps** what the load leaves
+   behind, so the entry is invalid for the rest of its life and `dt_image_cache_get()` answers NULL
+   for that imgid from then on.
+3. `_write_mipmap_to_disk()` asks the image cache for the image; a NULL makes
+   `dt_image_choose_input_path(NULL, …)` answer `DT_IMAGE_PATH_NONE`, so `_init_8()` sees
+   `input_exists == FALSE` and abandons the thumbnail.
+4. `_generate_blocking()` clears `GENERATE` and paints the 8×8 skull, and the view reports an 8×8
+   buffer as `DT_VIEW_SURFACE_OK`, so the widget commits it and never asks again.
+
+One lock held for a moment by an indexer or a backup agent therefore cost an image its thumbnail
+for the whole session, recoverable only through "Purge selected thumbnails from cache". Steps 1–2
+are fixed; steps 3–4 are #1474.
+
+Two things to keep straight when editing this:
+
+- **`SQLITE_DONE` and an error need opposite treatment.** `DONE` is the row genuinely being absent,
+  which is the ORDINARY outcome of a removal and of the lighttable re-reading a thumbnail just
+  after one — it must write `UNKNOWN_IMAGE`, and it must not be logged as a failure. An error must
+  leave `img` untouched: `dt_image_cache_get_reload()` reloads **in place with no re-init**, so
+  invalidating there would drop a live image because a lock was held for a moment.
+- **There is a busy timeout now** (`sqlite3_busy_timeout`, 5 s, set where the other PRAGMAs are),
+  and `dt_image_repository_load()` also retries `BUSY`/`LOCKED` itself. The two cover different
+  things: the timeout waits out another *process* holding the file lock, while `LOCKED` can come
+  from a table lock inside our own connection, which the timeout does not wait on.
+
+`tests/unittests/test_image_repository.c` pins the absence half. It cannot pin the error half
+(that needs a second process) nor the success half (`dt_image_from_stmt()` reads a conf key through
+`dt_image_film_roll_name()` and the fixture initialises no conf). Note the trap the test itself
+documents: initialising the struct with `dt_image_init()` makes the assertion hold whether or not
+the function writes the id, so it must start from a struct that already looks loaded — which is
+also what `get_reload()` actually hands it.
+
 ## Mipmap invalidation is explicit, not hash-driven
 
 *Found `22f623c0be`, 2026-06-25.*

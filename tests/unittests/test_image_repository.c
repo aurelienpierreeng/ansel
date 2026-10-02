@@ -26,6 +26,8 @@
 
 #include "testdb.h"
 
+#include "common/image.h"   // dt_image_init(), dt_image_t, UNKNOWN_IMAGE
+
 
 // an arbitrary flag bit with no side meaning in these tests
 #define TEST_FLAG 2048
@@ -234,6 +236,54 @@ static void test_foreach_with_path_stops_when_asked(void **state)
   assert_int_equal(seen, 2);
 }
 
+/* dt_image_repository_load() must tell "the row is not there" apart from "the query failed", because
+ * the two have opposite consequences one layer up. Its caller is the image cache's allocate
+ * callback, which keeps whatever the call leaves in the struct: an id left at UNKNOWN_IMAGE makes
+ * dt_image_cache_get() answer NULL for that imgid for the rest of the entry's life, and the
+ * thumbnail path reads a NULL image as "the file is unavailable" and caches an 8x8 skull that
+ * nothing retries. Treating a momentary SQLITE_BUSY as an absence therefore cost an image its
+ * thumbnail for the whole session (#1475).
+ *
+ * WHAT THIS TEST GUARDS, precisely: that an ABSENCE still invalidates the struct it was handed. It
+ * does NOT distinguish the two outcomes -- an implementation that wrote UNKNOWN_IMAGE
+ * unconditionally, which is the one being replaced, passes it too. It is here because the first
+ * draft of this fix went the other way and stopped writing the id at all, which looks harmless on
+ * the allocate path (dt_image_init() has already put UNKNOWN_IMAGE there) and silently breaks
+ * dt_image_cache_get_reload(): that one reloads in place with no re-init, so a row removed under it
+ * would have come back as a live image.
+ *
+ * The error half is not reachable here. SQLITE_BUSY and SQLITE_LOCKED need a second process holding
+ * the file lock and this suite runs on ":memory:"; what that branch owes is leaving img untouched,
+ * for the same get_reload() reason, and no test in this fixture can hold it to that.
+ *
+ * Nor is the success half: dt_image_from_stmt() maps the row through dt_image_film_roll_name(),
+ * which reads a conf key, and this fixture initialises no conf system -- the same reason
+ * test_removed_image_repository.c gives for avoiding this function entirely. The absent path never
+ * reaches the mapper, which is why it can be asserted and the present one cannot. */
+static void test_load_marks_an_absent_image_invalid(void **state)
+{
+  (void)state;
+  const int32_t film = testdb_make_film("/testdb/absentfilm");
+  assert_true(film > 0);
+  const int32_t id = testdb_make_image(film, "present.raw");
+  assert_true(id > 0);
+
+  /* Starting from a struct that already looks like a loaded image, which is the only arrangement
+   * that can detect anything here: dt_image_cache_get_reload() reloads IN PLACE with no re-init, so
+   * what it hands the mapper is a populated entry. Initialising to UNKNOWN_IMAGE instead would make
+   * the assertion below hold whether or not the function writes the id -- true of the version being
+   * replaced as much as of this one -- and the test would pin nothing. Verified: with the write
+   * removed, this fails; with dt_image_init() in its place, it passes either way. */
+  dt_image_t img;
+  dt_image_init(&img);
+  img.id = id;
+
+  /* An id no row answers to. This is the ORDINARY outcome of a removal, and of the lighttable
+   * re-reading a thumbnail just after one -- not an error, and no longer logged as one. */
+  assert_false(dt_image_repository_load(id + 10000, &img));
+  assert_int_equal(img.id, UNKNOWN_IMAGE);
+}
+
 int main(void)
 {
   const struct CMUnitTest tests[] = {
@@ -245,6 +295,7 @@ int main(void)
     cmocka_unit_test(test_group_member_rows),
     cmocka_unit_test(test_count_distinct_fields),
     cmocka_unit_test(test_foreach_with_path_stops_when_asked),
+    cmocka_unit_test(test_load_marks_an_absent_image_invalid),
   };
   return cmocka_run_group_tests(tests, testdb_setup, testdb_teardown);
 }
