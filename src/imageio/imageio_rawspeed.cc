@@ -112,7 +112,7 @@ static std::mutex meta_mutex;
  */
 static void dt_rawspeed_load_meta()
 {
-  std::lock_guard<std::mutex> lock(meta_mutex);
+  std::scoped_lock lock(meta_mutex);
   if(!IS_NULL_PTR(meta)) return;
 
   char datadir[DT_PATH_MAX] = { 0 }, camfile[DT_PATH_MAX] = { 0 };
