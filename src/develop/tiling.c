@@ -475,9 +475,11 @@ static int _default_process_tiling_ptp(struct dt_iop_module_t *self, const struc
   return 0;
 
 error:
-  gchar *alert_msg = g_strdup_printf(_("tiling failed for module '%s'. output might be garbled."), self->op);
-  dt_control_alert(_("Module failed"), alert_msg);
-  dt_free(alert_msg);
+  {
+    gchar *alert_msg = g_strdup_printf(_("tiling failed for module '%s'. output might be garbled."), self->op);
+    dt_control_alert(_("Module failed"), alert_msg);
+    dt_free(alert_msg);
+  }
 // fall through
 
 fallback:
@@ -809,9 +811,11 @@ static int _default_process_tiling_roi(struct dt_iop_module_t *self, const struc
   return 0;
 
 error:
-  gchar *alert_msg = g_strdup_printf(_("tiling failed for module '%s'. output might be garbled."), self->op);
-  dt_control_alert(_("Module failed"), alert_msg);
-  dt_free(alert_msg);
+  {
+    gchar *alert_msg = g_strdup_printf(_("tiling failed for module '%s'. output might be garbled."), self->op);
+    dt_control_alert(_("Module failed"), alert_msg);
+    dt_free(alert_msg);
+  }
 // fall through
 
 fallback:
