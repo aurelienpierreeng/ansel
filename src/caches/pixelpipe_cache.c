@@ -146,18 +146,18 @@ static void _warn_user(const char *message)
 static gchar *_cache_full_sentence(const char *name, const char *module)
 {
   if(!IS_NULL_PTR(name) && !IS_NULL_PTR(module))
-    return g_strdup_printf(_("The pipeline cache is full while allocating \n"
+    return g_strdup_printf(_("The pipeline cache is full while allocating\n"
                              "`%s` (module `%s`).\n"
                              "Either your RAM settings are too frugal or your RAM is too small."),
                            name, module);
   if(!IS_NULL_PTR(name))
-    return g_strdup_printf(_("The pipeline cache is full while allocating `\n"
-                             "%s`.\n"
+    return g_strdup_printf(_("The pipeline cache is full while allocating\n"
+                             "`%s`.\n"
                              "Either your RAM settings are too frugal or your RAM is too small."),
                            name);
   if(!IS_NULL_PTR(module))
-    return g_strdup_printf(_("The pipeline cache is full while processing module `\n"
-                             "%s`.\n"
+    return g_strdup_printf(_("The pipeline cache is full while processing module\n"
+                             "`%s`.\n"
                              "Either your RAM settings are too frugal or your RAM is too small."),
                            module);
   return g_strdup(_("The pipeline cache is full.\n"
