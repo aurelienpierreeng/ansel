@@ -2134,21 +2134,21 @@ int32_t dt_image_rename(const int32_t imgid, const int32_t filmid, const gchar *
           if(g_error_matches(moveError, G_IO_ERROR, G_IO_ERROR_NOT_FOUND))
           {
             gchar *oldBasename = g_path_get_basename(copysrcpath);
-            dt_control_log(_("cannot access local copy `%s'"), oldBasename);
+            dt_control_alert(_("File operation failed"), _("cannot access local copy `%s'"), oldBasename);
             dt_free(oldBasename);
           }
           else if(g_error_matches(moveError, G_IO_ERROR, G_IO_ERROR_EXISTS)
                   || g_error_matches(moveError, G_IO_ERROR, G_IO_ERROR_IS_DIRECTORY))
           {
             gchar *newBasename = g_path_get_basename(copydestpath);
-            dt_control_log(_("cannot write local copy `%s'"), newBasename);
+            dt_control_alert(_("File operation failed"), _("cannot write local copy `%s'"), newBasename);
             dt_free(newBasename);
           }
           else
           {
             gchar *oldBasename = g_path_get_basename(copysrcpath);
             gchar *newBasename = g_path_get_basename(copydestpath);
-            dt_control_log(_("error moving local copy `%s' -> `%s'"), oldBasename, newBasename);
+            dt_control_alert(_("File operation failed"), _("error moving local copy `%s' -> `%s'"), oldBasename, newBasename);
             dt_free(oldBasename);
             dt_free(newBasename);
           }
@@ -2164,7 +2164,7 @@ int32_t dt_image_rename(const int32_t imgid, const int32_t filmid, const gchar *
     {
       if(g_error_matches(moveError, G_IO_ERROR, G_IO_ERROR_NOT_FOUND))
       {
-        dt_control_log(_("error moving `%s': file not found"), oldimg);
+        dt_control_alert(_("File operation failed"), _("error moving `%s': file not found"), oldimg);
       }
       // only display error message if newname is set (renaming and
       // not moving) as when moving it can be the case where a
@@ -2174,11 +2174,11 @@ int32_t dt_image_rename(const int32_t imgid, const int32_t filmid, const gchar *
               && (g_error_matches(moveError, G_IO_ERROR, G_IO_ERROR_EXISTS)
                   || g_error_matches(moveError, G_IO_ERROR, G_IO_ERROR_IS_DIRECTORY)))
       {
-        dt_control_log(_("error moving `%s' -> `%s': file exists"), oldimg, newimg);
+        dt_control_alert(_("File operation failed"), _("error moving `%s' -> `%s': file exists"), oldimg, newimg);
       }
       else if(newname)
       {
-        dt_control_log(_("error moving `%s' -> `%s'"), oldimg, newimg);
+        dt_control_alert(_("File operation failed"), _("error moving `%s' -> `%s'"), oldimg, newimg);
       }
     }
 
@@ -2318,7 +2318,7 @@ int dt_image_local_copy_set(const int32_t imgid)
   // check that the src file is readable
   if(!g_file_test(srcpath, G_FILE_TEST_IS_REGULAR))
   {
-    dt_control_log(_("cannot create local copy when the original file is not accessible."));
+    dt_control_alert(_("File operation failed"), _("cannot create local copy when the original file is not accessible."));
     return 1;
   }
 
@@ -2332,7 +2332,7 @@ int dt_image_local_copy_set(const int32_t imgid)
 
     if(!g_file_copy(src, dest, G_FILE_COPY_NONE, NULL, NULL, NULL, &gerror))
     {
-      dt_control_log(_("cannot create local copy."));
+      dt_control_alert(_("File operation failed"), _("cannot create local copy."));
       g_object_unref(dest);
       g_object_unref(src);
       return 1;
@@ -2388,7 +2388,7 @@ int dt_image_local_copy_reset(const int32_t imgid)
 
   if(g_file_test(locppath, G_FILE_TEST_EXISTS) && !g_file_test(destpath, G_FILE_TEST_EXISTS))
   {
-    dt_control_log(_("cannot remove local copy when the original file is not accessible."));
+    dt_control_alert(_("File operation failed"), _("cannot remove local copy when the original file is not accessible."));
     return 1;
   }
 

@@ -4477,7 +4477,7 @@ msgstr "为打印选项创建临时文件失败。"
 msgid "printing on `%s' cancelled"
 msgstr "在“%s”上的打印任务已取消。"
 
-#: ../src/common/cups_print.c:584
+#: ../src/common/cups_print.c:586
 #, c-format
 msgid "error while printing `%s' on `%s'"
 msgstr "打印“%s”到“%s”时发生错误。"
@@ -4533,7 +4533,7 @@ msgstr "[MEMORY CONFIGURATION] 像素管道缓存大小：%lu MiB\n"
 msgid "[MEMORY CONFIGURATION] Worker threads: %i\n"
 msgstr "[MEMORY CONFIGURATION] 工作线程：%i\n"
 
-#: ../src/common/darktable.c:1744
+#: ../src/darktable.c:2541
 msgid ""
 "CRITICAL WARNING: Ansel will not be able to use the RAM you allocated it.\n"
 "Review your memory settings or add more RAM to your system."
@@ -5242,45 +5242,45 @@ msgstr "已为 %d 张图像应用时间信息。"
 msgid "Image %s is already in library and will not be re-imported.\n"
 msgstr "图片 %s 已存在于库中，不会重新导入。\n"
 
-#: ../src/common/image.c:2119
+#: ../src/common/image.c:2137
 #, c-format
 msgid "cannot access local copy `%s'"
 msgstr "无法访问本地副本“%s”。"
 
-#: ../src/common/image.c:2126
+#: ../src/common/image.c:2144
 #, c-format
 msgid "cannot write local copy `%s'"
 msgstr "无法写入本地副本“%s”。"
 
-#: ../src/common/image.c:2133
+#: ../src/common/image.c:2151
 #, c-format
 msgid "error moving local copy `%s' -> `%s'"
 msgstr "无法移动本地副本“%s”至“%s”。"
 
-#: ../src/common/image.c:2149
+#: ../src/common/image.c:2167
 #, c-format
 msgid "error moving `%s': file not found"
 msgstr "无法移动“%s”：文件未找到。"
 
-#: ../src/common/image.c:2159
+#: ../src/common/image.c:2177
 #, c-format
 msgid "error moving `%s' -> `%s': file exists"
 msgstr "无法移动“%s”至“%s”：目标位置已存在。"
 
-#: ../src/common/image.c:2163
+#: ../src/common/image.c:2181
 #, c-format
 msgid "error moving `%s' -> `%s'"
 msgstr "无法移动“%s”至“%s”。"
 
-#: ../src/common/image.c:2473
+#: ../src/common/image.c:2321
 msgid "cannot create local copy when the original file is not accessible."
 msgstr "当原件不可用时无法创建本地副本。"
 
-#: ../src/common/image.c:2487
+#: ../src/common/image.c:2335
 msgid "cannot create local copy."
 msgstr "无法创建本地副本。"
 
-#: ../src/common/image.c:2563 ../src/control/jobs/control_jobs.c:800
+#: ../src/common/image.c:2391 ../src/control/jobs/control_jobs.c:780
 msgid "cannot remove local copy when the original file is not accessible."
 msgstr "当原件不可用时无法删除本地副本。"
 
@@ -5376,7 +5376,7 @@ msgstr "heif"
 msgid "webp"
 msgstr "webp"
 
-#: ../src/common/imageio.c:792
+#: ../src/imageio/imageio_core.c:593
 #, c-format
 msgid "cannot find the style '%s' to apply during export."
 msgstr "在导出时无法找到并应用样式“%s”。"
@@ -6031,7 +6031,7 @@ msgstr "保留最旧的修改"
 msgid "synchronization log"
 msgstr "同步日志"
 
-#: ../src/control/jobs/control_jobs.c:195
+#: ../src/control/jobs/control_jobs.c:191
 msgid "failed to create film roll for destination directory, aborting move.."
 msgstr "目标目录创建胶卷失败，移动中断。"
 
@@ -6343,7 +6343,7 @@ msgstr "本地复制图像…"
 msgid "refresh exif"
 msgstr "刷新 EXIF…"
 
-#: ../src/control/jobs/control_jobs.c:1953
+#: ../src/control/jobs/control_jobs.c:1941
 #, c-format
 msgid "failed to get parameters from storage module `%s', aborting export.."
 msgstr "从存储模块“%s”获取参数失败，导出中断…"
@@ -6428,7 +6428,7 @@ msgstr ""
 "无法创建目录 %s。\n"
 "目标目录可能已满或为只读目录。\n"
 
-#: ../src/control/jobs/import_jobs.c:371
+#: ../src/control/jobs/import_jobs.c:430
 #, c-format
 msgid "Error importing file in collection: %s"
 msgstr "导入集合中的文件时出错：%s"
@@ -6475,21 +6475,21 @@ msgstr "源路径"
 msgid "import"
 msgstr "导入…"
 
-#: ../src/develop/blend.c:405
+#: ../src/develop/blend.c:460
 msgid "detail mask blending error"
 msgstr "细节蒙版混合出现错误。"
 
-#: ../src/develop/blend.c:685 ../src/develop/blend.c:1131
+#: ../src/develop/blend.c:761 ../src/develop/blend.c:1210
 #, c-format
 msgid "skipped blending in module '%s': roi's do not match"
 msgstr "在模块“%s”中跳过混合：着重区域不匹配。"
 
-#: ../src/develop/blend.c:711 ../src/develop/blend.c:750
-#: ../src/develop/blend.c:1162
+#: ../src/develop/blend.c:787 ../src/develop/blend.c:826
+#: ../src/develop/blend.c:1241
 msgid "could not allocate buffer for blending"
 msgstr "无法分配混合缓冲区。"
 
-#: ../src/develop/blend.c:1073
+#: ../src/develop/blend.c:1152
 msgid "detail mask CL blending problem"
 msgstr "细节蒙版 CL 混合出现错误。"
 
@@ -7557,28 +7557,28 @@ msgid "%s has been imported"
 msgid_plural "%s have been imported"
 msgstr[0] "%s 导入成功。"
 
-#: ../src/develop/pixelpipe_cache.c:1508 ../src/develop/pixelpipe_cache.c:1633
+#: ../src/caches/pixelpipe_cache.c:166
 #, c-format
 msgid ""
 "The pipeline cache is full while allocating `%s` (module `%s`). Either your "
 "RAM settings are too frugal or your RAM is too small."
 msgstr ""
 
-#: ../src/develop/pixelpipe_cache.c:1511 ../src/develop/pixelpipe_cache.c:1635
+#: ../src/caches/pixelpipe_cache.c:170
 #, c-format
 msgid ""
 "The pipeline cache is full while allocating `%s`. Either your RAM settings "
 "are too frugal or your RAM is too small."
 msgstr ""
 
-#: ../src/develop/pixelpipe_cache.c:1514 ../src/develop/pixelpipe_cache.c:1637
+#: ../src/caches/pixelpipe_cache.c:174
 #, c-format
 msgid ""
 "The pipeline cache is full while processing module `%s`. Either your RAM "
 "settings are too frugal or your RAM is too small."
 msgstr ""
 
-#: ../src/develop/pixelpipe_cache.c:1517 ../src/develop/pixelpipe_cache.c:1639
+#: ../src/caches/pixelpipe_cache.c:177
 msgid ""
 "The pipeline cache is full. Either your RAM settings are too frugal or your "
 "RAM is too small."
@@ -8038,7 +8038,7 @@ msgid ""
 "session!"
 msgstr "Ansel 检测到 OpenCL 设置出现问题；OpenCL 已在此次会话中禁用！"
 
-#: ../src/develop/tiling.c:823 ../src/develop/tiling.c:1140
+#: ../src/develop/tiling.c:478 ../src/develop/tiling.c:810
 #, c-format
 msgid "tiling failed for module '%s'. output might be garbled."
 msgstr "模块“%s”平铺失败。输出可能会出现混乱。"
@@ -9024,7 +9024,7 @@ msgctxt "preferences"
 msgid "export..."
 msgstr "导出…"
 
-#: ../src/gui/preferences.c:1173
+#: ../src/gui/preferences.c:1215
 #, c-format
 msgid "failed to import preset %s"
 msgstr "导入预设 %s 失败。"
@@ -10285,9 +10285,9 @@ msgstr "无效的纸张大小。"
 msgid "invalid border size, using 0"
 msgstr "无效的边距大小，已默认为 0。"
 
-#: ../src/imageio/format/pdf.c:207 ../src/imageio/storage/disk.c:360
-#: ../src/imageio/storage/gallery.c:387 ../src/imageio/storage/gallery.c:427
-#: ../src/imageio/storage/piwigo.c:1044 ../src/imageio/storage/example.c:156
+#: ../src/imageio/format/pdf.c:212 ../src/imageio/storage/disk.c:456
+#: ../src/imageio/storage/gallery.c:390 ../src/imageio/storage/gallery.c:431
+#: ../src/imageio/storage/example.c:156
 #, c-format
 msgid "could not export to file `%s'!"
 msgstr "无法导出至文件“%s”！"
@@ -10568,12 +10568,12 @@ msgstr "覆盖"
 msgid "skip"
 msgstr "跳过"
 
-#: ../src/imageio/storage/disk.c:309 ../src/imageio/storage/gallery.c:301
+#: ../src/imageio/storage/disk.c:403 ../src/imageio/storage/gallery.c:304
 #, c-format
 msgid "could not create directory `%s'!"
 msgstr "无法创建目录“%s”！"
 
-#: ../src/imageio/storage/disk.c:316
+#: ../src/imageio/storage/disk.c:410
 #, c-format
 msgid "could not write to directory `%s'!"
 msgstr "无法写入目录“%s”！"
@@ -10808,7 +10808,7 @@ msgstr "无法读取文件“%s”！"
 msgid "Last modified: %s"
 msgstr "用户调整"
 
-#: ../src/libs/textnotes.c:1965
+#: ../src/libs/textnotes.c:1842
 #, fuzzy, c-format
 msgid "failed to save text notes to %s: %s"
 msgstr "覆盖 %s 的样式文件失败。"
@@ -13645,20 +13645,20 @@ msgid ""
 "RGB!"
 msgstr "无法从色彩空间“%s”提取色彩矩阵，已使用 Rec2020 RGB 替换！"
 
-#: ../src/iop/colorin.c:1170
+#: ../src/iop/colorin.c:826
 #, c-format
 msgid "`%s' color matrix not found!"
 msgstr "未找到“%s”色彩矩阵！"
 
-#: ../src/iop/colorin.c:1262
+#: ../src/iop/colorin.c:882
 msgid "input profile could not be generated!"
 msgstr "无法生成用于导入的色彩配置！"
 
-#: ../src/iop/colorin.c:1367
+#: ../src/iop/colorin.c:863
 msgid "unsupported input profile has been replaced by linear Rec709 RGB!"
 msgstr "不支持的输入色彩配置已用线性 Rec709 RGB 取代！"
 
-#: ../src/iop/colorin.c:1514
+#: ../src/iop/colorin.c:971
 #, c-format
 msgid "The color profile `%s' referenced as input profile has not been found."
 msgstr "未找到输入颜色配置文件 `%s`。"
@@ -13774,15 +13774,15 @@ msgstr "线性或非线性、Lab、显示引用"
 msgid "non-linear, RGB or Lab, display-referred"
 msgstr "非线性、RGB 或 Lab、显示引用"
 
-#: ../src/iop/colorout.c:642
+#: ../src/iop/colorout.c:518
 msgid "missing output profile has been replaced by sRGB!"
 msgstr "未找到的导出色彩档案用 sRGB 替代了！"
 
-#: ../src/iop/colorout.c:676
+#: ../src/iop/colorout.c:550
 msgid "missing softproof profile has been replaced by sRGB!"
 msgstr "未找到的软打样色彩档案用 sRGB 替代了！"
 
-#: ../src/iop/colorout.c:735
+#: ../src/iop/colorout.c:574
 msgid "unsupported output profile has been replaced by sRGB!"
 msgstr "不支持的导出色彩档案用 sRGB 替代了！"
 
@@ -13802,7 +13802,7 @@ msgstr "色彩重构"
 msgid "recover clipped highlights by propagating surrounding colors"
 msgstr "通过传播周围的颜色来恢复改善过曝的高光。"
 
-#: ../src/iop/colorreconstruction.c:619
+#: ../src/iop/colorreconstruction.c:624
 msgid "module `color reconstruction' failed"
 msgstr "模块“色彩重构”出现错误。"
 
@@ -14059,7 +14059,7 @@ msgstr "依照传感器色彩滤波阵列读数来重建完整的RGB像素。"
 msgid "[dual demosaic_cl] internal problem"
 msgstr "[dual demosaic_cl] 内部错误"
 
-#: ../src/iop/demosaic.c:2202
+#: ../src/iop/demosaic.c:2299
 #, c-format
 msgid "`%s' color matrix not found for 4bayer image!"
 msgstr "未找到 4bayer 图像的“%s”颜色矩阵！"
@@ -15780,7 +15780,7 @@ msgstr ""
 "自动热像素校正\n"
 "只作用于 RAW 图"
 
-#: ../src/iop/invert.c:112 ../src/iop/invert.c:327
+#: ../src/iop/invert.c:117 ../src/iop/invert.c:367
 #, c-format
 msgid "`%s' color matrix not found for 4bayer image"
 msgstr "未找到 4bayer 图像的“%s”颜色矩阵。"
@@ -17516,12 +17516,12 @@ msgstr "白平衡"
 msgid "scale raw RGB channels to balance white and help demosaicing"
 msgstr "衡量 RAW 的 RGB 通道以平衡白色并帮助色彩重建。"
 
-#: ../src/iop/temperature.c:1086
+#: ../src/iop/temperature.c:1174
 #, c-format
 msgid "`%s' color matrix not found for image"
 msgstr "未找到图像的“%s”色彩矩阵。"
 
-#: ../src/iop/temperature.c:1120
+#: ../src/iop/temperature.c:1208
 #, c-format
 msgid "failed to read camera white balance information from `%s'!"
 msgstr "无法从“%s”读取相机白平衡信息！"
@@ -20100,7 +20100,7 @@ msgstr "打印设置"
 msgid "processing `%s' for `%s'"
 msgstr "正在处理“%s”用于“%s”。"
 
-#: ../src/libs/print_settings.c:382
+#: ../src/libs/print_settings.c:395
 #, c-format
 msgid "cannot open printer profile `%s'"
 msgstr "无法打开打印机色彩配置“%s”。"
@@ -20110,12 +20110,12 @@ msgstr "无法打开打印机色彩配置“%s”。"
 msgid "error getting output profile for image %d"
 msgstr "无法获取图像 %d 的输出色彩配置。"
 
-#: ../src/libs/print_settings.c:400
+#: ../src/libs/print_settings.c:413
 #, c-format
 msgid "cannot apply printer profile `%s'"
 msgstr "无法应用打印机色彩配置“%s”！"
 
-#: ../src/libs/print_settings.c:552
+#: ../src/libs/print_settings.c:565
 msgid "failed to create temporary pdf for printing"
 msgstr "创建打印用的临时 PDF 失败。"
 
@@ -21081,16 +21081,16 @@ msgstr "色域检查"
 msgid "soft proof"
 msgstr "软打样"
 
-#: ../src/views/darkroom.c:1276
+#: ../src/views/darkroom.c:1232
 #, fuzzy
 msgid "Could not load the image source data."
 msgstr "无法加载图片。"
 
-#: ../src/views/darkroom.c:1279
+#: ../src/views/darkroom.c:1235
 msgid "Could not read image information from the database."
 msgstr ""
 
-#: ../src/views/darkroom.c:1282
+#: ../src/views/darkroom.c:1238
 msgid "We could not load the image."
 msgstr "无法加载图片。"
 
@@ -21785,7 +21785,7 @@ msgstr ""
 "\n"
 "- 检查提供掩码的模块 %s (%s) 是否尚未被移至 %s 之上。\n"
 
-#: ../src/develop/pixelpipe_raster_masks.c:61
+#: ../src/develop/pixelpipe_raster_masks.c:66
 #, fuzzy, c-format
 msgid ""
 "The %s module is trying to reuse a mask from a module but it can't be "
@@ -21797,7 +21797,7 @@ msgstr ""
 "在找到可用掩码之前，%s 中的掩码功能将被禁用。\n"
 "%s"
 
-#: ../src/develop/pixelpipe_raster_masks.c:74
+#: ../src/develop/pixelpipe_raster_masks.c:79
 #, fuzzy, c-format
 msgid ""
 "The `%s` module is trying to reuse a mask from disabled module `%s`.\n"
@@ -21981,7 +21981,7 @@ msgid "failed to commit drawing stroke before renaming"
 msgstr ""
 
 #: ../src/iop/drawlayer.c:2012 ../src/iop/drawlayer/layers.c:191
-#: ../src/iop/drawlayer/runtime.c:788
+#: ../src/iop/drawlayer/runtime.c:761
 msgid "failed to write drawing layer sidecar"
 msgstr ""
 
@@ -22373,7 +22373,7 @@ msgstr ""
 msgid "failed to start drawing worker"
 msgstr ""
 
-#: ../src/iop/drawlayer/worker.c:1506
+#: ../src/iop/drawlayer/worker.c:1677
 msgid "drawing worker queue is full, stroke aborted"
 msgstr ""
 

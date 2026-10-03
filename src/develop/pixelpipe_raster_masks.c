@@ -15,7 +15,7 @@
 // This file is textually #included into pixelpipe_hb.c (see the doc block above), so
 // these guarded includes fold into that TU; they are named here because THIS file uses them.
 #include "common/glib_utils.h"        // dt_string_replace
-#include "develop/pipeline_notify.h"  // dt_pipeline_message
+#include "control/user_message.h"   // dt_control_alert
 
 /**
  * @brief Check that the raster-mask provider/consumer relation is still valid in the current pipe.
@@ -63,7 +63,7 @@ static gboolean _dt_dev_raster_mask_check(dt_dev_pixelpipe_iop_t *source_piece,
       dt_free(clean_source_name);
     }
 
-    dt_pipeline_message(_("The %s module is trying to reuse a mask from a module but it can't be found.\n"
+    dt_control_alert(_("Module failed"), _("The %s module is trying to reuse a mask from a module but it can't be found.\n"
                      "\n%s"),
                    target_name, hint ? hint : "");
     dt_free(hint);
@@ -76,7 +76,7 @@ static gboolean _dt_dev_raster_mask_check(dt_dev_pixelpipe_iop_t *source_piece,
   {
     gchar *clean_source_name = dt_string_replace(source_piece->module->name(), "_");
     gchar *source_name = g_strdup_printf("%s (%s)", clean_source_name, source_piece->module->multi_name);
-    dt_pipeline_message(_("The `%s` module is trying to reuse a mask from disabled module `%s`.\n"
+    dt_control_alert(_("Module failed"), _("The `%s` module is trying to reuse a mask from disabled module `%s`.\n"
                      "Disabled modules cannot provide their masks to other modules.\n"
                      "\n- Please enable `%s` or change the raster mask in `%s`."),
                    target_name, source_name, source_name, target_name);

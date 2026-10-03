@@ -392,7 +392,7 @@ static int _export_image(dt_job_t *job, dt_image_box *img)
                                  DT_PROFILE_ROLE_OUTPUT);
     if(IS_NULL_PTR(pprof))
     {
-      dt_control_log(_("cannot open printer profile `%s'"), params->p_icc_profile);
+      dt_control_alert(_("Printing failed"), _("cannot open printer profile `%s'"), params->p_icc_profile);
       fprintf(stderr, "cannot open printer profile `%s'\n", params->p_icc_profile);
       dt_control_queue_redraw();
       return 1;
@@ -410,7 +410,7 @@ static int _export_image(dt_job_t *job, dt_image_box *img)
          ((void **)&(params->buf), dat.head.width, dat.head.height, dat.bpp, buf_profile->profile,
           pprof->profile, params->p_icc_intent, params->black_point_compensation))
       {
-        dt_control_log(_("cannot apply printer profile `%s'"), params->p_icc_profile);
+        dt_control_alert(_("Printing failed"), _("cannot apply printer profile `%s'"), params->p_icc_profile);
         fprintf(stderr, "cannot apply printer profile `%s'\n", params->p_icc_profile);
         dt_control_queue_redraw();
         return 1;
@@ -562,7 +562,7 @@ static int _print_job_run(dt_job_t *job)
   const gint fd = g_mkstemp(params->pdf_filename);
   if(fd == -1)
   {
-    dt_control_log(_("failed to create temporary pdf for printing"));
+    dt_control_alert(_("Printing failed"), _("failed to create temporary pdf for printing"));
     fprintf(stderr, "failed to create temporary pdf for printing\n");
     return 1;
   }
