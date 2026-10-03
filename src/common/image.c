@@ -2134,21 +2134,28 @@ int32_t dt_image_rename(const int32_t imgid, const int32_t filmid, const gchar *
           if(g_error_matches(moveError, G_IO_ERROR, G_IO_ERROR_NOT_FOUND))
           {
             gchar *oldBasename = g_path_get_basename(copysrcpath);
-            dt_control_alert(_("File operation failed"), _("cannot access local copy `%s'"), oldBasename);
+            gchar *alert_msg = g_strdup_printf(_("cannot access local copy `%s'"), oldBasename);
+            dt_control_alert(_("File operation failed"), alert_msg);
+            dt_free(alert_msg);
             dt_free(oldBasename);
           }
           else if(g_error_matches(moveError, G_IO_ERROR, G_IO_ERROR_EXISTS)
                   || g_error_matches(moveError, G_IO_ERROR, G_IO_ERROR_IS_DIRECTORY))
           {
             gchar *newBasename = g_path_get_basename(copydestpath);
-            dt_control_alert(_("File operation failed"), _("cannot write local copy `%s'"), newBasename);
+            gchar *alert_msg = g_strdup_printf(_("cannot write local copy `%s'"), newBasename);
+            dt_control_alert(_("File operation failed"), alert_msg);
+            dt_free(alert_msg);
             dt_free(newBasename);
           }
           else
           {
             gchar *oldBasename = g_path_get_basename(copysrcpath);
             gchar *newBasename = g_path_get_basename(copydestpath);
-            dt_control_alert(_("File operation failed"), _("error moving local copy `%s' -> `%s'"), oldBasename, newBasename);
+            gchar *alert_msg = g_strdup_printf(_("error moving local copy `%s' -> `%s'"),
+                                               oldBasename, newBasename);
+            dt_control_alert(_("File operation failed"), alert_msg);
+            dt_free(alert_msg);
             dt_free(oldBasename);
             dt_free(newBasename);
           }
@@ -2164,7 +2171,9 @@ int32_t dt_image_rename(const int32_t imgid, const int32_t filmid, const gchar *
     {
       if(g_error_matches(moveError, G_IO_ERROR, G_IO_ERROR_NOT_FOUND))
       {
-        dt_control_alert(_("File operation failed"), _("error moving `%s': file not found"), oldimg);
+        gchar *alert_msg = g_strdup_printf(_("error moving `%s': file not found"), oldimg);
+        dt_control_alert(_("File operation failed"), alert_msg);
+        dt_free(alert_msg);
       }
       // only display error message if newname is set (renaming and
       // not moving) as when moving it can be the case where a
@@ -2174,11 +2183,15 @@ int32_t dt_image_rename(const int32_t imgid, const int32_t filmid, const gchar *
               && (g_error_matches(moveError, G_IO_ERROR, G_IO_ERROR_EXISTS)
                   || g_error_matches(moveError, G_IO_ERROR, G_IO_ERROR_IS_DIRECTORY)))
       {
-        dt_control_alert(_("File operation failed"), _("error moving `%s' -> `%s': file exists"), oldimg, newimg);
+        gchar *alert_msg = g_strdup_printf(_("error moving `%s' -> `%s': file exists"), oldimg, newimg);
+        dt_control_alert(_("File operation failed"), alert_msg);
+        dt_free(alert_msg);
       }
       else if(newname)
       {
-        dt_control_alert(_("File operation failed"), _("error moving `%s' -> `%s'"), oldimg, newimg);
+        gchar *alert_msg = g_strdup_printf(_("error moving `%s' -> `%s'"), oldimg, newimg);
+        dt_control_alert(_("File operation failed"), alert_msg);
+        dt_free(alert_msg);
       }
     }
 

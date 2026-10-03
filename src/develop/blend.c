@@ -758,7 +758,9 @@ int dt_develop_blend_process(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *p
   if(oscale != iscale || xoffs < 0 || yoffs < 0
      || ((xoffs > 0 || yoffs > 0) && (owidth + xoffs > iwidth || oheight + yoffs > iheight)))
   {
-    dt_control_alert(_("Module failed"), _("skipped blending in module '%s': roi's do not match"), self->op);
+    gchar *alert_msg = g_strdup_printf(_("skipped blending in module '%s': roi's do not match"), self->op);
+    dt_control_alert(_("Module failed"), alert_msg);
+    dt_free(alert_msg);
     return 0;
   }
 
@@ -1207,7 +1209,9 @@ int dt_develop_blend_process_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_t
   if(oscale != iscale || xoffs < 0 || yoffs < 0
      || ((xoffs > 0 || yoffs > 0) && (owidth + xoffs > iwidth || oheight + yoffs > iheight)))
   {
-    dt_control_alert(_("Module failed"), _("skipped blending in module '%s': roi's do not match"), self->op);
+    gchar *alert_msg = g_strdup_printf(_("skipped blending in module '%s': roi's do not match"), self->op);
+    dt_control_alert(_("Module failed"), alert_msg);
+    dt_free(alert_msg);
     return 0;
   }
 
