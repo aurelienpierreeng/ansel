@@ -83,9 +83,9 @@ gboolean dt_datetime_img_to_local(char *local, const size_t local_size,
                                   const dt_image_t *img, const gboolean msec);
 
 // unix datetime to img cache datetime
-gboolean dt_datetime_unix_to_img(dt_image_t *img, const time_t *unix);
+gboolean dt_datetime_unix_to_img(dt_image_t *img, const time_t *timestamp);
 // unix datetime to exif datetime
-gboolean dt_datetime_unix_to_exif(char *exif, const size_t exif_size, const time_t *unix);
+gboolean dt_datetime_unix_to_exif(char *exif, const size_t exif_size, const time_t *timestamp);
 
 // now to exif
 void dt_datetime_now_to_exif(char *exif);
@@ -149,4 +149,3 @@ gboolean dt_datetime_exif_add_numbers(const gchar *exif, const dt_datetime_t num
 // vim: shiftwidth=2 expandtab tabstop=2 cindent
 // kate: tab-indents: off; indent-width 2; replace-tabs on; indent-mode cstyle; remove-trailing-spaces modified;
 // clang-format on
-
