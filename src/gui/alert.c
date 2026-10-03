@@ -124,10 +124,11 @@ dt_gui_alert_t *dt_gui_alert_new(const dt_gui_alert_kind_t kind, const char *tit
   switch(kind)
   {
     case DT_GUI_ALERT_NOTICE:
-      // Not modal: the user may go on working, and the window waits for them above the others.
+      // Not modal: the user may go on working, and the window waits for them above the main window.
+      // Being transient for it is what keeps it there, and only there. Not gtk_window_set_keep_above():
+      // on Windows that is HWND_TOPMOST, above every application on the desktop.
       if(GTK_IS_WINDOW(main_window)) gtk_window_set_transient_for(GTK_WINDOW(window), GTK_WINDOW(main_window));
       gtk_window_set_position(GTK_WINDOW(window), GTK_WIN_POS_CENTER_ON_PARENT);
-      gtk_window_set_keep_above(GTK_WINDOW(window), TRUE);
       icon = gtk_image_new_from_icon_name("dialog-warning", GTK_ICON_SIZE_DIALOG);
       break;
     case DT_GUI_ALERT_QUESTION:
