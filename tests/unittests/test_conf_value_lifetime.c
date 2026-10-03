@@ -55,6 +55,10 @@
 #include <stdint.h>
 #include <cmocka.h>
 
+#ifdef _WIN32
+#include "win/main_wrapper.h"
+#endif
+
 /** A key with no confgen declaration, so nothing clamps or sanitises what we store. */
 #define TEST_KEY "plugins/test/conf_value_lifetime"
 
@@ -196,7 +200,7 @@ static void _the_generation_advances_on_a_change_and_not_otherwise(void **state)
   assert_int_equal(dt_conf_generation(), after_int);
 }
 
-int main(void)
+int main(int argc, char *argv[])
 {
   const struct CMUnitTest tests[] = {
     cmocka_unit_test(_borrowed_value_survives_being_replaced),

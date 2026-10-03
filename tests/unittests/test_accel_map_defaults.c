@@ -46,6 +46,10 @@
 #include <stdint.h>
 #include <cmocka.h>
 
+#ifdef _WIN32
+#include "win/main_wrapper.h"
+#endif
+
 #define APP_DEFAULT_KEY GDK_KEY_F5
 
 /** Write a keyboardrc holding the given lines, and load it the way the app does. */
@@ -134,13 +138,11 @@ static void _saving_marks_defaults_as_comments_and_changes_as_lines(void **state
   g_free(path);
 }
 
-int main(void)
+int main(int argc, char *argv[])
 {
   // The accel map is a plain hash table populated by gtk_init(), and unreachable without it.
   // The result is deliberately ignored: a headless runner opens no display and answers FALSE,
   // having initialised everything these tests touch anyway.
-  int argc = 0;
-  char **argv = NULL;
   gtk_init_check(&argc, &argv);
 
   const struct CMUnitTest tests[] = {

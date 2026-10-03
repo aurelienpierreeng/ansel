@@ -40,6 +40,10 @@
 #include <glib/gstdio.h>
 #include <stdlib.h>  // calloc/free, used directly below
 
+#ifdef _WIN32
+#include "win/main_wrapper.h"
+#endif
+
 // two bits standing in for the crawl's own DT_IMAGE_HAS_TXT / DT_IMAGE_HAS_WAV
 #define CRAWL_BIT_A (1 << 4)
 #define CRAWL_BIT_B (1 << 5)
@@ -396,7 +400,7 @@ static void test_crawl_reads_a_miscased_name_as_the_filesystem_does(void **state
   if(folds_case) skip();
 }
 
-int main(void)
+int main(int argc, char *argv[])
 {
   const struct CMUnitTest tests[] = {
     cmocka_unit_test(test_cached_entry_overwrites_a_row_written_behind_it),
