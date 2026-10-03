@@ -36,6 +36,10 @@
 #include <stdint.h>
 #include <cmocka.h>
 
+#ifdef _WIN32
+#include "win/main_wrapper.h"
+#endif
+
 #define LINE_BYTES (256 * 1024)
 #define HASH_A 0x0A0A0A0A0A0A0A0Aull
 
@@ -105,7 +109,7 @@ static void _unflagged_line_outlives_its_release(void **state __attribute__((unu
   dt_dev_pixelpipe_cache_ref_count_entry(FALSE, held);
 }
 
-int main(void)
+int main(int argc, char *argv[])
 {
   const struct CMUnitTest tests[] = {
     cmocka_unit_test_setup_teardown(_flagged_line_goes_with_its_release, _setup, _teardown),

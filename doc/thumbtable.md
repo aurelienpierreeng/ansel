@@ -138,8 +138,9 @@ iterations so background signals and the GUI thread never mutate the lists concu
 `73980c3cf0`, from a Windows crash backtrace and the GTK 3.24.52 DLL shipped in the nightly). GTK
 restyles an appended child in `gtk_css_node_ensure_style()`, which recurses through every
 *previous sibling* once appending has invalidated them all: one 144-byte frame per child already
-attached. `ansel.exe` reserves 1 MiB for the main thread (lld's default; `setrlimit` in
-`resource_limits.c` does nothing there), and the crash overflowed it at 6995 children — 6995 × 144 =
+attached. `ansel.exe` reserves 1 MiB for the main thread (lld's default; `dt_set_rlimits()` in
+`resource_limits.c` does nothing there — since 2026-10-03 not even nominally, see
+`unit-tests-windows.md`), and the crash overflowed it at 6995 children — 6995 × 144 =
 1 007 280 bytes, leaving ~40 KiB for the rest of the stack. Before that date this section claimed
 scrolling already detached widgets, and the header of `thumbtable.c` that the hash was "limited to
 840 elements" and "garbage-collected": nothing destroyed a thumbnail short of a collection reset, so

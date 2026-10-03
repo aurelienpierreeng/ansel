@@ -25,6 +25,11 @@
  */
 
 #include "testdb.h"
+#include "system/mem_alloc.h"
+
+#ifdef _WIN32
+#include "win/main_wrapper.h"
+#endif
 
 
 // an arbitrary flag bit with no side meaning in these tests
@@ -125,8 +130,13 @@ static void test_full_paths(void **state)
   GList *ids = g_list_append(g_list_append(NULL, GINT_TO_POINTER(a)), GINT_TO_POINTER(b));
   GList *paths = dt_image_repository_get_full_paths(ids);
   assert_int_equal(g_list_length(paths), 2);
-  assert_string_equal((const char *)paths->data, "/testdb/paths/a.raw");
-  assert_string_equal((const char *)paths->next->data, "/testdb/paths/b.raw");
+  // the repository joins folder and file with the platform's separator, whatever the folder uses
+  gchar *expected_a = g_strconcat("/testdb/paths", G_DIR_SEPARATOR_S, "a.raw", NULL);
+  gchar *expected_b = g_strconcat("/testdb/paths", G_DIR_SEPARATOR_S, "b.raw", NULL);
+  assert_string_equal((const char *)paths->data, expected_a);
+  assert_string_equal((const char *)paths->next->data, expected_b);
+  dt_free(expected_a);
+  dt_free(expected_b);
   g_list_free_full(paths, g_free);
   g_list_free(ids);
 }
@@ -234,7 +244,7 @@ static void test_foreach_with_path_stops_when_asked(void **state)
   assert_int_equal(seen, 2);
 }
 
-int main(void)
+int main(int argc, char *argv[])
 {
   const struct CMUnitTest tests[] = {
     cmocka_unit_test(test_flag_among_multi_image),

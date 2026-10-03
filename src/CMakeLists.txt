@@ -3,6 +3,12 @@ add_subdirectory(external)
 # LensSerious: lens-correction math as data (git submodule). It IS the lens correction --
 # nothing here links liblensfun any more. Its importer still reads the upstream XML, but
 # only at build time, to produce data/lenses.db.
+#
+# Its own tests stay off here: EXCLUDE_FROM_ALL never builds their executables, yet their
+# add_test() calls still landed in Ansel's ctest, as six tests reported "Not Run" on every
+# run. The submodule's own CI is where they run. The importer lives outside its test block,
+# so lenses.db is unaffected.
+set(LENSSERIOUS_TESTS OFF)
 add_subdirectory(external/LensSerious EXCLUDE_FROM_ALL)
 # Its include directory is global, like ${CMAKE_CURRENT_SOURCE_DIR} below, because
 # common/image.h embeds ls_vendor_data_t by value and image.h reaches nearly every target
@@ -287,9 +293,6 @@ if(WIN32)
 
   list(APPEND SOURCE_FILES "win/getrusage.c")
   list(APPEND HEADER_FILES "win/getrusage.h")
-
-  list(APPEND SOURCE_FILES "win/rlimit.c")
-  list(APPEND HEADER_FILES "win/rlimit.h")
 
   list(APPEND SOURCE_FILES "win/getdelim.c")
   list(APPEND HEADER_FILES "win/getdelim.h")

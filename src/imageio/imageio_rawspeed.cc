@@ -88,7 +88,7 @@ static dt_imageio_retval_t dt_imageio_open_rawspeed_sraw (dt_image_t *img,
                                                           const RawImage r,
                                                           dt_mipmap_buffer_t *buf);
 static CameraMetaData *meta = NULL;
-static std::once_flag meta_once;
+static std::mutex meta_mutex;
 
 /** Load rawspeed's cameras.xml exactly once, whichever thread gets here first.
  *
@@ -98,19 +98,27 @@ static std::once_flag meta_once;
  * of the object. It also meant a one-time initialisation shared a lock with the watermark
  * renderer and the export filename allocator, which have nothing to do with it.
  *
- * std::call_once is the mechanism this always wanted: no lock of our own, correct
- * publication, and -- unlike pthread_once -- a throwing initialiser leaves the flag unset
- * and propagates, so a corrupt cameras.xml is retried rather than latched as "done". The
- * object is intentionally never freed; it lives until the process exits.
+ * Every caller takes this lock of its own, including after the load: acquiring it after the
+ * loader released it is what publishes `meta` and the object behind it. A throwing
+ * constructor unlocks through the guard and leaves `meta` NULL, so a corrupt cameras.xml is
+ * retried rather than latched as "done".
+ *
+ * Not std::call_once, which promises the same retry: libstdc++ builds it on pthread_once
+ * wherever it has no futex -- MinGW among them (GCC PR 66146) -- and there a throwing
+ * initialiser leaves the once "in progress", so the next caller waits forever. Measured
+ * 2026-10-03 on UCRT64 (clang++ + libstdc++): test_image_cache_flags_writeback, whose
+ * datadir holds no cameras.xml, hung in the third call. The object is intentionally never
+ * freed; it lives until the process exits.
  */
 static void dt_rawspeed_load_meta()
 {
-  std::call_once(meta_once, [] {
-    char datadir[DT_PATH_MAX] = { 0 }, camfile[DT_PATH_MAX] = { 0 };
-    dt_loc_get_datadir(datadir, sizeof(datadir));
-    dt_concat_path_file(camfile, datadir, "rawspeed/cameras.xml");
-    meta = new CameraMetaData(camfile);
-  });
+  std::lock_guard<std::mutex> lock(meta_mutex);
+  if(!IS_NULL_PTR(meta)) return;
+
+  char datadir[DT_PATH_MAX] = { 0 }, camfile[DT_PATH_MAX] = { 0 };
+  dt_loc_get_datadir(datadir, sizeof(datadir));
+  dt_concat_path_file(camfile, datadir, "rawspeed/cameras.xml");
+  meta = new CameraMetaData(camfile);
 }
 
 gboolean dt_rawspeed_lookup_makermodel(const char *maker,

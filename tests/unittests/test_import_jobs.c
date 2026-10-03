@@ -30,8 +30,10 @@
 
 #ifdef _WIN32
 #include <io.h>
+#include "win/main_wrapper.h"
 #define test_dup _dup
-#define test_dup2 _dup2
+// _dup2() answers 0 on success where POSIX dup2() answers the target descriptor
+#define test_dup2(fd, fd2) (_dup2((fd), (fd2)) == 0 ? (fd2) : -1)
 #define test_close _close
 #else
 #include <unistd.h>
@@ -985,7 +987,7 @@ restore:
   }
 }
 
-int main(void)
+int main(int argc, char *argv[])
 {
   directory_failure_fixture_t directory_fixtures[] = {
     { .test_case = &_directory_failure_cases[0] },
@@ -1013,11 +1015,11 @@ int main(void)
   assert_non_null(g_mkdtemp(_integration_tmp));
   _integration_datadir = _prepare_test_datadir(_integration_tmp);
   char *noiseprofiles = g_build_filename(ANSEL_TEST_SOURCE_DIR, "data", "noiseprofiles.json", NULL);
-  char *argv[] = { "ansel-test-import-jobs", "--library", ":memory:", "--datadir", _integration_datadir,
-                   "--noiseprofiles", noiseprofiles, "--moduledir", ANSEL_TEST_BINARY_DIR "/src",
-                   "--configdir", _integration_config, "--cachedir", _integration_cache, "--tmpdir", _integration_tmp,
-                   "--disable-opencl", "--conf", "write_sidecar_files=FALSE", "-t", "1", NULL };
-  assert_int_equal(dt_init(G_N_ELEMENTS(argv) - 1, argv, FALSE, FALSE), 0);
+  char *init_argv[] = { "ansel-test-import-jobs", "--library", ":memory:", "--datadir", _integration_datadir,
+                        "--noiseprofiles", noiseprofiles, "--moduledir", ANSEL_TEST_BINARY_DIR "/src",
+                        "--configdir", _integration_config, "--cachedir", _integration_cache, "--tmpdir", _integration_tmp,
+                        "--disable-opencl", "--conf", "write_sidecar_files=FALSE", "-t", "1", NULL };
+  assert_int_equal(dt_init(G_N_ELEMENTS(init_argv) - 1, init_argv, FALSE, FALSE), 0);
   dt_pthread_mutex_init(&darktable.control->progress_system.mutex, NULL);
   dt_free(noiseprofiles);
 

@@ -15,7 +15,11 @@ if(USE_OPENCL)
   # reaches every consumer of ansel_deps, including targets with no OpenCL include path, and
   # common/opencl.h includes <CL/cl.h> inside this very guard. src/widgets then failed to build
   # on Windows and macOS while Linux happened to resolve the header anyway.
+  #
+  # The same goes for the bundled OpenCL headers src/ adds for itself: without them the tests
+  # only resolved <CL/cl.h> where the system ships one, which Windows does not.
   add_definitions(-DHAVE_OPENCL=1)
+  include_directories(SYSTEM ${CMAKE_SOURCE_DIR}/src/external/OpenCL)
 endif(USE_OPENCL)
 
 add_executable(ansel-test-variables variables.c)
@@ -53,6 +57,10 @@ set_target_properties(ansel-test-masks-geometry PROPERTIES
   SKIP_BUILD_RPATH FALSE
   BUILD_WITH_INSTALL_RPATH FALSE
   BUILD_RPATH "$<TARGET_FILE_DIR:lib_ansel>")
+if(WIN32)
+  # Windows has no rpath: the DLL must sit beside the executable, as in tests/unittests.
+  _copy_required_library(ansel-test-masks-geometry lib_ansel)
+endif()
 target_compile_definitions(ansel-test-masks-geometry PRIVATE
   ANSEL_TEST_SOURCE_DIR="${CMAKE_SOURCE_DIR}"
   ANSEL_TEST_BINARY_DIR="${CMAKE_BINARY_DIR}")

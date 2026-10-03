@@ -39,6 +39,10 @@
 #include <string.h>
 #include <cmocka.h>
 
+#ifdef _WIN32
+#include "win/main_wrapper.h"
+#endif
+
 #define LINE_BYTES (256 * 1024)
 #define HASH_A 0x0A0A0A0A0A0A0A0Aull
 #define HASH_B 0x0B0B0B0B0B0B0B0Bull
@@ -173,7 +177,7 @@ static void _without_rekey_the_previous_output_stays(void **state __attribute__(
   dt_dev_pixelpipe_cache_ref_count_entry(FALSE, held);
 }
 
-int main(void)
+int main(int argc, char *argv[])
 {
   const struct CMUnitTest tests[] = {
     cmocka_unit_test_setup_teardown(_rekeyed_line_publishes_no_host_pixels, _setup, _teardown),

@@ -44,6 +44,11 @@
 #include "testdb.h"
 
 #include "database/removed_image_repository.h"
+#include "system/mem_alloc.h"
+
+#ifdef _WIN32
+#include "win/main_wrapper.h"
+#endif
 
 // an arbitrary flag word, distinctive enough that a restored row cannot carry it by accident
 #define SEEDED_FLAGS 0x51
@@ -215,7 +220,10 @@ static void test_film_roll_comes_back_with_its_last_image(void **state)
   GList *ids = g_list_prepend(NULL, GINT_TO_POINTER(imgid));
   GList *paths = dt_image_repository_get_full_paths(ids);
   assert_int_equal(g_list_length(paths), 1);
-  assert_string_equal((const char *)paths->data, "/testdb/removal/film/only.raw");
+  // the repository joins folder and file with the platform's separator, whatever the folder uses
+  gchar *expected = g_strconcat("/testdb/removal/film", G_DIR_SEPARATOR_S, "only.raw", NULL);
+  assert_string_equal((const char *)paths->data, expected);
+  dt_free(expected);
   g_list_free_full(paths, g_free);
   g_list_free(ids);
 }
@@ -335,7 +343,7 @@ static void test_successive_snapshots_do_not_collide(void **state)
   assert_true(_has_flags(imgid, SEEDED_FLAGS));
 }
 
-int main(void)
+int main(int argc, char *argv[])
 {
   const struct CMUnitTest tests[] = {
     cmocka_unit_test(test_round_trip_restores_every_table),

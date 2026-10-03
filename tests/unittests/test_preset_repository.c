@@ -28,6 +28,10 @@
 
 #include "testdb.h"
 
+#ifdef _WIN32
+#include "win/main_wrapper.h"
+#endif
+
 
 static const unsigned char params_a[] = { 0x01, 0x02, 0x03, 0x04, 0x05 };
 static const unsigned char params_b[] = { 0x0a, 0x0b, 0x0c };
@@ -135,7 +139,7 @@ static void test_list_all_carries_the_tree_row(void **state)
   g_list_free_full(rows, dt_preset_row_free);
 }
 
-int main(void)
+int main(int argc, char *argv[])
 {
   const struct CMUnitTest tests[] = {
     cmocka_unit_test(test_set_module_version_leaves_params_alone),

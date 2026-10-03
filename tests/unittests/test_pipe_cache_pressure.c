@@ -33,6 +33,10 @@
 #include <stdint.h>
 #include <cmocka.h>
 
+#ifdef _WIN32
+#include "win/main_wrapper.h"
+#endif
+
 #define GIB ((size_t)1024 * 1024 * 1024)
 #define MIB ((size_t)1024 * 1024)
 
@@ -168,7 +172,7 @@ static void _reported_budget_never_underflows_its_readers(void **state)
   assert_int_equal(dt_pixelpipe_cache_pressure_reported(&p, held), held);
 }
 
-int main(void)
+int main(int argc, char *argv[])
 {
   const struct CMUnitTest tests[] = {
     cmocka_unit_test(_starts_at_the_plan),

@@ -37,6 +37,10 @@
 #include <stdint.h>
 #include <cmocka.h>
 
+#ifdef _WIN32
+#include "win/main_wrapper.h"
+#endif
+
 /** A GPU-capable node with no reason of its own to want host data. */
 static dt_dev_pipe_cache_policy_inputs_t _gpu_node_with_no_needs(void)
 {
@@ -268,7 +272,7 @@ static void _a_pure_gpu_chain_nobody_reads_caches_nothing(void **state)
   for(int i = 0; i < 3; i++) assert_false(cached[i]);
 }
 
-int main(void)
+int main(int argc, char *argv[])
 {
   const struct CMUnitTest tests[] = {
     cmocka_unit_test(_cpu_only_node_needs_its_input_on_host),

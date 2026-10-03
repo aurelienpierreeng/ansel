@@ -48,6 +48,10 @@
 #endif
 #include <cmocka.h>
 
+#ifdef _WIN32
+#include "win/main_wrapper.h"
+#endif
+
 #define W 96
 #define H 96
 
@@ -428,7 +432,7 @@ static void test_report_batch_speedup(void **state)
   _report_speedup(0.6f);
 }
 
-int main(void)
+int main(int argc, char *argv[])
 {
   const struct CMUnitTest tests[] = {
     cmocka_unit_test(test_report_batch_speedup),

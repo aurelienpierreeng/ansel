@@ -33,6 +33,10 @@
 #include <stdint.h>
 #include <cmocka.h>
 
+#ifdef _WIN32
+#include "win/main_wrapper.h"
+#endif
+
 static uint32_t _pixel(cairo_surface_t *surface, const int x, const int y)
 {
   cairo_surface_flush(surface);
@@ -251,7 +255,7 @@ static void _the_touched_record_resets(void **state)
   cairo_surface_destroy(s);
 }
 
-int main(void)
+int main(int argc, char *argv[])
 {
   const struct CMUnitTest tests[] = {
     cmocka_unit_test(_a_horizontal_line_paints_a_band_of_its_width),
