@@ -87,12 +87,13 @@ were killed and how. When you write a finding down, write down the number and th
 
 A toast (`dt_control_log()`, `dt_pipeline_message()`) fades within seconds, while what such a
 message says — a module failed, an image was not updated, an export will not come — stays true.
-Use `dt_control_alert(title, fmt, ...)` from
+Use `dt_control_alert(title, message)` from
 [`src/control/user_message.h`](src/control/user_message.h), next to `dt_control_log()`: the GUI
 shows it with `dt_gui_alert()` from [`src/gui/alert.h`](src/gui/alert.h) — a small window with
 one OK button, kept above the others until it is clicked, one per title — and without a GUI
-(`ansel-cli`) it falls back to the toast. Any thread, any layer from `common/` up; only `gui/`
-itself calls `dt_gui_alert()` directly. Repeated failures share a window by sharing a title, so
+(`ansel-cli`) it falls back to the toast. It takes the finished text, not a printf format: build
+a message with values in it with `g_strdup_printf()` and free it after the call. Any thread, any
+layer from `common/` up; only `gui/` itself calls `dt_gui_alert()` directly. Repeated failures share a window by sharing a title, so
 reuse one of the existing titles ("Module failed", "Export failed", "Not enough memory", …)
 before inventing one. A window that needs
 more than OK — other buttons, a list, a question — is a `dt_gui_alert_t` object

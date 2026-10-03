@@ -2296,7 +2296,9 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *params, dt_dev
     {
       const char *camera = self->dev->image_storage.camera_makermodel;
       fprintf(stderr, "[colorspaces] `%s' color matrix not found for 4bayer image!\n", camera);
-      dt_control_alert(_("Camera data missing"), _("`%s' color matrix not found for 4bayer image!"), camera);
+      gchar *alert_msg = g_strdup_printf(_("`%s' color matrix not found for 4bayer image!"), camera);
+      dt_control_alert(_("Camera data missing"), alert_msg);
+      dt_free(alert_msg);
     }
   }
 

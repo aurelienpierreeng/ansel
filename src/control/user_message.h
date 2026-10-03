@@ -68,9 +68,12 @@ void dt_toast_markup_log(const char *msg, ...) __attribute__((format(printf, 1, 
  * so a failure that repeats updates the text rather than stacking windows. Without a GUI --
  * ansel-cli, or before dt_gui_gtk_init() -- it goes to dt_control_log(). Any thread.
  *
- * @param title already translated; also what groups repeated alerts into one window
- * @param msg   printf format of the text, already translated; plain text, not markup */
-void dt_control_alert(const char *title, const char *msg, ...) __attribute__((format(printf, 2, 3)));
+ * Takes the finished text, not a printf format: a message with values in it is built with
+ * g_strdup_printf() by the caller, and freed after this returns.
+ *
+ * @param title   already translated; also what groups repeated alerts into one window
+ * @param message the finished text, already translated; plain text, not markup */
+void dt_control_alert(const char *title, const char *message);
 
 /** @brief What dt_control_alert() hands its finished text to. Installed once by the GUI. */
 typedef void (*dt_control_alert_handler_t)(const char *title, const char *message);
