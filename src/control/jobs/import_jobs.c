@@ -427,7 +427,9 @@ int32_t _import_image(const GList *img, dt_control_import_t *data, const char *f
   const int32_t imgid = _import_job(data, img_path_to_db);
   if(imgid <= 0)
   {
-    dt_control_log(_("Error importing file in collection: %s"), img_path_to_db);
+    gchar *alert_msg = g_strdup_printf(_("Error importing file in collection: %s"), img_path_to_db);
+    dt_control_alert(_("Import problem"), alert_msg);
+    dt_free(alert_msg);
     fprintf(stderr, "[Import] Error importing file in collection: %s", img_path_to_db);
     return UNKNOWN_IMAGE;
   }
@@ -454,9 +456,19 @@ int32_t _import_image(const GList *img, dt_control_import_t *data, const char *f
   }
 
   if(identical != 1)
-    dt_control_log(_("The imported file differs from the original, which was not deleted: %s"), filename);
+  {
+    gchar *alert_msg = g_strdup_printf(_("The imported file differs from the original, which was not deleted: %s"),
+                                       filename);
+    dt_control_alert(_("Import problem"), alert_msg);
+    dt_free(alert_msg);
+  }
   else if(g_unlink(filename) != 0)
-    dt_control_log(_("The imported file was verified but the original could not be deleted: %s"), filename);
+  {
+    gchar *alert_msg = g_strdup_printf(_("The imported file was verified but the original could not be deleted: %s"),
+                                       filename);
+    dt_control_alert(_("Import problem"), alert_msg);
+    dt_free(alert_msg);
+  }
 
 apply_styles:
   if(IS_NULL_PTR(data->styles)) return imgid;

@@ -583,7 +583,12 @@ void dt_print_file(const int32_t imgid, const char *filename, const char *job_ti
   const int job_id = cupsPrintFile(pinfo->printer.name, filename, job_title, num_options, options);
 
   if (job_id == 0)
-    dt_control_log(_("error while printing `%s' on `%s'"), job_title, pinfo->printer.name);
+  {
+    gchar *alert_msg = g_strdup_printf(_("error while printing `%s' on `%s'"),
+                                       job_title, pinfo->printer.name);
+    dt_control_alert(_("Printing failed"), alert_msg);
+    dt_free(alert_msg);
+  }
   else
     dt_control_log(_("printing `%s' on `%s'"), job_title, pinfo->printer.name);
 

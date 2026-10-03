@@ -859,6 +859,24 @@ void dt_control_log(const char *msg, ...)
   g_idle_add(_redraw_center, 0);
 }
 
+// Installed by dt_gui_gtk_init() before any worker runs, and never changed after: read without
+// a lock, like the other handlers the orchestrator installs.
+static dt_control_alert_handler_t _alert_handler = NULL;
+
+void dt_control_set_alert_handler(dt_control_alert_handler_t handler)
+{
+  _alert_handler = handler;
+}
+
+void dt_control_alert(const char *title, const char *message)
+{
+  if(IS_NULL_PTR(message)) return;
+  if(!IS_NULL_PTR(_alert_handler))
+    _alert_handler(title, message);
+  else
+    dt_control_log("%s", message);
+}
+
 static void _toast_log(const gboolean markup, const char *msg, va_list ap)
 {
   dt_pthread_mutex_lock(&darktable.control->toast_mutex);

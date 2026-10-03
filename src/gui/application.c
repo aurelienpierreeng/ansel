@@ -97,6 +97,8 @@
 #include "gui/dtgtk/thumbtable.h"
 #include "gui/splash.h"
 #include "gui/closing.h"
+#include "gui/alert.h"
+#include "caches/pixelpipe_cache.h"
 
 #include "common/conf.h"
 #include "control/control.h"
@@ -1096,6 +1098,14 @@ static void _accels_recent_set(int index, const char *value)
   dt_free(key);
 }
 
+/* The pixelpipe cache alerts when it cannot serve an allocation -- it is full, or the system itself
+ * runs out of memory: the module that needed the memory fails and the image is not updated, which
+ * a toast would stop saying too soon. */
+static void _pixelpipe_cache_alert(const char *message)
+{
+  dt_gui_alert(_("Not enough memory"), message);
+}
+
 /* common/ reports startup progress; opening the splash on the first message is display
  * state, so it lives here rather than in whatever subsystem happens to be slow. */
 static void _gui_startup_progress(const char *message)
@@ -1410,6 +1420,8 @@ int dt_gui_gtk_init(dt_gui_gtk_t *gui)
   dt_thumbnail_notify_set_handler(_gui_refresh_thumbnail);
   dt_startup_progress_set_handler(_gui_startup_progress);
   dt_control_set_shutdown_wait_handler(dt_gui_closing_wait);
+  dt_control_set_alert_handler(dt_gui_alert);
+  dt_dev_pixelpipe_cache_set_alert_handler(_pixelpipe_cache_alert);
   dt_film_gui_register_handlers();
   dt_collection_gui_register_handlers();
   dt_folder_survey_gui_register_handlers();

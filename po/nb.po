@@ -4652,7 +4652,7 @@ msgstr "kunne ikke skrive midlertidig fil for utskriftsinnstillinger"
 msgid "printing on `%s' cancelled"
 msgstr "utskrift på `%s' avbrutt"
 
-#: ../src/common/cups_print.c:584
+#: ../src/common/cups_print.c:586
 #, c-format
 msgid "error while printing `%s' on `%s'"
 msgstr "feil ved utskrift av `%s' på `%s'"
@@ -4704,7 +4704,7 @@ msgstr ""
 msgid "[MEMORY CONFIGURATION] Worker threads: %i\n"
 msgstr ""
 
-#: ../src/common/darktable.c:1744
+#: ../src/darktable.c:2541
 msgid ""
 "CRITICAL WARNING: Ansel will not be able to use the RAM you allocated it.\n"
 "Review your memory settings or add more RAM to your system."
@@ -5360,45 +5360,45 @@ msgstr "gir vurdering %d til %d bilde"
 msgid "Image %s is already in library and will not be re-imported.\n"
 msgstr ""
 
-#: ../src/common/image.c:2119
+#: ../src/common/image.c:2137
 #, c-format
 msgid "cannot access local copy `%s'"
 msgstr "får ikke tilgang til lokal kopi `%s'"
 
-#: ../src/common/image.c:2126
+#: ../src/common/image.c:2144
 #, c-format
 msgid "cannot write local copy `%s'"
 msgstr "kan ikke lagre lokal kopi `%s'"
 
-#: ../src/common/image.c:2133
+#: ../src/common/image.c:2151
 #, c-format
 msgid "error moving local copy `%s' -> `%s'"
 msgstr "feil ved flytting av lokal kopi `%s' -> `%s'"
 
-#: ../src/common/image.c:2149
+#: ../src/common/image.c:2167
 #, c-format
 msgid "error moving `%s': file not found"
 msgstr "feil ved flytting av `%s':filen ikke funnet"
 
-#: ../src/common/image.c:2159
+#: ../src/common/image.c:2177
 #, c-format
 msgid "error moving `%s' -> `%s': file exists"
 msgstr "feil ved flytting av `%s' -> `%s': filen finnes fra før"
 
-#: ../src/common/image.c:2163
+#: ../src/common/image.c:2181
 #, c-format
 msgid "error moving `%s' -> `%s'"
 msgstr "feil ved flytting `%s' -> `%s'"
 
-#: ../src/common/image.c:2473
+#: ../src/common/image.c:2321
 msgid "cannot create local copy when the original file is not accessible."
 msgstr "kan ikke lage lokal kopi når originalen ikke er tilgjengelig."
 
-#: ../src/common/image.c:2487
+#: ../src/common/image.c:2335
 msgid "cannot create local copy."
 msgstr "kan ikke lage lokal kopi."
 
-#: ../src/common/image.c:2563 ../src/control/jobs/control_jobs.c:800
+#: ../src/common/image.c:2391 ../src/control/jobs/control_jobs.c:780
 msgid "cannot remove local copy when the original file is not accessible."
 msgstr ""
 "kan ikke fjerne lokal kopi når den originale filen ikke er tilgjengelig."
@@ -5493,7 +5493,7 @@ msgstr ""
 msgid "webp"
 msgstr ""
 
-#: ../src/common/imageio.c:792
+#: ../src/imageio/imageio_core.c:593
 #, c-format
 msgid "cannot find the style '%s' to apply during export."
 msgstr "kan ikke finne stilen '%s' som var ment å brukes under eksport."
@@ -6155,7 +6155,7 @@ msgstr ""
 msgid "synchronization log"
 msgstr ""
 
-#: ../src/control/jobs/control_jobs.c:195
+#: ../src/control/jobs/control_jobs.c:191
 msgid "failed to create film roll for destination directory, aborting move.."
 msgstr "kunne ikke opprette filmrull i mottaksmappen, avbryter flytting..."
 
@@ -6492,7 +6492,7 @@ msgstr "lokal kopi av bilder"
 msgid "refresh exif"
 msgstr "les inn exif på nytt"
 
-#: ../src/control/jobs/control_jobs.c:1953
+#: ../src/control/jobs/control_jobs.c:1941
 #, c-format
 msgid "failed to get parameters from storage module `%s', aborting export.."
 msgstr "fikk ikke hentet parametre fra lagringsmodul `%s', avbryter eksport..."
@@ -6576,7 +6576,7 @@ msgid ""
 "The target may be full or read-only.\n"
 msgstr ""
 
-#: ../src/control/jobs/import_jobs.c:371
+#: ../src/control/jobs/import_jobs.c:430
 #, c-format
 msgid "Error importing file in collection: %s"
 msgstr ""
@@ -6626,22 +6626,22 @@ msgstr "original"
 msgid "import"
 msgstr "import"
 
-#: ../src/develop/blend.c:405
+#: ../src/develop/blend.c:460
 #, fuzzy
 msgid "detail mask blending error"
 msgstr "feil med papirkurven"
 
-#: ../src/develop/blend.c:685 ../src/develop/blend.c:1131
+#: ../src/develop/blend.c:761 ../src/develop/blend.c:1210
 #, c-format
 msgid "skipped blending in module '%s': roi's do not match"
 msgstr "hoppet over miksing i modul '%s': roi-er stemmer ikke overens"
 
-#: ../src/develop/blend.c:711 ../src/develop/blend.c:750
-#: ../src/develop/blend.c:1162
+#: ../src/develop/blend.c:787 ../src/develop/blend.c:826
+#: ../src/develop/blend.c:1241
 msgid "could not allocate buffer for blending"
 msgstr "kunne ikke allokere mellomlager for miksing"
 
-#: ../src/develop/blend.c:1073
+#: ../src/develop/blend.c:1152
 msgid "detail mask CL blending problem"
 msgstr ""
 
@@ -7726,28 +7726,28 @@ msgid_plural "%s have been imported"
 msgstr[0] "%s er importert"
 msgstr[1] "%s er importert"
 
-#: ../src/develop/pixelpipe_cache.c:1508 ../src/develop/pixelpipe_cache.c:1633
+#: ../src/caches/pixelpipe_cache.c:166
 #, c-format
 msgid ""
 "The pipeline cache is full while allocating `%s` (module `%s`). Either your "
 "RAM settings are too frugal or your RAM is too small."
 msgstr ""
 
-#: ../src/develop/pixelpipe_cache.c:1511 ../src/develop/pixelpipe_cache.c:1635
+#: ../src/caches/pixelpipe_cache.c:170
 #, c-format
 msgid ""
 "The pipeline cache is full while allocating `%s`. Either your RAM settings "
 "are too frugal or your RAM is too small."
 msgstr ""
 
-#: ../src/develop/pixelpipe_cache.c:1514 ../src/develop/pixelpipe_cache.c:1637
+#: ../src/caches/pixelpipe_cache.c:174
 #, c-format
 msgid ""
 "The pipeline cache is full while processing module `%s`. Either your RAM "
 "settings are too frugal or your RAM is too small."
 msgstr ""
 
-#: ../src/develop/pixelpipe_cache.c:1517 ../src/develop/pixelpipe_cache.c:1639
+#: ../src/caches/pixelpipe_cache.c:177
 msgid ""
 "The pipeline cache is full. Either your RAM settings are too frugal or your "
 "RAM is too small."
@@ -8187,7 +8187,7 @@ msgid ""
 "session!"
 msgstr ""
 
-#: ../src/develop/tiling.c:823 ../src/develop/tiling.c:1140
+#: ../src/develop/tiling.c:478 ../src/develop/tiling.c:810
 #, c-format
 msgid "tiling failed for module '%s'. output might be garbled."
 msgstr "flislegging feilet for modul '%s'. resultatet kan bli bare tull."
@@ -9187,7 +9187,7 @@ msgctxt "preferences"
 msgid "export..."
 msgstr "eksporter..."
 
-#: ../src/gui/preferences.c:1173
+#: ../src/gui/preferences.c:1215
 #, fuzzy, c-format
 msgid "failed to import preset %s"
 msgstr "stil-filen for %s ble ikke overskrevet"
@@ -10488,9 +10488,9 @@ msgstr "ugyldig papirstørrelse"
 msgid "invalid border size, using 0"
 msgstr "ugyldig kantstørrelse, bruker 0"
 
-#: ../src/imageio/format/pdf.c:207 ../src/imageio/storage/disk.c:360
-#: ../src/imageio/storage/gallery.c:387 ../src/imageio/storage/gallery.c:427
-#: ../src/imageio/storage/piwigo.c:1044 ../src/imageio/storage/example.c:156
+#: ../src/imageio/format/pdf.c:212 ../src/imageio/storage/disk.c:456
+#: ../src/imageio/storage/gallery.c:390 ../src/imageio/storage/gallery.c:431
+#: ../src/imageio/storage/example.c:156
 #, c-format
 msgid "could not export to file `%s'!"
 msgstr "kunne ikke eksportere til fil `%s'!"
@@ -10774,12 +10774,12 @@ msgstr "skriv over"
 msgid "skip"
 msgstr "hopp over"
 
-#: ../src/imageio/storage/disk.c:309 ../src/imageio/storage/gallery.c:301
+#: ../src/imageio/storage/disk.c:403 ../src/imageio/storage/gallery.c:304
 #, c-format
 msgid "could not create directory `%s'!"
 msgstr "kunne ikke opprette mappe `%s'!"
 
-#: ../src/imageio/storage/disk.c:316
+#: ../src/imageio/storage/disk.c:410
 #, c-format
 msgid "could not write to directory `%s'!"
 msgstr "kunne ikke skrive til mappen `%s'!"
@@ -11013,7 +11013,7 @@ msgstr "kunne ikke eksportere til fil `%s'!"
 msgid "Last modified: %s"
 msgstr ""
 
-#: ../src/libs/textnotes.c:1965
+#: ../src/libs/textnotes.c:1842
 #, fuzzy, c-format
 msgid "failed to save text notes to %s: %s"
 msgstr "stil-filen for %s ble ikke overskrevet"
@@ -13831,20 +13831,20 @@ msgstr ""
 "kan ikke trekke ut matrise fra fargemodellen `%s', blir erstattet med "
 "Rec2020 RGB!"
 
-#: ../src/iop/colorin.c:1170
+#: ../src/iop/colorin.c:826
 #, c-format
 msgid "`%s' color matrix not found!"
 msgstr "`%s' fargematrise ikke funnet!"
 
-#: ../src/iop/colorin.c:1262
+#: ../src/iop/colorin.c:882
 msgid "input profile could not be generated!"
 msgstr "inngående profil kunne ikke lages!"
 
-#: ../src/iop/colorin.c:1367
+#: ../src/iop/colorin.c:863
 msgid "unsupported input profile has been replaced by linear Rec709 RGB!"
 msgstr "ikke støttet inngående profil er erstattet av lineær Rec709 RGB!"
 
-#: ../src/iop/colorin.c:1514
+#: ../src/iop/colorin.c:971
 #, c-format
 msgid "The color profile `%s' referenced as input profile has not been found."
 msgstr ""
@@ -13959,15 +13959,15 @@ msgstr ""
 msgid "non-linear, RGB or Lab, display-referred"
 msgstr ""
 
-#: ../src/iop/colorout.c:642
+#: ../src/iop/colorout.c:518
 msgid "missing output profile has been replaced by sRGB!"
 msgstr "manglende utgående fargeprofil er erstattet av sRGB!"
 
-#: ../src/iop/colorout.c:676
+#: ../src/iop/colorout.c:550
 msgid "missing softproof profile has been replaced by sRGB!"
 msgstr "manglende prøvevisnings-profil er erstattet av sRGB!"
 
-#: ../src/iop/colorout.c:735
+#: ../src/iop/colorout.c:574
 msgid "unsupported output profile has been replaced by sRGB!"
 msgstr "ikk støttet utgående profil er erstattet av sRGB!"
 
@@ -13985,7 +13985,7 @@ msgstr "farge gjenoppretting"
 msgid "recover clipped highlights by propagating surrounding colors"
 msgstr ""
 
-#: ../src/iop/colorreconstruction.c:619
+#: ../src/iop/colorreconstruction.c:624
 msgid "module `color reconstruction' failed"
 msgstr "modulen `farge gjenoppretting' feilet"
 
@@ -14254,7 +14254,7 @@ msgstr ""
 msgid "[dual demosaic_cl] internal problem"
 msgstr ""
 
-#: ../src/iop/demosaic.c:2202
+#: ../src/iop/demosaic.c:2299
 #, c-format
 msgid "`%s' color matrix not found for 4bayer image!"
 msgstr "`%s' fargematrise ikke funnet for 4bayer-bilde!"
@@ -15848,7 +15848,7 @@ msgstr ""
 "korrigering av hete punkter\n"
 "virker bare med raw-bilder."
 
-#: ../src/iop/invert.c:112 ../src/iop/invert.c:327
+#: ../src/iop/invert.c:117 ../src/iop/invert.c:367
 #, c-format
 msgid "`%s' color matrix not found for 4bayer image"
 msgstr "`%s' fargematrise ikke funnet for 4bayer bilde"
@@ -17586,12 +17586,12 @@ msgstr "hvitbalanse"
 msgid "scale raw RGB channels to balance white and help demosaicing"
 msgstr ""
 
-#: ../src/iop/temperature.c:1086
+#: ../src/iop/temperature.c:1174
 #, c-format
 msgid "`%s' color matrix not found for image"
 msgstr "ikke funnet `%s' fargematrise for bilde"
 
-#: ../src/iop/temperature.c:1120
+#: ../src/iop/temperature.c:1208
 #, c-format
 msgid "failed to read camera white balance information from `%s'!"
 msgstr "kunne ikke lese kamera hvitbalanse fra `%s'!"
@@ -20170,7 +20170,7 @@ msgstr "innstillinger for utskrift"
 msgid "processing `%s' for `%s'"
 msgstr "prosesserer `%s' for `%s'"
 
-#: ../src/libs/print_settings.c:382
+#: ../src/libs/print_settings.c:395
 #, c-format
 msgid "cannot open printer profile `%s'"
 msgstr "kan ikke åpne skriverprofil `%s'"
@@ -20180,12 +20180,12 @@ msgstr "kan ikke åpne skriverprofil `%s'"
 msgid "error getting output profile for image %d"
 msgstr "feil ved henting av utskriftsprofil for %d"
 
-#: ../src/libs/print_settings.c:400
+#: ../src/libs/print_settings.c:413
 #, c-format
 msgid "cannot apply printer profile `%s'"
 msgstr "kan ikke bruke skriverprofil `%s'"
 
-#: ../src/libs/print_settings.c:552
+#: ../src/libs/print_settings.c:565
 msgid "failed to create temporary pdf for printing"
 msgstr "greide ikke lage midlertidig PDF for utskrift"
 
@@ -21175,16 +21175,16 @@ msgstr "spektrums-sjekk"
 msgid "soft proof"
 msgstr "utskrift-sjekk"
 
-#: ../src/views/darkroom.c:1276
+#: ../src/views/darkroom.c:1232
 #, fuzzy
 msgid "Could not load the image source data."
 msgstr "kunne ikke laste opp til piwigo!"
 
-#: ../src/views/darkroom.c:1279
+#: ../src/views/darkroom.c:1235
 msgid "Could not read image information from the database."
 msgstr ""
 
-#: ../src/views/darkroom.c:1282
+#: ../src/views/darkroom.c:1238
 #, fuzzy
 msgid "We could not load the image."
 msgstr "kunne ikke laste opp til piwigo!"
@@ -21863,7 +21863,7 @@ msgid ""
 "%s.\n"
 msgstr ""
 
-#: ../src/develop/pixelpipe_raster_masks.c:61
+#: ../src/develop/pixelpipe_raster_masks.c:66
 #, c-format
 msgid ""
 "The %s module is trying to reuse a mask from a module but it can't be "
@@ -21872,7 +21872,7 @@ msgid ""
 "%s"
 msgstr ""
 
-#: ../src/develop/pixelpipe_raster_masks.c:74
+#: ../src/develop/pixelpipe_raster_masks.c:79
 #, c-format
 msgid ""
 "The `%s` module is trying to reuse a mask from disabled module `%s`.\n"
@@ -22053,7 +22053,7 @@ msgid "failed to commit drawing stroke before renaming"
 msgstr ""
 
 #: ../src/iop/drawlayer.c:2012 ../src/iop/drawlayer/layers.c:191
-#: ../src/iop/drawlayer/runtime.c:788
+#: ../src/iop/drawlayer/runtime.c:761
 msgid "failed to write drawing layer sidecar"
 msgstr ""
 
@@ -22445,7 +22445,7 @@ msgstr ""
 msgid "failed to start drawing worker"
 msgstr ""
 
-#: ../src/iop/drawlayer/worker.c:1506
+#: ../src/iop/drawlayer/worker.c:1677
 msgid "drawing worker queue is full, stroke aborted"
 msgstr ""
 

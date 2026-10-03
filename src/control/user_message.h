@@ -61,6 +61,26 @@ void dt_toast_log(const char *msg, ...) __attribute__((format(printf, 1, 2)));
 /** @brief Post a transient toast, interpreting Pango markup in @p msg. */
 void dt_toast_markup_log(const char *msg, ...) __attribute__((format(printf, 1, 2)));
 
+/** @brief Tell the user something that must not go unseen: what it says stays true after a toast
+ * would have faded -- a module failed, a file was not written, an export will not come.
+ *
+ * The GUI shows it in an alert window with one OK button (gui/alert.h): one window per @p title,
+ * so a failure that repeats updates the text rather than stacking windows. Without a GUI --
+ * ansel-cli, or before dt_gui_gtk_init() -- it goes to dt_control_log(). Any thread.
+ *
+ * Takes the finished text, not a printf format: a message with values in it is built with
+ * g_strdup_printf() by the caller, and freed after this returns.
+ *
+ * @param title   already translated; also what groups repeated alerts into one window
+ * @param message the finished text, already translated; plain text, not markup */
+void dt_control_alert(const char *title, const char *message);
+
+/** @brief What dt_control_alert() hands its finished text to. Installed once by the GUI. */
+typedef void (*dt_control_alert_handler_t)(const char *title, const char *message);
+
+/** @brief Install the alert handler; NULL restores the fallback to dt_control_log(). */
+void dt_control_set_alert_handler(dt_control_alert_handler_t handler);
+
 /* Busy counters. Each enter must be matched by a leave: they are counters, not flags, so
  * nested work does not clear the indicator early. */
 void dt_control_log_busy_enter();
