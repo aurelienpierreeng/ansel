@@ -90,7 +90,7 @@ message says — a module failed, an image was not updated, an export will not c
 Use `dt_control_alert(title, message)` from
 [`src/control/user_message.h`](src/control/user_message.h), next to `dt_control_log()`: the GUI
 shows it with `dt_gui_alert()` from [`src/gui/alert.h`](src/gui/alert.h) — a small window with
-one OK button, kept above the others until it is clicked, one per title — and without a GUI
+one OK button, kept above Ansel's main window (not other applications) until it is clicked, one per title — and without a GUI
 (`ansel-cli`) it falls back to the toast. It takes the finished text, not a printf format: build
 a message with values in it with `g_strdup_printf()` and free it after the call. Any thread, any
 layer from `common/` up; only `gui/` itself calls `dt_gui_alert()` directly. Repeated failures share a window by sharing a title, so

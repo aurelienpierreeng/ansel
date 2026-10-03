@@ -692,8 +692,8 @@ The defense has five layers, from planning to last resort:
    HALF the floor, the allocation is refused: the pipeline fails with a clear message, which
    beats a silent SIGKILL. The message goes through the cache's *alert* handler, not its warn
    handler: the GUI installs it (`dt_dev_pixelpipe_cache_set_alert_handler()`, from
-   `dt_gui_gtk_init()`) and shows it with `dt_gui_alert()` (`gui/alert.c`), a window kept above the
-   others until its OK button is clicked, because what it says -- the module failed, the image was
+   `dt_gui_gtk_init()`) and shows it with `dt_gui_alert()` (`gui/alert.c`), a window kept above Ansel's
+   main window until its OK button is clicked, because what it says -- the module failed, the image was
    not updated -- stays true long after a toast is gone. Without a GUI it falls back to the warn
    handler. It names the size refused and is rate-limited to one every 10 s. The cache's other
    user-facing message, "The pipeline cache is full…" (the cache's own cap, `_free_space_to_alloc()`
