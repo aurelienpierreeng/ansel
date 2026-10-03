@@ -209,7 +209,7 @@ int write_image(dt_imageio_module_data_t *data, const char *filename, const void
     if(IS_NULL_PTR(pdf))
     {
       fprintf(stderr, "[imageio_format_pdf] could not export to file: `%s'!\n", filename);
-      dt_control_log(_("could not export to file `%s'!"), filename);
+      dt_control_alert(_("Export failed"), _("could not export to file `%s'!"), filename);
       return 1;
     }
 

@@ -1839,7 +1839,7 @@ static void _save_and_render(dt_lib_module_t *self)
   GError *error = NULL;
   if(!g_file_set_contents(d->path, text, -1, &error))
   {
-    dt_control_log(_("failed to save text notes to %s: %s"), d->path, error->message);
+    dt_control_alert(_("Could not save"), _("failed to save text notes to %s: %s"), d->path, error->message);
     g_clear_error(&error);
     goto done;
   }

@@ -2538,7 +2538,7 @@ void dt_configure_runtime_performance(dt_sys_resources_t *resources, gboolean in
   dt_print(DT_DEBUG_MEMORY | DT_DEBUG_CACHE, _("[MEMORY CONFIGURATION] Worker threads: %i\n"), dt_worker_threads());
 
   if(resources->total_memory < resources->headroom_memory + resources->mipmap_memory + resources->pixelpipe_memory)
-    dt_control_log(_("CRITICAL WARNING: Ansel will not be able to use the RAM you allocated it.\n"
+    dt_control_alert(_("Not enough memory"), _("CRITICAL WARNING: Ansel will not be able to use the RAM you allocated it.\n"
                      "Review your memory settings or add more RAM to your system."));
 }
 

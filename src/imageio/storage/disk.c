@@ -400,14 +400,14 @@ try_again:
     if(g_mkdir_with_parents(output_dir, 0755))
     {
       fprintf(stderr, "[imageio_storage_disk] could not create directory: `%s'!\n", output_dir);
-      dt_control_log(_("could not create directory `%s'!"), output_dir);
+      dt_control_alert(_("Export failed"), _("could not create directory `%s'!"), output_dir);
       fail = TRUE;
       goto failed;
     }
     if(g_access(output_dir, W_OK | X_OK) != 0)
     {
       fprintf(stderr, "[imageio_storage_disk] could not write to directory: `%s'!\n", output_dir);
-      dt_control_log(_("could not write to directory `%s'!"), output_dir);
+      dt_control_alert(_("Export failed"), _("could not write to directory `%s'!"), output_dir);
       fail = TRUE;
       goto failed;
     }
@@ -453,7 +453,7 @@ try_again:
                        icc_filename, icc_intent, self, sdata, num, total, metadata) != 0)
   {
     fprintf(stderr, "[imageio_storage_disk] could not export to file: `%s'!\n", filename);
-    dt_control_log(_("could not export to file `%s'!"), filename);
+    dt_control_alert(_("Export failed"), _("could not export to file `%s'!"), filename);
     return 1;
   }
 

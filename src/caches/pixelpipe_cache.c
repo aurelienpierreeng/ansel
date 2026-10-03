@@ -126,9 +126,9 @@ void dt_dev_pixelpipe_cache_set_alert_handler(dt_pixelpipe_cache_alert_handler_t
 
 /* printf-style, so the call sites keep reading as they did; the formatting happens here and
  * the handler receives a finished string.
- * Everything the cache tells the user is an allocation it could not serve: the module that asked
- * fails, and its pipe publishes nothing. That stays true long after a toast is gone, so it goes to
- * the alert handler, and to the warn handler only when no GUI installed one. */
+ * For an allocation the cache refused: the module that asked fails, and its pipe publishes
+ * nothing. That stays true long after a toast is gone, so it goes to the alert handler, and to the
+ * warn handler only when no GUI installed one. */
 static void _alert_user(const char *format, ...) __attribute__((format(printf, 1, 2)));
 static void _alert_user(const char *format, ...)
 {
@@ -143,6 +143,56 @@ static void _alert_user(const char *format, ...)
   else
     _warn_handler(message);
   g_free(message);
+}
+
+/* For what is fine to miss: the cache went over its budget, but the allocation went ahead. */
+static void _warn_user(const char *format, ...) __attribute__((format(printf, 1, 2)));
+static void _warn_user(const char *format, ...)
+{
+  if(IS_NULL_PTR(_warn_handler)) return;
+  va_list ap;
+  va_start(ap, format);
+  char *message = g_strdup_vprintf(format, ap);
+  va_end(ap);
+  if(!IS_NULL_PTR(message)) _warn_handler(message);
+  g_free(message);
+}
+
+/* "The pipeline cache is full while allocating ...", in the four shapes the catalogs already
+ * translate, depending on what is known of the request. Freed by the caller. */
+static gchar *_cache_full_sentence(const char *name, const char *module)
+{
+  if(!IS_NULL_PTR(name) && !IS_NULL_PTR(module))
+    return g_strdup_printf(_("The pipeline cache is full while allocating \n"
+                             "`%s` (module `%s`).\n"
+                             "Either your RAM settings are too frugal or your RAM is too small."),
+                           name, module);
+  if(!IS_NULL_PTR(name))
+    return g_strdup_printf(_("The pipeline cache is full while allocating `\n"
+                             "%s`.\n"
+                             "Either your RAM settings are too frugal or your RAM is too small."),
+                           name);
+  if(!IS_NULL_PTR(module))
+    return g_strdup_printf(_("The pipeline cache is full while processing module `\n"
+                             "%s`.\n"
+                             "Either your RAM settings are too frugal or your RAM is too small."),
+                           module);
+  return g_strdup(_("The pipeline cache is full.\n"
+                    "Either your RAM settings are too frugal or your RAM is too small."));
+}
+
+/* The cache refused an allocation: say what it was, then what follows from it. The buffer is a
+ * module's output or one of its working buffers, so the module fails and the pipe stops without
+ * publishing. Nothing retries in smaller tiles: whether to tile was decided before the module
+ * ran (pixelpipe_cpu.c), from the memory that looked free then. The darkroom keeps showing its
+ * last complete rendering, and only the next change runs the pipe again (develop.c). */
+static void _alert_cache_refused(const char *name, const char *module)
+{
+  gchar *what = _cache_full_sentence(name, module);
+  _alert_user("%s\n%s", what,
+              _("The module fails and the image is not updated: what is shown stays the last complete "
+                "rendering, until the next change tries again."));
+  dt_free(what);
 }
 
 static inline gboolean _observed(void)
@@ -1779,10 +1829,11 @@ static gboolean _system_memory_pressure_valve(dt_dev_pixelpipe_cache_t *cache, s
     if(now - last_warning_us > 10000000)
     {
       last_warning_us = now;
-      _alert_user(_("Your system is running out of memory: %" G_GSIZE_FORMAT " MiB could not be reserved, "
-                    "so the module that needed them will fail and the image will not be updated.\n "
+      // %d, not G_GSIZE_FORMAT: xgettext does not expand macros, and would cut the msgid there.
+      _alert_user(_("Your system is running out of memory: %d MiB could not be reserved, "
+                    "so the module that needed them will fail and the image will not be updated.\n"
                     "Close other applications or add more RAM to your system."),
-                  request_size / (1024 * 1024));
+                  (int)(request_size / (1024 * 1024)));
     }
     fprintf(stdout,
             "[pixelpipe_cache] refusing to allocate %" G_GSIZE_FORMAT " MiB: the system has only "
@@ -1874,17 +1925,8 @@ static inline void _log_arena_allocation_failure(dt_dev_pixelpipe_cache_t *cache
             largest_free_bytes / (1024 * 1024), total_free_bytes / (1024 * 1024),
             cache->current_memory / (1024 * 1024), cache->max_memory / (1024 * 1024));
 
-  if(!IS_NULL_PTR(entry_name) && !IS_NULL_PTR(module))
-    _alert_user(_("The pipeline cache is full while allocating `%s` (module `%s`). Either your RAM settings are too frugal or your RAM is too small."),
-                   entry_name, module);
-  else if(!IS_NULL_PTR(entry_name))
-    _alert_user(_("The pipeline cache is full while allocating `%s`. Either your RAM settings are too frugal or your RAM is too small."),
-                   entry_name);
-  else if(!IS_NULL_PTR(module))
-    _alert_user(_("The pipeline cache is full while processing module `%s`. Either your RAM settings are too frugal or your RAM is too small."),
-                   module);
-  else
-    _alert_user(_("The pipeline cache is full. Either your RAM settings are too frugal or your RAM is too small."));
+  // The arena could not serve the request: every caller gets NULL back.
+  _alert_cache_refused(entry_name, module);
 
   (void)name_is_file; // kept for signature symmetry if future callers need it.
 }
@@ -2077,14 +2119,20 @@ static int _free_space_to_alloc(dt_dev_pixelpipe_cache_t *cache, const size_t si
       fprintf(stdout, "[pixelpipe] cache is full, cannot allocate new entry %" PRIu64 " (%s)\n", hash, name);
     else
       fprintf(stdout, "[pixelpipe] cache is full, cannot allocate new entry (%s)\n", name);
-    if(!IS_NULL_PTR(name) && !IS_NULL_PTR(module) && name_is_file)
-      _alert_user(_("The pipeline cache is full while allocating `%s` (module `%s`). Either your RAM settings are too frugal or your RAM is too small."), name, module);
-    else if(!IS_NULL_PTR(name))
-      _alert_user(_("The pipeline cache is full while allocating `%s`. Either your RAM settings are too frugal or your RAM is too small."), name);
-    else if(!IS_NULL_PTR(module))
-      _alert_user(_("The pipeline cache is full while processing module `%s`. Either your RAM settings are too frugal or your RAM is too small."), module);
+    // The module is named only beside a file-like entry name, as before.
+    if(error)
+    {
+      // Everything left is in use: the caller is refused, and gets NULL.
+      _alert_cache_refused(name, name_is_file ? module : NULL);
+    }
     else
-      _alert_user(_("The pipeline cache is full. Either your RAM settings are too frugal or your RAM is too small."));
+    {
+      // Nothing was left to evict -- the memory is held by working buffers, not cachelines -- so
+      // the allocation goes ahead past the budget, and nothing fails.
+      gchar *what = _cache_full_sentence(name, name_is_file ? module : NULL);
+      _warn_user("%s", what);
+      dt_free(what);
+    }
   }
 
   return error;

@@ -1229,13 +1229,13 @@ static void _darkroom_log_image_load_error(const int ret)
   switch(ret)
   {
     case DT_DEV_IMAGE_STORAGE_MIPMAP_NOT_FOUND:
-      dt_control_log(_("Could not load the image source data."));
+      dt_control_alert(_("Image could not be opened"), _("Could not load the image source data."));
       break;
     case DT_DEV_IMAGE_STORAGE_DB_NOT_READ:
-      dt_control_log(_("Could not read image information from the database."));
+      dt_control_alert(_("Image could not be opened"), _("Could not read image information from the database."));
       break;
     default:
-      dt_control_log(_("We could not load the image."));
+      dt_control_alert(_("Image could not be opened"), _("We could not load the image."));
       break;
   }
 }

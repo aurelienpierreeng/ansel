@@ -697,9 +697,16 @@ The defense has five layers, from planning to last resort:
    not updated -- stays true long after a toast is gone. Without a GUI it falls back to the warn
    handler. It names the size refused and is rate-limited to one every 10 s. The cache's other
    user-facing message, "The pipeline cache is full…" (the cache's own cap, `_free_space_to_alloc()`
-   and `_log_arena_allocation_failure()`), says the same thing -- an allocation refused, a module
-   failed -- and takes the same path, under the same "Not enough memory" title, so the two share
-   one window; it is not rate-limited, as its toast was not. Written 2026-10-03 on
+   and `_log_arena_allocation_failure()`), takes the same path, under the same "Not enough
+   memory" title, so the two share one window -- but only when the allocation is actually
+   refused, and then followed by what happens next (`_alert_cache_refused()`): the module fails,
+   the pipe stops without publishing, nothing retries in tiles (whether to tile was decided before
+   `process()` ran, in `pixelpipe_cpu.c`), and the darkroom keeps its last complete rendering until
+   the next change runs the pipe again (`develop.c`). Read from the code on 2026-10-03, not
+   measured. `_free_space_to_alloc()` also reaches its message when nothing is left to evict
+   because the memory is held by working buffers, not cachelines: `error` stays 0 and the
+   allocation goes ahead past the budget. That case stays a toast. Neither is rate-limited, as
+   the toast was not. Written 2026-10-03 on
    top of `65e7a3adea`; the failure it describes was measured on that base with AI denoise on CPU
    (a 1182 MiB tile refused with 1255 MiB available, the preview left as it was). A 5-second GUI timer (`_memory_pressure_shedder()`) covers the case
    where *another* application creates the pressure while we sit idle and never allocate.
