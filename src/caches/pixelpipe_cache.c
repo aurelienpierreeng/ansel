@@ -35,7 +35,6 @@
 */
 
 #include <inttypes.h>
-#include <stdarg.h>
 #include <glib.h>
 #include <stdlib.h>
 #include <signal.h>
@@ -124,38 +123,22 @@ void dt_dev_pixelpipe_cache_set_alert_handler(dt_pixelpipe_cache_alert_handler_t
   _alert_handler = alert;
 }
 
-/* printf-style, so the call sites keep reading as they did; the formatting happens here and
- * the handler receives a finished string.
- * For an allocation the cache refused: the module that asked fails, and its pipe publishes
+/* For an allocation the cache refused: the module that asked fails, and its pipe publishes
  * nothing. That stays true long after a toast is gone, so it goes to the alert handler, and to the
  * warn handler only when no GUI installed one. */
-static void _alert_user(const char *format, ...) __attribute__((format(printf, 1, 2)));
-static void _alert_user(const char *format, ...)
+static void _alert_user(const char *message)
 {
-  if(IS_NULL_PTR(_alert_handler) && IS_NULL_PTR(_warn_handler)) return;
-  va_list ap;
-  va_start(ap, format);
-  char *message = g_strdup_vprintf(format, ap);
-  va_end(ap);
   if(IS_NULL_PTR(message)) return;
   if(!IS_NULL_PTR(_alert_handler))
     _alert_handler(message);
-  else
+  else if(!IS_NULL_PTR(_warn_handler))
     _warn_handler(message);
-  g_free(message);
 }
 
 /* For what is fine to miss: the cache went over its budget, but the allocation went ahead. */
-static void _warn_user(const char *format, ...) __attribute__((format(printf, 1, 2)));
-static void _warn_user(const char *format, ...)
+static void _warn_user(const char *message)
 {
-  if(IS_NULL_PTR(_warn_handler)) return;
-  va_list ap;
-  va_start(ap, format);
-  char *message = g_strdup_vprintf(format, ap);
-  va_end(ap);
-  if(!IS_NULL_PTR(message)) _warn_handler(message);
-  g_free(message);
+  if(!IS_NULL_PTR(_warn_handler) && !IS_NULL_PTR(message)) _warn_handler(message);
 }
 
 /* "The pipeline cache is full while allocating ...", in the four shapes the catalogs already
@@ -189,9 +172,11 @@ static gchar *_cache_full_sentence(const char *name, const char *module)
 static void _alert_cache_refused(const char *name, const char *module)
 {
   gchar *what = _cache_full_sentence(name, module);
-  _alert_user("%s\n%s", what,
-              _("The module fails and the image is not updated: what is shown stays the last complete "
-                "rendering, until the next change tries again."));
+  gchar *message = g_strdup_printf("%s\n%s", what,
+                                   _("The module fails and the image is not updated: what is shown stays "
+                                     "the last complete rendering, until the next change tries again."));
+  _alert_user(message);
+  dt_free(message);
   dt_free(what);
 }
 
@@ -1830,10 +1815,13 @@ static gboolean _system_memory_pressure_valve(dt_dev_pixelpipe_cache_t *cache, s
     {
       last_warning_us = now;
       // %d, not G_GSIZE_FORMAT: xgettext does not expand macros, and would cut the msgid there.
-      _alert_user(_("Your system is running out of memory: %d MiB could not be reserved, "
-                    "so the module that needed them will fail and the image will not be updated.\n"
-                    "Close other applications or add more RAM to your system."),
-                  (int)(request_size / (1024 * 1024)));
+      gchar *message
+          = g_strdup_printf(_("Your system is running out of memory: %d MiB could not be reserved, "
+                              "so the module that needed them will fail and the image will not be updated.\n"
+                              "Close other applications or add more RAM to your system."),
+                            (int)(request_size / (1024 * 1024)));
+      _alert_user(message);
+      dt_free(message);
     }
     fprintf(stdout,
             "[pixelpipe_cache] refusing to allocate %" G_GSIZE_FORMAT " MiB: the system has only "
@@ -2130,7 +2118,7 @@ static int _free_space_to_alloc(dt_dev_pixelpipe_cache_t *cache, const size_t si
       // Nothing was left to evict -- the memory is held by working buffers, not cachelines -- so
       // the allocation goes ahead past the budget, and nothing fails.
       gchar *what = _cache_full_sentence(name, name_is_file ? module : NULL);
-      _warn_user("%s", what);
+      _warn_user(what);
       dt_free(what);
     }
   }

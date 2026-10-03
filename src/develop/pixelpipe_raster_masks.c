@@ -63,9 +63,11 @@ static gboolean _dt_dev_raster_mask_check(dt_dev_pixelpipe_iop_t *source_piece,
       dt_free(clean_source_name);
     }
 
-    dt_control_alert(_("Module failed"), _("The %s module is trying to reuse a mask from a module but it can't be found.\n"
-                     "\n%s"),
-                   target_name, hint ? hint : "");
+    gchar *alert_msg = g_strdup_printf(_("The %s module is trying to reuse a mask from a module but it can't be found.\n"
+                                         "\n%s"),
+                                       target_name, hint ? hint : "");
+    dt_control_alert(_("Module failed"), alert_msg);
+    dt_free(alert_msg);
     dt_free(hint);
 
     dt_print(DT_DEBUG_MASKS, "[raster masks] no source module for module %s could be found\n", target_name);
@@ -76,10 +78,12 @@ static gboolean _dt_dev_raster_mask_check(dt_dev_pixelpipe_iop_t *source_piece,
   {
     gchar *clean_source_name = dt_string_replace(source_piece->module->name(), "_");
     gchar *source_name = g_strdup_printf("%s (%s)", clean_source_name, source_piece->module->multi_name);
-    dt_control_alert(_("Module failed"), _("The `%s` module is trying to reuse a mask from disabled module `%s`.\n"
-                     "Disabled modules cannot provide their masks to other modules.\n"
-                     "\n- Please enable `%s` or change the raster mask in `%s`."),
-                   target_name, source_name, source_name, target_name);
+    gchar *alert_msg = g_strdup_printf(_("The `%s` module is trying to reuse a mask from disabled module `%s`.\n"
+                                         "Disabled modules cannot provide their masks to other modules.\n"
+                                         "\n- Please enable `%s` or change the raster mask in `%s`."),
+                                       target_name, source_name, source_name, target_name);
+    dt_control_alert(_("Module failed"), alert_msg);
+    dt_free(alert_msg);
 
     dt_print(DT_DEBUG_MASKS, "[raster masks] module %s trying to reuse a mask from disabled instance of %s\n",
             target_name, source_name);

@@ -868,17 +868,13 @@ void dt_control_set_alert_handler(dt_control_alert_handler_t handler)
   _alert_handler = handler;
 }
 
-void dt_control_alert(const char *title, const char *msg, ...)
+void dt_control_alert(const char *title, const char *message)
 {
-  va_list ap;
-  va_start(ap, msg);
-  gchar *message = g_strdup_vprintf(msg, ap);
-  va_end(ap);
+  if(IS_NULL_PTR(message)) return;
   if(!IS_NULL_PTR(_alert_handler))
     _alert_handler(title, message);
   else
     dt_control_log("%s", message);
-  dt_free(message);
 }
 
 static void _toast_log(const gboolean markup, const char *msg, va_list ap)
