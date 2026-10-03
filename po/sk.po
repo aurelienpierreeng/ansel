@@ -4621,7 +4621,7 @@ msgstr "zlyhalo vytvorenie dočasného súboru pre voľby tlače"
 msgid "printing on `%s' cancelled"
 msgstr "tlač na \"%s\" bola zrušená"
 
-#: ../src/common/cups_print.c:584
+#: ../src/common/cups_print.c:586
 #, c-format
 msgid "error while printing `%s' on `%s'"
 msgstr "chyba počas tlače obrázku  \"%s\" na \"%s\""
@@ -4673,7 +4673,7 @@ msgstr ""
 msgid "[MEMORY CONFIGURATION] Worker threads: %i\n"
 msgstr ""
 
-#: ../src/common/darktable.c:1744
+#: ../src/darktable.c:2541
 msgid ""
 "CRITICAL WARNING: Ansel will not be able to use the RAM you allocated it.\n"
 "Review your memory settings or add more RAM to your system."
@@ -5334,45 +5334,45 @@ msgstr "pridáva sa hodnotenie %d na %d obrázok"
 msgid "Image %s is already in library and will not be re-imported.\n"
 msgstr ""
 
-#: ../src/common/image.c:2119
+#: ../src/common/image.c:2137
 #, c-format
 msgid "cannot access local copy `%s'"
 msgstr "nie je možné čítať miestnu kópiu \"%s\""
 
-#: ../src/common/image.c:2126
+#: ../src/common/image.c:2144
 #, c-format
 msgid "cannot write local copy `%s'"
 msgstr "nie je možné zapísať miestnu kópiu \"%s\""
 
-#: ../src/common/image.c:2133
+#: ../src/common/image.c:2151
 #, c-format
 msgid "error moving local copy `%s' -> `%s'"
 msgstr "chyba pri premiestňovaní lokálnej kópie \"%s\" -> \"%s\""
 
-#: ../src/common/image.c:2149
+#: ../src/common/image.c:2167
 #, c-format
 msgid "error moving `%s': file not found"
 msgstr "chyba pre premiestňovaní `%s': súbor nebol nájdený"
 
-#: ../src/common/image.c:2159
+#: ../src/common/image.c:2177
 #, c-format
 msgid "error moving `%s' -> `%s': file exists"
 msgstr "chyba pre premiestňovaní `%s' -> `%s':: súbor existuje"
 
-#: ../src/common/image.c:2163
+#: ../src/common/image.c:2181
 #, c-format
 msgid "error moving `%s' -> `%s'"
 msgstr "chyba pri premiestnení \"%s\" -> \"%s\""
 
-#: ../src/common/image.c:2473
+#: ../src/common/image.c:2321
 msgid "cannot create local copy when the original file is not accessible."
 msgstr "nemožno vytvoriť lokálnu kópiu ak originál nie je prístupný."
 
-#: ../src/common/image.c:2487
+#: ../src/common/image.c:2335
 msgid "cannot create local copy."
 msgstr "nemožno vytvoriť lokálnu kópiu."
 
-#: ../src/common/image.c:2563 ../src/control/jobs/control_jobs.c:800
+#: ../src/common/image.c:2391 ../src/control/jobs/control_jobs.c:780
 msgid "cannot remove local copy when the original file is not accessible."
 msgstr "nemožno zmazať lokálnu kópiu ak originál nie je prístupný."
 
@@ -5467,7 +5467,7 @@ msgstr ""
 msgid "webp"
 msgstr ""
 
-#: ../src/common/imageio.c:792
+#: ../src/imageio/imageio_core.c:593
 #, c-format
 msgid "cannot find the style '%s' to apply during export."
 msgstr "nemôžno nájsť '%s' štýl ktorý treba aplikovať počas exportu."
@@ -6131,7 +6131,7 @@ msgstr ""
 msgid "synchronization log"
 msgstr ""
 
-#: ../src/control/jobs/control_jobs.c:195
+#: ../src/control/jobs/control_jobs.c:191
 msgid "failed to create film roll for destination directory, aborting move.."
 msgstr "nemožno vytvoriť cieľový priečinok, presun prerušený."
 
@@ -6501,7 +6501,7 @@ msgstr "lokálna kópia obrázkov"
 msgid "refresh exif"
 msgstr "znova načítať exif"
 
-#: ../src/control/jobs/control_jobs.c:1953
+#: ../src/control/jobs/control_jobs.c:1941
 #, c-format
 msgid "failed to get parameters from storage module `%s', aborting export.."
 msgstr ""
@@ -6587,7 +6587,7 @@ msgid ""
 "The target may be full or read-only.\n"
 msgstr ""
 
-#: ../src/control/jobs/import_jobs.c:371
+#: ../src/control/jobs/import_jobs.c:430
 #, c-format
 msgid "Error importing file in collection: %s"
 msgstr ""
@@ -6639,22 +6639,22 @@ msgstr "originál"
 msgid "import"
 msgstr "importovať"
 
-#: ../src/develop/blend.c:405
+#: ../src/develop/blend.c:460
 #, fuzzy
 msgid "detail mask blending error"
 msgstr "chyba pri presúvaní do koša"
 
-#: ../src/develop/blend.c:685 ../src/develop/blend.c:1131
+#: ../src/develop/blend.c:761 ../src/develop/blend.c:1210
 #, c-format
 msgid "skipped blending in module '%s': roi's do not match"
 msgstr "prelínanie ignorované v module  '%s': nekompatibilné parametre"
 
-#: ../src/develop/blend.c:711 ../src/develop/blend.c:750
-#: ../src/develop/blend.c:1162
+#: ../src/develop/blend.c:787 ../src/develop/blend.c:826
+#: ../src/develop/blend.c:1241
 msgid "could not allocate buffer for blending"
 msgstr "nemôžem vyčleniť pamäť pre prelínanie"
 
-#: ../src/develop/blend.c:1073
+#: ../src/develop/blend.c:1152
 msgid "detail mask CL blending problem"
 msgstr ""
 
@@ -7741,28 +7741,28 @@ msgstr[0] "%s bol importovaný"
 msgstr[1] "%s boli importované"
 msgstr[2] "%s bolo importovaných"
 
-#: ../src/develop/pixelpipe_cache.c:1508 ../src/develop/pixelpipe_cache.c:1633
+#: ../src/caches/pixelpipe_cache.c:166
 #, c-format
 msgid ""
 "The pipeline cache is full while allocating `%s` (module `%s`). Either your "
 "RAM settings are too frugal or your RAM is too small."
 msgstr ""
 
-#: ../src/develop/pixelpipe_cache.c:1511 ../src/develop/pixelpipe_cache.c:1635
+#: ../src/caches/pixelpipe_cache.c:170
 #, c-format
 msgid ""
 "The pipeline cache is full while allocating `%s`. Either your RAM settings "
 "are too frugal or your RAM is too small."
 msgstr ""
 
-#: ../src/develop/pixelpipe_cache.c:1514 ../src/develop/pixelpipe_cache.c:1637
+#: ../src/caches/pixelpipe_cache.c:174
 #, c-format
 msgid ""
 "The pipeline cache is full while processing module `%s`. Either your RAM "
 "settings are too frugal or your RAM is too small."
 msgstr ""
 
-#: ../src/develop/pixelpipe_cache.c:1517 ../src/develop/pixelpipe_cache.c:1639
+#: ../src/caches/pixelpipe_cache.c:177
 msgid ""
 "The pipeline cache is full. Either your RAM settings are too frugal or your "
 "RAM is too small."
@@ -8199,7 +8199,7 @@ msgid ""
 "session!"
 msgstr ""
 
-#: ../src/develop/tiling.c:823 ../src/develop/tiling.c:1140
+#: ../src/develop/tiling.c:478 ../src/develop/tiling.c:810
 #, c-format
 msgid "tiling failed for module '%s'. output might be garbled."
 msgstr "konvolúcia zlyhala pre modul '%s'. výstup môže byť zbabraný."
@@ -9203,7 +9203,7 @@ msgctxt "preferences"
 msgid "export..."
 msgstr "exportovať..."
 
-#: ../src/gui/preferences.c:1173
+#: ../src/gui/preferences.c:1215
 #, fuzzy, c-format
 msgid "failed to import preset %s"
 msgstr "zlyhalo prepísanie súboru so štýlom pre %s"
@@ -10507,9 +10507,9 @@ msgstr "neplatná veľkosť papiera"
 msgid "invalid border size, using 0"
 msgstr "neplatná veľkosť okraja, použitá 0"
 
-#: ../src/imageio/format/pdf.c:207 ../src/imageio/storage/disk.c:360
-#: ../src/imageio/storage/gallery.c:387 ../src/imageio/storage/gallery.c:427
-#: ../src/imageio/storage/piwigo.c:1044 ../src/imageio/storage/example.c:156
+#: ../src/imageio/format/pdf.c:212 ../src/imageio/storage/disk.c:456
+#: ../src/imageio/storage/gallery.c:390 ../src/imageio/storage/gallery.c:431
+#: ../src/imageio/storage/example.c:156
 #, c-format
 msgid "could not export to file `%s'!"
 msgstr "nemožno exportovať do súboru `%s'!"
@@ -10790,12 +10790,12 @@ msgstr "prepísať"
 msgid "skip"
 msgstr "preskočiť"
 
-#: ../src/imageio/storage/disk.c:309 ../src/imageio/storage/gallery.c:301
+#: ../src/imageio/storage/disk.c:403 ../src/imageio/storage/gallery.c:304
 #, c-format
 msgid "could not create directory `%s'!"
 msgstr "nepodarilo sa vytvoriť priečinok „%s“!"
 
-#: ../src/imageio/storage/disk.c:316
+#: ../src/imageio/storage/disk.c:410
 #, c-format
 msgid "could not write to directory `%s'!"
 msgstr "nepodarilo sa zapísať do priečinka „%s“!"
@@ -11033,7 +11033,7 @@ msgstr "nemožno exportovať do súboru `%s'!"
 msgid "Last modified: %s"
 msgstr "modifikované používateľom"
 
-#: ../src/libs/textnotes.c:1965
+#: ../src/libs/textnotes.c:1842
 #, fuzzy, c-format
 msgid "failed to save text notes to %s: %s"
 msgstr "zlyhalo prepísanie súboru so štýlom pre %s"
@@ -13877,20 +13877,20 @@ msgstr ""
 "nedá sa extrahovať maticu z farebného priestoru \"%s\", bude nahradené "
 "Rec2020 RGB!"
 
-#: ../src/iop/colorin.c:1170
+#: ../src/iop/colorin.c:826
 #, c-format
 msgid "`%s' color matrix not found!"
 msgstr "`%s' farebná matica nenájdená!"
 
-#: ../src/iop/colorin.c:1262
+#: ../src/iop/colorin.c:882
 msgid "input profile could not be generated!"
 msgstr "vstupný profil sa nepodarilo vygenerovať!"
 
-#: ../src/iop/colorin.c:1367
+#: ../src/iop/colorin.c:863
 msgid "unsupported input profile has been replaced by linear Rec709 RGB!"
 msgstr "nepodporovaný vstupný profil bol zmenený za lineárny RGB Rec709 !"
 
-#: ../src/iop/colorin.c:1514
+#: ../src/iop/colorin.c:971
 #, c-format
 msgid "The color profile `%s' referenced as input profile has not been found."
 msgstr ""
@@ -14010,15 +14010,15 @@ msgstr "lienárny alebo nelineárny, Lab, podľa obrazovky"
 msgid "non-linear, RGB or Lab, display-referred"
 msgstr "nelineárny, LAB, podľa obrazovky"
 
-#: ../src/iop/colorout.c:642
+#: ../src/iop/colorout.c:518
 msgid "missing output profile has been replaced by sRGB!"
 msgstr "chýbajúci výstupný profil bol nahradený profilom sRGB!"
 
-#: ../src/iop/colorout.c:676
+#: ../src/iop/colorout.c:550
 msgid "missing softproof profile has been replaced by sRGB!"
 msgstr "chýbajúci profil náhľadu bol nahradený profilom sRGB!"
 
-#: ../src/iop/colorout.c:735
+#: ../src/iop/colorout.c:574
 msgid "unsupported output profile has been replaced by sRGB!"
 msgstr "nepodporovaný výstupný profil, bol nahradený s sRGB!"
 
@@ -14036,7 +14036,7 @@ msgstr "rekonštrukcia farieb"
 msgid "recover clipped highlights by propagating surrounding colors"
 msgstr "obnoviť orezané svetlá preberaním informácií z okolitých pixelov"
 
-#: ../src/iop/colorreconstruction.c:619
+#: ../src/iop/colorreconstruction.c:624
 msgid "module `color reconstruction' failed"
 msgstr "modul \"rekonštrukcia farieb\" zlyhal"
 
@@ -14309,7 +14309,7 @@ msgstr "rekonštruovať plné RGB pixely z čítania senzora poľa farebného fi
 msgid "[dual demosaic_cl] internal problem"
 msgstr ""
 
-#: ../src/iop/demosaic.c:2202
+#: ../src/iop/demosaic.c:2299
 #, c-format
 msgid "`%s' color matrix not found for 4bayer image!"
 msgstr "matica farieb \"%s\" pre obrázok 4bayer nebola nájdená!"
@@ -15975,7 +15975,7 @@ msgstr ""
 "korekcia poškodených pixelov\n"
 "funguje len pre obrázky raw."
 
-#: ../src/iop/invert.c:112 ../src/iop/invert.c:327
+#: ../src/iop/invert.c:117 ../src/iop/invert.c:367
 #, c-format
 msgid "`%s' color matrix not found for 4bayer image"
 msgstr "`%s' farebná mriežka pre snímku 4bayer nenájdená"
@@ -17747,12 +17747,12 @@ msgstr "vyváženie bielej"
 msgid "scale raw RGB channels to balance white and help demosaicing"
 msgstr "škálovať surové RGB kanály na vyváženie bielej a na pomoc demosaicingu"
 
-#: ../src/iop/temperature.c:1086
+#: ../src/iop/temperature.c:1174
 #, c-format
 msgid "`%s' color matrix not found for image"
 msgstr "„%s“ matica farieb pre obrázok nenájdená"
 
-#: ../src/iop/temperature.c:1120
+#: ../src/iop/temperature.c:1208
 #, c-format
 msgid "failed to read camera white balance information from `%s'!"
 msgstr "zlyhalo čítanie informácií o vyvážení bielej fotoaparátu z „%s“!"
@@ -20376,7 +20376,7 @@ msgstr "nastavenia tlače"
 msgid "processing `%s' for `%s'"
 msgstr "spracovanie \"%s\" pre \"%s\""
 
-#: ../src/libs/print_settings.c:382
+#: ../src/libs/print_settings.c:395
 #, c-format
 msgid "cannot open printer profile `%s'"
 msgstr "nedá sa otvoriť profil tlačiarne`%s'"
@@ -20386,12 +20386,12 @@ msgstr "nedá sa otvoriť profil tlačiarne`%s'"
 msgid "error getting output profile for image %d"
 msgstr "chyba pri získavaní výstupného profilu pre snímku %d"
 
-#: ../src/libs/print_settings.c:400
+#: ../src/libs/print_settings.c:413
 #, c-format
 msgid "cannot apply printer profile `%s'"
 msgstr "nedá sa použiť profil tlačiarne „%s“"
 
-#: ../src/libs/print_settings.c:552
+#: ../src/libs/print_settings.c:565
 msgid "failed to create temporary pdf for printing"
 msgstr "nepodarilo sa vytvoriť dočasné pdf pre tlač"
 
@@ -21392,16 +21392,16 @@ msgstr "kontrola gamutu"
 msgid "soft proof"
 msgstr "farebný náhľad"
 
-#: ../src/views/darkroom.c:1276
+#: ../src/views/darkroom.c:1232
 #, fuzzy
 msgid "Could not load the image source data."
 msgstr "nie je možné nahrať na piwigo!"
 
-#: ../src/views/darkroom.c:1279
+#: ../src/views/darkroom.c:1235
 msgid "Could not read image information from the database."
 msgstr ""
 
-#: ../src/views/darkroom.c:1282
+#: ../src/views/darkroom.c:1238
 #, fuzzy
 msgid "We could not load the image."
 msgstr "nie je možné nahrať na piwigo!"
@@ -22091,7 +22091,7 @@ msgid ""
 "%s.\n"
 msgstr ""
 
-#: ../src/develop/pixelpipe_raster_masks.c:61
+#: ../src/develop/pixelpipe_raster_masks.c:66
 #, c-format
 msgid ""
 "The %s module is trying to reuse a mask from a module but it can't be "
@@ -22100,7 +22100,7 @@ msgid ""
 "%s"
 msgstr ""
 
-#: ../src/develop/pixelpipe_raster_masks.c:74
+#: ../src/develop/pixelpipe_raster_masks.c:79
 #, c-format
 msgid ""
 "The `%s` module is trying to reuse a mask from disabled module `%s`.\n"
@@ -22281,7 +22281,7 @@ msgid "failed to commit drawing stroke before renaming"
 msgstr ""
 
 #: ../src/iop/drawlayer.c:2012 ../src/iop/drawlayer/layers.c:191
-#: ../src/iop/drawlayer/runtime.c:788
+#: ../src/iop/drawlayer/runtime.c:761
 msgid "failed to write drawing layer sidecar"
 msgstr ""
 
@@ -22673,7 +22673,7 @@ msgstr ""
 msgid "failed to start drawing worker"
 msgstr ""
 
-#: ../src/iop/drawlayer/worker.c:1506
+#: ../src/iop/drawlayer/worker.c:1677
 msgid "drawing worker queue is full, stroke aborted"
 msgstr ""
 

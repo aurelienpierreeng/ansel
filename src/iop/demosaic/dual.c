@@ -57,7 +57,7 @@ static int dual_demosaic(const dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_
     dt_pixelpipe_cache_free_align(tmp);
     dt_pixelpipe_cache_free_align(blend);
     dt_pixelpipe_cache_free_align(vng_image);
-    dt_control_log(_("[dual demosaic] can't allocate internal buffers"));
+    dt_control_alert(_("Not enough memory"), _("[dual demosaic] can't allocate internal buffers"));
     return 1;
   }
   const gboolean info = ((dt_get_debug_flags() & (DT_DEBUG_DEMOSAIC | DT_DEBUG_PERF))

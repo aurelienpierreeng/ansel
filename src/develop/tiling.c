@@ -33,7 +33,7 @@
 */
 
 
-#include "develop/pipeline_notify.h"
+#include "control/user_message.h"
 #include "system/sys_resources.h"
 #include "caches/pixelpipe_cache_alloc.h"
 #include "develop/tiling.h"
@@ -475,7 +475,7 @@ static int _default_process_tiling_ptp(struct dt_iop_module_t *self, const struc
   return 0;
 
 error:
-  dt_pipeline_message(_("tiling failed for module '%s'. output might be garbled."), self->op);
+  dt_control_alert(_("Module failed"), _("tiling failed for module '%s'. output might be garbled."), self->op);
 // fall through
 
 fallback:
@@ -807,7 +807,7 @@ static int _default_process_tiling_roi(struct dt_iop_module_t *self, const struc
   return 0;
 
 error:
-  dt_pipeline_message(_("tiling failed for module '%s'. output might be garbled."), self->op);
+  dt_control_alert(_("Module failed"), _("tiling failed for module '%s'. output might be garbled."), self->op);
 // fall through
 
 fallback:
