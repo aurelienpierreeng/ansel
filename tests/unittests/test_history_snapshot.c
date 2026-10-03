@@ -46,6 +46,10 @@
 #include <stdint.h>
 #include <cmocka.h>
 
+#ifdef _WIN32
+#include "win/main_wrapper.h"
+#endif
+
 typedef struct _fixture_t
 {
   dt_develop_t dev;
@@ -313,7 +317,7 @@ static void _transient_params_serial_advances_with_every_publication(void **stat
   assert_int_equal(none, 0u);
 }
 
-int main(void)
+int main(int argc, char *argv[])
 {
   const struct CMUnitTest tests[] = {
     cmocka_unit_test_setup_teardown(_a_snapshot_references_every_item_and_releases_them, _setup, _teardown),

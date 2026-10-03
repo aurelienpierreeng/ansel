@@ -25,18 +25,15 @@
 #endif
 
 #include "system/resource_limits.h"
+
+#ifndef _WIN32
 #include <assert.h>       // for assert
 #include <errno.h>        // for errno
 #include <stdint.h>       // for uintmax_t
 #include <stdio.h>        // for fprintf, stderr
 #include <string.h>       // for strerror
 #include <inttypes.h>
-
-#ifdef _WIN32
-#include "win/rlimit.h"
-#else
 #include <sys/resource.h> // for rlimit, RLIMIT_STACK, getrlimit, setrlimit
-#endif //_WIN32
 
 static void dt_set_rlimits_stack()
 {
@@ -75,10 +72,20 @@ static void dt_set_rlimits_stack()
     }
   }
 }
+#endif // !_WIN32
 
+/**
+ * @brief Raise the process limits Ansel needs, where the system lets a running process do it.
+ *
+ * Nothing to do on Windows: a thread's stack size is fixed when it is created, the main thread's
+ * at link time from the executable header, and no call changes it afterwards. The emulated
+ * `getrlimit()` that used to sit here answered RLIM_INFINITY, so `setrlimit()` was never reached.
+ */
 void dt_set_rlimits()
 {
+#ifndef _WIN32
   dt_set_rlimits_stack();
+#endif
 }
 
 

@@ -21,6 +21,10 @@
 #include "libs/tagging_completion.h"
 #include "metadata/tags.h"
 
+#ifdef _WIN32
+#include "win/main_wrapper.h"
+#endif
+
 static gboolean _store_contains(GtkTreeModel *model, const char *path)
 {
   GtkTreeIter iter;
@@ -55,7 +59,7 @@ static void test_refresh_exposes_new_hierarchical_tag(void **state)
   g_object_unref(store);
 }
 
-int main(void)
+int main(int argc, char *argv[])
 {
   const struct CMUnitTest tests[] = {
     cmocka_unit_test(test_refresh_exposes_new_hierarchical_tag),

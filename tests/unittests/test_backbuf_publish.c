@@ -51,6 +51,10 @@
 
 #include <glib.h>
 
+#ifdef _WIN32
+#include "win/main_wrapper.h"
+#endif
+
 /* Two publications a clipping module's edit mode swaps between: the cropped frame, and the full
  * transformed one it neutralises the crop to show. Different shape, different cacheline. */
 #define SHAPE_A_W 4032
@@ -167,7 +171,7 @@ static void test_single_field_setter_is_a_publication(void **state)
   assert_int_equal(published.height, SHAPE_A_H);
 }
 
-int main(void)
+int main(int argc, char *argv[])
 {
   const struct CMUnitTest tests[] = {
     cmocka_unit_test(test_field_by_field_read_crosses_publications),

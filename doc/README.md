@@ -99,6 +99,8 @@ Related, more specific:
 - `include-graph.md` — why include guards rather than `#pragma once`, and how cycles are measured
 - `ci.md` — what CI actually checks, why `CI Gate` is the one required check, and the gates that
   currently report success without checking
+- `unit-tests-windows.md` — what the unit suite needed to build and pass on Windows, and the
+  `std::call_once` deadlock it found
 - `globals-migration.md` — dispatching the `darktable` global through function arguments
 - `pipeline-cache.md` — the cache-wait protocol and raster-mask side-band cachelines
 - `image-type-detection.md` — the provisional → resolved image lifecycle

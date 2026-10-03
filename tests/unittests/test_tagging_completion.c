@@ -24,6 +24,10 @@
 #include <stdint.h>
 #include <cmocka.h>
 
+#ifdef _WIN32
+#include "win/main_wrapper.h"
+#endif
+
 typedef struct dt_tagging_completion_test_t
 {
   GtkWidget *window;

@@ -9,10 +9,21 @@ add_cmocka_test(test_sample
                 COMPILE_OPTIONS -Wno-error=deprecated-declarations # cmocka >= 2 deprecates check_expected et al.
                 LINK_LIBRARIES ${CMOCKA_LINK_TARGET})
 
+# Windows has no rpath: libansel.dll must sit beside the executables. Every test below
+# shares this one directory, so the copy is ONE target they all depend on -- a POST_BUILD
+# copy per test had up to 23 links writing the same file at once, and Windows answered
+# "Permission denied" to whichever lost, failing a random handful of links per build.
+if(WIN32)
+  add_custom_target(unittests_lib_ansel_dll
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:lib_ansel> ${CMAKE_CURRENT_BINARY_DIR})
+  add_dependencies(unittests_lib_ansel_dll lib_ansel)
+endif()
+
 # Windows: main-method requires the wrapper provided by lib-darktable
 if(WIN32)
+    target_include_directories(test_sample PRIVATE ${CMAKE_SOURCE_DIR}/src)
     target_link_libraries(test_sample PRIVATE lib_ansel)
-    _copy_required_library(test_sample lib_ansel)
+    add_dependencies(test_sample unittests_lib_ansel_dll)
 endif(WIN32)
 
 # CMocka unit tests for the sealed modules under src/.
@@ -67,11 +78,7 @@ foreach(test ${LIB_ANSEL_UNIT_TESTS})
     BUILD_WITH_INSTALL_RPATH FALSE
     BUILD_RPATH "$<TARGET_FILE_DIR:lib_ansel>")
   if(WIN32)
-    # Windows has no rpath: the DLLs must sit beside the executable. These tests used to be
-    # pointed at the main binary's directory by a relative path, which only worked from
-    # src/tests/unittests; from here the neighbouring iop tests' way is both correct and
-    # independent of where the test tree sits.
-    _copy_required_library(${test} lib_ansel)
+    add_dependencies(${test} unittests_lib_ansel_dll)
   endif()
 endforeach()
 
