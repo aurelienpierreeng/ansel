@@ -1689,7 +1689,7 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
     dt_opencl_set_kernel_arg(devid, ldkernel, 10, sizeof(ls_eval_t), (void *)&p);
     dt_opencl_set_kernel_arg(devid, ldkernel, 11, sizeof(int), (void *)&(d->do_nan_checks));
     dt_opencl_set_kernel_arg(devid, ldkernel, 12, sizeof(int), (void *)&(raw_monochrome));
-    dt_opencl_set_kernel_arg(devid, ldkernel, 13, sizeof(int), (void *)&mask_display);
+    dt_opencl_set_kernel_arg(devid, ldkernel, 13, sizeof(int), &mask_display);
     err = dt_opencl_enqueue_kernel_2d(devid, ldkernel, osizes);
     if(err != CL_SUCCESS) goto error;
   }
