@@ -17,6 +17,8 @@
 #include "common/glib_utils.h"        // dt_string_replace
 #include "control/user_message.h"   // dt_control_alert
 
+#include <glib/gi18n.h>               // _(), to translate the messages
+
 /**
  * @brief Check that the raster-mask provider/consumer relation is still valid in the current pipe.
  *
