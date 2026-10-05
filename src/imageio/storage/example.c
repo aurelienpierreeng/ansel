@@ -152,7 +152,7 @@ int store(dt_imageio_module_storage_t *self, dt_imageio_module_data_t *sdata, co
                        icc_filename, icc_intent, self, sdata, num, total, metadata) != 0)
   {
     fprintf(stderr, "[imageio_storage_email] could not export to file: `%s'!\n", attachment->file);
-    dt_control_log(_("could not export to file `%s'!"), attachment->file);
+    dt_control_log(_("Could not export to file `%s'!"), attachment->file);
     dt_free(attachment->file);
     dt_free(attachment);
     dt_free(filename);
@@ -266,7 +266,7 @@ void finalize_store(dt_imageio_module_storage_t *self, dt_imageio_module_data_t 
 
   if(exit_status)
   {
-    dt_control_log(_("could not launch email client!"));
+    dt_control_log(_("Could not launch email client!"));
   }
 }
 

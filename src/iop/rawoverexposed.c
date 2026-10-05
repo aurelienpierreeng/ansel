@@ -89,7 +89,7 @@ typedef struct dt_iop_rawoverexposed_global_data_t
 
 const char *name()
 {
-  return _("raw overexposed");
+  return _("Raw overexposed");
 }
 
 int default_group()
@@ -160,7 +160,7 @@ int process(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_
   dt_mipmap_cache_get(&buf, image->id, DT_MIPMAP_FULL, DT_MIPMAP_BLOCKING, 'r');
   if(IS_NULL_PTR(buf.buf))
   {
-    dt_control_log(_("failed to get raw buffer from image `%s'"), image->filename);
+    dt_control_log(_("Failed to get raw buffer from image `%s'"), image->filename);
     dt_mipmap_cache_release(&buf);
     return 0;
   }
@@ -278,7 +278,7 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
   dt_mipmap_cache_get(&buf, image->id, DT_MIPMAP_FULL, DT_MIPMAP_BLOCKING, 'r');
   if(IS_NULL_PTR(buf.buf))
   {
-    dt_control_log(_("failed to get raw buffer from image `%s'"), image->filename);
+    dt_control_log(_("Failed to get raw buffer from image `%s'"), image->filename);
     dt_mipmap_cache_release(&buf);
     goto error;
   }

@@ -122,12 +122,12 @@ typedef struct dt_iop_colorequal_node_t
 
 typedef struct dt_iop_colorequal_params_t
 {
-  float white_level; // $MIN: -2.0 $MAX: 16.0 $DEFAULT: 1.0 $DESCRIPTION: "white level"
-  float sigma_L;     // $MIN: 1.0 $MAX: 100.0 $DEFAULT: 50.0 $DESCRIPTION: "brightness smoothing"
-  float sigma_rho;   // $MIN: 0.01 $MAX: 2.0 $DEFAULT: 1 $DESCRIPTION: "saturation smoothing"
-  float sigma_theta; // $MIN: 0.01 $MAX: 6.28318531 $DEFAULT: 0.40 $DESCRIPTION: "hue smoothing"
-  float neutral_protection; // $MIN: 0.0 $MAX: 2.0 $DEFAULT: 0.05 $DESCRIPTION: "neutral protection"
-  dt_iop_colorequal_interpolation_t interpolation; // $DEFAULT: DT_IOP_COLOREQUAL_TETRAHEDRAL $DESCRIPTION: "interpolation"
+  float white_level; // $MIN: -2.0 $MAX: 16.0 $DEFAULT: 1.0 $DESCRIPTION: "White level"
+  float sigma_L;     // $MIN: 1.0 $MAX: 100.0 $DEFAULT: 50.0 $DESCRIPTION: "Brightness smoothing"
+  float sigma_rho;   // $MIN: 0.01 $MAX: 2.0 $DEFAULT: 1 $DESCRIPTION: "Saturation smoothing"
+  float sigma_theta; // $MIN: 0.01 $MAX: 6.28318531 $DEFAULT: 0.40 $DESCRIPTION: "Hue smoothing"
+  float neutral_protection; // $MIN: 0.0 $MAX: 2.0 $DEFAULT: 0.05 $DESCRIPTION: "Neutral protection"
+  dt_iop_colorequal_interpolation_t interpolation; // $DEFAULT: DT_IOP_COLOREQUAL_TETRAHEDRAL $DESCRIPTION: "Interpolation"
   dt_iop_colorequal_node_t curve[DT_IOP_COLOREQUAL_NUM_RINGS][DT_IOP_COLOREQUAL_NUM_CHANNELS]
                                 [DT_IOP_COLOREQUAL_MAXNODES];
   int curve_num_nodes[DT_IOP_COLOREQUAL_NUM_RINGS][DT_IOP_COLOREQUAL_NUM_CHANNELS];
@@ -218,7 +218,7 @@ typedef struct dt_iop_colorequal_gui_data_t
 
 const char *name()
 {
-  return _("color equalizer");
+  return _("Color equalizer");
 }
 
 const char *aliases()
@@ -2442,7 +2442,7 @@ void gui_init(dt_iop_module_t *self)
   dt_bauhaus_slider_set_soft_range(g->neutral_protection, 0.f, 1.f);
 
   g->interpolation = dt_bauhaus_combobox_from_params(self, "interpolation");
-  gtk_widget_set_tooltip_text(g->interpolation, _("select the interpolation method"));
+  gtk_widget_set_tooltip_text(g->interpolation, _("Select the interpolation method"));
 
   self->gui->widget = module_root;
 

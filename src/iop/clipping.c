@@ -123,10 +123,10 @@ typedef struct dt_iop_clipping_aspect_t
 typedef struct dt_iop_clipping_params_t
 {
   float angle; // $MIN: -180.0 $MAX: 180.0
-  float cx;    // $MIN: 0.0 $MAX: 1.0 $DESCRIPTION: "left"
-  float cy;    // $MIN: 0.0 $MAX: 1.0 $DESCRIPTION: "top"
-  float cw;    // $MIN: 0.0 $MAX: 1.0 $DESCRIPTION: "right"
-  float ch;    // $MIN: 0.0 $MAX: 1.0 $DESCRIPTION: "bottom"
+  float cx;    // $MIN: 0.0 $MAX: 1.0 $DESCRIPTION: "Left"
+  float cy;    // $MIN: 0.0 $MAX: 1.0 $DESCRIPTION: "Top"
+  float cw;    // $MIN: 0.0 $MAX: 1.0 $DESCRIPTION: "Right"
+  float ch;    // $MIN: 0.0 $MAX: 1.0 $DESCRIPTION: "Bottom"
   float k_h, k_v;
   float kxa;   // $MIN: 0.0 $MAX: 1.0 $DEFAULT: 0.2
   float kya;   // $MIN: 0.0 $MAX: 1.0 $DEFAULT: 0.2
@@ -138,7 +138,7 @@ typedef struct dt_iop_clipping_params_t
   float kyd;   // $MIN: 0.0 $MAX: 1.0 $DEFAULT: 0.8
   int k_type, k_sym;
   int k_apply;   // $DEFAULT: 0
-  gboolean crop_auto; // $DEFAULT: TRUE $DESCRIPTION: "automatic cropping"
+  gboolean crop_auto; // $DEFAULT: TRUE $DESCRIPTION: "Automatic cropping"
   int ratio_n;   // $DEFAULT: -1
   int ratio_d;   // $DEFAULT: -1
 } dt_iop_clipping_params_t;
@@ -353,12 +353,12 @@ static inline void adjust_aabb(const float *p, float *aabb)
 
 const char *deprecated_msg()
 {
-  return _("this module is deprecated. please use the crop, orientation and/or rotate and perspective modules instead.");
+  return _("This module is deprecated. Please use the crop, orientation and/or rotate and perspective modules instead.");
 }
 
 const char *name()
 {
-  return _("crop and rotate");
+  return _("Crop and rotate");
 }
 
 const char *aliases()
@@ -1807,7 +1807,7 @@ static void aspect_presets_changed(GtkWidget *combo, dt_iop_module_t *self)
         // some sanity check
         if(nn == 0 || dd == 0)
         {
-          dt_control_log(_("invalid ratio format. it should be \"number:number\""));
+          dt_control_log(_("Invalid ratio format. It should be \"number:number\""));
           dt_bauhaus_combobox_set(combo, 0);
           return;
         }
@@ -1823,7 +1823,7 @@ static void aspect_presets_changed(GtkWidget *combo, dt_iop_module_t *self)
         // some sanity check
         if(dd == 0 || nn == 0)
         {
-          dt_control_log(_("invalid ratio format. it should be a positive number"));
+          dt_control_log(_("Invalid ratio format. It should be a positive number"));
           dt_bauhaus_combobox_set(combo, 0);
           return;
         }
@@ -2196,35 +2196,35 @@ void gui_init(struct dt_iop_module_t *self)
 
   g->notebook = dt_ui_notebook_new();
 
-  self->gui->widget = dt_ui_notebook_page(g->notebook, N_("main"), NULL);
+  self->gui->widget = dt_ui_notebook_page(g->notebook, N_("Main"), NULL);
 
   g->hvflip = dt_bauhaus_combobox_new(dt_bauhaus_get_global(), DT_GUI_MODULE(self));
-  dt_bauhaus_widget_set_label(g->hvflip, N_("flip"));
+  dt_bauhaus_widget_set_label(g->hvflip, N_("Flip"));
   dt_bauhaus_combobox_add(g->hvflip, _("none"));
   dt_bauhaus_combobox_add(g->hvflip, _("horizontal"));
   dt_bauhaus_combobox_add(g->hvflip, _("vertical"));
   dt_bauhaus_combobox_add(g->hvflip, _("both"));
   g_signal_connect(G_OBJECT(g->hvflip), "value-changed", G_CALLBACK(hvflip_callback), self);
-  gtk_widget_set_tooltip_text(g->hvflip, _("mirror image horizontally and/or vertically"));
+  gtk_widget_set_tooltip_text(g->hvflip, _("Mirror image horizontally and/or vertically"));
   gtk_box_pack_start(GTK_BOX(self->gui->widget), g->hvflip, TRUE, TRUE, 0);
 
   g->angle = dt_bauhaus_slider_from_params(self, N_("angle"));
   dt_bauhaus_slider_set_factor(g->angle, -1.0);
   dt_bauhaus_slider_set_format(g->angle, "\302\260");
-  gtk_widget_set_tooltip_text(g->angle, _("right-click and drag a line on the image to drag a straight line"));
+  gtk_widget_set_tooltip_text(g->angle, _("Right-click and drag a line on the image to drag a straight line"));
 
   g->keystone_type = dt_bauhaus_combobox_new(dt_bauhaus_get_global(), DT_GUI_MODULE(self));
-  dt_bauhaus_widget_set_label(g->keystone_type, N_("keystone"));
+  dt_bauhaus_widget_set_label(g->keystone_type, N_("Keystone"));
   dt_bauhaus_combobox_add(g->keystone_type, _("none"));
   dt_bauhaus_combobox_add(g->keystone_type, _("vertical"));
   dt_bauhaus_combobox_add(g->keystone_type, _("horizontal"));
   dt_bauhaus_combobox_add(g->keystone_type, _("full"));
-  gtk_widget_set_tooltip_text(g->keystone_type, _("set perspective correction for your image"));
+  gtk_widget_set_tooltip_text(g->keystone_type, _("Set perspective correction for your image"));
   g_signal_connect(G_OBJECT(g->keystone_type), "value-changed", G_CALLBACK(keystone_type_changed), self);
   gtk_box_pack_start(GTK_BOX(self->gui->widget), g->keystone_type, TRUE, TRUE, 0);
 
   g->crop_auto = dt_bauhaus_combobox_from_params(self, "crop_auto");
-  gtk_widget_set_tooltip_text(g->crop_auto, _("automatically crop to avoid black edges"));
+  gtk_widget_set_tooltip_text(g->crop_auto, _("Automatically crop to avoid black edges"));
 
   dt_iop_clipping_aspect_t aspects[] = { { _("freehand"), 0, 0 },
                                          { _("original image"), 1, 0 },
@@ -2277,7 +2277,7 @@ void gui_init(struct dt_iop_module_t *self)
       if(n == 0 || d == 0)
       {
         fprintf(stderr, "invalid ratio format for `%s'. it should be \"number:number\"\n", nv->key);
-        dt_control_log(_("invalid ratio format for `%s'. it should be \"number:number\""), nv->key);
+        dt_control_log(_("Invalid ratio format for `%s'. It should be \"number:number\""), nv->key);
         continue;
       }
       dt_iop_clipping_aspect_t *aspect = g_malloc(sizeof(dt_iop_clipping_aspect_t));
@@ -2289,7 +2289,7 @@ void gui_init(struct dt_iop_module_t *self)
     else
     {
       fprintf(stderr, "invalid ratio format for `%s'. it should be \"number:number\"\n", nv->key);
-      dt_control_log(_("invalid ratio format for `%s'. it should be \"number:number\""), nv->key);
+      dt_control_log(_("Invalid ratio format for `%s'. It should be \"number:number\""), nv->key);
       continue;
     }
 
@@ -2325,7 +2325,7 @@ void gui_init(struct dt_iop_module_t *self)
 
   g->aspect_presets = dt_bauhaus_combobox_new(dt_bauhaus_get_global(), DT_GUI_MODULE(self));
   dt_bauhaus_combobox_set_editable(g->aspect_presets, 1);
-  dt_bauhaus_widget_set_label(g->aspect_presets, N_("aspect"));
+  dt_bauhaus_widget_set_label(g->aspect_presets, N_("Aspect"));
 
   for(GList *iter = g->aspect_list; iter; iter = g_list_next(iter))
   {
@@ -2336,38 +2336,38 @@ void gui_init(struct dt_iop_module_t *self)
   dt_bauhaus_combobox_set(g->aspect_presets, 0);
 
   g_signal_connect(G_OBJECT(g->aspect_presets), "value-changed", G_CALLBACK(aspect_presets_changed), self);
-  gtk_widget_set_tooltip_text(g->aspect_presets, _("set the aspect ratio\n"
+  gtk_widget_set_tooltip_text(g->aspect_presets, _("Set the aspect ratio\n"
                                                    "the list is sorted: from most square to least square\n"
                                                    "to enter custom aspect ratio open the combobox and type ratio in x:y or decimal format"));
   dt_bauhaus_widget_set_quad_paint(g->aspect_presets, dtgtk_cairo_paint_aspectflip, 0, NULL);
   g_signal_connect(G_OBJECT(g->aspect_presets), "quad-pressed", G_CALLBACK(aspect_flip), self);
   gtk_box_pack_start(GTK_BOX(self->gui->widget), g->aspect_presets, TRUE, TRUE, 0);
 
-  self->gui->widget = dt_ui_notebook_page(g->notebook, _("margins"), NULL);
+  self->gui->widget = dt_ui_notebook_page(g->notebook, _("Margins"), NULL);
 
   g->cx = dt_bauhaus_slider_from_params(self, "cx");
   dt_bauhaus_slider_set_digits(g->cx, 4);
   dt_bauhaus_slider_set_format(g->cx, "%");
-  gtk_widget_set_tooltip_text(g->cx, _("the left margin cannot overlap with the right margin"));
+  gtk_widget_set_tooltip_text(g->cx, _("The left margin cannot overlap with the right margin"));
 
   g->cw = dt_bauhaus_slider_from_params(self, "cw");
   dt_bauhaus_slider_set_digits(g->cw, 4);
   dt_bauhaus_slider_set_factor(g->cw, -100.0);
   dt_bauhaus_slider_set_offset(g->cw, 100.0);
   dt_bauhaus_slider_set_format(g->cw, "%");
-  gtk_widget_set_tooltip_text(g->cw, _("the right margin cannot overlap with the left margin"));
+  gtk_widget_set_tooltip_text(g->cw, _("The right margin cannot overlap with the left margin"));
 
   g->cy = dt_bauhaus_slider_from_params(self, "cy");
   dt_bauhaus_slider_set_digits(g->cy, 4);
   dt_bauhaus_slider_set_format(g->cy, "%");
-  gtk_widget_set_tooltip_text(g->cy, _("the top margin cannot overlap with the bottom margin"));
+  gtk_widget_set_tooltip_text(g->cy, _("The top margin cannot overlap with the bottom margin"));
 
   g->ch = dt_bauhaus_slider_from_params(self, "ch");
   dt_bauhaus_slider_set_digits(g->ch, 4);
   dt_bauhaus_slider_set_factor(g->ch, -100.0);
   dt_bauhaus_slider_set_offset(g->ch, 100.0);
   dt_bauhaus_slider_set_format(g->ch, "%");
-  gtk_widget_set_tooltip_text(g->ch, _("the bottom margin cannot overlap with the top margin"));
+  gtk_widget_set_tooltip_text(g->ch, _("The bottom margin cannot overlap with the top margin"));
 
   self->gui->widget = GTK_WIDGET(g->notebook);
 }

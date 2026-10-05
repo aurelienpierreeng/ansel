@@ -512,21 +512,21 @@ typedef enum dt_atrous_wavelets_scales_t
 typedef struct dt_iop_highlights_params_t
 {
   // params of v1
-  dt_iop_highlights_mode_t mode; // $DEFAULT: DT_IOP_HIGHLIGHTS_HARMONIC $DESCRIPTION: "method"
+  dt_iop_highlights_mode_t mode; // $DEFAULT: DT_IOP_HIGHLIGHTS_HARMONIC $DESCRIPTION: "Method"
   float blendL;                  // unused $DEFAULT: 1.0
   float blendC;                  // unused $DEFAULT: 0.0
   float blendh;                  // unused $DEFAULT: 0.0
   // params of v2
-  float clip; // $MIN: 0.0 $MAX: 2.0 $DEFAULT: 1.0 $DESCRIPTION: "clipping threshold"
+  float clip; // $MIN: 0.0 $MAX: 2.0 $DEFAULT: 1.0 $DESCRIPTION: "Clipping threshold"
   // params of v3
-  float noise_level;                  // $MIN: 0. $MAX: 1.0 $DEFAULT: 0.00 $DESCRIPTION: "noise level"
-  int iterations;                     // $MIN: 1 $MAX: 512 $DEFAULT: 30 $DESCRIPTION: "iterations"
-  dt_atrous_wavelets_scales_t scales; // $DEFAULT: 8 $DESCRIPTION: "diameter of reconstruction"
-  float reconstructing;               // $MIN: 0.0 $MAX: 1.0  $DEFAULT: 0.4 $DESCRIPTION: "cast balance"
-  float combine;                      // $MIN: 0.0 $MAX: 10.0 $DEFAULT: 2.0 $DESCRIPTION: "combine segments"
+  float noise_level;                  // $MIN: 0. $MAX: 1.0 $DEFAULT: 0.00 $DESCRIPTION: "Noise level"
+  int iterations;                     // $MIN: 1 $MAX: 512 $DEFAULT: 30 $DESCRIPTION: "Iterations"
+  dt_atrous_wavelets_scales_t scales; // $DEFAULT: 8 $DESCRIPTION: "Diameter of reconstruction"
+  float reconstructing;               // $MIN: 0.0 $MAX: 1.0  $DEFAULT: 0.4 $DESCRIPTION: "Cast balance"
+  float combine;                      // $MIN: 0.0 $MAX: 10.0 $DEFAULT: 2.0 $DESCRIPTION: "Combine segments"
   int debugmode;
   // params of v4
-  float solid_color; // $MIN: 0.0 $MAX: 1.0 $DEFAULT: 0.0 $DESCRIPTION: "inpaint a flat color"
+  float solid_color; // $MIN: 0.0 $MAX: 1.0 $DEFAULT: 0.0 $DESCRIPTION: "Inpaint a flat color"
 } dt_iop_highlights_params_t;
 
 typedef dt_iop_highlights_params_t dt_iop_highlights_data_t;

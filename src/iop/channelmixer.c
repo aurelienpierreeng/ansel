@@ -154,12 +154,12 @@ typedef struct dt_iop_channelmixer_data_t
 
 const char *name()
 {
-  return _("channel mixer");
+  return _("Channel mixer");
 }
 
 const char *deprecated_msg()
 {
-  return _("this module is deprecated. please use the color calibration module instead.");
+  return _("This module is deprecated. Please use the color calibration module instead.");
 }
 
 const char **description(struct dt_iop_module_t *self)
@@ -571,7 +571,7 @@ void gui_init(struct dt_iop_module_t *self)
 
   /* output */
   g->output_channel = dt_bauhaus_combobox_new(dt_bauhaus_get_global(), DT_GUI_MODULE(self));
-  dt_bauhaus_widget_set_label(g->output_channel, N_("destination"));
+  dt_bauhaus_widget_set_label(g->output_channel, N_("Destination"));
   dt_bauhaus_combobox_add(g->output_channel, _("hue"));
   dt_bauhaus_combobox_add(g->output_channel, _("saturation"));
   dt_bauhaus_combobox_add(g->output_channel, _("lightness"));
@@ -584,20 +584,20 @@ void gui_init(struct dt_iop_module_t *self)
 
   /* red */
   g->scale_red = dt_bauhaus_slider_new_with_range(dt_bauhaus_get_global(), DT_GUI_MODULE(self), -2.0, 2.0, 0, p->red[CHANNEL_RED], 3);
-  gtk_widget_set_tooltip_text(g->scale_red, _("amount of red channel in the output channel"));
-  dt_bauhaus_widget_set_label(g->scale_red, N_("red"));
+  gtk_widget_set_tooltip_text(g->scale_red, _("Amount of red channel in the output channel"));
+  dt_bauhaus_widget_set_label(g->scale_red, N_("Red"));
   g_signal_connect(G_OBJECT(g->scale_red), "value-changed", G_CALLBACK(red_callback), self);
 
   /* green */
   g->scale_green = dt_bauhaus_slider_new_with_range(dt_bauhaus_get_global(), DT_GUI_MODULE(self), -2.0, 2.0, 0, p->green[CHANNEL_RED], 3);
-  gtk_widget_set_tooltip_text(g->scale_green, _("amount of green channel in the output channel"));
-  dt_bauhaus_widget_set_label(g->scale_green, N_("green"));
+  gtk_widget_set_tooltip_text(g->scale_green, _("Amount of green channel in the output channel"));
+  dt_bauhaus_widget_set_label(g->scale_green, N_("Green"));
   g_signal_connect(G_OBJECT(g->scale_green), "value-changed", G_CALLBACK(green_callback), self);
 
   /* blue */
   g->scale_blue = dt_bauhaus_slider_new_with_range(dt_bauhaus_get_global(), DT_GUI_MODULE(self), -2.0, 2.0, 0, p->blue[CHANNEL_RED], 3);
-  gtk_widget_set_tooltip_text(g->scale_blue, _("amount of blue channel in the output channel"));
-  dt_bauhaus_widget_set_label(g->scale_blue, N_("blue"));
+  gtk_widget_set_tooltip_text(g->scale_blue, _("Amount of blue channel in the output channel"));
+  dt_bauhaus_widget_set_label(g->scale_blue, N_("Blue"));
   g_signal_connect(G_OBJECT(g->scale_blue), "value-changed", G_CALLBACK(blue_callback), self);
 
 

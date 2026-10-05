@@ -1626,7 +1626,7 @@ static int _init_fading(dt_masks_form_t *mask_form, int parentid, dt_masks_form_
 {
   const float masks_fading = dt_masks_get_set_conf_value_with_toast(mask_form, "fading", amount,
                                                                     FADING_MIN, FADING_MAX, increment, flow,
-                                                                    _("fading: %3.2f%%"), 100.0f);
+                                                                    _("Fading: %3.2f%%"), 100.0f);
   if(mask_gui->guipoints_count > 0)
     dt_masks_dynbuf_set(mask_gui->guipoints_payload, -3, masks_fading);
   return 1;
@@ -1637,7 +1637,7 @@ static int _init_size(dt_masks_form_t *mask_form, int parentid, dt_masks_form_gu
 {
   const float masks_border = dt_masks_get_set_conf_value_with_toast(mask_form, "border", amount,
                                                                     FADING_MIN, FADING_MAX, increment, flow,
-                                                                    _("size: %3.2f%%"), 2.f * 100.f);
+                                                                    _("Size: %3.2f%%"), 2.f * 100.f);
   if(mask_gui->guipoints_count > 0)
     dt_masks_dynbuf_set(mask_gui->guipoints_payload, -4, masks_border);
   return 1;
@@ -1647,7 +1647,7 @@ static int _init_opacity(dt_masks_form_t *mask_form, int parentid, dt_masks_form
                          const float amount, const dt_masks_increment_t increment, const int flow)
 {
   dt_masks_get_set_conf_value_with_toast(mask_form, "opacity", amount, 0.f, 1.f,
-                                         increment, flow, _("opacity: %3.2f%%"), 100.f);
+                                         increment, flow, _("Opacity: %3.2f%%"), 100.f);
   return 1;
 }
 

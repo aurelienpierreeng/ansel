@@ -92,7 +92,7 @@ typedef enum dt_iop_rawdenoise_channel_t
 
 typedef struct dt_iop_rawdenoise_params_t
 {
-  float threshold; // $MIN: 0.0 $MAX: 1.0 $DEFAULT: 0.01 $DESCRIPTION: "noise threshold"
+  float threshold; // $MIN: 0.0 $MAX: 1.0 $DEFAULT: 0.01 $DESCRIPTION: "Noise threshold"
   float x[DT_RAWDENOISE_NONE][DT_IOP_RAWDENOISE_BANDS];
   float y[DT_RAWDENOISE_NONE][DT_IOP_RAWDENOISE_BANDS]; // $DEFAULT: 0.5
 } dt_iop_rawdenoise_params_t;
@@ -159,7 +159,7 @@ int legacy_params(dt_iop_module_t *self, const void *const old_params, const int
 
 const char *name()
 {
-  return _("raw denoise");
+  return _("Raw denoise");
 }
 
 const char **description(struct dt_iop_module_t *self)
@@ -960,7 +960,7 @@ void gui_init(dt_iop_module_t *self)
   c->channel = dt_conf_get_int("plugins/darkroom/rawdenoise/gui_channel");
   c->channel_tabs = GTK_NOTEBOOK(gtk_notebook_new());
 
-  dt_ui_notebook_page(c->channel_tabs, N_("all"), NULL);
+  dt_ui_notebook_page(c->channel_tabs, N_("All"), NULL);
   dt_ui_notebook_page(c->channel_tabs, N_("R"), NULL);
   dt_ui_notebook_page(c->channel_tabs, N_("G"), NULL);
   dt_ui_notebook_page(c->channel_tabs, N_("B"), NULL);
@@ -1013,7 +1013,7 @@ void gui_init(dt_iop_module_t *self)
   self->gui->widget = gtk_stack_new();
   gtk_stack_set_homogeneous(GTK_STACK(self->gui->widget), FALSE);
 
-  GtkWidget *label_non_raw = dt_ui_label_new(_("raw denoising\nonly works for raw images."));
+  GtkWidget *label_non_raw = dt_ui_label_new(_("Raw denoising\nonly works for raw images."));
 
   gtk_stack_add_named(GTK_STACK(self->gui->widget), label_non_raw, "non_raw");
   gtk_stack_add_named(GTK_STACK(self->gui->widget), box_raw, "raw");

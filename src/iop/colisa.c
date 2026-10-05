@@ -84,7 +84,7 @@ typedef struct dt_iop_colisa_data_t
 
 const char *name()
 {
-  return _("contrast brightness saturation");
+  return _("Contrast brightness saturation");
 }
 
 const char **description(struct dt_iop_module_t *self)
@@ -234,9 +234,9 @@ void gui_init(struct dt_iop_module_t *self)
   g->brightness = dt_bauhaus_slider_from_params(self, N_("brightness"));
   g->saturation = dt_bauhaus_slider_from_params(self, N_("saturation"));
 
-  gtk_widget_set_tooltip_text(g->contrast, _("contrast adjustment"));
-  gtk_widget_set_tooltip_text(g->brightness, _("brightness adjustment"));
-  gtk_widget_set_tooltip_text(g->saturation, _("color saturation adjustment"));
+  gtk_widget_set_tooltip_text(g->contrast, _("Contrast adjustment"));
+  gtk_widget_set_tooltip_text(g->brightness, _("Brightness adjustment"));
+  gtk_widget_set_tooltip_text(g->saturation, _("Color saturation adjustment"));
 }
 
 // clang-format off

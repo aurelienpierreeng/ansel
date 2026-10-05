@@ -80,15 +80,15 @@ typedef struct dt_masks_shape_buttons_data_t
 
 static const dt_masks_shape_button_def_t _masks_shape_button_defs[] = {
   { DT_MASKS_SHAPE_INDEX_GRADIENT, DT_MASKS_SHAPE_BUTTONS_GRADIENT, DT_MASKS_GRADIENT,
-    N_("add gradient"), N_("add multiple gradients"), N_("Gradient"), dtgtk_cairo_paint_masks_gradient },
+    N_("Add gradient"), N_("add multiple gradients"), N_("Gradient"), dtgtk_cairo_paint_masks_gradient },
   { DT_MASKS_SHAPE_INDEX_BRUSH, DT_MASKS_SHAPE_BUTTONS_BRUSH, DT_MASKS_BRUSH,
-    N_("add brush"), N_("add multiple brush strokes"), N_("Brush"), dtgtk_cairo_paint_masks_brush },
+    N_("Add brush"), N_("add multiple brush strokes"), N_("Brush"), dtgtk_cairo_paint_masks_brush },
   { DT_MASKS_SHAPE_INDEX_POLYGON, DT_MASKS_SHAPE_BUTTONS_POLYGON, DT_MASKS_POLYGON,
-    N_("add polygon"), N_("add multiple polygons"), N_("Polygon"), dtgtk_cairo_paint_masks_polygon },
+    N_("Add polygon"), N_("add multiple polygons"), N_("Polygon"), dtgtk_cairo_paint_masks_polygon },
   { DT_MASKS_SHAPE_INDEX_ELLIPSE, DT_MASKS_SHAPE_BUTTONS_ELLIPSE, DT_MASKS_ELLIPSE,
-    N_("add ellipse"), N_("add multiple ellipses"), N_("Ellipse"), dtgtk_cairo_paint_masks_ellipse },
+    N_("Add ellipse"), N_("add multiple ellipses"), N_("Ellipse"), dtgtk_cairo_paint_masks_ellipse },
   { DT_MASKS_SHAPE_INDEX_CIRCLE, DT_MASKS_SHAPE_BUTTONS_CIRCLE, DT_MASKS_CIRCLE,
-    N_("add circle"), N_("add multiple circles"), N_("Circle"), dtgtk_cairo_paint_masks_circle },
+    N_("Add circle"), N_("add multiple circles"), N_("Circle"), dtgtk_cairo_paint_masks_circle },
 };
 
 static void _masks_shape_buttons_deactivate(GtkWidget *active_button, dt_masks_shape_buttons_data_t *data)
@@ -616,8 +616,8 @@ gboolean dt_masks_gui_confirm_permanent_delete(const char *form_name)
   GtkWidget *message_area = gtk_message_dialog_get_message_area(GTK_MESSAGE_DIALOG(dialog));
   GtkWidget *ask_check = gtk_check_button_new_with_label(_("Always ask"));
   gtk_widget_set_tooltip_text(ask_check,
-      _("when unchecked, mask shapes will be deleted silently from now on without this confirmation.\n"
-        "you can turn it back on from preferences."));
+      _("When unchecked, mask shapes will be deleted silently from now on without this confirmation.\n"
+        "You can turn it back on from preferences."));
   gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(ask_check), TRUE);
   gtk_box_pack_start(GTK_BOX(message_area), ask_check, FALSE, FALSE, 6);
   gtk_widget_show(ask_check);

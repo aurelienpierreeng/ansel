@@ -189,11 +189,11 @@ static void menuitem_update_preset(GtkMenuItem *menuitem, dt_lib_module_info_t *
     GtkWidget *window = dt_gui_main_window();
     GtkWidget *dialog
       = gtk_message_dialog_new(GTK_WINDOW(window), GTK_DIALOG_DESTROY_WITH_PARENT, GTK_MESSAGE_QUESTION,
-                               GTK_BUTTONS_YES_NO, _("do you really want to update the preset `%s'?"), name);
+                               GTK_BUTTONS_YES_NO, _("Do you really want to update the preset `%s'?"), name);
 #ifdef GDK_WINDOWING_QUARTZ
     dt_osx_disallow_fullscreen(dialog);
 #endif
-    gtk_window_set_title(GTK_WINDOW(dialog), _("update preset?"));
+    gtk_window_set_title(GTK_WINDOW(dialog), _("Update preset?"));
     res = gtk_dialog_run(GTK_DIALOG(dialog));
     gtk_widget_destroy(dialog);
   }
@@ -243,11 +243,11 @@ static void menuitem_delete_preset(GtkMenuItem *menuitem, dt_lib_module_info_t *
     GtkWidget *window = dt_gui_main_window();
     GtkWidget *dialog
       = gtk_message_dialog_new(GTK_WINDOW(window), GTK_DIALOG_DESTROY_WITH_PARENT, GTK_MESSAGE_QUESTION,
-                               GTK_BUTTONS_YES_NO, _("do you really want to delete the preset `%s'?"), name);
+                               GTK_BUTTONS_YES_NO, _("Do you really want to delete the preset `%s'?"), name);
 #ifdef GDK_WINDOWING_QUARTZ
     dt_osx_disallow_fullscreen(dialog);
 #endif
-    gtk_window_set_title(GTK_WINDOW(dialog), _("delete preset?"));
+    gtk_window_set_title(GTK_WINDOW(dialog), _("Delete preset?"));
     res = gtk_dialog_run(GTK_DIALOG(dialog));
     gtk_widget_destroy(dialog);
   }
@@ -321,7 +321,7 @@ gboolean dt_lib_presets_apply(const gchar *preset, const gchar *module_name, int
   dt_module_preset_free(p);
   if(res)
   {
-    dt_control_log(_("deleting preset for obsolete module"));
+    dt_control_log(_("Deleting preset for obsolete module"));
     dt_lib_presets_remove(preset, module_name, module_version);
   }
   return ret;
@@ -458,7 +458,7 @@ static void dt_lib_presets_popup_menu_show(dt_lib_module_info_t *minfo)
     if(minfo->params_size == 0)
     {
       gtk_widget_set_sensitive(GTK_WIDGET(mi), FALSE);
-      gtk_widget_set_tooltip_text(mi, _("nothing to save"));
+      gtk_widget_set_tooltip_text(mi, _("Nothing to save"));
     }
     else
       g_signal_connect(G_OBJECT(mi), "activate", G_CALLBACK(menuitem_new_preset), minfo);
@@ -702,7 +702,6 @@ static void dt_lib_init_module(void *m)
     // Else: add accel pathes
 
     gchar *clean_name = delete_underscore(module->name(module));
-    dt_capitalize_label(clean_name);
 
     // slash is not allowed in module names because that makes accel pathes fail
     assert(g_strrstr(clean_name, "/") == NULL);
@@ -758,7 +757,6 @@ void dt_lib_unload_module(dt_lib_module_t *module)
   if(dt_gui_get_global() && dt_gui_get_accels() && module->views)
   {
     gchar *clean_name = delete_underscore(module->name(module));
-    dt_capitalize_label(clean_name);
 
     const char **views = module->views(module);
     for(const char **view = views; view && *view; ++view)
@@ -1089,7 +1087,6 @@ GtkWidget *dt_lib_gui_get_expander(dt_lib_module_t *module)
   GtkWidget *label_evb = gtk_event_box_new();
   gtk_container_add(GTK_CONTAINER(label_evb), label);
   gchar *mname = g_markup_escape_text(module->name(module), -1);
-  dt_capitalize_label(mname);
   gtk_label_set_markup(GTK_LABEL(label), mname);
   dt_free(mname);
   gtk_label_set_ellipsize(GTK_LABEL(label), PANGO_ELLIPSIZE_END);
@@ -1335,10 +1332,7 @@ gboolean dt_handle_dialog_enter(GtkWidget *widget, GdkEventKey *event, gpointer 
 
 GtkWidget *dt_action_button_new(dt_lib_module_t *self, const gchar *label, gpointer callback, gpointer data, const gchar *tooltip, guint accel_key, GdkModifierType mods)
 {
-  gchar *label_copy = g_strdup(label);
-  dt_capitalize_label(label_copy);
-  GtkWidget *button = gtk_button_new_with_label(label_copy);
-  dt_free(label_copy);
+  GtkWidget *button = gtk_button_new_with_label(_(label));
 
   gtk_widget_set_valign(GTK_WIDGET(button), GTK_ALIGN_CENTER);
   gtk_widget_set_halign(GTK_WIDGET(button), GTK_ALIGN_CENTER);

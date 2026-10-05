@@ -277,7 +277,7 @@ int dt_gui_hist_dialog_new(dt_history_copy_item_t *d, int32_t imgid, gboolean is
   }
   else
   {
-    dt_control_log(_("can't copy history out of unaltered image"));
+    dt_control_log(_("Can't copy history out of unaltered image"));
     return GTK_RESPONSE_CANCEL;
   }
 

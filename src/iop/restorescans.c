@@ -33,21 +33,21 @@ DT_MODULE_INTROSPECTION(1, dt_iop_restorescans_t)
 
 typedef struct dt_iop_restorescans_t
 {
-  float C_c; // $MIN: -1.0 $MAX: 1.0 $DEFAULT: 1.0 $DESCRIPTION: "input cyan"
-  float C_m; // $MIN: -1.0 $MAX: 1.0 $DEFAULT: 0.0 $DESCRIPTION: "input magenta"
-  float C_y; // $MIN: -1.0 $MAX: 1.0 $DEFAULT: 0.0 $DESCRIPTION: "input yellow"
-  float C_o; // $MIN: -1.0 $MAX: 1.0 $DEFAULT: 0.0 $DESCRIPTION: "cyan offset"
-  float M_c; // $MIN: -1.0 $MAX: 1.0 $DEFAULT: 0.0 $DESCRIPTION: "input cyan"
-  float M_m; // $MIN: -1.0 $MAX: 1.0 $DEFAULT: 1.0 $DESCRIPTION: "input magenta"
-  float M_y; // $MIN: -1.0 $MAX: 1.0 $DEFAULT: 0.0 $DESCRIPTION: "input yellow"
-  float M_o; // $MIN: -1.0 $MAX: 1.0 $DEFAULT: 0.0 $DESCRIPTION: "magenta offset"
-  float Y_c; // $MIN: -1.0 $MAX: 1.0 $DEFAULT: 0.0 $DESCRIPTION: "input cyan"
-  float Y_m; // $MIN: -1.0 $MAX: 1.0 $DEFAULT: 0.0 $DESCRIPTION: "input magenta"
-  float Y_y; // $MIN: -1.0 $MAX: 1.0 $DEFAULT: 1.0 $DESCRIPTION: "input yellow"
-  float Y_o; // $MIN: -1.0 $MAX: 1.0 $DEFAULT: 0.0 $DESCRIPTION: "yellow offset"
-  float diffusion; // $MIN: 0.0 $MAX: 1.0 $DEFAULT: 0.0 $DESCRIPTION: "sharpening"
-  float regularization; // $MIN: 0.0 $MAX: 1.0 $DEFAULT: 0.0 $DESCRIPTION: "edge avoiding"
-  int iterations; // $MIN: 1 $MAX: 32 $DEFAULT: 1 $DESCRIPTION: "iterations"
+  float C_c; // $MIN: -1.0 $MAX: 1.0 $DEFAULT: 1.0 $DESCRIPTION: "Input cyan"
+  float C_m; // $MIN: -1.0 $MAX: 1.0 $DEFAULT: 0.0 $DESCRIPTION: "Input magenta"
+  float C_y; // $MIN: -1.0 $MAX: 1.0 $DEFAULT: 0.0 $DESCRIPTION: "Input yellow"
+  float C_o; // $MIN: -1.0 $MAX: 1.0 $DEFAULT: 0.0 $DESCRIPTION: "Cyan offset"
+  float M_c; // $MIN: -1.0 $MAX: 1.0 $DEFAULT: 0.0 $DESCRIPTION: "Input cyan"
+  float M_m; // $MIN: -1.0 $MAX: 1.0 $DEFAULT: 1.0 $DESCRIPTION: "Input magenta"
+  float M_y; // $MIN: -1.0 $MAX: 1.0 $DEFAULT: 0.0 $DESCRIPTION: "Input yellow"
+  float M_o; // $MIN: -1.0 $MAX: 1.0 $DEFAULT: 0.0 $DESCRIPTION: "Magenta offset"
+  float Y_c; // $MIN: -1.0 $MAX: 1.0 $DEFAULT: 0.0 $DESCRIPTION: "Input cyan"
+  float Y_m; // $MIN: -1.0 $MAX: 1.0 $DEFAULT: 0.0 $DESCRIPTION: "Input magenta"
+  float Y_y; // $MIN: -1.0 $MAX: 1.0 $DEFAULT: 1.0 $DESCRIPTION: "Input yellow"
+  float Y_o; // $MIN: -1.0 $MAX: 1.0 $DEFAULT: 0.0 $DESCRIPTION: "Yellow offset"
+  float diffusion; // $MIN: 0.0 $MAX: 1.0 $DEFAULT: 0.0 $DESCRIPTION: "Sharpening"
+  float regularization; // $MIN: 0.0 $MAX: 1.0 $DEFAULT: 0.0 $DESCRIPTION: "Edge avoiding"
+  int iterations; // $MIN: 1 $MAX: 32 $DEFAULT: 1 $DESCRIPTION: "Iterations"
 } dt_iop_restorescans_t;
 
 typedef struct dt_iop_restorescans_gui_data_t
@@ -70,7 +70,7 @@ typedef struct dt_iop_restorescans_data_t
 const char * name()
 {
   // make sure you put all your translatable strings into _() !
-  return _("scan restore");
+  return _("Scan restore");
 }
 
 // some additional flags (self explanatory i think):

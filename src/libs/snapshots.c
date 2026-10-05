@@ -507,8 +507,8 @@ void gui_init(dt_lib_module_t *self)
   d->snapshots_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
 
   /* create take snapshot button */
-  d->take_button = dt_action_button_new(self, N_("take snapshot"), _lib_snapshots_add_button_clicked_callback, self,
-                                        _("take snapshot to compare with another image "
+  d->take_button = dt_action_button_new(self, N_("Take snapshot"), _lib_snapshots_add_button_clicked_callback, self,
+                                        _("Take snapshot to compare with another image "
                                           "or the same image at another stage of development"), 0, 0);
 
   for(int k = 0; k < d->size; k++)
@@ -531,7 +531,7 @@ void gui_init(dt_lib_module_t *self)
     gtk_button_set_relief(GTK_BUTTON(d->snapshot[k].delete_button), GTK_RELIEF_NONE);
     gtk_button_set_image(GTK_BUTTON(d->snapshot[k].delete_button),
                          gtk_image_new_from_icon_name("user-trash-symbolic", GTK_ICON_SIZE_MENU));
-    gtk_widget_set_tooltip_text(d->snapshot[k].delete_button, _("remove this snapshot"));
+    gtk_widget_set_tooltip_text(d->snapshot[k].delete_button, _("Remove this snapshot"));
     g_object_set_data(G_OBJECT(d->snapshot[k].delete_button), "snapshot", GINT_TO_POINTER(k + 1));
     g_signal_connect(G_OBJECT(d->snapshot[k].delete_button), "clicked",
                      G_CALLBACK(_lib_snapshots_delete_button_clicked_callback), self);

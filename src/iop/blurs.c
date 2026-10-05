@@ -57,19 +57,19 @@ typedef enum dt_iop_blur_type_t
 
 typedef struct dt_iop_blurs_params_t
 {
-  dt_iop_blur_type_t type; // $DEFAULT: DT_BLUR_LENS $DESCRIPTION: "blur type"
-  int radius;              // $MIN: 4 $MAX: 128 $DEFAULT: 8 $DESCRIPTION: "blur radius"
+  dt_iop_blur_type_t type; // $DEFAULT: DT_BLUR_LENS $DESCRIPTION: "Blur type"
+  int radius;              // $MIN: 4 $MAX: 128 $DEFAULT: 8 $DESCRIPTION: "Blur radius"
 
   // lens blur params
-  int blades;              // $MIN: 3 $MAX: 11 $DEFAULT: 5 $DESCRIPTION: "diaphragm blades"
-  float concavity;         // $MIN: 1. $MAX: 9.  $DEFAULT: 1. $DESCRIPTION: "concavity"
-  float linearity;         // $MIN: 0. $MAX: 1.  $DEFAULT: 1. $DESCRIPTION: "linearity"
-  float rotation;          // $MIN: -1.57 $MAX: 1.57 $DEFAULT: 0. $DESCRIPTION: "rotation"
+  int blades;              // $MIN: 3 $MAX: 11 $DEFAULT: 5 $DESCRIPTION: "Diaphragm blades"
+  float concavity;         // $MIN: 1. $MAX: 9.  $DEFAULT: 1. $DESCRIPTION: "Concavity"
+  float linearity;         // $MIN: 0. $MAX: 1.  $DEFAULT: 1. $DESCRIPTION: "Linearity"
+  float rotation;          // $MIN: -1.57 $MAX: 1.57 $DEFAULT: 0. $DESCRIPTION: "Rotation"
 
   // motion blur params
-  float angle;             // $MIN: -3.14 $MAX: 3.14 $DEFAULT: 0. $DESCRIPTION: "direction"
-  float curvature;         // $MIN: -2.   $MAX: 2.   $DEFAULT: 0. $DESCRIPTION: "curvature"
-  float offset;            // $MIN: -1.   $MAX: 1.   $DEFAULT: 0  $DESCRIPTION: "offset"
+  float angle;             // $MIN: -3.14 $MAX: 3.14 $DEFAULT: 0. $DESCRIPTION: "Direction"
+  float curvature;         // $MIN: -2.   $MAX: 2.   $DEFAULT: 0. $DESCRIPTION: "Curvature"
+  float offset;            // $MIN: -1.   $MAX: 1.   $DEFAULT: 0  $DESCRIPTION: "Offset"
 
 } dt_iop_blurs_params_t;
 
@@ -92,7 +92,7 @@ typedef struct dt_iop_blurs_global_data_t
 
 const char *name()
 {
-  return _("blurs");
+  return _("Blurs");
 }
 
 const char *aliases()

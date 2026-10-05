@@ -94,25 +94,25 @@ typedef struct dt_iop_borders_params_t
 {
   float color[3];           // border color $DEFAULT: 1.0
   float aspect;             /* aspect ratio of the outer frame w/h
-                               $MIN: 1.0 $MAX: 3.0 $DEFAULT: DT_IOP_BORDERS_ASPECT_CONSTANT_VALUE $DESCRIPTION: "aspect ratio" */
+                               $MIN: 1.0 $MAX: 3.0 $DEFAULT: DT_IOP_BORDERS_ASPECT_CONSTANT_VALUE $DESCRIPTION: "Aspect ratio" */
   char aspect_text[20];     /* aspect ratio of the outer frame w/h (user string version)
                                DEFAULT: "constant border" */
   int aspect_orient;        /* aspect ratio orientation
-                               $DEFAULT: 0 $DESCRIPTION: "orientation" */
+                               $DEFAULT: 0 $DESCRIPTION: "Orientation" */
   float size;               /* border width relative to overall frame width
-                               $MIN: 0.0 $MAX: 0.5 $DEFAULT: 0.1 $DESCRIPTION: "border size" */
+                               $MIN: 0.0 $MAX: 0.5 $DEFAULT: 0.1 $DESCRIPTION: "Border size" */
   float pos_h;              /* picture horizontal position ratio into the final image
-                               $MIN: 0.0 $MAX: 1.0 $DEFAULT: 0.5 $DESCRIPTION: "horizontal offset" */
+                               $MIN: 0.0 $MAX: 1.0 $DEFAULT: 0.5 $DESCRIPTION: "Horizontal offset" */
   char pos_h_text[20];      /* picture horizontal position ratio into the final image (user string version)
                                DEFAULT: "1/2" */
   float pos_v;              /* picture vertical position ratio into the final image
-                               $MIN: 0.0 $MAX: 1.0 $DEFAULT: 0.5 $DESCRIPTION: "vertical offset"*/
+                               $MIN: 0.0 $MAX: 1.0 $DEFAULT: 0.5 $DESCRIPTION: "Vertical offset"*/
   char pos_v_text[20];      /* picture vertical position ratio into the final image (user string version)
                                DEFAULT: "1/2" */
   float frame_size;         /* frame line width relative to border width
-                               $MIN: 0.0 $MAX: 1.0 $DEFAULT: 0.0 $DESCRIPTION: "frame line size" */
+                               $MIN: 0.0 $MAX: 1.0 $DEFAULT: 0.0 $DESCRIPTION: "Frame line size" */
   float frame_offset;       /* frame offset from picture size relative to [border width - frame width]
-                               $MIN: 0.0 $MAX: 1.0 $DEFAULT: 0.5 $DESCRIPTION: "frame line offset" */
+                               $MIN: 0.0 $MAX: 1.0 $DEFAULT: 0.5 $DESCRIPTION: "Frame line offset" */
   float frame_color[3];     // frame line color $DEFAULT: 0.0
   gboolean max_border_size; /* the way border size is computed
                                $DEFAULT: TRUE */
@@ -207,7 +207,7 @@ typedef struct dt_iop_borders_params_t dt_iop_borders_data_t;
 
 const char *name()
 {
-  return _("framing");
+  return _("Framing");
 }
 
 const char **description(struct dt_iop_module_t *self)
@@ -1112,55 +1112,55 @@ void gui_init(struct dt_iop_module_t *self)
   g->size = dt_bauhaus_slider_from_params(self, "size");
   dt_bauhaus_slider_set_digits(g->size, 4);
   dt_bauhaus_slider_set_format(g->size, "%");
-  gtk_widget_set_tooltip_text(g->size, _("size of the border in percent of the full image"));
+  gtk_widget_set_tooltip_text(g->size, _("Size of the border in percent of the full image"));
 
   g->aspect = dt_bauhaus_combobox_new(dt_bauhaus_get_global(), DT_GUI_MODULE(self));
   dt_bauhaus_combobox_set_editable(g->aspect, 1);
-  dt_bauhaus_widget_set_label(g->aspect, N_("aspect"));
+  dt_bauhaus_widget_set_label(g->aspect, N_("Aspect"));
   gtk_box_pack_start(GTK_BOX(self->gui->widget), g->aspect, TRUE, TRUE, 0);
   gui_init_aspect(self);
   g_signal_connect(G_OBJECT(g->aspect), "value-changed", G_CALLBACK(aspect_changed), self);
-  gtk_widget_set_tooltip_text(g->aspect, _("select the aspect ratio or right click and type your own (w:h)"));
+  gtk_widget_set_tooltip_text(g->aspect, _("Select the aspect ratio or right click and type your own (w:h)"));
   g->aspect_slider = dt_bauhaus_slider_from_params(self, "aspect");
-  gtk_widget_set_tooltip_text(g->aspect_slider, _("set the custom aspect ratio"));
+  gtk_widget_set_tooltip_text(g->aspect_slider, _("Set the custom aspect ratio"));
 
   g->aspect_orient = dt_bauhaus_combobox_from_params(self, "aspect_orient");
   dt_bauhaus_combobox_add(g->aspect_orient, _("auto"));
   dt_bauhaus_combobox_add(g->aspect_orient, _("portrait"));
   dt_bauhaus_combobox_add(g->aspect_orient, _("landscape"));
-  gtk_widget_set_tooltip_text(g->aspect_orient, _("aspect ratio orientation of the image with border"));
+  gtk_widget_set_tooltip_text(g->aspect_orient, _("Aspect ratio orientation of the image with border"));
 
   g->pos_h = dt_bauhaus_combobox_new(dt_bauhaus_get_global(), DT_GUI_MODULE(self));
   dt_bauhaus_combobox_set_editable(g->pos_h, 1);
-  dt_bauhaus_widget_set_label(g->pos_h, N_("horizontal position"));
+  dt_bauhaus_widget_set_label(g->pos_h, N_("Horizontal position"));
   gtk_box_pack_start(GTK_BOX(self->gui->widget), g->pos_h, TRUE, TRUE, 0);
   g_signal_connect(G_OBJECT(g->pos_h), "value-changed", G_CALLBACK(position_h_changed), self);
-  gtk_widget_set_tooltip_text(g->pos_h, _("select the horizontal position ratio relative to top "
+  gtk_widget_set_tooltip_text(g->pos_h, _("Select the horizontal position ratio relative to top "
                                           "or right click and type your own (y:h)"));
   g->pos_h_slider = dt_bauhaus_slider_from_params(self, "pos_h");
-  gtk_widget_set_tooltip_text(g->pos_h_slider, _("custom horizontal position"));
+  gtk_widget_set_tooltip_text(g->pos_h_slider, _("Custom horizontal position"));
 
   g->pos_v = dt_bauhaus_combobox_new(dt_bauhaus_get_global(), DT_GUI_MODULE(self));
   dt_bauhaus_combobox_set_editable(g->pos_v, 1);
-  dt_bauhaus_widget_set_label(g->pos_v, N_("vertical position"));
+  dt_bauhaus_widget_set_label(g->pos_v, N_("Vertical position"));
   gtk_box_pack_start(GTK_BOX(self->gui->widget), g->pos_v, TRUE, TRUE, 0);
   g_signal_connect(G_OBJECT(g->pos_v), "value-changed", G_CALLBACK(position_v_changed), self);
-  gtk_widget_set_tooltip_text(g->pos_v, _("select the vertical position ratio relative to left "
+  gtk_widget_set_tooltip_text(g->pos_v, _("Select the vertical position ratio relative to left "
                                           "or right click and type your own (x:w)"));
   g->pos_v_slider = dt_bauhaus_slider_from_params(self, "pos_v");
-  gtk_widget_set_tooltip_text(g->pos_v_slider, _("custom vertical position"));
+  gtk_widget_set_tooltip_text(g->pos_v_slider, _("Custom vertical position"));
 
   gui_init_positions(self);
 
   g->frame_size = dt_bauhaus_slider_from_params(self, "frame_size");
   dt_bauhaus_slider_set_digits(g->frame_size, 4);
   dt_bauhaus_slider_set_format(g->frame_size, "%");
-  gtk_widget_set_tooltip_text(g->frame_size, _("size of the frame line in percent of min border width"));
+  gtk_widget_set_tooltip_text(g->frame_size, _("Size of the frame line in percent of min border width"));
 
   g->frame_offset = dt_bauhaus_slider_from_params(self, "frame_offset");
   dt_bauhaus_slider_set_digits(g->frame_offset, 4);
   dt_bauhaus_slider_set_format(g->frame_offset, "%");
-  gtk_widget_set_tooltip_text(g->frame_offset, _("offset of the frame line beginning on picture side"));
+  gtk_widget_set_tooltip_text(g->frame_offset, _("Offset of the frame line beginning on picture side"));
 
   GdkRGBA color = (GdkRGBA){.red = p->color[0], .green = p->color[1], .blue = p->color[2], .alpha = 1.0 };
 
@@ -1175,7 +1175,7 @@ void gui_init(struct dt_iop_module_t *self)
   g_signal_connect(G_OBJECT(g->colorpick), "color-set", G_CALLBACK(colorpick_color_set), self);
   gtk_box_pack_start(GTK_BOX(box), GTK_WIDGET(g->colorpick), FALSE, TRUE, 0);
   g->border_picker = dt_color_picker_new(self, DT_COLOR_PICKER_POINT, box);
-  gtk_widget_set_tooltip_text(GTK_WIDGET(g->border_picker), _("pick border color from image"));
+  gtk_widget_set_tooltip_text(GTK_WIDGET(g->border_picker), _("Pick border color from image"));
   gtk_box_pack_start(GTK_BOX(self->gui->widget), box, TRUE, TRUE, 0);
 
   box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
@@ -1187,7 +1187,7 @@ void gui_init(struct dt_iop_module_t *self)
   g_signal_connect(G_OBJECT(g->frame_colorpick), "color-set", G_CALLBACK(frame_colorpick_color_set), self);
   gtk_box_pack_start(GTK_BOX(box), GTK_WIDGET(g->frame_colorpick), FALSE, TRUE, 0);
   g->frame_picker = dt_color_picker_new(self, DT_COLOR_PICKER_POINT, box);
-  gtk_widget_set_tooltip_text(GTK_WIDGET(g->frame_picker), _("pick frame line color from image"));
+  gtk_widget_set_tooltip_text(GTK_WIDGET(g->frame_picker), _("Pick frame line color from image"));
   gtk_box_pack_start(GTK_BOX(self->gui->widget), box, TRUE, TRUE, 0);
 }
 

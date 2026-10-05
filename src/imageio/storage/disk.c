@@ -157,7 +157,7 @@ static void button_clicked(GtkWidget *widget, dt_imageio_module_storage_t *self)
   disk_t *d = (disk_t *)self->gui_data;
   GtkWidget *win = dt_gui_main_window();
   GtkFileChooserNative *filechooser = gtk_file_chooser_native_new(
-        _("select directory"), GTK_WINDOW(win), GTK_FILE_CHOOSER_ACTION_SELECT_FOLDER,
+        _("Select directory"), GTK_WINDOW(win), GTK_FILE_CHOOSER_ACTION_SELECT_FOLDER,
         _("_select as output destination"), _("_cancel"));
 
   gchar *old = g_strdup(gtk_entry_get_text(d->entry));
@@ -263,17 +263,17 @@ void gui_init(dt_imageio_module_storage_t *self)
   d->entry = GTK_ENTRY(widget);
   gtk_entry_set_width_chars(GTK_ENTRY(widget), 0);
   gtk_widget_set_tooltip_text(widget,
-      _("enter the path where to put exported images\nvariables support bash like string manipulation\n"
+      _("Enter the path where to put exported images\nvariables support bash like string manipulation\n"
         "type '$(' to activate the completion and see the list of variables"));
   g_signal_connect(G_OBJECT(widget), "changed", G_CALLBACK(entry_changed_callback), self);
 
   widget = dtgtk_button_new(dtgtk_cairo_paint_directory, CPF_NONE, NULL);
-  gtk_widget_set_tooltip_text(widget, _("select directory"));
+  gtk_widget_set_tooltip_text(widget, _("Select directory"));
   gtk_box_pack_start(GTK_BOX(hbox), widget, FALSE, FALSE, 0);
   g_signal_connect(G_OBJECT(widget), "clicked", G_CALLBACK(button_clicked), self);
 
   d->onsave_action = dt_bauhaus_combobox_new(dt_bauhaus_get_global(), DT_GUI_MODULE(NULL));
-  dt_bauhaus_widget_set_label(d->onsave_action, N_("on conflict"));
+  dt_bauhaus_widget_set_label(d->onsave_action, N_("On conflict"));
   gtk_widget_set_tooltip_text(d->onsave_action, _("Expected behaviour if the current naming pattern\n"
                                                   "produces a filename that already exists."));
   dt_bauhaus_combobox_add(d->onsave_action, _("create unique filename"));
@@ -400,14 +400,14 @@ try_again:
     if(g_mkdir_with_parents(output_dir, 0755))
     {
       fprintf(stderr, "[imageio_storage_disk] could not create directory: `%s'!\n", output_dir);
-      dt_control_log(_("could not create directory `%s'!"), output_dir);
+      dt_control_log(_("Could not create directory `%s'!"), output_dir);
       fail = TRUE;
       goto failed;
     }
     if(g_access(output_dir, W_OK | X_OK) != 0)
     {
       fprintf(stderr, "[imageio_storage_disk] could not write to directory: `%s'!\n", output_dir);
-      dt_control_log(_("could not write to directory `%s'!"), output_dir);
+      dt_control_log(_("Could not write to directory `%s'!"), output_dir);
       fail = TRUE;
       goto failed;
     }
@@ -453,7 +453,7 @@ try_again:
                        icc_filename, icc_intent, self, sdata, num, total, metadata) != 0)
   {
     fprintf(stderr, "[imageio_storage_disk] could not export to file: `%s'!\n", filename);
-    dt_control_log(_("could not export to file `%s'!"), filename);
+    dt_control_log(_("Could not export to file `%s'!"), filename);
     return 1;
   }
 

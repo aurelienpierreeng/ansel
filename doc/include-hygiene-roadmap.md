@@ -694,7 +694,9 @@ it — with `_hm_clean_module_name()`, `_hm_module_row_label()`, `_hm_label_t` a
 `dt_capitalize_label()`, which lives in `widgets/widget_style.h` — layer 4. The whole chain
 is *presentation*: it builds the display strings the merge report's rows are made of. "No
 GTK in it" is not the same as "belongs below the GUI", and taking the first for the second
-is what cost two broken builds.
+is what cost two broken builds. (On 2026-10-01 `dt_capitalize_label()` went away and module
+names took their capital in the source; `_hm_clean_module_name()` now only drops the mnemonic
+underscore. The chain is still presentation, and the conclusion stands.)
 
 The actual defect was one level up. `_hm_backup_dest()` snapshots the destination before a
 merge, and among that snapshot it captured `orig_labels` / `orig_styles` — **ready-made

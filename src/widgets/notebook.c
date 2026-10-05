@@ -19,7 +19,6 @@
 #include "widgets/notebook.h"
 
 #include "system/macros.h"            // IS_NULL_PTR
-#include "widgets/widget_style.h"     // dt_capitalize_label
 #include "widgets/widget_settings.h"  // DT_PIXEL_APPLY_DPI, dt_widget_notebook_page_changed
 #include "widgets/widget_style.h"     // dt_gui_add_class
 #include <glib/gi18n.h>
@@ -87,10 +86,7 @@ GtkNotebook *dt_ui_notebook_new()
 
 GtkWidget *dt_ui_notebook_page(GtkNotebook *notebook, const char *text, const char *tooltip)
 {
-  gchar *text_cpy = g_strdup(_(text));
-  dt_capitalize_label(text_cpy);
-  GtkWidget *label = gtk_label_new(text_cpy);
-  dt_free(text_cpy);
+  GtkWidget *label = gtk_label_new(_(text));
   GtkWidget *page = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
   if(strlen(text) > 2)
     gtk_label_set_ellipsize(GTK_LABEL(label), PANGO_ELLIPSIZE_END);

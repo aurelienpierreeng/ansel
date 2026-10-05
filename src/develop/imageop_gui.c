@@ -190,7 +190,9 @@ GtkWidget *dt_bauhaus_slider_from_params(dt_iop_module_t *self, const char *para
       }
       else
       {
+        // A field with no $DESCRIPTION shows its own name, ASCII by construction, starting with a capital.
         gchar *str = dt_util_str_replace(f->header.field_name, "_", " ");
+        str[0] = g_ascii_toupper(str[0]);
 
         dt_bauhaus_widget_set_label(slider, str);
 
@@ -243,6 +245,7 @@ GtkWidget *dt_bauhaus_combobox_from_params(dt_iop_module_t *self, const char *pa
     else
     {
       str = dt_util_str_replace(f->header.field_name, "_", " ");
+      str[0] = g_ascii_toupper(str[0]);
 
       dt_bauhaus_widget_set_label(combobox, str);
 
@@ -335,7 +338,7 @@ GtkWidget *dt_iop_togglebutton_new(dt_iop_module_t *self, const char *section, c
     gtk_widget_set_tooltip_text(w, _(label));
   else
   {
-    gchar *tooltip = g_strdup_printf(_("%s\nctrl+click to %s"), _(label), _(ctrl_label));
+    gchar *tooltip = g_strdup_printf(_("%s\nCtrl+click to %s"), _(label), _(ctrl_label));
     gtk_widget_set_tooltip_text(w, tooltip);
     dt_free(tooltip);
   }
@@ -360,7 +363,7 @@ GtkWidget *dt_iop_togglebutton_new_no_register(dt_iop_module_t *self, const char
     gtk_widget_set_tooltip_text(w, _(label));
   else
   {
-    gchar *tooltip = g_strdup_printf(_("%s\nctrl+click to %s"), _(label), _(ctrl_label));
+    gchar *tooltip = g_strdup_printf(_("%s\nCtrl+click to %s"), _(label), _(ctrl_label));
     gtk_widget_set_tooltip_text(w, tooltip);
     dt_free(tooltip);
   }
@@ -928,7 +931,6 @@ static void _iop_panel_label(dt_iop_module_t *module)
   gtk_widget_set_name(lab, "iop-panel-label");
 
   char *module_name = dt_history_item_get_label(module);
-  dt_capitalize_label(module_name);
   gtk_label_set_markup_with_mnemonic(GTK_LABEL(lab), module_name);
   dt_free(module_name);
 
@@ -946,7 +948,6 @@ static void _iop_panel_label(dt_iop_module_t *module)
   }
 
   gchar *clean_name = delete_underscore(module->name());
-  dt_capitalize_label(clean_name);
 
   mod->instance_name
       = g_strdup_printf("%s/%s", clean_name, (module->multi_name[0] != '\0') ? module->multi_name : "0");
@@ -1031,7 +1032,6 @@ void dt_iop_gui_init(dt_iop_module_t *module)
   if(!dt_iop_is_hidden(module) && !(module->flags() & IOP_FLAGS_DEPRECATED))
   {
     gchar *clean_name = delete_underscore(module->name());
-    dt_capitalize_label(clean_name);
 
     // slash is not allowed in module names because that makes accel pathes fail
     assert(g_strrstr(clean_name, "/") == NULL);
@@ -1920,7 +1920,7 @@ void dt_iop_gui_set_expander(dt_iop_module_t *module)
   hw[IOP_MODULE_INSTANCE] = dtgtk_button_new(dtgtk_cairo_paint_multiinstance, 0, NULL);
   module->gui->multimenu_button = GTK_WIDGET(hw[IOP_MODULE_INSTANCE]);
   gtk_widget_set_tooltip_text(GTK_WIDGET(hw[IOP_MODULE_INSTANCE]),
-                              _("multiple instance actions\nright-click creates new instance"));
+                              _("Multiple instance actions\nRight-click creates new instance"));
   g_signal_connect(G_OBJECT(hw[IOP_MODULE_INSTANCE]), "button-press-event",
                    G_CALLBACK(_iop_plugin_header_child_button_press), module);
   g_signal_connect(G_OBJECT(hw[IOP_MODULE_INSTANCE]), "button-press-event", G_CALLBACK(_gui_multiinstance_callback),
@@ -1931,7 +1931,7 @@ void dt_iop_gui_set_expander(dt_iop_module_t *module)
   /* add reset button */
   hw[IOP_MODULE_RESET] = dtgtk_button_new(dtgtk_cairo_paint_reset, 0, NULL);
   module->gui->reset_button = GTK_WIDGET(hw[IOP_MODULE_RESET]);
-  gtk_widget_set_tooltip_text(GTK_WIDGET(hw[IOP_MODULE_RESET]), _("reset parameters\nctrl+click to reapply any automatic presets"));
+  gtk_widget_set_tooltip_text(GTK_WIDGET(hw[IOP_MODULE_RESET]), _("Reset parameters\nCtrl+click to reapply any automatic presets"));
   g_signal_connect(G_OBJECT(hw[IOP_MODULE_RESET]), "button-press-event",
                    G_CALLBACK(_iop_plugin_header_child_button_press), module);
   g_signal_connect(G_OBJECT(hw[IOP_MODULE_RESET]), "button-press-event", G_CALLBACK(_gui_reset_callback), module);
@@ -1940,7 +1940,7 @@ void dt_iop_gui_set_expander(dt_iop_module_t *module)
   hw[IOP_MODULE_PRESETS] = dtgtk_button_new(dtgtk_cairo_paint_presets, 0, NULL);
   module->gui->presets_button = GTK_WIDGET(hw[IOP_MODULE_PRESETS]);
   if(!(module->flags() & IOP_FLAGS_ONE_INSTANCE))
-    gtk_widget_set_tooltip_text(GTK_WIDGET(hw[IOP_MODULE_PRESETS]), _("presets\nright-click to apply on new instance"));
+    gtk_widget_set_tooltip_text(GTK_WIDGET(hw[IOP_MODULE_PRESETS]), _("Presets\nRight-click to apply on new instance"));
   g_signal_connect(G_OBJECT(hw[IOP_MODULE_PRESETS]), "button-press-event",
                    G_CALLBACK(_iop_plugin_header_child_button_press), module);
   g_signal_connect(G_OBJECT(hw[IOP_MODULE_PRESETS]), "clicked", G_CALLBACK(_presets_popup_callback), module);

@@ -2415,7 +2415,7 @@ static void _rename_layer_clicked(GtkButton *button, gpointer user_data)
     return;
 
   if(!_rename_current_layer_from_gui(self, requested_name))
-    dt_control_log(_("failed to rename drawing layer"));
+    dt_control_log(_("Failed to rename drawing layer"));
 }
 
 static void _delete_layer_clicked(GtkButton *button, gpointer user_data)
@@ -2503,21 +2503,21 @@ static void _fill_white_clicked(GtkButton *button, gpointer user_data)
 {
   (void)button;
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
-  if(!_fill_current_layer(self, 1.0f)) dt_control_log(_("failed to fill drawing layer"));
+  if(!_fill_current_layer(self, 1.0f)) dt_control_log(_("Failed to fill drawing layer"));
 }
 
 static void _fill_black_clicked(GtkButton *button, gpointer user_data)
 {
   (void)button;
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
-  if(!_fill_current_layer(self, 0.0f)) dt_control_log(_("failed to fill drawing layer"));
+  if(!_fill_current_layer(self, 0.0f)) dt_control_log(_("Failed to fill drawing layer"));
 }
 
 static void _fill_transparent_clicked(GtkButton *button, gpointer user_data)
 {
   (void)button;
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
-  if(!_clear_current_layer(self)) dt_control_log(_("failed to clear drawing layer"));
+  if(!_clear_current_layer(self)) dt_control_log(_("Failed to clear drawing layer"));
 }
 
 static void _save_layer_clicked(GtkButton *button, gpointer user_data)
@@ -2605,14 +2605,14 @@ static void _create_layer_clicked(GtkButton *button, gpointer user_data)
     return;
 
   if(!_create_new_layer(self, requested_name))
-    dt_control_log(_("failed to create drawing layer"));
+    dt_control_log(_("Failed to create drawing layer"));
 }
 
 static void _create_background_clicked(GtkButton *button, gpointer user_data)
 {
   (void)button;
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
-  if(!_create_background_layer_from_input(self)) dt_control_log(_("failed to create background layer from input"));
+  if(!_create_background_layer_from_input(self)) dt_control_log(_("Failed to create background layer from input"));
 }
 
 static void _preview_bg_toggled(GtkToggleButton *button, gpointer user_data)
@@ -2759,7 +2759,7 @@ void dt_drawlayer_show_runtime_feedback(const dt_iop_drawlayer_gui_data_t *g,
 /** @brief Module display name. */
 const char *name()
 {
-  return C_("modulename", "drawing");
+  return C_("modulename", "Drawing");
 }
 
 /** @brief Module description strings used by UI/help. */
@@ -3778,7 +3778,7 @@ int button_pressed(dt_iop_module_t *self, double x, double y, double pressure, i
   if(!dispatch.ok)
     return 0;
   if(!dispatch.raw_input_ok)
-    dt_control_log(_("failed to queue live drawing stroke"));
+    dt_control_log(_("Failed to queue live drawing stroke"));
   dt_control_mouse_is_painting(TRUE);
   dt_control_queue_redraw_center();
   return 1;
@@ -3829,7 +3829,7 @@ int button_released(dt_iop_module_t *self, double x, double y, int which, uint32
     const dt_drawlayer_runtime_result_t dispatch
         = dt_drawlayer_runtime_manager_update(&g->manager, &update, &runtime_manager);
     if(!dispatch.ok || !dispatch.raw_input_ok)
-      dt_control_log(_("failed to queue drawing stroke end"));
+      dt_control_log(_("Failed to queue drawing stroke end"));
     dt_control_queue_redraw_center();
     return 1;
   }

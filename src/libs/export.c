@@ -215,7 +215,7 @@ static void _resolve_export_size(int *max_width, int *max_height, double *scale_
 
 const char *name(struct dt_lib_module_t *self)
 {
-  return _("export");
+  return _("Export");
 }
 
 const char **views(dt_lib_module_t *self)
@@ -350,7 +350,7 @@ static void _export_button_clicked(GtkWidget *widget, dt_lib_export_t *d)
     dt_osx_disallow_fullscreen(dialog);
 #endif
 
-    gtk_window_set_title(GTK_WINDOW(dialog), _("export to disk"));
+    gtk_window_set_title(GTK_WINDOW(dialog), _("Export to disk"));
     const gint res = gtk_dialog_run(GTK_DIALOG(dialog));
     GtkWindow *dialog_parent = gtk_window_get_transient_for(GTK_WINDOW(dialog));
     gtk_widget_destroy(dialog);
@@ -1018,11 +1018,11 @@ void gui_init(dt_lib_module_t *self)
                             G_CALLBACK(_on_storage_list_changed), self);
   g_signal_connect(G_OBJECT(d->storage), "value-changed", G_CALLBACK(_storage_changed), (gpointer)d);
 
-  label = dt_ui_section_label_new(_("format options"));
+  label = dt_ui_section_label_new(_("Format options"));
   gtk_box_pack_start(GTK_BOX(self->widget), label, FALSE, TRUE, 0);
 
   d->format = dt_bauhaus_combobox_new(dt_bauhaus_get_global(), DT_GUI_MODULE(NULL));
-  dt_bauhaus_widget_set_label(d->format, N_("file format"));
+  dt_bauhaus_widget_set_label(d->format, N_("File format"));
   gtk_box_pack_start(GTK_BOX(self->widget), d->format, FALSE, TRUE, 0);
   g_signal_connect(G_OBJECT(d->format), "value-changed", G_CALLBACK(_format_changed), (gpointer)d);
 
@@ -1040,10 +1040,10 @@ void gui_init(dt_lib_module_t *self)
     }
   }
 
-  label = dt_ui_section_label_new(_("global options"));
+  label = dt_ui_section_label_new(_("Global options"));
   gtk_box_pack_start(GTK_BOX(self->widget), label, FALSE, TRUE, 0);
 
-  DT_BAUHAUS_COMBOBOX_NEW_FULL(dt_bauhaus_get_global(), d->dimensions_type, NULL, N_("set size (bounding box)"),
+  DT_BAUHAUS_COMBOBOX_NEW_FULL(dt_bauhaus_get_global(), d->dimensions_type, NULL, N_("Set size (bounding box)"),
                                _("Choose a method for setting the output size.\n"
                                  "The width and height specified define the bounding box\n"
                                  "in which the image will be proportionnaly fitted.\n"),
@@ -1057,17 +1057,17 @@ void gui_init(dt_lib_module_t *self)
 
   d->print_width = gtk_entry_new();
   dt_accels_disconnect_on_text_input(d->print_width);
-  gtk_widget_set_tooltip_text(d->print_width, _("maximum output width limit.\n"
-                                                "click middle mouse button to reset to 0."));
+  gtk_widget_set_tooltip_text(d->print_width, _("Maximum output width limit.\n"
+                                                "Click middle mouse button to reset to 0."));
   gtk_entry_set_width_chars(GTK_ENTRY(d->print_width), 5);
   d->print_height = gtk_entry_new();
   dt_accels_disconnect_on_text_input(d->print_height);
-  gtk_widget_set_tooltip_text(d->print_height, _("maximum output height limit.\n"
-                                                 "click middle mouse button to reset to 0."));
+  gtk_widget_set_tooltip_text(d->print_height, _("Maximum output height limit.\n"
+                                                 "Click middle mouse button to reset to 0."));
   gtk_entry_set_width_chars(GTK_ENTRY(d->print_height), 5);
   d->print_dpi = gtk_entry_new();
   dt_accels_disconnect_on_text_input(d->print_dpi);
-  gtk_widget_set_tooltip_text(d->print_dpi, _("resolution in dot per inch"));
+  gtk_widget_set_tooltip_text(d->print_dpi, _("Resolution in dot per inch"));
   gtk_entry_set_width_chars(GTK_ENTRY(d->print_dpi), 4);
   const char *dpi = dt_conf_get_string_const(CONFIG_PREFIX "print_dpi");
   gtk_entry_set_text(GTK_ENTRY(d->print_dpi), dpi);
@@ -1075,13 +1075,13 @@ void gui_init(dt_lib_module_t *self)
 
   d->width = gtk_entry_new();
   dt_accels_disconnect_on_text_input(d->width);
-  gtk_widget_set_tooltip_text(d->width, _("maximum output width limit.\n"
-                                          "click middle mouse button to reset to 0."));
+  gtk_widget_set_tooltip_text(d->width, _("Maximum output width limit.\n"
+                                          "Click middle mouse button to reset to 0."));
   gtk_entry_set_width_chars(GTK_ENTRY(d->width), 5);
   d->height = gtk_entry_new();
   dt_accels_disconnect_on_text_input(d->height);
-  gtk_widget_set_tooltip_text(d->height, _("maximum output height limit.\n"
-                                           "click middle mouse button to reset to 0."));
+  gtk_widget_set_tooltip_text(d->height, _("Maximum output height limit.\n"
+                                           "Click middle mouse button to reset to 0."));
   gtk_entry_set_width_chars(GTK_ENTRY(d->height), 5);
 
   gtk_widget_add_events(d->width, GDK_BUTTON_PRESS_MASK);
@@ -1118,9 +1118,9 @@ void gui_init(dt_lib_module_t *self)
   dt_accels_disconnect_on_text_input(d->scale);
   gtk_entry_set_width_chars(GTK_ENTRY(d->scale), 5);
   gtk_entry_set_text (GTK_ENTRY(d->scale), dt_conf_get_string_const(CONFIG_PREFIX "resizing_factor"));
-  gtk_widget_set_tooltip_text(d->scale, _("it can be an integer, decimal number or simple fraction.\n"
-                                          "zero or empty values are equal to 1.\n"
-                                          "click middle mouse button to reset to 1."));
+  gtk_widget_set_tooltip_text(d->scale, _("It can be an integer, decimal number or simple fraction.\n"
+                                          "Zero or empty values are equal to 1.\n"
+                                          "Click middle mouse button to reset to 1."));
   gtk_widget_set_halign(GTK_WIDGET(d->scale), GTK_ALIGN_END);
   gtk_widget_add_events(d->scale, GDK_BUTTON_PRESS_MASK);
 
@@ -1138,10 +1138,10 @@ void gui_init(dt_lib_module_t *self)
   gtk_box_pack_start(GTK_BOX(self->widget), GTK_WIDGET(d->size_in_px), FALSE, FALSE, 0);
 
   d->export_masks = dt_bauhaus_combobox_new(dt_bauhaus_get_global(), DT_GUI_MODULE(NULL));
-  dt_bauhaus_widget_set_label(d->export_masks, N_("store masks"));
+  dt_bauhaus_widget_set_label(d->export_masks, N_("Store masks"));
   dt_bauhaus_combobox_add(d->export_masks, _("no"));
   dt_bauhaus_combobox_add(d->export_masks, _("yes"));
-  gtk_widget_set_tooltip_text(d->export_masks, _("store masks as layers in exported images. only works for some formats."));
+  gtk_widget_set_tooltip_text(d->export_masks, _("Store masks as layers in exported images. Only works for some formats."));
   gtk_box_pack_start(GTK_BOX(self->widget), d->export_masks, FALSE, TRUE, 0);
 
   //  Add profile combo
@@ -1169,7 +1169,7 @@ void gui_init(dt_lib_module_t *self)
     "RGB color space used to encode the output files.\n"
     "\"same as original\" exports to the same space as the original\n"
     "picture, which is linear sensor RGB for raw pictures.\n"
-    "sRGB is recommended in most cases.\n"
+    "SRGB is recommended in most cases.\n"
     "You can use custom color spaces defined\n"
     "by ICC profiles stored in:\n- %s\n- %s"), user_profile_dir, system_profile_dir);
   gtk_widget_set_tooltip_text(d->profile, tooltip);
@@ -1180,7 +1180,7 @@ void gui_init(dt_lib_module_t *self)
   //  Add intent combo
 
   d->intent = dt_bauhaus_combobox_new(dt_bauhaus_get_global(), DT_GUI_MODULE(NULL));
-  dt_bauhaus_widget_set_label(d->intent, N_("intent"));
+  dt_bauhaus_widget_set_label(d->intent, N_("Intent"));
   dt_bauhaus_combobox_add(d->intent, _("same as original"));
   dt_bauhaus_combobox_add(d->intent, _("perceptual"));
   dt_bauhaus_combobox_add(d->intent, _("relative colorimetric"));
@@ -1191,7 +1191,7 @@ void gui_init(dt_lib_module_t *self)
   tooltip = g_strdup_printf(_("• perceptual: "
                               "smoothly moves out-of-gamut colors into gamut,"
                               "preserving gradations, but distorts in-gamut colors in the process."
-                              " note that perceptual is often a proprietary LUT that depends"
+                              " Note that perceptual is often a proprietary LUT that depends"
                               " on the destination space."
                               "\n\n"
 
@@ -1207,7 +1207,7 @@ void gui_init(dt_lib_module_t *self)
 
                               "• absolute colorimetric: "
                               "adapt white point of the image to the white point of the"
-                              " destination medium and do nothing else. mainly used when"
+                              " destination medium and do nothing else. Mainly used when"
                               " proofing colors. (not suited for photography)."
                               ""
                               ));
@@ -1217,10 +1217,10 @@ void gui_init(dt_lib_module_t *self)
   //  Add style combo
 
   d->style = dt_bauhaus_combobox_new(dt_bauhaus_get_global(), DT_GUI_MODULE(NULL));
-  dt_bauhaus_widget_set_label(d->style, N_("style"));
+  dt_bauhaus_widget_set_label(d->style, N_("Style"));
   _lib_export_styles_changed_callback(NULL, self);
   gtk_box_pack_start(GTK_BOX(self->widget), d->style, FALSE, TRUE, 0);
-  gtk_widget_set_tooltip_text(d->style, _("temporary style to use while exporting"));
+  gtk_widget_set_tooltip_text(d->style, _("Temporary style to use while exporting"));
 
   //  Set callback signals
   g_signal_connect(G_OBJECT(d->export_masks), "value-changed", G_CALLBACK(_callback_bool),
@@ -1236,8 +1236,8 @@ void gui_init(dt_lib_module_t *self)
   gtk_box_pack_start(GTK_BOX(self->widget), GTK_WIDGET(hbox), FALSE, TRUE, 0);
 
   // Export button
-  d->export_button = GTK_BUTTON(dt_action_button_new(self, N_("export"), _export_button_clicked, d,
-                                                     _("export with current settings"), GDK_KEY_e, DT_PRIMARY_MASK));
+  d->export_button = GTK_BUTTON(dt_action_button_new(self, N_("Export"), _export_button_clicked, d,
+                                                     _("Export with current settings"), GDK_KEY_e, DT_PRIMARY_MASK));
   gtk_box_pack_start(hbox, GTK_WIDGET(d->export_button), TRUE, TRUE, 0);
 
   g_signal_connect(G_OBJECT(d->width), "changed", G_CALLBACK(_width_changed), (gpointer)d);
