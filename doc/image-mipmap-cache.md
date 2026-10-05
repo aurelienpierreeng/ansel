@@ -111,3 +111,36 @@ history copy/delete completes — so the very first time the duplicate becomes v
 carries its final history. Any future caller of `dt_image_duplicate()` that will mutate the new
 image's history afterward (a style, a batch edit, ...) should do the same rather than let the
 default immediate reload race its own follow-up write.
+
+## Why a thumbnail is a skull, and how it says so
+
+*Found `8bef6908d9`, 2026-10-05, by reading every path that zeroes a thumbnail's size (#1531).*
+
+A skull is painted by one function: `_paint_skulls()` (`caches/mipmap_cache.c`) replaces any
+thumbnail whose descriptor came out of generation as `0x0` with the 8x8 `dead_image_8()`. Every
+cause therefore goes through zeroing `dsc->width/height`, and until this change the cause was
+lost there — stderr only got `could not process thumbnail!`. The causes, each now kept as a
+`dt_imageio_retval_t` in `dsc->status` and handed to readers in `dt_mipmap_buffer_t.status`:
+
+| Where | Cause | Status |
+|---|---|---|
+| `_init_8` | neither the original nor a local copy exists, or the image left the image cache | `FILE_NOT_FOUND` |
+| `_init_8` | embedded-JPEG mode "always" (2) and no embedded/companion JPEG could be read: the pipe is forbidden | `NO_EMBEDDED_THUMBNAIL` |
+| `_generate_blocking`, `DT_MIPMAP_FULL` | the loader failed; its own value (`UNSUPPORTED_CAMERA`, `FILE_CORRUPTED`, …) used to be dropped | the loader's |
+| `dt_imageio_export_with_flags` | pipe init failed, or the pipe returned an error / no backbuf, or its output was gone from the pixelpipe cache before it could be referenced | `PROCESSING_FAILED` |
+| `dt_imageio_export_with_flags` | the pipe was stopped (`dt_dev_pixelpipe_process` returns the same `1` for a kill-switch stop as for a failure) | `ABORTED` |
+| `dt_imageio_export_with_flags` | the output buffer could not be allocated | `CACHE_FULL` |
+| `dt_imageio_export_with_flags` | `format->write_image` failed | `IOERROR` |
+
+Not causes: an **external** stop (`shutdown_ext`, a thumbnail scrolled out of view) restores the
+descriptor and keeps the entry flagged for generation, so it never leaves a skull; the disk cache
+never holds one (only `> 8x8` entries are written, and an unreadable `.jpg` is deleted and
+regenerated); `_init_8`'s early return for `width < 16` does not zero the size.
+
+A skull stays in RAM until the entry is evicted or invalidated, **whatever the cause** — a
+transient one (`CACHE_FULL`) included. The label makes that visible; it does not change it.
+
+`_view_image_get_surface_internal()` (`views/view.c`) paints the label: every consumer
+(lighttable, filmstrip, preview window, map, print, slideshow) goes through it. It runs in a
+worker thread, so it builds its own Pango font description rather than borrowing bauhaus's, which
+`dt_bauhaus_load_theme()` frees from the GUI thread.

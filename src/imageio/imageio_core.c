@@ -755,7 +755,7 @@ void _export_final_buffer_to_uint16(const float *const restrict inbuf, uint16_t 
 }
 
 // internal function: to avoid exif blob reading + 8-bit byteorder flag + high-quality override
-int dt_imageio_export_with_flags(const int32_t imgid, const char *filename,
+dt_imageio_retval_t dt_imageio_export_with_flags(const int32_t imgid, const char *filename,
                                  dt_imageio_module_format_t *format, dt_imageio_module_data_t *format_params,
                                  const gboolean ignore_exif, const gboolean display_byteorder,
                                  const gboolean high_quality, const double scale_factor, const gboolean thumbnail_export,
@@ -770,6 +770,8 @@ int dt_imageio_export_with_flags(const int32_t imgid, const char *filename,
 
   dt_mipmap_buffer_t buf;
   void *outbuf = NULL;
+  // set at every `goto error`, so the caller learns which step failed
+  dt_imageio_retval_t status = DT_IMAGEIO_OK;
 
   // Get the history, aka sequence of editing changes
   dt_develop_t dev;
@@ -781,7 +783,10 @@ int dt_imageio_export_with_flags(const int32_t imgid, const char *filename,
   const gboolean use_style = !thumbnail_export && format_params->style[0] != '\0';
   //  If a style is to be applied during export, add the iop params into the history
   if(use_style && _apply_style_before_export(&dev, format_params, imgid))
+  {
+    status = DT_IMAGEIO_PROCESSING_FAILED;
     goto error;
+  }
 
   int width = MAX(format_params->max_width, 0);
   int height = MAX(format_params->max_height, 0);
@@ -795,7 +800,11 @@ int dt_imageio_export_with_flags(const int32_t imgid, const char *filename,
   else
     res = dt_dev_pixelpipe_init_export(&pipe, &dev, format->levels(format_params), export_masks);
 
-  if(!res) goto error;
+  if(!res)
+  {
+    status = DT_IMAGEIO_PROCESSING_FAILED;
+    goto error;
+  }
 
   pipe.shutdown_ext = shutdown;
 
@@ -814,6 +823,9 @@ int dt_imageio_export_with_flags(const int32_t imgid, const char *filename,
 
   if(IS_NULL_PTR(buf.buf) || buf.width == 0 || buf.height == 0)
   {
+    // the loader's own reason (unsupported camera, corrupted file...). An error path must never
+    // report success, hence the fallback.
+    status = (buf.status != DT_IMAGEIO_OK) ? buf.status : DT_IMAGEIO_LOAD_FAILED;
     dt_mipmap_cache_release(&buf);
     goto error;
   }
@@ -872,6 +884,8 @@ int dt_imageio_export_with_flags(const int32_t imgid, const char *filename,
   if(dt_dev_backbuf_get_hash(&pipe.backbuf) == -1 || err)
   {
     dt_print(DT_DEBUG_IMAGEIO, "[dt_imageio_export_with_flags] no valid output buffer\n");
+    // the pipe reports a kill-switch stop with the same error as a failure
+    status = dt_dev_pixelpipe_has_shutdown(&pipe) ? DT_IMAGEIO_ABORTED : DT_IMAGEIO_PROCESSING_FAILED;
     goto error;
   }
 
@@ -894,6 +908,7 @@ int dt_imageio_export_with_flags(const int32_t imgid, const char *filename,
   {
     if(cache_entry)
       dt_dev_pixelpipe_cache_ref_count_entry(FALSE, cache_entry);
+    status = DT_IMAGEIO_PROCESSING_FAILED;
     goto error;
   }
 
@@ -960,7 +975,11 @@ int dt_imageio_export_with_flags(const int32_t imgid, const char *filename,
   dt_dev_pixelpipe_cache_ref_count_entry(FALSE, cache_entry);
   dt_dev_pixelpipe_cache_rdlock_entry(FALSE, cache_entry);
 
-  if(IS_NULL_PTR(outbuf)) goto error;
+  if(IS_NULL_PTR(outbuf))
+  {
+    status = DT_IMAGEIO_CACHE_FULL;
+    goto error;
+  }
 
   format_params->width = pipe.backbuf.width;
   format_params->height = pipe.backbuf.height;
@@ -987,7 +1006,11 @@ int dt_imageio_export_with_flags(const int32_t imgid, const char *filename,
                             num, total, &pipe, export_masks);
 
   dt_free(exif_profile);
-  if(res) goto error;
+  if(res)
+  {
+    status = DT_IMAGEIO_IOERROR;
+    goto error;
+  }
 
   dt_dev_pixelpipe_cleanup(&pipe);
   dt_dev_cleanup(&dev);
@@ -1004,13 +1027,13 @@ int dt_imageio_export_with_flags(const int32_t imgid, const char *filename,
   }
 
   dt_pixelpipe_cache_free_align(outbuf);
-  return 0; // success
+  return DT_IMAGEIO_OK;
 
 error:
   dt_pixelpipe_cache_free_align(outbuf);
   dt_dev_pixelpipe_cleanup(&pipe);
   dt_dev_cleanup(&dev);
-  return 1;
+  return status;
 }
 
 

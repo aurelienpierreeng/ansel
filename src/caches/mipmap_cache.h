@@ -76,6 +76,10 @@ typedef struct dt_mipmap_buffer_t
   uint8_t *buf;
   dt_colorspaces_color_profile_type_t color_space;
   dt_cache_entry_t *cache_entry;
+  /** @brief Why the entry holds no image: a thumbnail drawn as a skull, or a full-size input
+   * with no pixels. DT_IMAGEIO_OK otherwise, and when @ref buf is NULL because the entry is
+   * not available yet rather than failed. */
+  dt_imageio_retval_t status;
 } dt_mipmap_buffer_t;
 
 typedef struct dt_mipmap_cache_one_t dt_mipmap_cache_one_t;
