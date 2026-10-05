@@ -1763,13 +1763,18 @@ int dt_dev_pixelpipe_process(dt_dev_pixelpipe_t *pipe, dt_iop_roi_t roi)
 
       // No opencl errors, no killswitch triggered: we should have a valid output buffer now.
       /* Retained too: the run's own reference covers this entry only while the planned hash is still
-       * the one it produced. */
+       * the one it produced.
+       * And not required to be in RAM yet: an export pipe never goes through the darkroom's cache
+       * policy seal, so its last node keeps cache_output_on_ram = 0 and an OpenCL run leaves the
+       * final output in vRAM only. The device is still reserved here, so the host copy every
+       * backbuffer consumer reads is downloaded now, on the referenced entry. */
       dt_pixel_cache_entry_t *final_entry = NULL;
       if(!requested_backbuf)
       {
         dt_dev_pixelpipe_cache_unref_hash(final_hash);
       }
-      else if(dt_dev_pixelpipe_cache_ref_host_entry_by_hash(dt_dev_pixelpipe_get_hash(pipe), NULL, &final_entry))
+      else if(dt_dev_pixelpipe_cache_ref_entry_by_hash(dt_dev_pixelpipe_get_hash(pipe), NULL, &final_entry)
+              && dt_dev_pixelpipe_cache_restore_host_payload(final_entry, pipe->devid, NULL))
       {
         _update_backbuf_cache_reference(pipe, roi, final_entry);
         dt_dev_pixelpipe_cache_unref_entry(final_entry);
@@ -1782,6 +1787,8 @@ int dt_dev_pixelpipe_process(dt_dev_pixelpipe_t *pipe, dt_iop_roi_t roi)
                  " devid=%d err=%d\n",
                  dt_pixelpipe_get_pipe_name(pipe->type), dt_dev_pixelpipe_get_hash(pipe),
                  dt_dev_pixelpipe_get_history_hash(pipe), pipe->devid, err);
+        // Found but not restorable to RAM: the reference taken above is released here.
+        if(!IS_NULL_PTR(final_entry)) dt_dev_pixelpipe_cache_unref_entry(final_entry);
         dt_dev_pixelpipe_cache_unref_hash(final_hash);
       }
 
