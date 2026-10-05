@@ -155,6 +155,12 @@ static inline void _observe_rekey(uint64_t old_hash, uint64_t new_hash)
 
 static __thread const char *dt_pixelpipe_cache_current_module = NULL;
 
+/* Allocations refused to this thread for lack of memory: by _free_space_to_alloc() when the
+ * budget is spent and every line is in use, and by _log_arena_allocation_failure() when the
+ * arena has no run long enough or the system is out of RAM. Only ever counted up, so two readings
+ * tell a caller whether anything was refused in between, whoever else reads it. */
+static __thread uint32_t dt_pixelpipe_cache_alloc_refusals = 0;
+
 static dt_pixel_cache_entry_t *_non_threadsafe_cache_get_entry(dt_dev_pixelpipe_cache_t *cache, GHashTable *table,
                                                                const uint64_t key);
 
@@ -184,6 +190,11 @@ const char *dt_pixelpipe_cache_set_current_module(const char *module)
   const char *previous = dt_pixelpipe_cache_current_module;
   dt_pixelpipe_cache_current_module = module;
   return previous;
+}
+
+uint32_t dt_pixelpipe_cache_get_alloc_refusals(void)
+{
+  return dt_pixelpipe_cache_alloc_refusals;
 }
 
 typedef struct dt_cache_clmem_t
@@ -1838,6 +1849,8 @@ static inline void _log_arena_allocation_failure(dt_dev_pixelpipe_cache_t *cache
                                                  const char *entry_name, const char *module, uint64_t hash,
                                                  gboolean name_is_file)
 {
+  dt_pixelpipe_cache_alloc_refusals++;
+
   uint32_t total_free_pages = 0, largest_free_run_pages = 0;
   size_t total_free_bytes = 0, largest_free_bytes = 0;
   _arena_stats_bytes(cache, &total_free_pages, &largest_free_run_pages, &total_free_bytes, &largest_free_bytes);
@@ -2069,6 +2082,9 @@ static int _free_space_to_alloc(dt_dev_pixelpipe_cache_t *cache, const size_t si
     else
       _warn_user(_("The pipeline cache is full. Either your RAM settings are too frugal or your RAM is too small."));
   }
+
+  // Both callers return NULL on an error: the allocation is refused.
+  if(error) dt_pixelpipe_cache_alloc_refusals++;
 
   return error;
 }

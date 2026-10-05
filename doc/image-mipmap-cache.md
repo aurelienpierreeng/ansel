@@ -128,6 +128,7 @@ lost there — stderr only got `could not process thumbnail!`. The causes, each 
 | `_init_8` | embedded-JPEG mode "always" (2) and no embedded/companion JPEG could be read: the pipe is forbidden | `NO_EMBEDDED_THUMBNAIL` |
 | `_generate_blocking`, `DT_MIPMAP_FULL` | the loader failed; its own value (`UNSUPPORTED_CAMERA`, `FILE_CORRUPTED`, …) used to be dropped | the loader's |
 | `dt_imageio_export_with_flags` | pipe init failed, or the pipe returned an error / no backbuf | `PROCESSING_FAILED` |
+| `dt_imageio_export_with_flags` | the pipe returned an error after the pixelpipe cache refused it memory | `CACHE_FULL` |
 | `dt_imageio_export_with_flags` | the pipe was stopped (`dt_dev_pixelpipe_process` returns the same `1` for a kill-switch stop as for a failure) | `ABORTED` |
 | `dt_imageio_export_with_flags` | the pipe's output was gone from the pixelpipe cache before it could be referenced | `PROCESSING_FAILED` |
 | `dt_imageio_export_with_flags` | the output buffer could not be allocated | `CACHE_FULL` |
@@ -137,6 +138,32 @@ Not causes: an **external** stop (`shutdown_ext`, a thumbnail scrolled out of vi
 descriptor and keeps the entry flagged for generation, so it never leaves a skull; the disk cache
 never holds one (only `> 8x8` entries are written, and an unreadable `.jpg` is deleted and
 regenerated); `_init_8`'s early return for `width < 16` does not zero the size.
+
+### A pipe that failed for lack of memory says so
+
+*Established on `8bef6908d9` with this change, 2026-10-05; the cache's side measured by
+`tests/unittests/test_pipe_cache_alloc_refusals.c`, the export's side not run.*
+
+A run the pixelpipe cache refuses a buffer fails like any other: the module or
+`dt_dev_pixelpipe_cache_get_writable()` gets NULL and the pipe returns `1`. Telling the two apart
+afterwards needs the cache, which is the only one that knows. It counts its refusals per thread
+in `dt_pixelpipe_cache_get_alloc_refusals()`, at the two places where it already tells the user
+"the pipeline cache is full":
+
+- `_free_space_to_alloc()` returning an error: the budget is spent and every line is in use, so
+  nothing can be evicted;
+- `_log_arena_allocation_failure()`: the arena has no free run long enough, or
+  `_system_memory_pressure_valve()` refused because the system is out of RAM.
+
+The export reads the count before `dt_dev_pixelpipe_process()` and again on failure. The pipe
+runs on its caller's thread, so a change is this run's refusal, not another pipe's. The test
+measures that: a granted buffer is not counted, a refusal is counted exactly once on each of the
+two paths, and a refusal on another thread leaves this one's count unchanged.
+
+Still `PROCESSING_FAILED`: memory a module allocates outside the cache (plain `dt_alloc_align`),
+allocations on OpenMP worker threads, and OpenCL allocations. Device memory is not the cache's,
+and a device failure falls back to the CPU anyway. One known mislabel goes the other way: a refusal
+the run recovered from, followed by an unrelated failure in the same run, reads as `CACHE_FULL`.
 
 A skull stays in RAM until the entry is evicted or invalidated, **whatever the cause** — a
 transient one (`CACHE_FULL`) included. The label makes that visible; it does not change it.

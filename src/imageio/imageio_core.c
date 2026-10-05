@@ -926,6 +926,7 @@ dt_imageio_retval_t dt_imageio_export_with_flags(const int32_t imgid, const char
   dt_iop_roi_t roi = (dt_iop_roi_t){ 0, 0, processed_width, processed_height, scale };
 
   dt_get_times(&start);
+  const uint32_t alloc_refusals = dt_pixelpipe_cache_get_alloc_refusals();
   int err = dt_dev_pixelpipe_process(&pipe, roi);
   dt_show_times(&start, thumbnail_export ? "[dev_process_thumbnail] pixel pipeline processing thread"
                                          : "[dev_process_export] pixel pipeline processing thread");
@@ -933,8 +934,16 @@ dt_imageio_retval_t dt_imageio_export_with_flags(const int32_t imgid, const char
   if(dt_dev_backbuf_get_hash(&pipe.backbuf) == -1 || err)
   {
     dt_print(DT_DEBUG_IMAGEIO, "[dt_imageio_export_with_flags] no valid output buffer\n");
-    // the pipe reports a kill-switch stop with the same error as a failure
-    status = dt_dev_pixelpipe_has_shutdown(&pipe) ? DT_IMAGEIO_ABORTED : DT_IMAGEIO_PROCESSING_FAILED;
+    /* The pipe returns the same error for a kill-switch stop, a module that failed, and a buffer
+     * the pixelpipe cache refused it. The stop is the pipe's own state. The cache counts what it
+     * refuses to each thread, and the pipe ran on this one. Anything else stays a processing
+     * failure, including memory the modules allocate outside the cache. */
+    if(dt_dev_pixelpipe_has_shutdown(&pipe))
+      status = DT_IMAGEIO_ABORTED;
+    else if(dt_pixelpipe_cache_get_alloc_refusals() != alloc_refusals)
+      status = DT_IMAGEIO_CACHE_FULL;
+    else
+      status = DT_IMAGEIO_PROCESSING_FAILED;
     goto error;
   }
 

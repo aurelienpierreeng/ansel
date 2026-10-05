@@ -189,6 +189,21 @@ typedef struct dt_pixel_cache_entry_t
 const char *dt_pixelpipe_cache_set_current_module(const char *module);
 
 /**
+ * @brief Count the allocations the cache refused to the calling thread for lack of memory
+ * (thread-local).
+ *
+ * @details
+ * A refusal is a NULL returned because memory ran short: the cache's budget was spent with every
+ * line in use, the arena had no free run long enough, or the system had no RAM left. The count
+ * only goes up. A caller that reads it before and after a pixelpipe run learns whether that run
+ * was refused memory: the pipe runs on its caller's thread. Allocations made on other threads,
+ * such as OpenMP workers, are not counted here.
+ *
+ * @return uint32_t Refusals so far on this thread.
+ */
+uint32_t dt_pixelpipe_cache_get_alloc_refusals(void);
+
+/**
  * @brief Get an internal reference to the cache entry matching hash.
  * If you are going to access this entry more than once, keeping the reference and using
  * it instead of hashes will prevent redundant lookups.
