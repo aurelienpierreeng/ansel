@@ -788,10 +788,24 @@ lock), read-locks while copying, and releases exactly that reference.
 Referencing the entry after the peek does not close the window: the eviction can still land before
 the reference, which then counts up freed memory. The backbuffer's keepalive is the case that costs
 most: taken that way, it is released by pointer at the next publication. So the pipeline publishes
-the backbuffer from `ref_host_entry_by_hash()` and drops that reference once the keepalive is taken.
+the backbuffer from a retained lookup and drops that reference once the keepalive is taken: the exact
+hit before a run from `ref_host_entry_by_hash()`, the output after it from `ref_entry_by_hash()`
+followed by `dt_dev_pixelpipe_cache_restore_host_payload(entry, pipe->devid, NULL)`.
 `dt_dev_pixelpipe_cache_get_entry()` is a peek too: it serves the producer-to-consumer handoff inside
 one run, where the reference is already held, and nothing else. For the same reason,
 `dt_dev_pixelpipe_cache_get_writable()` hands its exact hit back already referenced.
+
+*Wrong claim, found 2026-10-05 against `281fc20a37`:* that commit published the output after the run
+from `ref_host_entry_by_hash()` too, on the premise that "after the run the final output always keeps
+a host copy". It does not on an export pipe: `dt_imageio_export_with_flags()` drives the pipe without
+`_seal_opencl_cache_policy()`, `dt_iop_commit_params()` leaves the last node at
+`cache_output_on_ram = 0`, and `gamma` is disabled outside the GUI pipes, so an OpenCL export ends on
+a vRAM-only cacheline. The peek it replaced, called with the still-reserved `pipe->devid`, had been
+downloading it; the host-only lookup refused it, the backbuffer was never published, and the export
+failed with only `[dt_imageio_export_with_flags] no valid output buffer` under `-d imageio`.
+Measured by bisect: OpenCL export fails at `281fc20a37`, succeeds at its parent; CPU export succeeds
+at both. The exact hit before the run is unaffected: `pipe->devid` is -1 there, so the peek never
+materialized a device-only entry either.
 
 A release nobody took is a use-after-free with a delay. It leaves the count below the number of real
 holders; the LRU (`refcount > 0` is its only guard) frees a held entry; and since every long-lived
