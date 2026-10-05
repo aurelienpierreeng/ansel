@@ -132,8 +132,8 @@ int dt_imageio_export(const int32_t imgid, const char *filename, struct dt_image
  * @return DT_IMAGEIO_OK (0) on success, otherwise the step that failed: the loader's own value
  * when the input could not be read, DT_IMAGEIO_PROCESSING_FAILED when the style could not be
  * applied or the pixelpipe could not be set up or produced no output, DT_IMAGEIO_ABORTED when the
- * pixelpipe was stopped, DT_IMAGEIO_CACHE_FULL when the output buffer could not be allocated,
- * DT_IMAGEIO_IOERROR when the format failed to write it.
+ * pixelpipe was stopped, DT_IMAGEIO_CACHE_FULL when the pixelpipe cache refused the run memory or
+ * the output buffer could not be allocated, DT_IMAGEIO_IOERROR when the format failed to write it.
  */
 dt_imageio_retval_t dt_imageio_export_with_flags(const int32_t imgid, const char *filename,
                                  struct dt_imageio_module_format_t *format,
