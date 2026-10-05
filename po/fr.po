@@ -22171,6 +22171,50 @@ msgstr "Avancer"
 msgid "Displays the next image"
 msgstr "Affiche l'image suivante"
 
+#: ../src/views/view.c:1052
+msgid "File not found"
+msgstr "Fichier non trouvé"
+
+#: ../src/views/view.c:1053
+msgid "Corrupted file"
+msgstr "Fichier corrompu"
+
+#: ../src/views/view.c:1054
+msgid "Out of RAM"
+msgstr "RAM insuffisante"
+
+#: ../src/views/view.c:1055
+msgid "Unsupported format"
+msgstr "Format non supporté"
+
+#: ../src/views/view.c:1056
+msgid "Unsupported feature"
+msgstr "Fonction non supportée"
+
+#: ../src/views/view.c:1057
+msgid "Unsupported camera"
+msgstr "Boîtier non supporté"
+
+#: ../src/views/view.c:1058
+msgid "Loading error"
+msgstr "Erreur de chargement"
+
+#: ../src/views/view.c:1059
+msgid "I/O error"
+msgstr "Erreur d'E/S"
+
+#: ../src/views/view.c:1060
+msgid "No embedded thumbnail"
+msgstr "Aucune miniature embarquée"
+
+#: ../src/views/view.c:1061
+msgid "Processing error"
+msgstr "Erreur de traitement"
+
+#: ../src/views/view.c:1062
+msgid "Aborted"
+msgstr "Interrompu"
+
 #: ../tools/generate_prefs.xsl:493 ../tools/generate_prefs.xsl:506
 msgid "</xsl:text><xsl:value-of select="
 msgstr "</xsl:text><xsl:value-of select="
