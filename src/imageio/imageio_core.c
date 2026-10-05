@@ -754,6 +754,58 @@ void _export_final_buffer_to_uint16(const float *const restrict inbuf, uint16_t 
       outbuf[4 * k + c] = (uint16_t)CLAMP(roundf(inbuf[4 * k + c] * 65535.f), 0.f, 65535.f);
 }
 
+/**
+ * @brief Convert the pipeline's float RGBA output into @p outbuf, at the depth the format writes:
+ * 8 bits (in display byte order if asked), 16 bits, or float for any other depth.
+ *
+ * A thumbnail export stores this buffer straight into the mipmap cache, and the thumbnail
+ * pipeline does not maintain a meaningful alpha contract across all modules: random zero/garbage
+ * alpha values would make valid RGB thumbnails render black in consumers that composite the
+ * mipmap buffer. So a thumbnail's alpha is forced opaque here, and its RGB left untouched.
+ */
+static void _export_convert_output(const float *const data, void *const outbuf, const int bpp,
+                                   const size_t width, const size_t height,
+                                   const gboolean display_byteorder, const gboolean thumbnail_export)
+{
+  const size_t pixels = width * height * 4;
+  if(bpp == 8)
+  {
+    if(display_byteorder)
+      _swap_byteorder_float_to_uint8(data, outbuf, width, height);
+    else
+      _clamp_float_to_uint8(data, outbuf, width, height);
+
+    if(thumbnail_export)
+    {
+      uint8_t *thumbnail_buf = outbuf;
+      __OMP_PARALLEL_FOR__()
+      for(size_t k = 0; k < pixels / 4; k++) thumbnail_buf[4 * k + 3] = UINT8_MAX;
+    }
+  }
+  else if(bpp == 16)
+  {
+    _export_final_buffer_to_uint16(data, outbuf, width, height);
+
+    if(thumbnail_export)
+    {
+      uint16_t *thumbnail_buf = outbuf;
+      __OMP_PARALLEL_FOR__()
+      for(size_t k = 0; k < pixels / 4; k++) thumbnail_buf[4 * k + 3] = UINT16_MAX;
+    }
+  }
+  else // output float, no further harm done to the pixels :)
+  {
+    memcpy(outbuf, data, sizeof(float_t) * pixels);
+
+    if(thumbnail_export)
+    {
+      float *thumbnail_buf = outbuf;
+      __OMP_PARALLEL_FOR__()
+      for(size_t k = 0; k < pixels / 4; k++) thumbnail_buf[4 * k + 3] = 1.0f;
+    }
+  }
+}
+
 // internal function: to avoid exif blob reading + 8-bit byteorder flag + high-quality override
 dt_imageio_retval_t dt_imageio_export_with_flags(const int32_t imgid, const char *filename,
                                  dt_imageio_module_format_t *format, dt_imageio_module_data_t *format_params,
@@ -793,12 +845,10 @@ dt_imageio_retval_t dt_imageio_export_with_flags(const int32_t imgid, const char
   double scale = 1.;
 
   // Get a pipeline, aka sequence of nodes
-  int res = 0;
   dt_dev_pixelpipe_t pipe;
-  if(thumbnail_export)
-    res = dt_dev_pixelpipe_init_thumbnail(&pipe, &dev);
-  else
-    res = dt_dev_pixelpipe_init_export(&pipe, &dev, format->levels(format_params), export_masks);
+  int res = thumbnail_export
+                ? dt_dev_pixelpipe_init_thumbnail(&pipe, &dev)
+                : dt_dev_pixelpipe_init_export(&pipe, &dev, format->levels(format_params), export_masks);
 
   if(!res)
   {
@@ -903,9 +953,9 @@ dt_imageio_retval_t dt_imageio_export_with_flags(const int32_t imgid, const char
    * window by holding cache->lock across both the lookup and the increment. */
   if(!dt_dev_pixelpipe_cache_ref_entry_by_hash(dt_dev_backbuf_get_hash(&pipe.backbuf),
                                                &data, &cache_entry)
-     || !data)
+     || IS_NULL_PTR(data))
   {
-    if(cache_entry)
+    if(!IS_NULL_PTR(cache_entry))
       dt_dev_pixelpipe_cache_ref_count_entry(FALSE, cache_entry);
     status = DT_IMAGEIO_PROCESSING_FAILED;
     goto error;
@@ -915,60 +965,17 @@ dt_imageio_retval_t dt_imageio_export_with_flags(const int32_t imgid, const char
    * while the OpenMP threads are reading it. */
   dt_dev_pixelpipe_cache_rdlock_entry(TRUE, cache_entry);
 
-  // Down-conversion to low-precision formats:
-  const size_t pixels = pipe.backbuf.width * pipe.backbuf.height * 4;
+  // Down-conversion to low-precision formats: 8 and 16 bits, any other depth stays float
+  size_t channel_size = sizeof(float_t);
   if(bpp == 8)
-  {
-    outbuf = dt_pixelpipe_cache_alloc_align_cache(
-        sizeof(uint8_t) * pixels,
-        0);
-    if(outbuf && display_byteorder)
-      _swap_byteorder_float_to_uint8(data, outbuf, pipe.backbuf.width, pipe.backbuf.height);
-    else if(outbuf)
-      _clamp_float_to_uint8(data, outbuf, pipe.backbuf.width, pipe.backbuf.height);
-
-    /* Thumbnail export stores the in-memory RGBA buffer straight into the mipmap cache.
-     * The thumbnail pipeline does not maintain a meaningful alpha contract across all
-     * modules, so random zero/garbage alpha values would make valid RGB thumbnails render
-     * black in consumers that composite the mipmap buffer. Keep thumbnail alpha opaque at
-     * the export boundary and leave RGB untouched. */
-    if(outbuf && thumbnail_export)
-    {
-      uint8_t *thumbnail_buf = (uint8_t *)outbuf;
-      __OMP_PARALLEL_FOR__()
-      for(size_t k = 0; k < pixels / 4; k++) thumbnail_buf[4 * k + 3] = UINT8_MAX;
-    }
-  }
+    channel_size = sizeof(uint8_t);
   else if(bpp == 16)
-  {
-    outbuf = dt_pixelpipe_cache_alloc_align_cache(
-        sizeof(uint16_t) * pixels,
-        0);
-    if(outbuf)
-      _export_final_buffer_to_uint16(data, outbuf, pipe.backbuf.width, pipe.backbuf.height);
+    channel_size = sizeof(uint16_t);
 
-    if(outbuf && thumbnail_export)
-    {
-      uint16_t *thumbnail_buf = (uint16_t *)outbuf;
-      __OMP_PARALLEL_FOR__()
-      for(size_t k = 0; k < pixels / 4; k++) thumbnail_buf[4 * k + 3] = UINT16_MAX;
-    }
-  }
-  else // output float, no further harm done to the pixels :)
-  {
-    outbuf = dt_pixelpipe_cache_alloc_align_cache(
-        sizeof(float_t) * pixels,
-        0);
-    if(outbuf)
-      memcpy(outbuf, data, sizeof(float_t) * pixels);
-
-    if(outbuf && thumbnail_export)
-    {
-      float *thumbnail_buf = (float *)outbuf;
-      __OMP_PARALLEL_FOR__()
-      for(size_t k = 0; k < pixels / 4; k++) thumbnail_buf[4 * k + 3] = 1.0f;
-    }
-  }
+  outbuf = dt_pixelpipe_cache_alloc_align_cache(channel_size * pipe.backbuf.width * pipe.backbuf.height * 4, 0);
+  if(!IS_NULL_PTR(outbuf))
+    _export_convert_output(data, outbuf, bpp, pipe.backbuf.width, pipe.backbuf.height, display_byteorder,
+                           thumbnail_export);
 
   // Decrease ref count on the cache entry and release the read lock
   dt_dev_pixelpipe_cache_ref_count_entry(FALSE, cache_entry);
