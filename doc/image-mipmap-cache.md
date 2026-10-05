@@ -127,8 +127,9 @@ lost there — stderr only got `could not process thumbnail!`. The causes, each 
 | `_init_8` | neither the original nor a local copy exists, or the image left the image cache | `FILE_NOT_FOUND` |
 | `_init_8` | embedded-JPEG mode "always" (2) and no embedded/companion JPEG could be read: the pipe is forbidden | `NO_EMBEDDED_THUMBNAIL` |
 | `_generate_blocking`, `DT_MIPMAP_FULL` | the loader failed; its own value (`UNSUPPORTED_CAMERA`, `FILE_CORRUPTED`, …) used to be dropped | the loader's |
-| `dt_imageio_export_with_flags` | pipe init failed, or the pipe returned an error / no backbuf, or its output was gone from the pixelpipe cache before it could be referenced | `PROCESSING_FAILED` |
+| `dt_imageio_export_with_flags` | pipe init failed, or the pipe returned an error / no backbuf | `PROCESSING_FAILED` |
 | `dt_imageio_export_with_flags` | the pipe was stopped (`dt_dev_pixelpipe_process` returns the same `1` for a kill-switch stop as for a failure) | `ABORTED` |
+| `dt_imageio_export_with_flags` | the pipe's output was gone from the pixelpipe cache before it could be referenced | `PROCESSING_FAILED` |
 | `dt_imageio_export_with_flags` | the output buffer could not be allocated | `CACHE_FULL` |
 | `dt_imageio_export_with_flags` | `format->write_image` failed | `IOERROR` |
 
