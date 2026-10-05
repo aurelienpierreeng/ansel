@@ -1697,8 +1697,8 @@ static dt_imageio_retval_t _init_8(uint8_t *buf, uint32_t *width, uint32_t *heig
                                        DT_INTENT_LAST, NULL, NULL, 1, 1, NULL, shutdown);
     if(status != DT_IMAGEIO_OK)
     {
-      fprintf(stderr, "[mipmap_cache] could not process thumbnail for image %d (%s): error %d\n", imgid,
-              filename, status);
+      g_printerr("[mipmap_cache] could not process thumbnail for image %" PRId32 " (%s): error %d\n", imgid,
+                 filename, status);
       *width = *height = 0;
       *iscale = 0.0f;
       *color_space = DT_COLORSPACE_NONE;
