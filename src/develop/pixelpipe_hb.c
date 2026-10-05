@@ -1769,28 +1769,22 @@ int dt_dev_pixelpipe_process(dt_dev_pixelpipe_t *pipe, dt_iop_roi_t roi)
        * final output in vRAM only. The device is still reserved here, so the host copy every
        * backbuffer consumer reads is downloaded now, on the referenced entry. */
       dt_pixel_cache_entry_t *final_entry = NULL;
-      if(!requested_backbuf)
-      {
-        dt_dev_pixelpipe_cache_unref_hash(final_hash);
-      }
-      else if(dt_dev_pixelpipe_cache_ref_entry_by_hash(dt_dev_pixelpipe_get_hash(pipe), NULL, &final_entry)
-              && dt_dev_pixelpipe_cache_restore_host_payload(final_entry, pipe->devid, NULL))
-      {
+      const gboolean published
+          = requested_backbuf
+            && dt_dev_pixelpipe_cache_ref_entry_by_hash(dt_dev_pixelpipe_get_hash(pipe), NULL, &final_entry)
+            && dt_dev_pixelpipe_cache_restore_host_payload(final_entry, pipe->devid, NULL);
+      if(published)
         _update_backbuf_cache_reference(pipe, roi, final_entry);
-        dt_dev_pixelpipe_cache_unref_entry(final_entry);
-        dt_dev_pixelpipe_cache_unref_hash(final_hash);
-      }
-      else
-      {
+      else if(requested_backbuf)
         dt_print(DT_DEBUG_DEV,
                  "[picker/rec] final output cache missing pipe=%s hash=%" PRIu64 " history=%" PRIu64
                  " devid=%d err=%d\n",
                  dt_pixelpipe_get_pipe_name(pipe->type), dt_dev_pixelpipe_get_hash(pipe),
                  dt_dev_pixelpipe_get_history_hash(pipe), pipe->devid, err);
-        // Found but not restorable to RAM: the reference taken above is released here.
-        if(!IS_NULL_PTR(final_entry)) dt_dev_pixelpipe_cache_unref_entry(final_entry);
-        dt_dev_pixelpipe_cache_unref_hash(final_hash);
-      }
+
+      // Taken above whenever the entry was found, restored to RAM or not.
+      if(!IS_NULL_PTR(final_entry)) dt_dev_pixelpipe_cache_unref_entry(final_entry);
+      dt_dev_pixelpipe_cache_unref_hash(final_hash);
 
       // Note : the last output (backbuf) of the pixelpipe cache is internally locked
       // Whatever consuming it will need to unlock it.
