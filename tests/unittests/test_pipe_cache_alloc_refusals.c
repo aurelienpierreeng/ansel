@@ -20,7 +20,7 @@
  *
  * A pixelpipe run that fails returns the same error whether a module failed or the cache refused
  * it a buffer. An export reads dt_pixelpipe_cache_get_alloc_refusals() around the run to tell the
- * two apart, and shows "Out of memory" on the thumbnail instead of "Processing error". That holds
+ * two apart, and shows "Out of RAM" on the thumbnail instead of "Processing error". That holds
  * only if every refusal is counted once, nothing else is, and a refusal on another thread is not.
  *
  * These tests drive the cache alone, without a pipe: the contract is the cache's.
