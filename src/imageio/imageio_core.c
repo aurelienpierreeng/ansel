@@ -823,9 +823,8 @@ dt_imageio_retval_t dt_imageio_export_with_flags(const int32_t imgid, const char
 
   if(IS_NULL_PTR(buf.buf) || buf.width == 0 || buf.height == 0)
   {
-    // the loader's own reason (unsupported camera, corrupted file...). An error path must never
-    // report success, hence the fallback.
-    status = (buf.status != DT_IMAGEIO_OK) ? buf.status : DT_IMAGEIO_LOAD_FAILED;
+    // the loader's own reason (unsupported camera, corrupted file...)
+    status = buf.status;
     dt_mipmap_cache_release(&buf);
     goto error;
   }

@@ -1212,7 +1212,7 @@ static dt_view_surface_value_t _view_image_get_surface_internal(int32_t imgid, i
     int text_h = 0;
     pango_layout_get_pixel_size(layout, NULL, &text_h);
     // at least the skull's bottom row, which is black already
-    const double band_h = fmax(img_height / 8., text_h + DT_UI_SCALE_DEVICE(4));
+    const double band_h = MAX(img_height / 8., text_h + DT_UI_SCALE_DEVICE(4));
     cairo_rectangle(cr, 0., img_height - band_h, img_width, band_h);
     cairo_set_source_rgba(cr, 0., 0., 0., 0.7);
     cairo_fill(cr);
