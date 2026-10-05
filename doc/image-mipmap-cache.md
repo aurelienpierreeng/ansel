@@ -172,3 +172,33 @@ transient one (`CACHE_FULL`) included. The label makes that visible; it does not
 (lighttable, filmstrip, preview window, map, print, slideshow) goes through it. It runs in a
 worker thread, so it builds its own Pango font description rather than borrowing bauhaus's, which
 `dt_bauhaus_load_theme()` frees from the GUI thread.
+
+### The label wraps onto half the skull at most
+
+*Measured on `8bef6908d9` with this change, 2026-10-05, outside the application: a standalone
+pangocairo program running the label block of `view.c` line for line over `dead_image_8()`, scaled
+with the nearest filter as `view.c` does, at square sizes from 32 to 160 px (FIT scales the 8x8
+skull uniformly, so the surface is always square). Pango 1.58.2, cairo 1.18.6, the Win32 font map;
+"sans bold" at 12 px resolved to DejaVu Sans Bold, one line 15 px tall. The final code ran on ten
+labels at eight sizes from 32 to 128 px: four English ones; "No embedded thumbnail" in French,
+Japanese, Chinese, Thai and Russian (the strings are new, so these were not taken from `po/`); and
+"Speicherzugriffsfehler", for a word wider than the thumbnail. Not yet seen in the application.*
+
+The label wraps onto as many lines as half the thumbnail holds (`pango_layout_set_height(layout,
+img_height / 2 * PANGO_SCALE)`), and Pango ellipsizes the last. Half keeps the skull's eyes clear:
+they end at 3/8 of its height. At this font size, half holds a single line below 56 px, which is
+the ellipsized line of before. Over the 80 label × size pairs, the band reached the eyes once, by
+half a pixel: Chinese at 60 px, whose two lines take 34 px.
+
+Half is approximate, by a pixel or two. 27 px holds one line, 28 px already two (30 px), and three
+start at 45 px. 28 is twice the font's metric height, 13.97 px, against 15 px for a laid-out line.
+A line count instead (`pango_layout_set_height(layout, -n)`, with `n` from a first one-line
+measure) was tried and dropped. Over 35 label × size pairs it gave the same lines as the pixel
+height in all but one: Thai at 60 px, one line instead of two, the eyes clear either way. Nor is it
+more exact: the one line it measures need not be as tall as the lines that wrap. Chinese at 60 px
+measured 15 px and wrapped onto 34.
+
+`PANGO_WRAP_WORD_CHAR`, not `PANGO_WRAP_WORD`. With `WORD`, a word wider than the thumbnail stays
+on one line, overflows both edges and is not ellipsized: "Speicherzugriffsfehler" at 72 px was
+drawn from −41 to 113 px, "Unsupported" from −9 to 81. `WORD_CHAR` breaks such a word inside, with
+a hyphen, and still breaks between words where it can.

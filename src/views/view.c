@@ -1209,6 +1209,11 @@ static dt_view_surface_value_t _view_image_get_surface_internal(int32_t imgid, i
     pango_layout_set_alignment(layout, PANGO_ALIGN_CENTER);
     pango_layout_set_ellipsize(layout, PANGO_ELLIPSIZE_END);
 
+    /* As many lines as half the thumbnail holds, which keeps the skull's eyes clear; Pango ellipsizes
+     * the last. WORD_CHAR: PANGO_WRAP_WORD lets a word wider than the thumbnail overflow both edges. */
+    pango_layout_set_wrap(layout, PANGO_WRAP_WORD_CHAR);
+    pango_layout_set_height(layout, img_height / 2 * PANGO_SCALE);
+
     int text_h = 0;
     pango_layout_get_pixel_size(layout, NULL, &text_h);
     // at least the skull's bottom row, which is black already
