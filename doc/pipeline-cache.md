@@ -702,7 +702,18 @@ The defense has five layers, from planning to last resort:
    memory" title but in a window of its own -- `dt_gui_alert()` opens one per title and message, and
    what was being allocated (the cacheline's name, its module) is the item, not part of the text.
    (Until 2026-10-06 the window was one per title and both messages carried their values, so every
-   size and every module added a paragraph; changed on top of `8073021c02`.) It is raised only when
+   size and every module added a paragraph; changed on top of `8073021c02`.)
+   `_log_arena_allocation_failure()` raises it only when the arena itself refused, not the valve
+   (`_arena_alloc_with_defrag()` says which). Until 2026-10-06 a valve refusal raised it too, so one
+   refusal opened two windows and the second was false. Measured on `8073021c02` by exporting the
+   24 Mpx X-H1 raw of the image test bank with the installed `ansel-cli --conf
+   memory_pressure_floor=1250`: lens was refused 370 MiB with 1495 MiB available, while the log
+   read `cache=741/4461 MiB` -- 370 of those 741 being lens's own entry, counted before its buffer
+   exists -- and nothing was evictable (`couldn't remove LRU, 2 items and all are used`: lens's
+   input and lens's own entry). Lens is where that export peaks: the pipe stays at full resolution
+   until `initialscale`, right after lens, so lens holds demosaic's 370 MiB output while asking for
+   370 more. The pre-commit image test met the same refusal for real that day, with 445 MiB
+   available. It is raised only when
    the allocation is actually
    refused, and then followed by what happens next (`_alert_cache_refused()`): the module fails,
    the pipe stops without publishing, nothing retries in tiles (whether to tile was decided before
