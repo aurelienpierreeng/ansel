@@ -25,10 +25,10 @@
  *
  * The regression these tests exist for is Windows-specific and invisible on this machine: GLib's
  * `g_get_user_cache_dir()` returns FOLDERID_InternetCache there -- the shell folder still labelled
- * "Temporary Internet Files" -- which Storage Sense clears by default on Windows 11. A thumbnail cache
- * written there is deleted by the OS behind the user's back and a log file written there is unfindable
- * (#1473). The last test below is the guard, and it asserts on the base directory rather than on the
- * string, so it says something true on every platform and fails on the one that regresses.
+ * "Temporary Internet Files" -- a hidden, shell-managed container for the browser cache, where a
+ * thumbnail cache and a log file are unfindable for a user who goes looking (#1473). The last test
+ * below is the guard, and it asserts on the base directory rather than on the string, so it says
+ * something true on every platform and fails on the one that regresses.
  *
  * The XDG tests are the part that runs meaningfully here: `XDG_CACHE_HOME` must win on every platform,
  * because a caller who sets it means it, and GLib honours it on Windows too.

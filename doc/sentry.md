@@ -302,11 +302,12 @@ existed on Windows at all, and asked users for `-d` runs that produced strictly 
   one thing and exit (`--help`, `-h`, `/?`, `--version`); `-d` and `--debug` were in it, so the
   flags that *produce* output sent every channel nowhere — no console, no file (#1472). They are
   out of that list now and must not go back in.
-- **The file used to live somewhere the OS deletes.** It was under `g_get_user_cache_dir()`, which
-  on Windows is `FOLDERID_InternetCache` — the shell folder still labelled "Temporary Internet
-  Files" — cleared by Storage Sense (on by default on Windows 11) and by Disk Cleanup, and hidden
-  from a user who goes looking (#1473). Both the log and the thumbnail disk cache were affected;
-  see [`image-mipmap-cache.md`](image-mipmap-cache.md).
+- **The file used to live where a user cannot find it.** It was under `g_get_user_cache_dir()`,
+  which on Windows is `FOLDERID_InternetCache` — the shell folder still labelled "Temporary
+  Internet Files", Hidden and System, so Explorer does not show it even with hidden files shown
+  (#1473). Both the log and the thumbnail disk cache were affected; see
+  [`image-mipmap-cache.md`](image-mipmap-cache.md), which also records why "Windows clears that
+  folder" is not a claim to repeat.
 
 So, to triage a Windows report:
 

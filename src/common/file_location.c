@@ -246,10 +246,10 @@ gchar *dt_loc_default_user_cache_dir(void)
 
 #ifdef _WIN32
   /* NOT g_get_user_cache_dir(): on Windows that is FOLDERID_InternetCache -- the shell folder
-   * still labelled "Temporary Internet Files" -- which the OS clears on its own (Storage Sense is
-   * on by default on Windows 11, Disk Cleanup targets it), so a thumbnail cache written there is
-   * deleted behind the user's back and a log file written there is unfindable and transient. It is
-   * also a shell-managed container folder, not a general-purpose per-user cache.
+   * still labelled "Temporary Internet Files" -- a shell-managed container for the browser cache,
+   * not a general-purpose per-user cache. It is Hidden and System, so Explorer does not show it even
+   * with hidden files shown, and a log file written there is unfindable for a user who goes looking.
+   * That Windows also empties it on its own is NOT established: see doc/image-mipmap-cache.md.
    *
    * %LOCALAPPDATA% is read directly rather than through g_get_user_data_dir(), which resolves to
    * the same folder but takes XDG_DATA_HOME first: that variable says where DATA goes and must not
