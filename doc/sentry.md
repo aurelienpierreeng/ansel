@@ -292,7 +292,7 @@ stdout or stderr is discarded unless the caller arranged otherwise. `main()`
 (`src/apps/ansel/main.c`) therefore redirects both into
 
 ```
-%LOCALAPPDATA%\ansel\cache\ansel-log.txt
+%LOCALAPPDATA%\cache\ansel\ansel-log.txt
 ```
 
 **A plain run does write that file.** That matters because for a long time we assumed no log
@@ -310,7 +310,7 @@ existed on Windows at all, and asked users for `-d` runs that produced strictly 
 
 So, to triage a Windows report:
 
-1. Ask for `%LOCALAPPDATA%\ansel\cache\ansel-log.txt` from a **normal** run. Pasting that path
+1. Ask for `%LOCALAPPDATA%\cache\ansel\ansel-log.txt` from a **normal** run. Pasting that path
    into Explorer works; browsing to it does not, the folder chain being hidden.
 2. For a debug run, `-d` alone is now enough. A caller who wants the output on a handle of their
    own can still redirect — `ansel.exe -d cache -d memory > C:\ansel.txt 2>&1` — because the

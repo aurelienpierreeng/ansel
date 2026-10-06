@@ -85,7 +85,7 @@ int main(int argc, char *argv[])
 
   if(redirect_output)
   {
-    // C:\Users\<username>\AppData\Local\ansel\cache\ansel-log.txt. dt_loc_init() has not run
+    // C:\Users\<username>\AppData\Local\cache\ansel\ansel-log.txt. dt_loc_init() has not run
     // yet, so this resolves the same default it will, without setting any global -- and without
     // honouring --cachedir, which is not parsed yet either.
     char *logdir = dt_loc_default_user_cache_dir();

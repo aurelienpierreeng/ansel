@@ -254,10 +254,15 @@ gchar *dt_loc_default_user_cache_dir(void)
    * %LOCALAPPDATA% is read directly rather than through g_get_user_data_dir(), which resolves to
    * the same folder but takes XDG_DATA_HOME first: that variable says where DATA goes and must not
    * steer the cache. g_get_user_data_dir() is the fallback for the case where the variable is
-   * missing, which is a broken environment rather than a supported one. */
+   * missing, which is a broken environment rather than a supported one.
+   *
+   * cache\ansel, not ansel\cache: %LOCALAPPDATA%\ansel is the CONFIG folder (g_get_user_config_dir()
+   * is %LOCALAPPDATA% on Windows), and a cache nested in it would go with every backup or deletion of
+   * anselrc and library.db. Beside it instead, as ~/.cache/ansel sits beside ~/.config/ansel on Linux;
+   * %LOCALAPPDATA%\cache is also Qt's QStandardPaths::GenericCacheLocation on Windows. */
   const gchar *local_app_data = g_getenv("LOCALAPPDATA");
   if(IS_NULL_PTR(local_app_data) || !local_app_data[0]) local_app_data = g_get_user_data_dir();
-  return g_build_filename(local_app_data, "ansel", "cache", NULL);
+  return g_build_filename(local_app_data, "cache", "ansel", NULL);
 #else
   return g_build_filename(g_get_user_cache_dir(), "ansel", NULL);
 #endif

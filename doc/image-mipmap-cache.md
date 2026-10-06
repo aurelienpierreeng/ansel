@@ -25,11 +25,15 @@ global. **Never `g_get_user_cache_dir()` directly**, for two independent reasons
   Internet Files" — which Storage Sense clears by default on Windows 11 and Disk Cleanup targets.
   A thumbnail cache written there is deleted by the OS behind the user's back, which reads as "the
   disk cache never works on Windows", and it is invisible to a user who goes looking (#1473). The
-  default is now `%LOCALAPPDATA%\ansel\cache` on Windows and `g_get_user_cache_dir()/ansel`
-  elsewhere, with an absolute `XDG_CACHE_HOME` winning on every platform. `%LOCALAPPDATA%` is read
-  from the environment rather than through `g_get_user_data_dir()`, which resolves to the same
-  folder but takes `XDG_DATA_HOME` first — a variable that says where data goes and must not steer
-  a cache.
+  default is now `%LOCALAPPDATA%\cache\ansel` on Windows and `g_get_user_cache_dir()/ansel`
+  elsewhere, with an absolute `XDG_CACHE_HOME` winning on every platform. On Windows it sits
+  *beside* the config folder `%LOCALAPPDATA%\ansel` (`g_get_user_config_dir()` is `%LOCALAPPDATA%`
+  there), not inside it, as `~/.cache/ansel` sits beside `~/.config/ansel`: a cache nested in the
+  config goes with every backup or deletion of `anselrc` and `library.db`. The branch first had
+  `ansel\cache`; it was changed on 2026-10-07, before it shipped, so only test builds wrote there.
+  `%LOCALAPPDATA%` is read from the environment rather than through `g_get_user_data_dir()`, which
+  resolves to the same folder but takes `XDG_DATA_HOME` first — a variable that says where data
+  goes and must not steer a cache.
 - **It ignores `--cachedir`.** That is how `libs/textnotes.c` came to build a download's path under
   `g_get_user_cache_dir()/ansel/downloads` while creating the directory under
   `dt_loc_cachedir()/downloads`: with `--cachedir` given, it made one directory and wrote into
