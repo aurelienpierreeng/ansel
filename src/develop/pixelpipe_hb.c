@@ -1073,7 +1073,7 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe,
   // image when it refuses. It knows nothing of images: it gets the image as text, as it gets the
   // module as its name. The file name is quoted: it can hold spaces, and nothing else would show
   // where it ends.
-  const char *prev_module = dt_pixelpipe_cache_set_current_module(module ? module->op : NULL);
+  const char *prev_module = dt_pixelpipe_cache_set_current_module(module->op);
   gchar *image = g_strdup_printf(_("`%s` (image id %d)"), pipe->dev->image_storage.filename,
                                  pipe->dev->image_storage.id);
   const char *prev_image = dt_pixelpipe_cache_set_current_image(image);
