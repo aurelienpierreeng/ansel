@@ -868,11 +868,13 @@ void dt_control_set_alert_handler(dt_control_alert_handler_t handler)
   _alert_handler = handler;
 }
 
-void dt_control_alert(const char *title, const char *message)
+void dt_control_alert(const char *title, const char *message, const char *item)
 {
   if(IS_NULL_PTR(message)) return;
   if(!IS_NULL_PTR(_alert_handler))
-    _alert_handler(title, message);
+    _alert_handler(title, message, item);
+  else if(!IS_NULL_PTR(item))
+    dt_control_log("%s\n%s", message, item);
   else
     dt_control_log("%s", message);
 }

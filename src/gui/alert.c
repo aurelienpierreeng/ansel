@@ -23,6 +23,7 @@
 #include "system/mem_alloc.h"
 #include "widgets/dialog.h"
 #include "widgets/widget_settings.h"
+#include "widgets/widget_style.h"
 
 #include <glib/gi18n.h>
 #include <gtk/gtk.h>
@@ -257,24 +258,27 @@ typedef struct dt_alert_message_t
 {
   gchar *title;
   gchar *message;
+  gchar *item;
 } dt_alert_message_t;
 
-// The message label of each dt_gui_alert() on screen, by title. GUI thread only.
-static GHashTable *_alert_labels = NULL;
+// The dt_gui_alert() windows on screen, by title and message: the box that lists each one's items.
+// GUI thread only.
+static GHashTable *_alert_windows = NULL;
 
 static void _alert_message_free(gpointer data)
 {
   dt_alert_message_t *message = (dt_alert_message_t *)data;
   dt_free(message->title);
   dt_free(message->message);
+  dt_free(message->item);
   dt_free(message);
 }
 
-// The label goes with its window, whatever closes it -- OK, its title bar, Escape: the title is
+// The list goes with its window, whatever closes it -- OK, its title bar, Escape: the message is
 // free for the next alert.
-static void _alert_label_destroyed(GtkWidget *label __attribute__((unused)), gpointer user_data)
+static void _alert_window_items_destroyed(GtkWidget *block __attribute__((unused)), gpointer user_data)
 {
-  g_hash_table_remove(_alert_labels, (const gchar *)user_data);
+  g_hash_table_remove(_alert_windows, (const gchar *)user_data);
 }
 
 static void _alert_ok_clicked(dt_gui_alert_t *alert, void *data __attribute__((unused)))
@@ -285,35 +289,86 @@ static void _alert_ok_clicked(dt_gui_alert_t *alert, void *data __attribute__((u
 static gboolean _alert_show(gpointer user_data)
 {
   const dt_alert_message_t *message = (const dt_alert_message_t *)user_data;
-  if(IS_NULL_PTR(_alert_labels)) _alert_labels = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, NULL);
+  if(IS_NULL_PTR(_alert_windows))
+    _alert_windows = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, NULL);
 
-  // The same alert again while its window is up: bring that window back with the new text.
-  GtkWidget *label = g_hash_table_lookup(_alert_labels, message->title);
-  if(!IS_NULL_PTR(label))
+  // One window per kind of message: its title and its text, which say what went wrong, never where.
+  // The same pair again while its window is up only adds its item to that window's list. A title
+  // is one line: the first line break of the key ends it.
+  gchar *key = g_strconcat(message->title, "\n", message->message, NULL);
+  dt_gui_alert_t *alert = NULL;
+  GtkWidget *block = g_hash_table_lookup(_alert_windows, key);
+  if(IS_NULL_PTR(block))
   {
-    gtk_label_set_text(GTK_LABEL(label), message->message);
-    gtk_window_present(GTK_WINDOW(gtk_widget_get_toplevel(label)));
-    return G_SOURCE_REMOVE;
+    alert = dt_gui_alert_new(DT_GUI_ALERT_NOTICE, message->title, message->title);
+    dt_gui_alert_add_text(alert, message->message);
+    // Under the message, the list of its items, which appears with the first one.
+    block = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+    dt_gui_alert_add_widget(alert, block);
+    dt_gui_alert_add_button(alert, _("OK"), _alert_ok_clicked, NULL);
+    // Each item once: a module failing on the same image at every change in the darkroom lists
+    // that image once.
+    g_object_set_data_full(G_OBJECT(block), "listed",
+                           g_hash_table_new_full(g_str_hash, g_str_equal, g_free, NULL),
+                           (GDestroyNotify)g_hash_table_destroy);
+
+    // The table takes the key; the destroy handler gets a copy of its own, freed with the closure.
+    g_signal_connect_data(block, "destroy", G_CALLBACK(_alert_window_items_destroyed), g_strdup(key),
+                          (GClosureNotify)g_free, 0);
+    g_hash_table_insert(_alert_windows, key, block);
+  }
+  else
+    dt_free(key);
+
+  gboolean added = FALSE;
+  if(!IS_NULL_PTR(message->item)
+     && g_hash_table_add(g_object_get_data(G_OBJECT(block), "listed"), g_strdup(message->item)))
+  {
+    // The list, as the closing window's: as tall as its lines up to a point, then it scrolls -- a
+    // module failing on every thumbnail of a film roll lists hundreds of images.
+    GtkWidget *items = g_object_get_data(G_OBJECT(block), "items");
+    if(IS_NULL_PTR(items))
+    {
+      items = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+      GtkWidget *scroll = gtk_scrolled_window_new(NULL, NULL);
+      dt_gui_add_class(scroll, "dt_recessed_scroll");
+      gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(scroll), GTK_POLICY_NEVER, GTK_POLICY_AUTOMATIC);
+      gtk_scrolled_window_set_max_content_height(GTK_SCROLLED_WINDOW(scroll), DT_PIXEL_APPLY_DPI(150));
+      gtk_scrolled_window_set_propagate_natural_height(GTK_SCROLLED_WINDOW(scroll), TRUE);
+      gtk_container_add(GTK_CONTAINER(scroll), items);
+      gtk_box_pack_start(GTK_BOX(block), scroll, FALSE, FALSE, 0);
+      g_object_set_data(G_OBJECT(block), "items", items);
+    }
+    // A path has no spaces to break at: it wraps anywhere, whole, and can be selected to be copied.
+    GtkWidget *label = gtk_label_new(message->item);
+    gtk_label_set_xalign(GTK_LABEL(label), 0.0);
+    gtk_label_set_line_wrap(GTK_LABEL(label), TRUE);
+    gtk_label_set_line_wrap_mode(GTK_LABEL(label), PANGO_WRAP_WORD_CHAR);
+    gtk_label_set_max_width_chars(GTK_LABEL(label), 60);
+    gtk_label_set_selectable(GTK_LABEL(label), TRUE);
+    gtk_box_pack_start(GTK_BOX(items), label, FALSE, FALSE, 0);
+    added = TRUE;
   }
 
-  dt_gui_alert_t *alert = dt_gui_alert_new(DT_GUI_ALERT_NOTICE, message->title, message->title);
-  label = dt_gui_alert_add_text(alert, message->message);
-  dt_gui_alert_add_button(alert, _("OK"), _alert_ok_clicked, NULL);
-
-  // The table owns its key; the destroy handler gets a copy of its own, freed with the closure.
-  g_hash_table_insert(_alert_labels, g_strdup(message->title), label);
-  g_signal_connect_data(label, "destroy", G_CALLBACK(_alert_label_destroyed), g_strdup(message->title),
-                        (GClosureNotify)g_free, 0);
-
-  dt_gui_alert_show(alert);
+  // A new window shows once it holds its first item, to be centred with it. A repeat that adds
+  // nothing leaves the window where it is: the darkroom runs its pipe again at every change, and
+  // the window would take the focus back each time.
+  if(!IS_NULL_PTR(alert))
+    dt_gui_alert_show(alert);
+  else if(added)
+  {
+    gtk_widget_show_all(block);
+    gtk_window_present(GTK_WINDOW(gtk_widget_get_toplevel(block)));
+  }
   return G_SOURCE_REMOVE;
 }
 
-void dt_gui_alert(const char *title, const char *message)
+void dt_gui_alert(const char *title, const char *message, const char *item)
 {
   dt_alert_message_t *copy = g_new0(dt_alert_message_t, 1);
   copy->title = g_strdup(title);
   copy->message = g_strdup(message);
+  copy->item = g_strdup(item);
   // Always deferred, even on the GUI thread: a caller may hold a lock -- the pixelpipe cache
   // alerts from under its own -- and building a window must not run inside it.
   g_idle_add_full(G_PRIORITY_DEFAULT, _alert_show, copy, _alert_message_free);

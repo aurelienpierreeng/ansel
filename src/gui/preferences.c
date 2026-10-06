@@ -1212,9 +1212,7 @@ static void _import_preset_from_file(const gchar* filename)
 {
   if(!dt_presets_import_from_file(filename))
   {
-    gchar *alert_msg = g_strdup_printf(_("failed to import preset %s"), filename);
-    dt_control_alert(_("Preset not imported"), alert_msg);
-    dt_free(alert_msg);
+    dt_control_alert(_("Preset not imported"), _("failed to import preset"), filename);
   }
 }
 

@@ -209,9 +209,7 @@ int write_image(dt_imageio_module_data_t *data, const char *filename, const void
     if(IS_NULL_PTR(pdf))
     {
       fprintf(stderr, "[imageio_format_pdf] could not export to file: `%s'!\n", filename);
-      gchar *alert_msg = g_strdup_printf(_("could not export to file `%s'!"), filename);
-      dt_control_alert(_("Export failed"), alert_msg);
-      dt_free(alert_msg);
+      dt_control_alert(_("Export failed"), _("could not export to file!"), filename);
       return 1;
     }
 

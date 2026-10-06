@@ -584,10 +584,9 @@ void dt_print_file(const int32_t imgid, const char *filename, const char *job_ti
 
   if (job_id == 0)
   {
-    gchar *alert_msg = g_strdup_printf(_("error while printing `%s' on `%s'"),
-                                       job_title, pinfo->printer.name);
-    dt_control_alert(_("Printing failed"), alert_msg);
-    dt_free(alert_msg);
+    gchar *item = g_strdup_printf(_("`%s' on `%s'"), job_title, pinfo->printer.name);
+    dt_control_alert(_("Printing failed"), _("error while printing"), item);
+    dt_free(item);
   }
   else
     dt_control_log(_("printing `%s' on `%s'"), job_title, pinfo->printer.name);

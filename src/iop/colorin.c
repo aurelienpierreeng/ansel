@@ -576,10 +576,9 @@ static void workicc_changed(GtkWidget *widget, gpointer user_data)
       dt_print(DT_DEBUG_COLORPROFILE,
                "[colorin] can't extract matrix from colorspace `%s', it will be replaced by Rec2020 RGB!\n",
                p->filename_work);
-      gchar *alert_msg = g_strdup_printf(_("can't extract matrix from colorspace `%s', it will be replaced by Rec2020 RGB!"),
-                                         p->filename_work);
-      dt_control_alert(_("Color profile replaced"), alert_msg);
-      dt_free(alert_msg);
+      dt_control_alert(_("Color profile replaced"),
+                       _("can't extract matrix from colorspace, it will be replaced by Rec2020 RGB!"),
+                       p->filename_work);
 
     }
     dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
@@ -826,10 +825,10 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
      && dt_image_is_matrix_correction_supported(&pipe->dev->image_storage))
   {
     dt_print(DT_DEBUG_COLORPROFILE, "[colorin] `%s' color matrix not found!\n", pipe->dev->image_storage.camera_makermodel);
-    gchar *alert_msg = g_strdup_printf(_("`%s' color matrix not found!"),
-                                       pipe->dev->image_storage.camera_makermodel);
-    dt_control_alert(_("Camera data missing"), alert_msg);
-    dt_free(alert_msg);
+    gchar *item = g_strdup_printf("%s (%s)", pipe->dev->image_storage.fullpath,
+                                  pipe->dev->image_storage.camera_makermodel);
+    dt_control_alert(_("Camera data missing"), _("color matrix not found!"), item);
+    dt_free(item);
   }
 
   const dt_colorspaces_color_profile_type_t clip_type = _clipping_profile_type(p);
@@ -866,7 +865,9 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
                p->filename);
     else
       dt_print(DT_DEBUG_COLORPROFILE, "[colorin] unsupported input profile has been replaced by linear Rec709 RGB!\n");
-    dt_control_alert(_("Color profile replaced"), _("unsupported input profile has been replaced by linear Rec709 RGB!"));
+    dt_control_alert(_("Color profile replaced"),
+                     _("unsupported input profile has been replaced by linear Rec709 RGB!"),
+                     pipe->dev->image_storage.fullpath);
 
     type = DT_COLORSPACE_LIN_REC709;
     source.type = type;
@@ -885,7 +886,8 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
   if(IS_NULL_PTR(conversion))
   {
     dt_print(DT_DEBUG_COLORPROFILE, "[colorin] input profile could not be generated!\n");
-    dt_control_alert(_("Color profile replaced"), _("input profile could not be generated!"));
+    dt_control_alert(_("Color profile replaced"), _("input profile could not be generated!"),
+                     pipe->dev->image_storage.fullpath);
     dt_colorspaces_free_image_profile(image_profile);
     piece->enabled = 0;
     return;
@@ -974,10 +976,9 @@ void gui_update(struct dt_iop_module_t *self)
     dt_print(DT_DEBUG_COLORPROFILE, "[colorin] could not find requested profile `%s'!\n",
              dt_colorspaces_get_name(p->type, p->filename));
 
-    gchar *alert_msg = g_strdup_printf(_("The color profile `%s' referenced as input profile has not been found."),
-                                       dt_colorspaces_get_name(p->type, p->filename));
-    dt_control_alert(_("Color profile replaced"), alert_msg);
-    dt_free(alert_msg);
+    dt_control_alert(_("Color profile replaced"),
+                     _("The color profile referenced as input profile has not been found."),
+                     dt_colorspaces_get_name(p->type, p->filename));
   }
 }
 

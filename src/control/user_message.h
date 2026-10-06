@@ -64,19 +64,27 @@ void dt_toast_markup_log(const char *msg, ...) __attribute__((format(printf, 1, 
 /** @brief Tell the user something that must not go unseen: what it says stays true after a toast
  * would have faded -- a module failed, a file was not written, an export will not come.
  *
- * The GUI shows it in an alert window with one OK button (gui/alert.h): one window per @p title,
- * so a failure that repeats updates the text rather than stacking windows. Without a GUI --
- * ansel-cli, or before dt_gui_gtk_init() -- it goes to dt_control_log(). Any thread.
+ * The GUI shows it in an alert window with one OK button (gui/alert.h): one window per @p title and
+ * @p message, which shows the message once and lists the items it was raised for under it, in a
+ * list that scrolls. A failure that repeats over a batch -- the thumbnails of a film roll, an
+ * export, sidecar files -- so stays one window that lists which items it hit, not only the last
+ * one. Without a GUI -- ansel-cli, or before dt_gui_gtk_init() -- it goes to dt_control_log().
+ * Any thread.
  *
- * Takes the finished text, not a printf format: a message with values in it is built with
+ * The message is the kind of failure: the same text at every call from one place, with no value
+ * in it, or every value would open a window of its own. What changes from one call to the next --
+ * the file, the module, the profile -- goes in @p item; an item of several values is built with
  * g_strdup_printf() by the caller, and freed after this returns.
  *
- * @param title   already translated; also what groups repeated alerts into one window
- * @param message the finished text, already translated; plain text, not markup */
-void dt_control_alert(const char *title, const char *message);
+ * @param title   already translated, one line; also what names the kind of failure
+ * @param message already translated; plain text, not markup; no value in it
+ * @param item    one line of the list under the message -- the full path of the image a module
+ *                failed on, prefixed with the module's name; plain text. NULL when there is
+ *                nothing to list. */
+void dt_control_alert(const char *title, const char *message, const char *item);
 
 /** @brief What dt_control_alert() hands its finished text to. Installed once by the GUI. */
-typedef void (*dt_control_alert_handler_t)(const char *title, const char *message);
+typedef void (*dt_control_alert_handler_t)(const char *title, const char *message, const char *item);
 
 /** @brief Install the alert handler; NULL restores the fallback to dt_control_log(). */
 void dt_control_set_alert_handler(dt_control_alert_handler_t handler);

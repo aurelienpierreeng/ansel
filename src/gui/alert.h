@@ -89,16 +89,25 @@ void dt_gui_alert_destroy(dt_gui_alert_t *alert);
  * failed, an image that was not updated. Nothing waits for the answer: the call returns at once,
  * and the rest of the application stays usable while the window is up.
  *
- * One window per title: an alert whose title is already on screen replaces its message, so a
- * failure that repeats does not stack windows.
+ * One window per kind of message -- per title and message -- which shows the message once and,
+ * under it, the items it was raised for, each once, in a list that scrolls past a height. A
+ * failure that repeats -- a module failing on every thumbnail of a film roll -- stays one window
+ * that lists which images it hit, instead of stacking windows or keeping only the last one. A
+ * repeat that adds nothing leaves the window as it is.
  *
- * Any thread: the window is built later, from the GUI thread's main loop, out of copies of @p title
- * and @p message -- never inside the call, so a caller holding a lock may alert.
+ * So the message says what went wrong, never where: the same text at every call from one place,
+ * built with no value in it. What changes from one call to the next -- a file, a module, a
+ * profile -- is the item.
  *
- * @param title   the window's title and the bold line at the top, already translated
+ * Any thread: the window is built later, from the GUI thread's main loop, out of copies of the
+ * arguments -- never inside the call, so a caller holding a lock may alert.
+ *
+ * @param title   the window's title and the bold line at the top, already translated; one line
  * @param message the text under it, already translated; plain text, not markup
+ * @param item    one line of the list under it -- an image's full path, or a module's name and
+ *                the image; plain text. NULL when there is nothing to list.
  */
-void dt_gui_alert(const char *title, const char *message);
+void dt_gui_alert(const char *title, const char *message, const char *item);
 
 #endif // DT_GUI_ALERT_H
 

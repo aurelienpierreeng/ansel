@@ -114,9 +114,9 @@ int legacy_params(dt_iop_module_t *self, const void *const old_params, const int
       {
         const char *camera = self->dev->image_storage.camera_makermodel;
         fprintf(stderr, "[invert] `%s' color matrix not found for 4bayer image\n", camera);
-        gchar *alert_msg = g_strdup_printf(_("`%s' color matrix not found for 4bayer image"), camera);
-        dt_control_alert(_("Camera data missing"), alert_msg);
-        dt_free(alert_msg);
+        gchar *item = g_strdup_printf("%s (%s)", self->dev->image_storage.fullpath, camera);
+        dt_control_alert(_("Camera data missing"), _("color matrix not found for 4bayer image"), item);
+        dt_free(item);
       }
       else
       {
@@ -366,9 +366,7 @@ void gui_update(dt_iop_module_t *self)
       {
         const char *camera = img->camera_makermodel;
         fprintf(stderr, "[invert] `%s' color matrix not found for 4bayer image\n", camera);
-        gchar *alert_msg = g_strdup_printf(_("`%s' color matrix not found for 4bayer image"), camera);
-        dt_control_alert(_("Camera data missing"), alert_msg);
-        dt_free(alert_msg);
+        dt_control_alert(_("Camera data missing"), _("color matrix not found for 4bayer image"), camera);
       }
     }
   }

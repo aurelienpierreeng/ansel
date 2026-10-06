@@ -758,7 +758,7 @@ dt_drawlayer_runtime_result_t dt_drawlayer_runtime_manager_update(dt_drawlayer_r
         _update_manager_information(state, &begin, host, NULL);
         if(self && !dt_drawlayer_flush_layer_cache(self))
         {
-          dt_control_alert(_("Drawing not saved"), _("failed to write drawing layer sidecar"));
+          dt_control_alert(_("Drawing not saved"), _("failed to write drawing layer sidecar"), NULL);
           result.ok = FALSE;
         }
         const dt_drawlayer_runtime_update_request_t end = {

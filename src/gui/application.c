@@ -1101,9 +1101,9 @@ static void _accels_recent_set(int index, const char *value)
 /* The pixelpipe cache alerts when it cannot serve an allocation -- it is full, or the system itself
  * runs out of memory: the module that needed the memory fails and the image is not updated, which
  * a toast would stop saying too soon. */
-static void _pixelpipe_cache_alert(const char *message)
+static void _pixelpipe_cache_alert(const char *message, const char *item)
 {
-  dt_gui_alert(_("Not enough memory"), message);
+  dt_gui_alert(_("Not enough memory"), message, item);
 }
 
 /* common/ reports startup progress; opening the splash on the first message is display

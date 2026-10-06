@@ -36,6 +36,7 @@
 #include "control/user_message.h"
 #include "system/sys_resources.h"
 #include "caches/pixelpipe_cache_alloc.h"
+#include "develop/develop.h"
 #include "develop/tiling.h"
 #include "common/opencl.h"
 #include "develop/pixelpipe.h"
@@ -476,9 +477,9 @@ static int _default_process_tiling_ptp(struct dt_iop_module_t *self, const struc
 
 error:
   {
-    gchar *alert_msg = g_strdup_printf(_("tiling failed for module '%s'. output might be garbled."), self->op);
-    dt_control_alert(_("Module failed"), alert_msg);
-    dt_free(alert_msg);
+    gchar *item = g_strdup_printf(_("`%s` on %s"), self->op, pipe->dev->image_storage.fullpath);
+    dt_control_alert(_("Module failed"), _("tiling failed. output might be garbled."), item);
+    dt_free(item);
   }
 // fall through
 
@@ -812,9 +813,9 @@ static int _default_process_tiling_roi(struct dt_iop_module_t *self, const struc
 
 error:
   {
-    gchar *alert_msg = g_strdup_printf(_("tiling failed for module '%s'. output might be garbled."), self->op);
-    dt_control_alert(_("Module failed"), alert_msg);
-    dt_free(alert_msg);
+    gchar *item = g_strdup_printf(_("`%s` on %s"), self->op, pipe->dev->image_storage.fullpath);
+    dt_control_alert(_("Module failed"), _("tiling failed. output might be garbled."), item);
+    dt_free(item);
   }
 // fall through
 
