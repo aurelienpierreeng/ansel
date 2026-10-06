@@ -83,6 +83,10 @@ typedef struct dt_dev_pixelpipe_cache_t
   gint64 sys_probe_time_us;
   size_t sys_available_est;
   gboolean sys_probe_valid;
+  // When the pressure valve last told the user of a refusal, per module and image, keyed by both as
+  // text: `gint64 *` monotonic times, guarded by `lock`. Entries older than the alert period go at
+  // the next refusal.
+  GHashTable *pressure_alerts;
   /* Kernel memory pressure: how much the cache may hold while the machine stalls, and what
    * decides it -- caches/pixelpipe_cache_pressure.c, which this file feeds through _pressure_sink()
    * and which never touches an entry itself. Guarded by `lock`, like the fields above. */
@@ -1721,6 +1725,14 @@ dt_pixel_cache_entry_t *dt_dev_pixelpipe_cache_ref_entry_for_host_ptr(void *host
  * buffers, not a hole large enough for pipeline tiles. */
 #define DT_PIXELPIPE_CACHE_PRESSURE_EXEMPT_SIZE ((size_t)1024 * 1024)
 
+// The pressure valve tells the user of one module's refusals on one image at most this often.
+#define DT_PIXELPIPE_CACHE_PRESSURE_ALERT_PERIOD_US ((gint64)10 * G_USEC_PER_SEC)
+
+static gboolean _pressure_alert_expired(gpointer key, gpointer value, gpointer user_data)
+{
+  return *(const gint64 *)user_data - *(const gint64 *)value > DT_PIXELPIPE_CACHE_PRESSURE_ALERT_PERIOD_US;
+}
+
 /* System memory-pressure valve (issue #1083).
  *
  * The internal budget (max_memory) is only a plan made at startup: it says nothing
@@ -1840,16 +1852,25 @@ static gboolean _system_memory_pressure_valve(dt_dev_pixelpipe_cache_t *cache, s
   }
   else
   {
-    // Alert the user at most every 10 s: this fires per failed allocation, on a
-    // system that is already drowning. The refused allocation makes the module that asked
-    // for it fail, and a pipe that failed publishes nothing: say so where it cannot be
+    // Alert the user of one module on one image at most once per alert period: this fires per
+    // failed allocation, on a system that is already drowning. Per module and image, not once for
+    // all: on 2026-10-06 two raws whose thumbnails were both refused got one line in the window, as
+    // the first refusal silenced the second for 10 s. The refused allocation makes the module that
+    // asked for it fail, and a pipe that failed publishes nothing: say so where it cannot be
     // missed, or the user waits for an image that will not come.
-    static gint64 last_warning_us = 0;
-    if(now - last_warning_us > 10000000)
+    const char *module = dt_pixelpipe_cache_current_module;
+    const char *image = dt_pixelpipe_cache_current_image;
+    g_hash_table_foreach_remove(cache->pressure_alerts, _pressure_alert_expired, (gpointer)&now);
+    gchar *who = g_strdup_printf("%s\n%s", module ? module : "", image ? image : "");
+    if(g_hash_table_contains(cache->pressure_alerts, who))
     {
-      last_warning_us = now;
-      const char *module = dt_pixelpipe_cache_current_module;
-      const char *image = dt_pixelpipe_cache_current_image;
+      dt_free(who);
+    }
+    else
+    {
+      gint64 *when = g_new(gint64, 1);
+      *when = now;
+      g_hash_table_insert(cache->pressure_alerts, who, when);
       // The size, the module that asked for it, its image and the memory left are the item, so that
       // the message is the same at every refusal. What is left is counted above the floor, as the
       // valve counts it, so it always reads less than the size; the system's own figure includes
@@ -2431,12 +2452,14 @@ gboolean dt_dev_pixelpipe_cache_init(size_t max_memory, const gboolean verbose,
   cache->sys_probe_time_us = 0;
   cache->sys_available_est = 0;
   cache->sys_probe_valid = FALSE;
+  cache->pressure_alerts = g_hash_table_new_full(g_str_hash, g_str_equal, dt_free_gpointer, dt_free_gpointer);
   dt_pixelpipe_cache_pressure_monitor_init(&cache->psi, max_memory);
 
-  if(IS_NULL_PTR(cache->entries) || IS_NULL_PTR(cache->external_entries))
+  if(IS_NULL_PTR(cache->entries) || IS_NULL_PTR(cache->external_entries) || IS_NULL_PTR(cache->pressure_alerts))
   {
     if(cache->entries) g_hash_table_destroy(cache->entries);
     if(cache->external_entries) g_hash_table_destroy(cache->external_entries);
+    if(cache->pressure_alerts) g_hash_table_destroy(cache->pressure_alerts);
     dt_pthread_mutex_destroy(&cache->lock);
     dt_free(cache);
     return FALSE;
@@ -2445,6 +2468,7 @@ gboolean dt_dev_pixelpipe_cache_init(size_t max_memory, const gboolean verbose,
   if(dt_cache_arena_init(&cache->arena, cache->max_memory))
   {
     dt_pthread_mutex_destroy(&cache->lock);
+    g_hash_table_destroy(cache->pressure_alerts);
     g_hash_table_destroy(cache->external_entries);
     g_hash_table_destroy(cache->entries);
     dt_free(cache);
@@ -2492,6 +2516,7 @@ void dt_dev_pixelpipe_cache_cleanup(void)
   // instance stays published until the tables are gone.
   g_hash_table_destroy(cache->external_entries);
   g_hash_table_destroy(cache->entries);
+  g_hash_table_destroy(cache->pressure_alerts);
   dt_pthread_mutex_destroy(&cache->lock);
   dt_cache_arena_cleanup(&cache->arena);
 

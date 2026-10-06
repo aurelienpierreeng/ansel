@@ -695,7 +695,11 @@ The defense has five layers, from planning to last resort:
    `dt_gui_gtk_init()`) and shows it with `dt_gui_alert()` (`gui/alert.c`), a window kept above Ansel's
    main window until its OK button is clicked, because what it says -- the module failed, the image was
    not updated -- stays true long after a toast is gone. Without a GUI it falls back to the warn
-   handler. It is rate-limited to one every 10 s; the size refused, the module that asked for it,
+   handler. It is rate-limited to one every 10 s for one module on one image (`pressure_alerts`,
+   keyed by both). Until 2026-10-06 the limit was one every 10 s for all of them, and two raws whose
+   thumbnails were refused at startup got one line in the window: the first refusal silenced the
+   second -- found from the code after the user saw one line for two thumbnails out of RAM; the
+   stdout log has no timestamps to show the gap. The size refused, the module that asked for it,
    that module's image (its file name between backticks -- it can hold spaces -- and its image id,
    as text `pixelpipe_hb.c` writes and hands over with
    `dt_pixelpipe_cache_set_current_image()` beside the module's name: the cache prints it, and knows
