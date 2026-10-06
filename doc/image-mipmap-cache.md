@@ -37,9 +37,9 @@ global. **Never `g_get_user_cache_dir()` directly**, for three independent reaso
 
   *Not established, though this section first stated it:* that Storage Sense clears that folder
   by default on Windows 11 and Disk Cleanup targets it, so that the OS deleted the cache behind
-  the user's back. Neither was measured. What was measured, on 2026-10-07 against `5b6eab75ed` on
-  one Windows 11 machine with Storage Sense on (`StoragePolicy` `01=1`, temporary files `04=1`) at
-  its default cadence (`2048=0`, "when disk space is low"): `INetCache\ansel` still held 118
+  the user's back. Neither was measured. What was measured, on 2026-10-07 against `ea59057346`
+  plus #1493 on one Windows 11 machine with Storage Sense on (`StoragePolicy` `01=1`, temporary
+  files `04=1`) at its default cadence (`2048=0`, "when disk space is low"): `INetCache\ansel` still held 118
   files, the oldest written 2026-04-30 — five months survived. That does not prove Windows never
   empties it (low disk space and Disk Cleanup were not tried), only that the move must not rest
   on it. It does not need to: the folder is the wrong one whether or not anything clears it. The
@@ -50,9 +50,9 @@ global. **Never `g_get_user_cache_dir()` directly**, for three independent reaso
   `dt_loc_cachedir()/downloads`: with `--cachedir` given, it made one directory and wrote into
   another, which did not exist.
 - **It takes `XDG_CACHE_HOME` literally, relative included, and keeps its first answer.**
-  *Established 2026-10-07 against `1ebc5f42ae`.* `g_build_user_cache_dir()` (`glib/gutils.c`)
-  copies the variable whenever it is non-empty, on every platform, with no `g_path_is_absolute()`
-  test; `g_get_user_cache_dir()` memoises that for the life of the process. Read from the GLib
+  *Established 2026-10-07 against `ea59057346` plus #1493.* `g_build_user_cache_dir()`
+  (`glib/gutils.c`) copies the variable whenever it is non-empty, on every platform, with no
+  `g_path_is_absolute()` test; `g_get_user_cache_dir()` memoises that for the life of the process. Read from the GLib
   source (main) and measured on Windows with a probe (GLib 2.90, MSYS2 UCRT64): with
   `XDG_CACHE_HOME=relative-cache` it answers `relative-cache`, and a second call after changing the
   variable answers the same. So the non-Windows default is built from `g_get_home_dir()` +
