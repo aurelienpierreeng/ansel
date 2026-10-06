@@ -235,8 +235,11 @@ void dt_gui_alert_set_cancel(dt_gui_alert_t *alert, dt_gui_alert_callback_t call
 
 void dt_gui_alert_show(dt_gui_alert_t *alert)
 {
-  gtk_widget_show_all(alert->window);
+  // The button takes the focus before the window shows. A window shown with no focus gives it to the
+  // first widget that takes it -- a selectable line of a dt_gui_alert() list -- and a selectable
+  // label selects all its text as it gets the focus, which a later grab does not unselect.
   if(!IS_NULL_PTR(alert->focus)) gtk_widget_grab_focus(alert->focus);
+  gtk_widget_show_all(alert->window);
   gtk_window_present(GTK_WINDOW(alert->window));
 #ifdef GDK_WINDOWING_QUARTZ
   // A question or a progress answers the user, but not always from the application in front: the
@@ -284,6 +287,21 @@ static void _alert_window_items_destroyed(GtkWidget *block __attribute__((unused
 static void _alert_ok_clicked(dt_gui_alert_t *alert, void *data __attribute__((unused)))
 {
   dt_gui_alert_destroy(alert);
+}
+
+// The list, one item per line: each item's label ends with the line break of its empty line.
+static void _alert_items_copy(GtkButton *button __attribute__((unused)), gpointer user_data)
+{
+  GString *text = g_string_new(NULL);
+  GList *labels = gtk_container_get_children(GTK_CONTAINER(user_data));
+  for(GList *label = labels; label; label = g_list_next(label))
+    g_string_append(text, gtk_label_get_text(GTK_LABEL(label->data)));
+  g_list_free(labels);
+  // GDK_SELECTION_CLIPBOARD is the explicit-copy clipboard on all backends, not X11's PRIMARY.
+  GtkClipboard *clipboard = gtk_clipboard_get(GDK_SELECTION_CLIPBOARD);
+  gtk_clipboard_set_text(clipboard, text->str, -1);
+  gtk_clipboard_store(clipboard);
+  g_string_free(text, TRUE);
 }
 
 static gboolean _alert_show(gpointer user_data)
@@ -336,11 +354,20 @@ static gboolean _alert_show(gpointer user_data)
       gtk_scrolled_window_set_max_content_height(GTK_SCROLLED_WINDOW(scroll), DT_PIXEL_APPLY_DPI(150));
       gtk_scrolled_window_set_propagate_natural_height(GTK_SCROLLED_WINDOW(scroll), TRUE);
       gtk_container_add(GTK_CONTAINER(scroll), items);
+      // Above the list, on its right, a button that copies it whole, to paste in a bug report.
+      GtkWidget *copy = gtk_button_new_from_icon_name("edit-copy-symbolic", GTK_ICON_SIZE_SMALL_TOOLBAR);
+      gtk_widget_set_tooltip_text(copy, _("copy to clipboard"));
+      gtk_widget_set_halign(copy, GTK_ALIGN_END);
+      g_signal_connect(copy, "clicked", G_CALLBACK(_alert_items_copy), items);
+      gtk_box_pack_start(GTK_BOX(block), copy, FALSE, FALSE, 0);
       gtk_box_pack_start(GTK_BOX(block), scroll, FALSE, FALSE, 0);
       g_object_set_data(G_OBJECT(block), "items", items);
     }
     // A path has no spaces to break at: it wraps anywhere, whole, and can be selected to be copied.
-    GtkWidget *label = gtk_label_new(message->item);
+    // An empty line ends each item, so that one wrapped over several lines stays apart from the next.
+    gchar *text = g_strconcat(message->item, "\n", NULL);
+    GtkWidget *label = gtk_label_new(text);
+    dt_free(text);
     gtk_label_set_xalign(GTK_LABEL(label), 0.0);
     gtk_label_set_line_wrap(GTK_LABEL(label), TRUE);
     gtk_label_set_line_wrap_mode(GTK_LABEL(label), PANGO_WRAP_WORD_CHAR);
