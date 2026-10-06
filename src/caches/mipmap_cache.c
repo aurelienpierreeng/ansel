@@ -547,7 +547,18 @@ void *dt_mipmap_cache_alloc(dt_mipmap_buffer_t *buf, const dt_image_t *img)
   const size_t buffer_size = wd * ht * bpp;
   const size_t min_buffer_size = 64 * 4 * sizeof(float);
   entry->data = dt_alloc_align(_get_entry_size(MAX(buffer_size, min_buffer_size)));
-  if(IS_NULL_PTR(entry->data)) return NULL;
+  if(IS_NULL_PTR(entry->data))
+  {
+    /* The old payload is already gone, and every reader of a cache entry takes entry->data for a
+     * valid descriptor: _generate_blocking() writes dsc->status as soon as the loader returns
+     * DT_IMAGEIO_CACHE_FULL, so leaving NULL here crashes there. Fall back to the empty 0x0
+     * payload a full-size entry is created with (dt_mipmap_cache_allocate_dynamic()), so the
+     * load fails instead. */
+    entry->data = dt_alloc_align(_get_entry_size(min_buffer_size));
+    struct dt_mipmap_buffer_dsc *empty = NULL;
+    dt_mipmap_cache_update_buffer_addresses(entry, &empty, 0, 0, min_buffer_size);
+    return NULL;
+  }
 
   // Update the references
   struct dt_mipmap_buffer_dsc *dsc = NULL;
