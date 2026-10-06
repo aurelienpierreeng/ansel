@@ -18,15 +18,15 @@
 
 `dt_loc_cachedir()` is the answer, always — or `dt_loc_default_user_cache_dir()`
 (`src/common/file_location.c`) for the two callers that run before `dt_loc_init()` has set the
-global. **Never `g_get_user_cache_dir()` directly**, for two independent reasons:
+global. **Never `g_get_user_cache_dir()` directly**, for three independent reasons:
 
 - **It is the wrong directory on Windows.** GLib returns `FOLDERID_InternetCache` there —
   `%LOCALAPPDATA%\Microsoft\Windows\INetCache`, the shell folder still labelled "Temporary
   Internet Files" — which Storage Sense clears by default on Windows 11 and Disk Cleanup targets.
   A thumbnail cache written there is deleted by the OS behind the user's back, which reads as "the
   disk cache never works on Windows", and it is invisible to a user who goes looking (#1473). The
-  default is now `%LOCALAPPDATA%\cache\ansel` on Windows and `g_get_user_cache_dir()/ansel`
-  elsewhere, with an absolute `XDG_CACHE_HOME` winning on every platform. On Windows it sits
+  default is now `%LOCALAPPDATA%\cache\ansel` on Windows and `~/.cache/ansel` elsewhere, with an
+  absolute `XDG_CACHE_HOME` winning on every platform. On Windows it sits
   *beside* the config folder `%LOCALAPPDATA%\ansel` (`g_get_user_config_dir()` is `%LOCALAPPDATA%`
   there), not inside it, as `~/.cache/ansel` sits beside `~/.config/ansel`: a cache nested in the
   config goes with every backup or deletion of `anselrc` and `library.db`. The branch first had
@@ -38,9 +38,23 @@ global. **Never `g_get_user_cache_dir()` directly**, for two independent reasons
   `g_get_user_cache_dir()/ansel/downloads` while creating the directory under
   `dt_loc_cachedir()/downloads`: with `--cachedir` given, it made one directory and wrote into
   another, which did not exist.
+- **It takes `XDG_CACHE_HOME` literally, relative included, and keeps its first answer.**
+  *Established 2026-10-07 against `1ebc5f42ae`.* `g_build_user_cache_dir()` (`glib/gutils.c`)
+  copies the variable whenever it is non-empty, on every platform, with no `g_path_is_absolute()`
+  test; `g_get_user_cache_dir()` memoises that for the life of the process. Read from the GLib
+  source (main) and measured on Windows with a probe (GLib 2.90, MSYS2 UCRT64): with
+  `XDG_CACHE_HOME=relative-cache` it answers `relative-cache`, and a second call after changing the
+  variable answers the same. So the non-Windows default is built from `g_get_home_dir()` +
+  `.cache`, which is what GLib answers for an unset or empty variable — the only cases left once an
+  absolute one has returned. *The first version of this branch had it wrong:* it kept
+  `g_get_user_cache_dir()/ansel` for Linux and macOS behind an "absolute only" guard, and a
+  relative value walked around the guard and came back through that call as `relative-cache/ansel`.
+  Its test could not see it: the empty-variable case ran first and froze GLib on `~/.cache`.
 
 `tests/unittests/test_loc_cache_dir.c` pins the XDG precedence and that the default is not a
-shell-managed temporary folder. The thumbnail cache path itself is built on top of this by
+shell-managed temporary folder. Its relative-variable case runs first, before anything in the
+process can have asked GLib for its cache directory, so a return to `g_get_user_cache_dir()` would
+fail it on Linux. The thumbnail cache path itself is built on top of this by
 `dt_mipmap_cache_get_filename()`, which hashes the library's absolute path into the directory
 name so two libraries do not share thumbnails.
 

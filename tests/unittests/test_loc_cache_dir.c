@@ -139,12 +139,15 @@ static void _the_default_is_not_a_shell_managed_temporary_folder(void **state)
 
   /* The base the platform must resolve against. On Windows this is deliberately NOT
    * g_get_user_cache_dir(): see the file comment. Same resolution order as the function under
-   * test, so this says the right thing on a Windows box whose %LOCALAPPDATA% is unset. */
+   * test, so this says the right thing on a Windows box whose %LOCALAPPDATA% is unset. Elsewhere
+   * not g_get_user_cache_dir() either, which answers whatever XDG_CACHE_HOME held at its first
+   * call in this process, not what it holds now. */
 #ifdef _WIN32
-  const gchar *base = g_getenv("LOCALAPPDATA");
-  if(IS_NULL_PTR(base) || !base[0]) base = g_get_user_data_dir();
+  const gchar *local_app_data = g_getenv("LOCALAPPDATA");
+  if(IS_NULL_PTR(local_app_data) || !local_app_data[0]) local_app_data = g_get_user_data_dir();
+  gchar *base = g_strdup(local_app_data);
 #else
-  const gchar *base = g_get_user_cache_dir();
+  gchar *base = g_build_filename(g_get_home_dir(), ".cache", NULL);
 #endif
   assert_non_null(base);
   assert_true(g_str_has_prefix(got, base));
@@ -155,6 +158,7 @@ static void _the_default_is_not_a_shell_managed_temporary_folder(void **state)
   assert_null(strstr(got, "INetCache"));
   assert_null(strstr(got, "Temporary Internet Files"));
 
+  dt_free(base);
   dt_free(got);
 }
 
@@ -178,10 +182,13 @@ static void _every_call_answers_the_same(void **state)
 
 int main(int argc, char *argv[])
 {
+  /* The relative case runs FIRST, before anything in this process can have asked GLib for its cache
+   * dir: g_get_user_cache_dir() memoises its first answer, so after an empty-variable run it would
+   * keep answering ~/.cache and a relative value leaking back through it would pass unseen. */
   const struct CMUnitTest tests[] = {
+    cmocka_unit_test(_a_relative_xdg_is_ignored),
     cmocka_unit_test(_xdg_cache_home_wins),
     cmocka_unit_test(_an_empty_xdg_is_ignored),
-    cmocka_unit_test(_a_relative_xdg_is_ignored),
     cmocka_unit_test(_the_default_is_not_a_shell_managed_temporary_folder),
     cmocka_unit_test(_every_call_answers_the_same),
   };

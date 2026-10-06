@@ -264,7 +264,11 @@ gchar *dt_loc_default_user_cache_dir(void)
   if(IS_NULL_PTR(local_app_data) || !local_app_data[0]) local_app_data = g_get_user_data_dir();
   return g_build_filename(local_app_data, "cache", "ansel", NULL);
 #else
-  return g_build_filename(g_get_user_cache_dir(), "ansel", NULL);
+  /* NOT g_get_user_cache_dir() either: GLib takes XDG_CACHE_HOME literally whenever it is non-empty,
+   * relative or not, so the value rejected above would come straight back through it -- and GLib
+   * memoises its first answer, so whether it did would depend on who asked first. ~/.cache is what
+   * it answers for an unset or empty variable, the only other cases that reach this line. */
+  return g_build_filename(g_get_home_dir(), ".cache", "ansel", NULL);
 #endif
 }
 
