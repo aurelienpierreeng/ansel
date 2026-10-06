@@ -1094,7 +1094,18 @@ dt_imageio_retval_t dt_imageio_open(dt_image_t *img,               // non-const 
   if(ret != DT_IMAGEIO_OK && ret != DT_IMAGEIO_CACHE_FULL)
     ret = dt_imageio_open_hdr(img, filename, buf);
 
-  // Final check and abort
+  // Final check and abort. CACHE_FULL stopped the cascade above: a decoder took the file, but could
+  // not allocate the memory to decode it -- the full-size buffer (dt_mipmap_cache_alloc()), or one
+  // of its own. Saying that no decoder supports the file would send the user looking elsewhere.
+  if(ret == DT_IMAGEIO_CACHE_FULL)
+  {
+    fprintf(stderr, "[imageio] not enough memory to load %s at full size.\n", filename);
+    dt_control_alert(_("Not enough memory"),
+                     _("Not enough memory to load the image at full size.\n"
+                       "Close other applications or add more RAM to your system."),
+                     filename);
+    return ret;
+  }
   if(ret != DT_IMAGEIO_OK)
   {
     fprintf(stderr, "[imageio] The file %s is supported by none of our decoders.\n", filename);
