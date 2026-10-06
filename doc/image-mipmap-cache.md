@@ -22,10 +22,10 @@ global. **Never `g_get_user_cache_dir()` directly**, for three independent reaso
 
 - **It is the wrong directory on Windows.** GLib returns `FOLDERID_InternetCache` there —
   `%LOCALAPPDATA%\Microsoft\Windows\INetCache`, the shell folder still labelled "Temporary
-  Internet Files" — which Storage Sense clears by default on Windows 11 and Disk Cleanup targets.
-  A thumbnail cache written there is deleted by the OS behind the user's back, which reads as "the
-  disk cache never works on Windows", and it is invisible to a user who goes looking (#1473). The
-  default is now `%LOCALAPPDATA%\cache\ansel` on Windows and `~/.cache/ansel` elsewhere, with an
+  Internet Files" — a shell-managed container for the browser cache, not a general-purpose
+  per-user cache. It carries the Hidden and System attributes, so Explorer does not show it even
+  with hidden files shown, and a thumbnail cache or a log written there is invisible to a user who
+  goes looking (#1473). The default is now `%LOCALAPPDATA%\cache\ansel` on Windows and `~/.cache/ansel` elsewhere, with an
   absolute `XDG_CACHE_HOME` winning on every platform. On Windows it sits
   *beside* the config folder `%LOCALAPPDATA%\ansel` (`g_get_user_config_dir()` is `%LOCALAPPDATA%`
   there), not inside it, as `~/.cache/ansel` sits beside `~/.config/ansel`: a cache nested in the
@@ -34,6 +34,17 @@ global. **Never `g_get_user_cache_dir()` directly**, for three independent reaso
   `%LOCALAPPDATA%` is read from the environment rather than through `g_get_user_data_dir()`, which
   resolves to the same folder but takes `XDG_DATA_HOME` first — a variable that says where data
   goes and must not steer a cache.
+
+  *Not established, though this section first stated it:* that Storage Sense clears that folder
+  by default on Windows 11 and Disk Cleanup targets it, so that the OS deleted the cache behind
+  the user's back. Neither was measured. What was measured, on 2026-10-07 against `5b6eab75ed` on
+  one Windows 11 machine with Storage Sense on (`StoragePolicy` `01=1`, temporary files `04=1`) at
+  its default cadence (`2048=0`, "when disk space is low"): `INetCache\ansel` still held 118
+  files, the oldest written 2026-04-30 — five months survived. That does not prove Windows never
+  empties it (low disk space and Disk Cleanup were not tried), only that the move must not rest
+  on it. It does not need to: the folder is the wrong one whether or not anything clears it. The
+  attributes were read on the same machine (`INetCache`: Hidden, System), with Explorer showing
+  hidden files but not protected system ones (`Hidden=1`, `ShowSuperHidden=0`).
 - **It ignores `--cachedir`.** That is how `libs/textnotes.c` came to build a download's path under
   `g_get_user_cache_dir()/ansel/downloads` while creating the directory under
   `dt_loc_cachedir()/downloads`: with `--cachedir` given, it made one directory and wrote into
