@@ -974,8 +974,26 @@ static void _toggle_expanded(dt_lib_module_t *module, gboolean close_all)
   }
 }
 
+/**
+ * @brief Queue the module's expander as the scroll target of the panel that holds it.
+ *
+ * The panel scrolls to it once its size has changed, that is once the module has expanded
+ * or collapsed.
+ * dt_lib_gui_set_expanded() only queues the right panel, so a click that toggles a module
+ * of the left panel has to name its panel here, before toggling.
+ */
+static void _scroll_to_module(dt_lib_module_t *module)
+{
+  const uint32_t container = module->container(module);
+  if(container == DT_UI_CONTAINER_PANEL_LEFT_CENTER)
+    dt_gui_get_global()->scroll_to[0] = module->expander;
+  else if(container == DT_UI_CONTAINER_PANEL_RIGHT_CENTER)
+    dt_gui_get_global()->scroll_to[1] = module->expander;
+}
+
 static void expand_callback(GtkButton *button, dt_lib_module_t *module)
 {
+  _scroll_to_module(module);
   _toggle_expanded(module, FALSE);
 }
 
@@ -994,12 +1012,7 @@ static gboolean _lib_plugin_header_button_press(GtkWidget *w, GdkEventButton *e,
     /* bail out if module is static */
     if(!module->expandable(module)) return FALSE;
 
-    // make gtk scroll to the module once it updated its allocation size
-    uint32_t container = module->container(module);
-    if(container == DT_UI_CONTAINER_PANEL_LEFT_CENTER)
-      dt_gui_get_global()->scroll_to[0] = module->expander;
-    else if(container == DT_UI_CONTAINER_PANEL_RIGHT_CENTER)
-      dt_gui_get_global()->scroll_to[1] = module->expander;
+    _scroll_to_module(module);
 
     gtk_widget_grab_focus(GTK_WIDGET(module->expander));
 
