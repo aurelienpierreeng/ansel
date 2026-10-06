@@ -65,7 +65,7 @@
 static gchar *_saved_xdg = NULL;
 static gboolean _had_xdg = FALSE;
 
-static int _setup(void **state)
+static int _setup(void **state G_GNUC_UNUSED)
 {
   const gchar *current = g_getenv(XDG_KEY);
   _had_xdg = !IS_NULL_PTR(current);
@@ -73,7 +73,7 @@ static int _setup(void **state)
   return 0;
 }
 
-static int _teardown(void **state)
+static int _teardown(void **state G_GNUC_UNUSED)
 {
   if(_had_xdg)
     g_setenv(XDG_KEY, _saved_xdg, TRUE);
@@ -85,7 +85,7 @@ static int _teardown(void **state)
   return 0;
 }
 
-static void _xdg_cache_home_wins(void **state)
+static void _xdg_cache_home_wins(void **state G_GNUC_UNUSED)
 {
   g_setenv(XDG_KEY, FAKE_ABSOLUTE_DIR, TRUE);
 
@@ -99,7 +99,7 @@ static void _xdg_cache_home_wins(void **state)
   dt_free(expected);
 }
 
-static void _an_empty_xdg_is_ignored(void **state)
+static void _an_empty_xdg_is_ignored(void **state G_GNUC_UNUSED)
 {
   /* An exported-but-empty variable is how a shell spells "not set"; taking it literally would put
    * the cache at the filesystem root. */
@@ -114,7 +114,7 @@ static void _an_empty_xdg_is_ignored(void **state)
   dt_free(got);
 }
 
-static void _a_relative_xdg_is_ignored(void **state)
+static void _a_relative_xdg_is_ignored(void **state G_GNUC_UNUSED)
 {
   /* The XDG specification calls a relative path in one of these variables invalid, and honouring one
    * would make the cache location depend on the working directory. */
@@ -129,7 +129,7 @@ static void _a_relative_xdg_is_ignored(void **state)
   dt_free(got);
 }
 
-static void _the_default_is_not_a_shell_managed_temporary_folder(void **state)
+static void _the_default_is_not_a_shell_managed_temporary_folder(void **state G_GNUC_UNUSED)
 {
   g_unsetenv(XDG_KEY);
 
@@ -162,7 +162,7 @@ static void _the_default_is_not_a_shell_managed_temporary_folder(void **state)
   dt_free(got);
 }
 
-static void _every_call_answers_the_same(void **state)
+static void _every_call_answers_the_same(void **state G_GNUC_UNUSED)
 {
   /* Two callers resolve this independently -- main() before dt_loc_init(), and
    * dt_loc_init_user_cache_dir() during it -- and they must land on the same directory. */
