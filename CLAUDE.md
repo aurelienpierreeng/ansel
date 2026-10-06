@@ -87,16 +87,21 @@ were killed and how. When you write a finding down, write down the number and th
 
 A toast (`dt_control_log()`, `dt_pipeline_message()`) fades within seconds, while what such a
 message says — a module failed, an image was not updated, an export will not come — stays true.
-Use `dt_control_alert(title, message)` from
+Use `dt_control_alert(title, message, item)` from
 [`src/control/user_message.h`](src/control/user_message.h), next to `dt_control_log()`: the GUI
 shows it with `dt_gui_alert()` from [`src/gui/alert.h`](src/gui/alert.h) — a small window with
-one OK button, kept above Ansel's main window (not other applications) until it is clicked, one per title — and without a GUI
-(`ansel-cli`) it falls back to the toast. It takes the finished text, not a printf format: build
-a message with values in it with `g_strdup_printf()` and free it after the call. Any thread, any
-layer from `common/` up; only `gui/` itself calls `dt_gui_alert()` directly. Repeated failures share a window by sharing a title, so
-reuse one of the existing titles ("Module failed", "Export failed", "Not enough memory", …)
-before inventing one. A window that needs
-more than OK — other buttons, a list, a question — is a `dt_gui_alert_t` object
+one OK button, kept above Ansel's main window (not other applications) until it is clicked, one
+per title and message — and without a GUI (`ansel-cli`) it falls back to the toast. Any thread,
+any layer from `common/` up; only `gui/` itself calls `dt_gui_alert()` directly.
+**The message is the kind of failure and carries no value**: the same text at every call from one
+place. What varies — the file, the module, the profile — is `item`, one line, which the window
+lists under the message, each once, in a list that scrolls; `NULL` when there is nothing to list.
+A value put in the message opens one window per value instead. An item of several values is built
+with `g_strdup_printf()` and freed after the call — a module on an image is
+``_("`%s` on %s")``, `self->op` then `dev->image_storage.fullpath`. Reuse one of the existing
+titles ("Module failed", "Export failed", "Not enough memory", …) before inventing one.
+A window that needs
+more than OK — other buttons, a list of its own, a question — is a `dt_gui_alert_t` object
 (`dt_gui_alert_new()` with a kind, then `_add_text/_add_widget/_add_button/_show/_destroy`), as
 `gui/closing.c` uses it. The window itself — frame, modality, Escape, title bar, focus, the macOS
 specifics — lives entirely in `gui/alert.c`; a caller never builds or configures it. Toasts

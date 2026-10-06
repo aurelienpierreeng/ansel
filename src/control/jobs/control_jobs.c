@@ -188,7 +188,8 @@ static int32_t _generic_dt_control_fileop_images_job_run(dt_job_t *job,
 
   if(film_id <= 0)
   {
-    dt_control_alert(_("File operation failed"), _("failed to create film roll for destination directory, aborting move.."));
+    dt_control_alert(_("File operation failed"),
+                     _("failed to create film roll for destination directory, aborting move.."), NULL);
     return -1;
   }
 
@@ -299,7 +300,7 @@ static int32_t dt_control_save_xmps_job_run(dt_job_t *job)
     const dt_image_write_sidecar_result_t res =
       forced ? dt_image_write_sidecar_file_forced(imgid)
              : dt_image_write_sidecar_file(imgid);
-    gchar *alert_msg = NULL;
+    const char *alert_msg = NULL;
     switch(res)
     {
       case DT_IMAGE_WRITE_SIDECAR_OK:
@@ -308,19 +309,27 @@ static int32_t dt_control_save_xmps_job_run(dt_job_t *job)
         // xmp writing is off, or the setting changed mid-batch: nothing was attempted, nothing to report
         break;
       case DT_IMAGE_WRITE_SIDECAR_CACHE_BUSY:
-        alert_msg = g_strdup_printf(_("cannot write XMP file for image %i: the image cache entry is busy, try again."), imgid);
+        alert_msg = _("cannot write XMP file: the image cache entry is busy, try again.");
         break;
       case DT_IMAGE_WRITE_SIDECAR_NO_SOURCE_PATH:
-        alert_msg = g_strdup_printf(_("cannot write XMP file for image %i: the original file could not be found."), imgid);
+        alert_msg = _("cannot write XMP file: the original file could not be found.");
         break;
       case DT_IMAGE_WRITE_SIDECAR_IO_ERROR:
-        alert_msg = g_strdup_printf(_("cannot write XMP file for image %i: the target storage may be unavailable or read-only."), imgid);
+        alert_msg = _("cannot write XMP file: the target storage may be unavailable or read-only.");
         break;
     }
     if(!IS_NULL_PTR(alert_msg))
     {
-      dt_control_alert(_("Sidecar file not written"), alert_msg);
-      dt_free(alert_msg);
+      // The image goes under the message, by the path it has in the library: an id means nothing to
+      // the user, and dt_image_full_path() gives no path for an original that is gone.
+      char fullpath[DT_PATH_MAX] = { 0 };
+      const dt_image_t *img = dt_image_cache_get(imgid, 'r');
+      if(!IS_NULL_PTR(img))
+      {
+        g_strlcpy(fullpath, img->fullpath, sizeof(fullpath));
+        dt_image_cache_read_release(img);
+      }
+      dt_control_alert(_("Sidecar file not written"), alert_msg, fullpath[0] ? fullpath : NULL);
     }
   }
   return 0;
@@ -782,7 +791,8 @@ static int32_t dt_control_remove_images_job_run(dt_job_t *job)
 
   if(!remove_ok)
   {
-    dt_control_alert(_("File operation failed"), _("cannot remove local copy when the original file is not accessible."));
+    dt_control_alert(_("File operation failed"),
+                     _("cannot remove local copy when the original file is not accessible."), NULL);
     return 0;
   }
 
@@ -1943,10 +1953,8 @@ void dt_control_export(GList *imgid_list, const dt_control_export_request_t *req
   dt_imageio_module_data_t *sdata = mstorage->get_params(mstorage);
   if(IS_NULL_PTR(sdata))
   {
-    gchar *alert_msg = g_strdup_printf(_("failed to get parameters from storage module `%s', aborting export.."),
-                                       mstorage->name(mstorage));
-    dt_control_alert(_("Export failed"), alert_msg);
-    dt_free(alert_msg);
+    dt_control_alert(_("Export failed"), _("failed to get parameters from storage module, aborting export.."),
+                     mstorage->name(mstorage));
     dt_control_job_dispose(job);
     return;
   }

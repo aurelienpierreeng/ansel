@@ -289,10 +289,9 @@ static void _export_list_save(GtkWidget *dialog, GtkTextBuffer *buffer)
     GError *error = NULL;
     if(!g_file_set_contents(filename, text, -1, &error))
     {
-      gchar *alert_msg = g_strdup_printf(_("could not save the image list to '%s': %s"),
-                                         filename, error->message);
-      dt_control_alert(_("Could not save"), alert_msg);
-      dt_free(alert_msg);
+      gchar *item = g_strdup_printf("%s: %s", filename, error->message);
+      dt_control_alert(_("Could not save"), _("could not save the image list"), item);
+      dt_free(item);
       g_error_free(error);
     }
     g_free(text);

@@ -621,7 +621,8 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
   return 0;
 
 error:
-  dt_control_alert(_("Module failed"), _("module `color reconstruction' failed"));
+  dt_control_alert(_("Module failed"), _("module `color reconstruction' failed"),
+                   pipe->dev->image_storage.fullpath);
   dt_iop_colorreconstruct_bilateral_free(b);
   dt_iop_image_copy_by_size(ovoid, ivoid, roi_out->width, roi_out->height, piece->dsc_in.channels);
   return 1;

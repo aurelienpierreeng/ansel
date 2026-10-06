@@ -2539,7 +2539,7 @@ void dt_configure_runtime_performance(dt_sys_resources_t *resources, gboolean in
 
   if(resources->total_memory < resources->headroom_memory + resources->mipmap_memory + resources->pixelpipe_memory)
     dt_control_alert(_("Not enough memory"), _("CRITICAL WARNING: Ansel will not be able to use the RAM you allocated it.\n"
-                     "Review your memory settings or add more RAM to your system."));
+                     "Review your memory settings or add more RAM to your system."), NULL);
 }
 
 int dt_capabilities_check(char *capability)

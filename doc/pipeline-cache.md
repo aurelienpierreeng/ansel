@@ -695,10 +695,15 @@ The defense has five layers, from planning to last resort:
    `dt_gui_gtk_init()`) and shows it with `dt_gui_alert()` (`gui/alert.c`), a window kept above Ansel's
    main window until its OK button is clicked, because what it says -- the module failed, the image was
    not updated -- stays true long after a toast is gone. Without a GUI it falls back to the warn
-   handler. It names the size refused and is rate-limited to one every 10 s. The cache's other
+   handler. It is rate-limited to one every 10 s; the size refused and the module that asked for it
+   are its item, listed under the message, which stays the same at every refusal. The cache's other
    user-facing message, "The pipeline cache is full…" (the cache's own cap, `_free_space_to_alloc()`
    and `_log_arena_allocation_failure()`), takes the same path, under the same "Not enough
-   memory" title, so the two share one window -- but only when the allocation is actually
+   memory" title but in a window of its own -- `dt_gui_alert()` opens one per title and message, and
+   what was being allocated (the cacheline's name, its module) is the item, not part of the text.
+   (Until 2026-10-06 the window was one per title and both messages carried their values, so every
+   size and every module added a paragraph; changed on top of `8073021c02`.) It is raised only when
+   the allocation is actually
    refused, and then followed by what happens next (`_alert_cache_refused()`): the module fails,
    the pipe stops without publishing, nothing retries in tiles (whether to tile was decided before
    `process()` ran, in `pixelpipe_cpu.c`), and the darkroom keeps its last complete rendering until

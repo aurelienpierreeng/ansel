@@ -125,14 +125,17 @@ void dt_dev_pixelpipe_cache_set_alert_handler(dt_pixelpipe_cache_alert_handler_t
 
 /* For an allocation the cache refused: the module that asked fails, and its pipe publishes
  * nothing. That stays true long after a toast is gone, so it goes to the alert handler, and to the
- * warn handler only when no GUI installed one. */
-static void _alert_user(const char *message)
+ * warn handler only when no GUI installed one, with the item on the line under the message. */
+static void _alert_user(const char *message, const char *item)
 {
-  if(IS_NULL_PTR(message)) return;
   if(!IS_NULL_PTR(_alert_handler))
-    _alert_handler(message);
+    _alert_handler(message, item);
   else if(!IS_NULL_PTR(_warn_handler))
-    _warn_handler(message);
+  {
+    gchar *text = IS_NULL_PTR(item) ? g_strdup(message) : g_strdup_printf("%s\n%s", message, item);
+    _warn_handler(text);
+    dt_free(text);
+  }
 }
 
 /* For what is fine to miss: the cache went over its budget, but the allocation went ahead. */
@@ -171,13 +174,23 @@ static gchar *_cache_full_sentence(const char *name, const char *module)
  * last complete rendering, and only the next change runs the pipe again (develop.c). */
 static void _alert_cache_refused(const char *name, const char *module)
 {
-  gchar *what = _cache_full_sentence(name, module);
-  gchar *message = g_strdup_printf("%s\n%s", what,
+  // What was being allocated -- the cacheline's name, the module that asked, or both -- is the item:
+  // the message stays the same whatever was refused, so a run of refusals shares one window.
+  gchar *item = NULL;
+  if(!IS_NULL_PTR(name) && !IS_NULL_PTR(module))
+    item = g_strdup_printf(_("`%s` (module `%s`)"), name, module);
+  else if(!IS_NULL_PTR(module))
+    item = g_strdup_printf(_("module `%s`"), module);
+  else
+    item = g_strdup(name);
+  gchar *message = g_strdup_printf("%s\n%s",
+                                   _("The pipeline cache is full.\n"
+                                     "Either your RAM settings are too frugal or your RAM is too small."),
                                    _("The module fails and the image is not updated: what is shown stays "
                                      "the last complete rendering, until the next change tries again."));
-  _alert_user(message);
+  _alert_user(message, item);
   dt_free(message);
-  dt_free(what);
+  dt_free(item);
 }
 
 static inline gboolean _observed(void)
@@ -1825,14 +1838,19 @@ static gboolean _system_memory_pressure_valve(dt_dev_pixelpipe_cache_t *cache, s
     if(now - last_warning_us > 10000000)
     {
       last_warning_us = now;
-      // %d, not G_GSIZE_FORMAT: xgettext does not expand macros, and would cut the msgid there.
-      gchar *message
-          = g_strdup_printf(_("Your system is running out of memory: %d MiB could not be reserved, "
-                              "so the module that needed them will fail and the image will not be updated.\n"
-                              "Close other applications or add more RAM to your system."),
-                            (int)(request_size / (1024 * 1024)));
-      _alert_user(message);
-      dt_free(message);
+      // The size and the module that asked for it are the item, so that the message is the same
+      // at every refusal. %d, not G_GSIZE_FORMAT: xgettext does not expand macros, and would cut
+      // the msgid there.
+      const int request_mib = (int)(request_size / (1024 * 1024));
+      gchar *item = IS_NULL_PTR(dt_pixelpipe_cache_current_module)
+                        ? g_strdup_printf(_("%d MiB"), request_mib)
+                        : g_strdup_printf(_("%d MiB for module `%s`"), request_mib,
+                                          dt_pixelpipe_cache_current_module);
+      _alert_user(_("Your system is running out of memory: what a module needed could not be reserved, "
+                    "so it will fail and the image will not be updated.\n"
+                    "Close other applications or add more RAM to your system."),
+                  item);
+      dt_free(item);
     }
     fprintf(stdout,
             "[pixelpipe_cache] refusing to allocate %" G_GSIZE_FORMAT " MiB: the system has only "

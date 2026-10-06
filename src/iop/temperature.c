@@ -1171,9 +1171,7 @@ static void prepare_matrices(dt_iop_module_t *module)
   {
     char *camera = module->dev->image_storage.camera_makermodel;
     fprintf(stderr, "[temperature] `%s' color matrix not found for image\n", camera);
-    gchar *alert_msg = g_strdup_printf(_("`%s' color matrix not found for image"), camera);
-    dt_control_alert(_("Camera data missing"), alert_msg);
-    dt_free(alert_msg);
+    dt_control_alert(_("Camera data missing"), _("color matrix not found for image"), camera);
   }
 }
 
@@ -1208,10 +1206,8 @@ static void find_coeffs(dt_iop_module_t *module, double coeffs[4])
     //  to contribute.
     if(!img->camera_missing_sample)
     {
-      gchar *alert_msg = g_strdup_printf(_("failed to read camera white balance information from `%s'!"),
-                                         img->filename);
-      dt_control_alert(_("Camera data missing"), alert_msg);
-      dt_free(alert_msg);
+      dt_control_alert(_("Camera data missing"), _("failed to read camera white balance information!"),
+                       img->filename);
     }
     fprintf(stderr, "[temperature] failed to read camera white balance information from `%s'!\n",
             img->filename);

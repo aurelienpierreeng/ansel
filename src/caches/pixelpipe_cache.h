@@ -885,8 +885,10 @@ int dt_dev_pixelpipe_cache_rekey(const uint64_t old_hash,
 typedef void (*dt_pixelpipe_cache_warn_handler_t)(const char *message);
 
 /** @brief Tell the user something that must not go unseen: what it says stays true after a toast
- * would have gone. Same contract as ::dt_pixelpipe_cache_warn_handler_t. */
-typedef void (*dt_pixelpipe_cache_alert_handler_t)(const char *message);
+ * would have gone. Same contract as dt_control_alert(): @p message is the kind of failure, the
+ * same text at every call; what was refused -- its size, its module -- is @p item, one line,
+ * already translated and formatted, NULL when unknown. */
+typedef void (*dt_pixelpipe_cache_alert_handler_t)(const char *message, const char *item);
 
 /** @brief Install the alert handler. The GUI installs it, once it exists, apart from the others:
  * without a GUI there is nothing to alert with, and an alert then goes to the warn handler.

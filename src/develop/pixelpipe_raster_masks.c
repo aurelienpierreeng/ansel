@@ -30,7 +30,8 @@
  * If either end of the relation cannot be found, or if the source exists but is disabled, the mask cannot be
  * trusted and the caller needs to stop the blending path with an explanatory error.
  */
-static gboolean _dt_dev_raster_mask_check(dt_dev_pixelpipe_iop_t *source_piece,
+static gboolean _dt_dev_raster_mask_check(const dt_dev_pixelpipe_t *pipe,
+                                          dt_dev_pixelpipe_iop_t *source_piece,
                                           dt_dev_pixelpipe_iop_t *current_piece,
                                           const dt_iop_module_t *target_module)
 {
@@ -49,28 +50,30 @@ static gboolean _dt_dev_raster_mask_check(dt_dev_pixelpipe_iop_t *source_piece,
             (!IS_NULL_PTR(source_piece)) ? "is defined" : "is undefined",
             (!IS_NULL_PTR(current_piece)) ? "is defined" : "is undefined");
 
-    gchar *hint = NULL;
+    // The message says what to check, the item which modules and which image: one window per cause.
     if(IS_NULL_PTR(source_piece))
     {
-      hint = g_strdup_printf(
-            _("- Check if the module providing the masks for the module %s has not been deleted.\n"),
-            target_name);
+      gchar *item = g_strdup_printf(_("`%s` on %s"), target_name, pipe->dev->image_storage.fullpath);
+      dt_control_alert(_("Module failed"),
+                       _("A module is trying to reuse a mask from a module but it can't be found.\n"
+                         "\n- Check if the module providing its masks has not been deleted."),
+                       item);
+      dt_free(item);
     }
-    else if(IS_NULL_PTR(current_piece))
+    else
     {
       gchar *clean_source_name = dt_string_replace(source_piece->module->name(), "_");
-      hint = g_strdup_printf(_("- Check if the module %s (%s) providing the masks has not been moved above %s.\n"),
-                             clean_source_name,
-                             source_piece->module->multi_name, clean_target_name);
+      gchar *source_name = g_strdup_printf("%s (%s)", clean_source_name, source_piece->module->multi_name);
+      gchar *item = g_strdup_printf(_("`%s`, mask from `%s`, on %s"), target_name, source_name,
+                                    pipe->dev->image_storage.fullpath);
+      dt_control_alert(_("Module failed"),
+                       _("A module is trying to reuse a mask from a module but it can't be found.\n"
+                         "\n- Check if the module providing its masks has not been moved above it."),
+                       item);
+      dt_free(item);
+      dt_free(source_name);
       dt_free(clean_source_name);
     }
-
-    gchar *alert_msg = g_strdup_printf(_("The %s module is trying to reuse a mask from a module but it can't be found.\n"
-                                         "\n%s"),
-                                       target_name, hint ? hint : "");
-    dt_control_alert(_("Module failed"), alert_msg);
-    dt_free(alert_msg);
-    dt_free(hint);
 
     dt_print(DT_DEBUG_MASKS, "[raster masks] no source module for module %s could be found\n", target_name);
     success = FALSE;
@@ -80,12 +83,15 @@ static gboolean _dt_dev_raster_mask_check(dt_dev_pixelpipe_iop_t *source_piece,
   {
     gchar *clean_source_name = dt_string_replace(source_piece->module->name(), "_");
     gchar *source_name = g_strdup_printf("%s (%s)", clean_source_name, source_piece->module->multi_name);
-    gchar *alert_msg = g_strdup_printf(_("The `%s` module is trying to reuse a mask from disabled module `%s`.\n"
-                                         "Disabled modules cannot provide their masks to other modules.\n"
-                                         "\n- Please enable `%s` or change the raster mask in `%s`."),
-                                       target_name, source_name, source_name, target_name);
-    dt_control_alert(_("Module failed"), alert_msg);
-    dt_free(alert_msg);
+    gchar *item = g_strdup_printf(_("`%s`, mask from `%s`, on %s"), target_name, source_name,
+                                  pipe->dev->image_storage.fullpath);
+    dt_control_alert(_("Module failed"),
+                     _("A module is trying to reuse a mask from a disabled module.\n"
+                       "Disabled modules cannot provide their masks to other modules.\n"
+                       "\n- Please enable the module providing the mask or change the raster mask in the "
+                       "module reusing it."),
+                     item);
+    dt_free(item);
 
     dt_print(DT_DEBUG_MASKS, "[raster masks] module %s trying to reuse a mask from disabled instance of %s\n",
             target_name, source_name);
@@ -138,7 +144,7 @@ float *dt_dev_get_raster_mask(dt_dev_pixelpipe_t *pipe, const dt_iop_module_t *r
     }
   }
 
-  const int err_ret = !_dt_dev_raster_mask_check(source_piece, current_piece, target_module);
+  const int err_ret = !_dt_dev_raster_mask_check(pipe, source_piece, current_piece, target_module);
   if(!IS_NULL_PTR(error)) *error = err_ret;
 
   if(!err_ret)
