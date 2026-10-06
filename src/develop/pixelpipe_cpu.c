@@ -44,9 +44,11 @@ int pixelpipe_process_on_CPU(dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_io
   if(IS_NULL_PTR(output))
     output = dt_pixel_cache_alloc(output_entry);
 
+  // NULL only when the pixelpipe cache refused the buffer -- the pressure valve or the arena -- and
+  // the cache has already logged why: a lack of memory, not a bug.
   if(IS_NULL_PTR(output))
   {
-    fprintf(stdout, "[dev_pixelpipe] %s got a NULL output, report that to developers\n", module->name());
+    fprintf(stdout, "[dev_pixelpipe] %s got no output buffer: the pixelpipe cache refused it\n", module->name());
     return 1;
   }
 

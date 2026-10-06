@@ -1865,12 +1865,15 @@ static gboolean _system_memory_pressure_valve(dt_dev_pixelpipe_cache_t *cache, s
 
 // Attempt to allocate from the arena; if fragmentation prevents it, evict LRU cache lines
 // until a sufficiently large contiguous run is available (or nothing remains to evict).
+// On NULL, `system_refused` says which of the two refused: the system, through the pressure valve,
+// which has already told the user, or the arena.
 static inline void *_arena_alloc_with_defrag(dt_dev_pixelpipe_cache_t *cache, size_t request_size,
-                                             size_t *actual_size)
+                                             size_t *actual_size, gboolean *system_refused)
 {
   // Never grow the committed footprint past what the system can actually take,
   // whatever our internal budget still allows.
-  if(!_system_memory_pressure_valve(cache, request_size)) return NULL;
+  *system_refused = !_system_memory_pressure_valve(cache, request_size);
+  if(*system_refused) return NULL;
 
   void *buf = dt_cache_arena_alloc(&cache->arena, request_size, actual_size);
   if(!IS_NULL_PTR(buf)) return buf;
@@ -1921,7 +1924,7 @@ size_t dt_pixelpipe_cache_get_largest_free_run(void)
 
 static inline void _log_arena_allocation_failure(dt_dev_pixelpipe_cache_t *cache, size_t request_size,
                                                  const char *entry_name, const char *module, uint64_t hash,
-                                                 gboolean name_is_file)
+                                                 gboolean name_is_file, gboolean system_refused)
 {
   dt_pixelpipe_cache_alloc_refusals++;
 
@@ -1944,8 +1947,11 @@ static inline void _log_arena_allocation_failure(dt_dev_pixelpipe_cache_t *cache
             largest_free_bytes / (1024 * 1024), total_free_bytes / (1024 * 1024),
             cache->current_memory / (1024 * 1024), cache->max_memory / (1024 * 1024));
 
-  // The arena could not serve the request: every caller gets NULL back.
-  _alert_cache_refused(entry_name, module);
+  // Every caller gets NULL back. When the pressure valve refused, it has already told the user that
+  // the system is running out of memory, and "the pipeline cache is full" on top of it is false: on
+  // 2026-10-06 the valve refused lens 370 MiB with the cache at 741 of 4461 MiB, 370 of them lens's
+  // own unallocated entry. Only a refusal by the arena itself is the cache's own.
+  if(!system_refused) _alert_cache_refused(entry_name, module);
 
   (void)name_is_file; // kept for signature symmetry if future callers need it.
 }
@@ -2020,13 +2026,14 @@ void *dt_pixel_cache_alloc(dt_pixel_cache_entry_t *cache_entry)
   // allocate the data buffer
   if(IS_NULL_PTR(cache_entry->data))
   {
-    cache_entry->data = _arena_alloc_with_defrag(cache, cache_entry->size, &cache_entry->size);
+    gboolean system_refused = FALSE;
+    cache_entry->data = _arena_alloc_with_defrag(cache, cache_entry->size, &cache_entry->size, &system_refused);
 
     if(IS_NULL_PTR(cache_entry->data))
     {
       const char *module = dt_pixelpipe_cache_current_module;
       _log_arena_allocation_failure(cache, cache_entry->size, cache_entry->name, module,
-                                    cache_entry->hash, FALSE);
+                                    cache_entry->hash, FALSE, system_refused);
     }
   }
 
@@ -2174,11 +2181,12 @@ void *dt_pixelpipe_cache_alloc_align_cache_impl(size_t size, int id,
 
   // Page size is the desired size + AVX/SSE rounding
   size_t page_size = 0;
-  void *buf = _arena_alloc_with_defrag(cache, size, &page_size);
+  gboolean system_refused = FALSE;
+  void *buf = _arena_alloc_with_defrag(cache, size, &page_size, &system_refused);
 
   if(IS_NULL_PTR(buf))
   {
-    _log_arena_allocation_failure(cache, size, name, NULL, 0, FALSE);
+    _log_arena_allocation_failure(cache, size, name, NULL, 0, FALSE, system_refused);
     return NULL;
   }
 
