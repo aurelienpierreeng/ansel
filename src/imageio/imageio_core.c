@@ -585,7 +585,7 @@ int dt_imageio_export(const int32_t imgid, const char *filename, dt_imageio_modu
   }
 }
 
-gboolean _apply_style_before_export(dt_develop_t *dev, dt_imageio_module_data_t *format_params, const int32_t imgid)
+gboolean _apply_style_before_export(dt_develop_t *dev, const dt_imageio_module_data_t *format_params, const int32_t imgid)
 {
   GList *style_items = dt_styles_get_item_list(format_params->style, TRUE, -1);
   if(IS_NULL_PTR(style_items))

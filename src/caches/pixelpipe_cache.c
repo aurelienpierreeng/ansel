@@ -1728,7 +1728,7 @@ dt_pixel_cache_entry_t *dt_dev_pixelpipe_cache_ref_entry_for_host_ptr(void *host
 // The pressure valve tells the user of one module's refusals on one image at most this often.
 #define DT_PIXELPIPE_CACHE_PRESSURE_ALERT_PERIOD_US ((gint64)10 * G_USEC_PER_SEC)
 
-static gboolean _pressure_alert_expired(gpointer key, gpointer value, gpointer user_data)
+static gboolean _pressure_alert_expired(gpointer key __attribute__((unused)), gpointer value, gpointer user_data)
 {
   return *(const gint64 *)user_data - *(const gint64 *)value > DT_PIXELPIPE_CACHE_PRESSURE_ALERT_PERIOD_US;
 }
@@ -1762,7 +1762,7 @@ static gboolean _system_memory_pressure_valve(dt_dev_pixelpipe_cache_t *cache, s
 
   dt_pthread_mutex_lock(&cache->lock);
 
-  const gint64 now = g_get_monotonic_time();
+  gint64 now = g_get_monotonic_time();
   const gint64 PROBE_PERIOD_US = 100000; // 100 ms
   if(cache->sys_probe_time_us == 0 || now - cache->sys_probe_time_us > PROBE_PERIOD_US)
   {
@@ -1849,63 +1849,62 @@ static gboolean _system_memory_pressure_valve(dt_dev_pixelpipe_cache_t *cache, s
     // self-corrects at the next probe if the arena allocation fails afterwards.
     cache->sys_available_est
         = (cache->sys_available_est > request_size) ? cache->sys_available_est - request_size : 0;
+    dt_pthread_mutex_unlock(&cache->lock);
+    return TRUE;
+  }
+
+  // Alert the user of one module on one image at most once per alert period: this fires per
+  // failed allocation, on a system that is already drowning. Per module and image, not once for
+  // all: on 2026-10-06 two raws whose thumbnails were both refused got one line in the window, as
+  // the first refusal silenced the second for 10 s. The refused allocation makes the module that
+  // asked for it fail, and a pipe that failed publishes nothing: say so where it cannot be
+  // missed, or the user waits for an image that will not come.
+  const char *module = dt_pixelpipe_cache_current_module;
+  const char *image = dt_pixelpipe_cache_current_image;
+  g_hash_table_foreach_remove(cache->pressure_alerts, _pressure_alert_expired, &now);
+  gchar *who = g_strdup_printf("%s\n%s", module ? module : "", image ? image : "");
+  if(g_hash_table_contains(cache->pressure_alerts, who))
+  {
+    dt_free(who);
   }
   else
   {
-    // Alert the user of one module on one image at most once per alert period: this fires per
-    // failed allocation, on a system that is already drowning. Per module and image, not once for
-    // all: on 2026-10-06 two raws whose thumbnails were both refused got one line in the window, as
-    // the first refusal silenced the second for 10 s. The refused allocation makes the module that
-    // asked for it fail, and a pipe that failed publishes nothing: say so where it cannot be
-    // missed, or the user waits for an image that will not come.
-    const char *module = dt_pixelpipe_cache_current_module;
-    const char *image = dt_pixelpipe_cache_current_image;
-    g_hash_table_foreach_remove(cache->pressure_alerts, _pressure_alert_expired, (gpointer)&now);
-    gchar *who = g_strdup_printf("%s\n%s", module ? module : "", image ? image : "");
-    if(g_hash_table_contains(cache->pressure_alerts, who))
-    {
-      dt_free(who);
-    }
+    gint64 *when = g_new(gint64, 1);
+    *when = now;
+    g_hash_table_insert(cache->pressure_alerts, who, when);
+    // The size, the module that asked for it, its image and the memory left are the item, so that
+    // the message is the same at every refusal. What is left is counted above the floor, as the
+    // valve counts it, so it always reads less than the size; the system's own figure includes
+    // the floor and can read more. Two decimals: in whole MiB, a 1.71 MiB request read "1 MiB",
+    // which the valve lets through. Not G_GSIZE_FORMAT: xgettext does not expand macros, and
+    // would cut the msgid there.
+    const double request_mib = (double)request_size / (1024 * 1024);
+    const double left_mib
+        = (double)(MAX(cache->sys_available_est, pressure_floor) - pressure_floor) / (1024 * 1024);
+    gchar *item = NULL;
+    if(IS_NULL_PTR(module))
+      item = g_strdup_printf(_("%.2f MiB: only %.2f MiB available"), request_mib, left_mib);
+    else if(IS_NULL_PTR(image))
+      item = g_strdup_printf(_("%.2f MiB for module `%s`: only %.2f MiB available"), request_mib, module,
+                             left_mib);
     else
-    {
-      gint64 *when = g_new(gint64, 1);
-      *when = now;
-      g_hash_table_insert(cache->pressure_alerts, who, when);
-      // The size, the module that asked for it, its image and the memory left are the item, so that
-      // the message is the same at every refusal. What is left is counted above the floor, as the
-      // valve counts it, so it always reads less than the size; the system's own figure includes
-      // the floor and can read more. Two decimals: in whole MiB, a 1.71 MiB request read "1 MiB",
-      // which the valve lets through. Not G_GSIZE_FORMAT: xgettext does not expand macros, and
-      // would cut the msgid there.
-      const double request_mib = (double)request_size / (1024 * 1024);
-      const double left_mib = (double)(cache->sys_available_est > pressure_floor
-                                         ? cache->sys_available_est - pressure_floor : 0)
-                              / (1024 * 1024);
-      gchar *item = NULL;
-      if(IS_NULL_PTR(module))
-        item = g_strdup_printf(_("%.2f MiB: only %.2f MiB available"), request_mib, left_mib);
-      else if(IS_NULL_PTR(image))
-        item = g_strdup_printf(_("%.2f MiB for module `%s`: only %.2f MiB available"), request_mib, module,
-                               left_mib);
-      else
-        item = g_strdup_printf(_("%.2f MiB for module `%s` on %s: only %.2f MiB available"),
-                               request_mib, module, image, left_mib);
-      _alert_user(_("Your system is running out of memory:\n"
-                    "A module could not get the memory it needs, "
-                    "so it fails and the image is not updated.\n\n"
-                    "Close other applications or add more RAM to your system."),
-                  item);
-      dt_free(item);
-    }
-    fprintf(stdout,
-            "[pixelpipe_cache] refusing to allocate %" G_GSIZE_FORMAT " MiB: the system has only "
-            "%" G_GSIZE_FORMAT " MiB of available RAM left (pressure floor: %" G_GSIZE_FORMAT " MiB)\n",
-            request_size / (1024 * 1024), cache->sys_available_est / (1024 * 1024),
-            pressure_floor / (1024 * 1024));
+      item = g_strdup_printf(_("%.2f MiB for module `%s` on %s: only %.2f MiB available"),
+                             request_mib, module, image, left_mib);
+    _alert_user(_("Your system is running out of memory:\n"
+                  "A module could not get the memory it needs, "
+                  "so it fails and the image is not updated.\n\n"
+                  "Close other applications or add more RAM to your system."),
+                item);
+    dt_free(item);
   }
+  fprintf(stdout,
+          "[pixelpipe_cache] refusing to allocate %" G_GSIZE_FORMAT " MiB: the system has only "
+          "%" G_GSIZE_FORMAT " MiB of available RAM left (pressure floor: %" G_GSIZE_FORMAT " MiB)\n",
+          request_size / (1024 * 1024), cache->sys_available_est / (1024 * 1024),
+          pressure_floor / (1024 * 1024));
 
   dt_pthread_mutex_unlock(&cache->lock);
-  return allowed;
+  return FALSE;
 }
 
 // Attempt to allocate from the arena; if fragmentation prevents it, evict LRU cache lines
