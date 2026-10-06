@@ -457,10 +457,12 @@ static void _refine_with_detail_mask(struct dt_iop_module_t *self, const struct 
   return;
 
   error:
-  dt_control_alert(_("Module failed"), _("detail mask blending error"), pipe->dev->image_storage.fullpath);
   dt_pixelpipe_cache_free_align(warp_mask);
   dt_pixelpipe_cache_free_align(lum);
   dt_pixelpipe_cache_free_align(tmp);
+  gchar *item = g_strdup_printf(_("`%s` on %s"), self->op, pipe->dev->image_storage.fullpath);
+  dt_control_alert(_("Module failed"), _("detail mask blending error"), item);
+  dt_free(item);
 }
 
 static size_t _develop_mask_get_post_operations(const dt_develop_blend_params_t *const params,
@@ -1153,11 +1155,13 @@ static void _refine_with_detail_mask_cl(struct dt_iop_module_t *self, const stru
   return;
 
   error:
-  dt_control_alert(_("Module failed"), _("detail mask CL blending problem"), pipe->dev->image_storage.fullpath);
   dt_pixelpipe_cache_free_align(lum);
   dt_opencl_release_mem_object(tmp);
   dt_opencl_release_mem_object(blur);
   dt_opencl_release_mem_object(out);
+  gchar *item = g_strdup_printf(_("`%s` on %s"), self->op, pipe->dev->image_storage.fullpath);
+  dt_control_alert(_("Module failed"), _("detail mask CL blending problem"), item);
+  dt_free(item);
 }
 
 static inline void _blend_process_cl_exchange(cl_mem *a, cl_mem *b)
