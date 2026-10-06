@@ -695,8 +695,23 @@ The defense has five layers, from planning to last resort:
    `dt_gui_gtk_init()`) and shows it with `dt_gui_alert()` (`gui/alert.c`), a window kept above Ansel's
    main window until its OK button is clicked, because what it says -- the module failed, the image was
    not updated -- stays true long after a toast is gone. Without a GUI it falls back to the warn
-   handler. It is rate-limited to one every 10 s; the size refused and the module that asked for it
-   are its item, listed under the message, which stays the same at every refusal. The cache's other
+   handler. It is rate-limited to one every 10 s; the size refused, the module that asked for it,
+   that module's image (its file name between backticks -- it can hold spaces -- and its image id,
+   as text `pixelpipe_hb.c` writes and hands over with
+   `dt_pixelpipe_cache_set_current_image()` beside the module's name: the cache prints it, and knows
+   nothing of images) and the RAM left above the floor -- what the valve compared the
+   size with -- are its item, listed under the message, which stays the same at every refusal.
+   `dev_pixelpipe.c` names both around `modify_roi_in()` too, before any module processes: lens
+   allocates its edge buffer there, and on 2026-10-06 a refusal of it (1795728 bytes, with the floor
+   forced to 3000 MiB) listed "1 MiB: only 0 MiB available", with neither module nor image. Lens
+   does not fail on it: it plans its input without the margin. The sizes have two decimals since
+   then: in whole MiB those 1.71 MiB read "1 MiB", which the valve lets through. In
+   `dt_dev_pixelpipe_process_rec()` the naming starts before `dt_dev_pixelpipe_cache_get_writable()`,
+   not at `process()`: that call allocates the module's output when it stays in RAM, as the
+   darkroom's preview does, and opening an image the same day listed "46,69 MiB: only 0,00 MiB
+   available" first -- rawdenoiseai's preview output, refused there -- then the same size named,
+   refused again in `pixelpipe_cpu.c`. The
+   cache's other
    user-facing message, "The pipeline cache is full…" (the cache's own cap, `_free_space_to_alloc()`
    and `_log_arena_allocation_failure()`), takes the same path, under the same "Not enough
    memory" title but in a window of its own -- `dt_gui_alert()` opens one per title and message, and

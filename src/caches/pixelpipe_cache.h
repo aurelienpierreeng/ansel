@@ -189,6 +189,19 @@ typedef struct dt_pixel_cache_entry_t
 const char *dt_pixelpipe_cache_set_current_module(const char *module);
 
 /**
+ * @brief Set the image the current module runs on, for the message that reports a refused
+ * allocation (thread-local).
+ *
+ * @details
+ * The image comes as text its caller wrote, as the module comes as its name: the cache prints it,
+ * and knows nothing of images. The pointer is kept, not copied.
+ *
+ * @param image The image as it should read, which must outlive the setting, or NULL to clear.
+ * @return const char* Previous image.
+ */
+const char *dt_pixelpipe_cache_set_current_image(const char *image);
+
+/**
  * @brief Count the allocations the cache refused to the calling thread for lack of memory
  * (thread-local).
  *
