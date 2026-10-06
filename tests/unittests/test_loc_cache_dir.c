@@ -41,6 +41,10 @@
 
 #include <cmocka.h>
 
+#ifdef _WIN32
+#include "win/main_wrapper.h"
+#endif
+
 #include <glib.h>
 #include <string.h>
 
@@ -172,7 +176,7 @@ static void _every_call_answers_the_same(void **state)
   dt_free(first);
 }
 
-int main(void)
+int main(int argc, char *argv[])
 {
   const struct CMUnitTest tests[] = {
     cmocka_unit_test(_xdg_cache_home_wins),
