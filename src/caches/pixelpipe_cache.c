@@ -215,6 +215,9 @@ static inline void _observe_rekey(uint64_t old_hash, uint64_t new_hash)
 
 
 static __thread const char *dt_pixelpipe_cache_current_module = NULL;
+// The image that module runs on, set alongside it, as text its caller wrote: what the user needs to
+// find in a refusal's message. The cache only prints it, and knows nothing of images.
+static __thread const char *dt_pixelpipe_cache_current_image = NULL;
 
 /* Allocations refused to this thread for lack of memory: by _free_space_to_alloc() when the
  * budget is spent and every line is in use, and by _log_arena_allocation_failure() when the
@@ -250,6 +253,13 @@ const char *dt_pixelpipe_cache_set_current_module(const char *module)
 {
   const char *previous = dt_pixelpipe_cache_current_module;
   dt_pixelpipe_cache_current_module = module;
+  return previous;
+}
+
+const char *dt_pixelpipe_cache_set_current_image(const char *image)
+{
+  const char *previous = dt_pixelpipe_cache_current_image;
+  dt_pixelpipe_cache_current_image = image;
   return previous;
 }
 
@@ -1838,16 +1848,30 @@ static gboolean _system_memory_pressure_valve(dt_dev_pixelpipe_cache_t *cache, s
     if(now - last_warning_us > 10000000)
     {
       last_warning_us = now;
-      // The size and the module that asked for it are the item, so that the message is the same
-      // at every refusal. %d, not G_GSIZE_FORMAT: xgettext does not expand macros, and would cut
-      // the msgid there.
-      const int request_mib = (int)(request_size / (1024 * 1024));
-      gchar *item = IS_NULL_PTR(dt_pixelpipe_cache_current_module)
-                        ? g_strdup_printf(_("%d MiB"), request_mib)
-                        : g_strdup_printf(_("%d MiB for module `%s`"), request_mib,
-                                          dt_pixelpipe_cache_current_module);
-      _alert_user(_("Your system is running out of memory: what a module needed could not be reserved, "
-                    "so it will fail and the image will not be updated.\n"
+      const char *module = dt_pixelpipe_cache_current_module;
+      const char *image = dt_pixelpipe_cache_current_image;
+      // The size, the module that asked for it, its image and the memory left are the item, so that
+      // the message is the same at every refusal. What is left is counted above the floor, as the
+      // valve counts it, so it always reads less than the size; the system's own figure includes
+      // the floor and can read more. Two decimals: in whole MiB, a 1.71 MiB request read "1 MiB",
+      // which the valve lets through. Not G_GSIZE_FORMAT: xgettext does not expand macros, and
+      // would cut the msgid there.
+      const double request_mib = (double)request_size / (1024 * 1024);
+      const double left_mib = (double)(cache->sys_available_est > pressure_floor
+                                         ? cache->sys_available_est - pressure_floor : 0)
+                              / (1024 * 1024);
+      gchar *item = NULL;
+      if(IS_NULL_PTR(module))
+        item = g_strdup_printf(_("%.2f MiB: only %.2f MiB available"), request_mib, left_mib);
+      else if(IS_NULL_PTR(image))
+        item = g_strdup_printf(_("%.2f MiB for module `%s`: only %.2f MiB available"), request_mib, module,
+                               left_mib);
+      else
+        item = g_strdup_printf(_("%.2f MiB for module `%s` on %s: only %.2f MiB available"),
+                               request_mib, module, image, left_mib);
+      _alert_user(_("Your system is running out of memory:\n"
+                    "A module could not get the memory it needs, "
+                    "so it fails and the image is not updated.\n\n"
                     "Close other applications or add more RAM to your system."),
                   item);
       dt_free(item);

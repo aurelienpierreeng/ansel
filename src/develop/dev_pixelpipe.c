@@ -667,6 +667,11 @@ void dt_dev_pixelpipe_get_roi_in(dt_dev_pixelpipe_t *pipe, const struct dt_iop_r
   gchar *pipe_name = NULL;
   if(dt_get_debug_flags() & DT_DEBUG_PIPE)
     pipe_name = _get_debug_pipe_name(pipe, pipe->dev);
+  // A modify_roi_in() can allocate from the pixelpipe cache -- lens does --, and the cache names the
+  // module and its image when it refuses, as it does while the module processes (pixelpipe_hb.c).
+  gchar *image = g_strdup_printf(_("`%s` (image id %d)"), pipe->dev->image_storage.filename,
+                                 pipe->dev->image_storage.id);
+  const char *prev_image = dt_pixelpipe_cache_set_current_image(image);
   for(GList *nodes = g_list_last(pipe->nodes); nodes; nodes = g_list_previous(nodes))
   {
     dt_dev_pixelpipe_iop_t *piece = (dt_dev_pixelpipe_iop_t *)nodes->data;
@@ -681,7 +686,11 @@ void dt_dev_pixelpipe_get_roi_in(dt_dev_pixelpipe_t *pipe, const struct dt_iop_r
 
     // If module is disabled, modify_roi_in() is a no-op
     if(piece->enabled)
+    {
+      const char *prev_module = dt_pixelpipe_cache_set_current_module(module->op);
       module->modify_roi_in(module, pipe, piece, &roi_out_temp, &roi_in);
+      dt_pixelpipe_cache_set_current_module(prev_module);
+    }
     else
       roi_in = roi_out_temp;
 
@@ -701,6 +710,8 @@ void dt_dev_pixelpipe_get_roi_in(dt_dev_pixelpipe_t *pipe, const struct dt_iop_r
     roi_out_temp = roi_in;
   }
 
+  dt_pixelpipe_cache_set_current_image(prev_image);
+  dt_free(image);
   if(pipe_name) dt_free(pipe_name);
 
   if(owns_forms) dt_masks_forms_snapshot_release(&pipe->forms);

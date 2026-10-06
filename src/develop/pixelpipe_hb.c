@@ -1068,6 +1068,15 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe,
   /* Not after a switch between history states (pipe->keep_outputs): this cacheline then holds
    * the output of the state the user is likely to switch back to. */
   const gboolean allow_rekey_reuse = !(dt_get_debug_flags() & DT_DEBUG_NOCACHE_REUSE) && !pipe->keep_outputs;
+  // From here to the end of its processing, what the cache allocates is this module's -- starting
+  // with its output, allocated right below when it stays in RAM: the cache names the module and its
+  // image when it refuses. It knows nothing of images: it gets the image as text, as it gets the
+  // module as its name. The file name is quoted: it can hold spaces, and nothing else would show
+  // where it ends.
+  const char *prev_module = dt_pixelpipe_cache_set_current_module(module ? module->op : NULL);
+  gchar *image = g_strdup_printf(_("`%s` (image id %d)"), pipe->dev->image_storage.filename,
+                                 pipe->dev->image_storage.id);
+  const char *prev_image = dt_pixelpipe_cache_set_current_image(image);
   const dt_dev_pixelpipe_cache_writable_status_t acquire_status
       = dt_dev_pixelpipe_cache_get_writable(hash, bufsize, name, pipe->type,
                                             cache_ram_output, allow_rekey_reuse,
@@ -1118,6 +1127,9 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe,
       dt_dev_pixelpipe_cache_ref_count_entry(FALSE, input_entry);
     *out_hash = hash;
     *out_piece = piece;
+    dt_pixelpipe_cache_set_current_image(prev_image);
+    dt_free(image);
+    dt_pixelpipe_cache_set_current_module(prev_module);
     return 0;
   }
   if(IS_NULL_PTR(output_entry))
@@ -1128,6 +1140,9 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe,
              module->op, hash, acquire_status);
     if(input_entry)
       dt_dev_pixelpipe_cache_ref_count_entry(FALSE, input_entry);
+    dt_pixelpipe_cache_set_current_image(prev_image);
+    dt_free(image);
+    dt_pixelpipe_cache_set_current_module(prev_module);
     return 1;
   }
   const gboolean new_entry = (acquire_status == DT_DEV_PIXELPIPE_CACHE_WRITABLE_CREATED);
@@ -1170,8 +1185,6 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe,
   dt_times_t start;
   dt_get_times(&start);
 
-  const char *prev_module = dt_pixelpipe_cache_set_current_module(module ? module->op : NULL);
-
 #ifdef HAVE_OPENCL
   error = pixelpipe_process_on_GPU(pipe, piece, previous_piece, &tiling, &pixelpipe_flow,
                                    &cache_ram_output,
@@ -1182,6 +1195,8 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe,
                                    input_entry, output_entry);
 #endif
 
+  dt_pixelpipe_cache_set_current_image(prev_image);
+  dt_free(image);
   dt_pixelpipe_cache_set_current_module(prev_module);
 
   // Every CPU and tiled path writes the host buffer, and the OpenCL path copies its output back
