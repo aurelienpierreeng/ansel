@@ -318,7 +318,7 @@ So, to triage a Windows report:
 3. The file is opened `"a"` and is never rotated, so it spans sessions. Ask for the tail, or for
    the size first.
 
-A build older than `aac2ee1321` has neither fix: for those, the log is under
+A build without #1493 has neither fix: for those, the log is under
 `%LOCALAPPDATA%\Microsoft\Windows\INetCache\ansel\`, if Windows has not removed it yet, and a
 `-d` run has no output anywhere.
 
