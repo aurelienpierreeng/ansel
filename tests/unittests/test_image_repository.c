@@ -25,7 +25,12 @@
  */
 
 #include "testdb.h"
+#include "common/conf.h"
+#include "darktable.h"
 #include "system/mem_alloc.h"
+
+#include <glib/gstdio.h>
+#include <stdlib.h>
 
 #ifdef _WIN32
 #include "win/main_wrapper.h"
@@ -34,6 +39,31 @@
 
 // an arbitrary flag bit with no side meaning in these tests
 #define TEST_FLAG 2048
+
+static char *_rcfile = NULL;
+
+static int image_repository_setup(void **state)
+{
+  const int result = testdb_setup(state);
+  if(result) return result;
+
+  _rcfile = g_build_filename(g_get_tmp_dir(), "ansel_test_image_repository.rc", NULL);
+  g_remove(_rcfile);
+  darktable.conf = calloc(1, sizeof(dt_conf_t));
+  dt_conf_init(darktable.conf, _rcfile, NULL);
+  return 0;
+}
+
+static int image_repository_teardown(void **state)
+{
+  dt_conf_cleanup(darktable.conf);
+  free(darktable.conf);
+  darktable.conf = NULL;
+  g_remove(_rcfile);
+  g_free(_rcfile);
+  _rcfile = NULL;
+  return testdb_teardown(state);
+}
 
 static void test_flag_among_multi_image(void **state)
 {
@@ -190,6 +220,49 @@ static void test_group_member_rows(void **state)
   g_list_free_full(members, dt_image_group_member_free);
 }
 
+static void test_assign_groups_if_unchanged_is_transactional_for_the_caller(void **state G_GNUC_UNUSED)
+{
+  const int32_t film = testdb_make_film("/testdb/conditional-groups");
+  const int32_t a = testdb_make_image(film, "a.raw");
+  const int32_t b = testdb_make_image(film, "b.raw");
+  assert_true(a > 0 && b > 0);
+  assert_true(dt_image_repository_set_group(a, a));
+  assert_true(dt_image_repository_set_group(b, b));
+
+  const dt_image_group_assignment_t conflicting[] = {
+    { .imgid = a, .expected_group_id = a, .new_group_id = b },
+    { .imgid = b, .expected_group_id = a, .new_group_id = b },
+  };
+
+  dt_database_start_transaction();
+  assert_false(dt_image_repository_assign_groups_if_unchanged(conflicting, G_N_ELEMENTS(conflicting)));
+  dt_database_rollback_transaction();
+
+  GList *members = dt_image_repository_get_group_members(a, -1);
+  assert_int_equal(g_list_length(members), 1);
+  assert_int_equal(GPOINTER_TO_INT(members->data), a);
+  g_list_free(members);
+  members = dt_image_repository_get_group_members(b, -1);
+  assert_int_equal(g_list_length(members), 1);
+  assert_int_equal(GPOINTER_TO_INT(members->data), b);
+  g_list_free(members);
+
+  const dt_image_group_assignment_t matching[] = {
+    { .imgid = a, .expected_group_id = a, .new_group_id = b },
+    { .imgid = b, .expected_group_id = b, .new_group_id = b },
+  };
+
+  dt_database_start_transaction();
+  assert_true(dt_image_repository_assign_groups_if_unchanged(matching, G_N_ELEMENTS(matching)));
+  dt_database_release_transaction();
+
+  members = dt_image_repository_get_group_members(b, -1);
+  assert_int_equal(g_list_length(members), 2);
+  assert_int_equal(GPOINTER_TO_INT(members->data), a);
+  assert_int_equal(GPOINTER_TO_INT(members->next->data), b);
+  g_list_free(members);
+}
+
 static void test_count_distinct_fields(void **state)
 {
   (void)state;
@@ -244,6 +317,29 @@ static void test_foreach_with_path_stops_when_asked(void **state)
   assert_int_equal(seen, 2);
 }
 
+static void _interrupt_collected_walk(void *user_data, const dt_image_t *image G_GNUC_UNUSED)
+{
+  int *const rows = user_data;
+  (*rows)++;
+  sqlite3_interrupt(dt_database_get_sqlite3_global());
+}
+
+static void test_foreach_collected_reports_step_failure(void **state G_GNUC_UNUSED)
+{
+  const int32_t film = testdb_make_film("/testdb/collected-walk");
+  const int32_t first = testdb_make_image(film, "first.raw");
+  const int32_t second = testdb_make_image(film, "second.raw");
+  assert_true(film > 0 && first > 0 && second > 0);
+
+  char *query = g_strdup_printf("INSERT INTO memory.collected_images (imgid) VALUES (%d), (%d)", first, second);
+  assert_int_equal(sqlite3_exec(dt_database_get_sqlite3_global(), query, NULL, NULL, NULL), SQLITE_OK);
+  g_free(query);
+
+  int rows = 0;
+  assert_false(dt_image_repository_foreach_collected(_interrupt_collected_walk, &rows));
+  assert_int_equal(rows, 1);
+}
+
 int main(int argc, char *argv[])
 {
   const struct CMUnitTest tests[] = {
@@ -253,8 +349,10 @@ int main(int argc, char *argv[])
     cmocka_unit_test(test_id_range),
     cmocka_unit_test(test_write_timestamp_is_64bit),
     cmocka_unit_test(test_group_member_rows),
+    cmocka_unit_test(test_assign_groups_if_unchanged_is_transactional_for_the_caller),
     cmocka_unit_test(test_count_distinct_fields),
     cmocka_unit_test(test_foreach_with_path_stops_when_asked),
+    cmocka_unit_test(test_foreach_collected_reports_step_failure),
   };
-  return cmocka_run_group_tests(tests, testdb_setup, testdb_teardown);
+  return cmocka_run_group_tests(tests, image_repository_setup, image_repository_teardown);
 }

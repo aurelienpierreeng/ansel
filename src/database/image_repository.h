@@ -42,6 +42,7 @@
 #include "common/image.h"
 
 #include <sqlite3.h>
+#include <stddef.h>
 #include <stdint.h>
 
 #ifdef __cplusplus
@@ -91,8 +92,11 @@ typedef void (*dt_image_repository_collected_cb)(void *user_data, const dt_image
  * shared statement stepped re-entrantly would have its cursor pulled out from under the outer
  * walk. One prepare per collection reload is the price, and a collection reload is not a
  * per-frame event.
+ *
+ * @return TRUE after every row was delivered, FALSE when the callback is NULL or SQLite cannot
+ *         prepare or finish the walk. A FALSE result may follow callbacks for earlier rows.
  */
-void dt_image_repository_foreach_collected(dt_image_repository_collected_cb cb, void *user_data);
+gboolean dt_image_repository_foreach_collected(dt_image_repository_collected_cb cb, void *user_data);
 
 /* ---------------------------------------------------------------------------------------
  *  Grouping
@@ -102,6 +106,30 @@ void dt_image_repository_foreach_collected(dt_image_repository_collected_cb cb, 
  *  ids -- `common/grouping.c` keeps the rules (who leads a group, what happens to the rest
  *  when the leader leaves) and the image-cache updates that go with them.
  * ------------------------------------------------------------------------------------- */
+
+/** @brief One conditional group assignment. */
+typedef struct dt_image_group_assignment_t
+{
+  int32_t imgid;
+  int32_t expected_group_id;
+  int32_t new_group_id;
+} dt_image_group_assignment_t;
+
+/**
+ * @brief Conditionally assign every group in @p assignments.
+ *
+ * @details Each assignment updates only the row whose current group matches
+ * @p expected_group_id. The function starts no transaction, reconciles no cache, emits no
+ * signal, and records no undo state. A FALSE result means a conflicting or failed assignment;
+ * earlier assignments may already have been applied. The caller owns the surrounding
+ * transaction and must roll it back on FALSE to preserve atomicity.
+ *
+ * @param assignments assignments to apply.
+ * @param count number of assignments.
+ * @return TRUE when every conditional assignment was applied.
+ */
+gboolean dt_image_repository_assign_groups_if_unchanged(const dt_image_group_assignment_t *assignments,
+                                                        size_t count);
 
 /* ---------------------------------------------------------------------------------------
  *  Duplicating and copying a row, with everything that hangs off it

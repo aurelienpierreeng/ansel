@@ -1113,7 +1113,11 @@ static void _dt_collection_lut(dt_thumbtable_t *table)
   // group_id, so the repository reads the whole row again from the images table.
   GArray *collection = g_array_new(FALSE, FALSE, sizeof(dt_thumbtable_cache_t));
   _collection_lut_ctx_t ctx = { .table = table, .collection = collection };
-  dt_image_repository_foreach_collected(_collection_lut_row, &ctx);
+  if(!dt_image_repository_foreach_collected(_collection_lut_row, &ctx))
+  {
+    g_array_free(collection, TRUE);
+    return;
+  }
 
   if(IS_NULL_PTR(collection) || collection->len == 0)
   {

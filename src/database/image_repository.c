@@ -242,13 +242,13 @@ gboolean dt_image_repository_load(const int32_t imgid, dt_image_t *img)
   return found;
 }
 
-void dt_image_repository_foreach_collected(dt_image_repository_collected_cb cb, void *user_data)
+gboolean dt_image_repository_foreach_collected(dt_image_repository_collected_cb cb, void *user_data)
 {
-  if(IS_NULL_PTR(cb)) return;
+  if(IS_NULL_PTR(cb)) return FALSE;
 
   sqlite3_stmt *stmt = NULL;
   // clang-format off
-  DT_DEBUG_SQLITE3_PREPARE_V2(
+  if(sqlite3_prepare_v2(
       dt_database_get_sqlite3_global(),
       // Same columns, same order, as the single-image load above -- dt_image_from_stmt() maps
       // both. Only the source differs: the collection instead of one id.
@@ -270,11 +270,12 @@ void dt_image_repository_foreach_collected(dt_image_repository_collected_cb cb, 
       "  JOIN memory.collected_images AS c ON i.id = c.imgid"
       "  LEFT JOIN main.film_rolls AS f ON f.id = i.film_id"
       "  ORDER BY c.rowid ASC",
-      -1, &stmt, NULL);
+      -1, &stmt, NULL) != SQLITE_OK)
+    return FALSE;
   // clang-format on
-  if(IS_NULL_PTR(stmt)) return;
 
-  while(sqlite3_step(stmt) == SQLITE_ROW)
+  int step = SQLITE_OK;
+  while((step = sqlite3_step(stmt)) == SQLITE_ROW)
   {
     dt_image_t info;
     dt_image_init(&info);
@@ -284,6 +285,7 @@ void dt_image_repository_foreach_collected(dt_image_repository_collected_cb cb, 
     cb(user_data, &info);
   }
   sqlite3_finalize(stmt);
+  return step == SQLITE_DONE;
 }
 
 
@@ -485,6 +487,33 @@ void dt_image_repository_reassign_group(const int32_t from_group_id, const int32
   DT_DEBUG_SQLITE3_BIND_INT(stmt, 3, exclude_imgid);
   sqlite3_step(stmt);
   sqlite3_finalize(stmt);
+}
+
+gboolean dt_image_repository_assign_groups_if_unchanged(const dt_image_group_assignment_t *assignments,
+                                                         const size_t count)
+{
+  if(count == 0) return TRUE;
+  if(IS_NULL_PTR(assignments)) return FALSE;
+
+  sqlite3_stmt *stmt = NULL;
+  sqlite3 *const db = dt_database_get_sqlite3_global();
+  if(sqlite3_prepare_v2(db, "UPDATE main.images SET group_id = ?1 WHERE id = ?2 AND group_id = ?3", -1,
+                        &stmt, NULL) != SQLITE_OK)
+    return FALSE;
+
+  gboolean assigned = TRUE;
+  for(size_t index = 0; index < count; index++)
+  {
+    const dt_image_group_assignment_t *assignment = assignments + index;
+    assigned = sqlite3_bind_int(stmt, 1, assignment->new_group_id) == SQLITE_OK
+               && sqlite3_bind_int(stmt, 2, assignment->imgid) == SQLITE_OK
+               && sqlite3_bind_int(stmt, 3, assignment->expected_group_id) == SQLITE_OK
+               && sqlite3_step(stmt) == SQLITE_DONE && sqlite3_changes(db) == 1
+               && sqlite3_reset(stmt) == SQLITE_OK && sqlite3_clear_bindings(stmt) == SQLITE_OK;
+    if(!assigned) break;
+  }
+
+  return sqlite3_finalize(stmt) == SQLITE_OK && assigned;
 }
 
 GList *dt_image_repository_get_ratings(const int32_t imgid)
