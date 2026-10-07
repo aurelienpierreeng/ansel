@@ -101,6 +101,18 @@ typedef struct dt_iop_overexposed_t
   int dummy;
 } dt_iop_overexposed_t;
 
+/* The indicator settings, sealed by commit_params() from the darkroom's GUI state. They are not
+ * module parameters, so nothing else carries them into the pipeline cache key: runtime_data_hash()
+ * folds them in, and process()/process_cl() render from them rather than re-reading
+ * dev->overexposed, so the pixels are the ones the hash describes. */
+typedef struct dt_iop_overexposed_data_t
+{
+  dt_clipping_preview_mode_t mode;
+  dt_dev_overexposed_colorscheme_t colorscheme;
+  float lower;
+  float upper;
+} dt_iop_overexposed_data_t;
+
 const char *name()
 {
   return _("overexposed");
@@ -135,15 +147,14 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
              void *const ovoid)
 {
   const dt_iop_roi_t *const roi_out = &piece->roi_out;
-
-  dt_develop_t *dev = self->dev;
+  const dt_iop_overexposed_data_t *const d = (const dt_iop_overexposed_data_t *)piece->data;
 
   const int ch = 4;
 
-  const float lower = exp2f(fminf(dev->overexposed.lower, -4.f));   // in EV
-  const float upper = dev->overexposed.upper / 100.0f;              // in %
+  const float lower = exp2f(fminf(d->lower, -4.f));   // in EV
+  const float upper = d->upper / 100.0f;              // in %
 
-  const int colorscheme = dev->overexposed.colorscheme;
+  const int colorscheme = d->colorscheme;
   const float *const upper_color = dt_iop_overexposed_colors[colorscheme][0];
   const float *const lower_color = dt_iop_overexposed_colors[colorscheme][1];
 
@@ -152,7 +163,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
 
   const dt_iop_order_iccprofile_info_t *const current_profile = dt_ioppr_get_pipe_current_profile_info(self, pipe);
 
-  if(dev->overexposed.mode == DT_CLIPPING_PREVIEW_ANYRGB)
+  if(d->mode == DT_CLIPPING_PREVIEW_ANYRGB)
   {
     // Any of the RGB channels is out of bounds
     __OMP_PARALLEL_FOR__()
@@ -173,7 +184,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
     }
   }
 
-  else if(dev->overexposed.mode == DT_CLIPPING_PREVIEW_GAMUT && !IS_NULL_PTR(current_profile))
+  else if(d->mode == DT_CLIPPING_PREVIEW_GAMUT && !IS_NULL_PTR(current_profile))
   {
     // Gamut is out of bounds
     __OMP_PARALLEL_FOR__()
@@ -226,7 +237,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
     }
   }
 
-  else if(dev->overexposed.mode == DT_CLIPPING_PREVIEW_LUMINANCE && !IS_NULL_PTR(current_profile))
+  else if(d->mode == DT_CLIPPING_PREVIEW_LUMINANCE && !IS_NULL_PTR(current_profile))
   {
     // Luminance channel is out of bounds
     __OMP_PARALLEL_FOR__()
@@ -253,7 +264,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
     }
   }
 
-  else if(dev->overexposed.mode == DT_CLIPPING_PREVIEW_SATURATION && !IS_NULL_PTR(current_profile))
+  else if(d->mode == DT_CLIPPING_PREVIEW_SATURATION && !IS_NULL_PTR(current_profile))
   {
     // Show saturation out of bounds where luminance is valid
     __OMP_PARALLEL_FOR__()
@@ -306,7 +317,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
 int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_iop_t *piece, cl_mem dev_in, cl_mem dev_out)
 {
   const dt_iop_roi_t *const roi_out = &piece->roi_out;
-  dt_develop_t *dev = self->dev;
+  const dt_iop_overexposed_data_t *const d = (const dt_iop_overexposed_data_t *)piece->data;
   dt_iop_overexposed_global_data_t *gd = (dt_iop_overexposed_global_data_t *)self->global_data;
 
   cl_int err = -999;
@@ -326,13 +337,13 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
                                             &dev_profile_info, &dev_profile_lut);
   if(err != CL_SUCCESS) goto error;
 
-  const float lower = exp2f(fminf(dev->overexposed.lower, -4.f));   // in EV
-  const float upper = dev->overexposed.upper / 100.0f;              // in %
-  const int colorscheme = dev->overexposed.colorscheme;
+  const float lower = exp2f(fminf(d->lower, -4.f));   // in EV
+  const float upper = d->upper / 100.0f;              // in %
+  const int colorscheme = d->colorscheme;
 
   const float *upper_color = dt_iop_overexposed_colors[colorscheme][0];
   const float *lower_color = dt_iop_overexposed_colors[colorscheme][1];
-  const int mode = dev->overexposed.mode;
+  const int mode = d->mode;
 
   size_t sizes[2] = { ROUNDUPDWD(width, devid), ROUNDUPDHT(height, devid) };
   dt_opencl_set_kernel_arg(devid, gd->kernel_overexposed, 0, sizeof(cl_mem), &dev_in);
@@ -390,18 +401,33 @@ void cleanup_global(dt_iop_module_so_t *module)
 void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pixelpipe_t *pipe,
                    dt_dev_pixelpipe_iop_t *piece)
 {
-  if(pipe->type != DT_DEV_PIXELPIPE_FULL || !self->dev->overexposed.enabled || !self->dev->gui_attached)
+  dt_develop_t *dev = self->dev;
+  dt_iop_overexposed_data_t *d = (dt_iop_overexposed_data_t *)piece->data;
+  d->mode = dev->overexposed.mode;
+  d->colorscheme = dev->overexposed.colorscheme;
+  d->lower = dev->overexposed.lower;
+  d->upper = dev->overexposed.upper;
+
+  if(pipe->type != DT_DEV_PIXELPIPE_FULL || !dev->overexposed.enabled || !dev->gui_attached)
     piece->enabled = 0;
+}
+
+gboolean runtime_data_hash(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe,
+                           const dt_dev_pixelpipe_iop_t *piece)
+{
+  return TRUE;
 }
 
 void init_pipe(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece)
 {
-  piece->data = NULL;
-  piece->data_size = 0;
+  piece->data = dt_calloc_align(sizeof(dt_iop_overexposed_data_t));
+  piece->data_size = sizeof(dt_iop_overexposed_data_t);
 }
 
 void cleanup_pipe(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece)
 {
+  dt_free_align(piece->data);
+  piece->data = NULL;
 }
 
 void init(dt_iop_module_t *module)
@@ -412,8 +438,9 @@ void init(dt_iop_module_t *module)
   module->default_enabled = 1;
   module->params_size = sizeof(dt_iop_overexposed_t);
 
-  // This module permanently bypasses the cache because it takes input from GUI
-  // and doesn't leave internal parameters to compute an integrity hash on.
+  // Bypasses the cache from here down while the indicator is shown. What keeps a changed setting
+  // from being served the previous frame is runtime_data_hash(), not this: a bypass leaves the
+  // hash unchanged, so the last module found the displayed cacheline under it and reused it.
   dt_iop_set_cache_bypass(module, TRUE);
 }
 

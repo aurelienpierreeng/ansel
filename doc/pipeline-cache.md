@@ -964,6 +964,37 @@ export's output profile. Same output content hashes as before, two global hashes
 reads pipe state while processing owes the same: copy it at commit, read the copy, opt into
 `runtime_data_hash()`.
 
+### A cache bypass does not refresh a frame: what a module reads from the GUI belongs in its key too
+
+*Found `ea59057346`, 2026-10-07.*
+
+The clipping indicator (`overexposed`) and the raw clipping indicator (`rawoverexposed`) render
+from darkroom GUI state that no history item carries: `dev->overexposed` and
+`dev->rawoverexposed`, i.e. mode, colour scheme and thresholds. Both set
+`dt_iop_set_cache_bypass(module, TRUE)` and read that state live in `process()`/`process_cl()`.
+Moving a setting in the toolbox popover resyncs the main pipe, and nothing in the key moves: the
+module's parameters are its defaults, and the bypass flag was already set before the change. Every
+piece keeps its global hash.
+
+The bypass makes the outputs from the module down auto-destroy, except the last one, so the frame
+on screen is still cached under that unchanged hash. `dt_dev_pixelpipe_cache_get_writable()`
+answers `DT_DEV_PIXELPIPE_CACHE_WRITABLE_EXACT_HIT` for the last module, `process_rec()`
+short-circuits without running anything, and the previous frame comes back. Retouch's preview
+toggles failed the same way (`iop-notes.md`, "combining the mask/wavelet-scale/suppress preview
+toggles", fix 1).
+
+The fix follows dither above. `commit_params()` seals the settings into `piece->data`, the
+processing reads only that copy, and `runtime_data_hash()` returns TRUE. `rawoverexposed` used to
+write the per-channel raw thresholds it derives at process time back into `piece->data`. They now
+go to a local, because whatever `piece->data` holds at the next commit is hashed as if it were a
+setting. The bypass stays: it keeps overlay frames out of the cache and was never what refreshed
+them.
+
+The stale frame was seen in the darkroom. The fix was confirmed there on 2026-10-07, with and
+without OpenCL: every setting of both indicators now refreshes the image. The exact-hit path itself
+was read from the source, not traced. Its field signature, for whoever traces it: `-d dev` printing
+`writable-exact-hit` for the last module of the main pipe right after a setting moved.
+
 ### A module memoising its own intermediates keys them on `upstream_hash`, never on `global_hash`
 
 *Found `1019fcd2e0`, 2026-09-24.*
