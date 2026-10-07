@@ -115,10 +115,10 @@ int default_colorspace(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, const dt
 }
 
 __DT_CLONE_TARGETS__
-static void process_common_setup(dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece,
+static void process_common_setup(const dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece,
                                  unsigned int threshold[4])
 {
-  dt_develop_t *dev = self->dev;
+  const dt_develop_t *dev = self->dev;
   const dt_iop_rawoverexposed_data_t *const d = piece->data;
 
   // 4BAYER is not supported by this module yet anyway.
@@ -469,8 +469,9 @@ void commit_params(dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pixelpipe_
   if(image->dsc.datatype != TYPE_UINT16 || !image->dsc.filters) piece->enabled = 0;
 }
 
-gboolean runtime_data_hash(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe,
-                           const dt_dev_pixelpipe_iop_t *piece)
+gboolean runtime_data_hash(dt_iop_module_t *self __attribute__((unused)),
+                           dt_dev_pixelpipe_t *pipe __attribute__((unused)),
+                           const dt_dev_pixelpipe_iop_t *piece __attribute__((unused)))
 {
   return TRUE;
 }
