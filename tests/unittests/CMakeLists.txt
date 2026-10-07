@@ -63,6 +63,8 @@ set(LIB_ANSEL_UNIT_TESTS
   test_drawlayer_batch_raster
   test_import_jobs
   test_auto_group
+  test_lighttable_group_expansion
+  test_display_group_expansion
   test_image_auto_group_action
 )
 

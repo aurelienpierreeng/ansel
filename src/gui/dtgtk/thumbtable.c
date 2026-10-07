@@ -96,10 +96,11 @@ static gboolean _thumbtable_clone_lut(dt_thumbtable_t *dst)
 
   dt_pthread_mutex_lock(&src->lock);
   const gboolean can_clone = (src->lut
-                              && src->collection_inited
-                              && src->collection_hash == dst->collection_hash
-                              && src->collapse_groups == dst->collapse_groups
-                              && src->collection_count > 0);
+                               && src->collection_inited
+                                && src->collection_hash == dst->collection_hash
+                               && src->collapse_groups == dst->collapse_groups
+                               && src->expanded_group_id == dst->expanded_group_id
+                               && src->collection_count > 0);
   if(!can_clone)
   {
     dt_pthread_mutex_unlock(&src->lock);
@@ -175,6 +176,8 @@ void _dt_thumbtable_empty_list(dt_thumbtable_t *table);
 
 static gboolean _thumbtable_idle_update(gpointer user_data);
 static void _thumbtable_schedule_update(dt_thumbtable_t *table);
+static void _dt_collection_lut(dt_thumbtable_t *table);
+static void _thumbtable_rebuild_expanded_group(dt_thumbtable_t *table);
 static void _scrollbar_value_changed(GtkAdjustment *adjustment, gpointer user_data);
 static void _scrollbar_page_size_notify(GObject *object, GParamSpec *pspec, gpointer user_data);
 static void _parent_overlay_size_allocate(GtkWidget *widget, GtkAllocation *allocation, gpointer user_data);
@@ -985,6 +988,49 @@ gboolean dt_thumbtable_get_draw_group_borders(dt_thumbtable_t *table)
   return table->draw_group_borders;
 }
 
+gboolean dt_thumbtable_toggle_expanded_group(dt_thumbtable_t *table, const int32_t group_id)
+{
+  if(IS_NULL_PTR(table) || table->mode != DT_THUMBTABLE_MODE_FILEMANAGER || group_id <= UNKNOWN_IMAGE) return FALSE;
+  if(!table->collapse_groups)
+  {
+    dt_thumbtable_clear_expanded_group(table);
+    return FALSE;
+  }
+
+  if(table->expanded_group_id == group_id)
+  {
+    table->expanded_group_id = UNKNOWN_IMAGE;
+    _thumbtable_rebuild_expanded_group(table);
+    return FALSE;
+  }
+
+  table->expanded_group_id = group_id;
+  _thumbtable_rebuild_expanded_group(table);
+  return TRUE;
+}
+
+static void _thumbtable_rebuild_expanded_group(dt_thumbtable_t *table)
+{
+  if(!table->collection_inited) return;
+  _dt_collection_lut(table);
+  table->thumbs_inited = FALSE;
+  _dt_thumbtable_empty_list(table);
+  if(table->scroll_window && table->grid)
+  {
+    dt_thumbtable_configure(table);
+    _update_grid_area(table);
+    dt_thumbtable_queue_update(table);
+  }
+}
+
+void dt_thumbtable_clear_expanded_group(dt_thumbtable_t *table)
+{
+  if(IS_NULL_PTR(table) || table->mode != DT_THUMBTABLE_MODE_FILEMANAGER) return;
+  if(table->expanded_group_id == UNKNOWN_IMAGE) return;
+  table->expanded_group_id = UNKNOWN_IMAGE;
+  _thumbtable_rebuild_expanded_group(table);
+}
+
 // can be called with imgid = -1, in that case we reload all mipmaps
 // reinit = FALSE should be called when the mipmap is ready to redraw,
 // reinit = TRUE should be called when a refreshed mipmap has been requested but we have nothing yet to draw
@@ -1074,7 +1120,7 @@ static void _collection_lut_row(void *user_data, const dt_image_t *row)
   const int32_t imgid = row->id;
   const int32_t groupid = row->group_id;
 
-  if(ctx->table->collapse_groups && imgid != groupid)
+  if(ctx->table->collapse_groups && imgid != groupid && groupid != ctx->table->expanded_group_id)
   {
     // if user requested to collapse image groups in GUI,
     // only the group leader is shown. But we need to make sure
@@ -1082,7 +1128,8 @@ static void _collection_lut_row(void *user_data, const dt_image_t *row)
     // because it's unexpected that unvisible items might be selected,
     // and selection sanitization only deals with imgids outside of current collection,
     // but group members are always within the collection.
-    dt_selection_deselect(dt_selection_get_global(), imgid);
+    if(ctx->table->mode == DT_THUMBTABLE_MODE_FILEMANAGER)
+      dt_selection_deselect(dt_selection_get_global(), imgid);
     return;
   }
 
@@ -1167,7 +1214,7 @@ static gboolean _dt_collection_get_hash(dt_thumbtable_t *table)
   // database module. It advances on every recomposition, so it changes exactly when the text
   // would have.
   const uint64_t generation = dt_collection_query_get_generation();
-  uint64_t hash = dt_hash(5384, (char *)&generation, sizeof(uint64_t));
+  uint64_t hash = dt_hash(5384, (const char *)&generation, sizeof(uint64_t));
 
   // Factor in the number of images in the collection result
   uint32_t num_pics = dt_collection_get_count(dt_collection_get_global());
@@ -1183,6 +1230,21 @@ static gboolean _dt_collection_get_hash(dt_thumbtable_t *table)
   return FALSE;
 }
 
+gboolean dt_thumbtable_update_expanded_group_for_collection_change(
+    dt_thumbtable_t *table, const dt_collection_change_t query_change,
+    const dt_collection_properties_t changed_property, const gboolean hash_changed, const gboolean collapse_groups)
+{
+  if(table->mode != DT_THUMBTABLE_MODE_FILEMANAGER || table->expanded_group_id == UNKNOWN_IMAGE) return FALSE;
+  if(changed_property == DT_COLLECTION_PROP_SORT) return FALSE;
+  if(query_change == DT_COLLECTION_CHANGE_GROUP_REPRESENTATIVE
+     && changed_property == DT_COLLECTION_PROP_GROUPING && collapse_groups) return FALSE;
+  if(changed_property != DT_COLLECTION_PROP_GROUPING && collapse_groups && !hash_changed
+     && query_change != DT_COLLECTION_CHANGE_NEW_QUERY && query_change != DT_COLLECTION_CHANGE_FILTER)
+    return FALSE;
+
+  table->expanded_group_id = UNKNOWN_IMAGE;
+  return TRUE;
+}
 
 // this is called each time collected images change
 static void _dt_collection_changed_callback(gpointer instance, dt_collection_change_t query_change,
@@ -1202,7 +1264,9 @@ static void _dt_collection_changed_callback(gpointer instance, dt_collection_cha
   // See if the collection changed
   gboolean grouping_changed = changed_property == DT_COLLECTION_PROP_GROUPING;
   gboolean hash_changed = _dt_collection_get_hash(table);
-  gboolean changed = hash_changed || collapsing_changed || grouping_changed;
+  const gboolean expansion_invalidated = dt_thumbtable_update_expanded_group_for_collection_change(
+      table, query_change, changed_property, hash_changed, collapse_groups);
+  gboolean changed = hash_changed || collapsing_changed || grouping_changed || expansion_invalidated;
   dt_print(DT_DEBUG_LIGHTTABLE,
           "[thumbtable] collection_changed_callback: query_change=%d changed_property=%d hash_changed=%d "
           "collapsing_changed=%d grouping_changed=%d -> changed=%d\n",
@@ -1212,7 +1276,7 @@ static void _dt_collection_changed_callback(gpointer instance, dt_collection_cha
     // If groups are collapsed, we add only the group leader image to the collection
     // It needs to be set before running _dt_collection_lut()
     table->collapse_groups = collapse_groups;
-    if(!_thumbtable_clone_lut(table))
+    if(grouping_changed || !_thumbtable_clone_lut(table))
       _dt_collection_lut(table);
 
     table->thumbs_inited = FALSE;
@@ -2065,6 +2129,7 @@ dt_thumbtable_t *dt_thumbtable_new(dt_thumbtable_mode_t mode)
   table->alternate_mode = FALSE;
   table->rowid = -1;
   table->collapse_groups = dt_conf_get_bool("ui_last/grouping");
+  table->expanded_group_id = UNKNOWN_IMAGE;
   table->draw_group_borders = dt_conf_get_bool("plugins/lighttable/group_borders");
   table->idle_update_id = 0;
   table->focus_idle_id = 0;
