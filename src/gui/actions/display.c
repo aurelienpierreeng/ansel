@@ -18,14 +18,17 @@
     along with Ansel.  If not, see <http://www.gnu.org/licenses/>.
 */
 #include "colorprofiles/colorspaces.h"
+#include "caches/image_cache.h"
 #include "common/conf.h"
 #include "caches/mipmap_cache.h"
 #include "common/collection.h"
+#include "common/selection.h"
 #include "control/control.h"
 #include "develop/dev_pixelpipe.h"
 #include "develop/develop.h"
 #include "gui/actions/menu.h"
 #include "gui/application.h"
+#include "gui/dtgtk/thumbtable.h"
 #include "widgets/accelerators.h"
 #include "views/view.h"
 
@@ -422,6 +425,49 @@ static gboolean collapse_grouped_checked_callback()
   return dt_conf_get_bool("ui_last/grouping");
 }
 
+static int32_t _selected_group_to_expand()
+{
+  if(!_is_lighttable() || !dt_conf_get_bool("ui_last/grouping")) return UNKNOWN_IMAGE;
+
+  struct dt_selection_t *selection = dt_selection_get_global();
+  if(dt_selection_get_length(selection) != 1) return UNKNOWN_IMAGE;
+
+  const int32_t imgid = dt_selection_get_first_id(selection);
+  const dt_image_t *image = dt_image_cache_get(imgid, 'r');
+  if(IS_NULL_PTR(image)) return UNKNOWN_IMAGE;
+
+  const int32_t group_id = image->group_members > 1 ? image->group_id : UNKNOWN_IMAGE;
+  dt_image_cache_read_release(image);
+  return group_id;
+}
+
+static gboolean expand_selected_group_callback(GtkAccelGroup *group G_GNUC_UNUSED, GObject *acceleratable G_GNUC_UNUSED,
+                                               guint keyval G_GNUC_UNUSED, GdkModifierType mods G_GNUC_UNUSED,
+                                               gpointer user_data G_GNUC_UNUSED)
+{
+  const int32_t group_id = _selected_group_to_expand();
+  struct dt_gui_gtk_t *gui = dt_gui_get_global();
+  dt_ui_t *ui = !IS_NULL_PTR(gui) ? dt_gui_get_ui() : NULL;
+  if(group_id <= UNKNOWN_IMAGE || IS_NULL_PTR(ui) || IS_NULL_PTR(ui->thumbtable_lighttable)) return TRUE;
+
+  dt_thumbtable_toggle_expanded_group(ui->thumbtable_lighttable, group_id);
+  return TRUE;
+}
+
+static gboolean expand_selected_group_sensitive_callback(GtkWidget *widget)
+{
+  const int32_t group_id = _selected_group_to_expand();
+  struct dt_gui_gtk_t *gui = dt_gui_get_global();
+  dt_ui_t *ui = !IS_NULL_PTR(gui) ? dt_gui_get_ui() : NULL;
+  dt_thumbtable_t *table = !IS_NULL_PTR(ui) ? ui->thumbtable_lighttable : NULL;
+  const gboolean sensitive = group_id > UNKNOWN_IMAGE && !IS_NULL_PTR(table);
+  GtkWidget *label = gtk_bin_get_child(GTK_BIN(widget));
+  gtk_label_set_text(GTK_LABEL(label), sensitive && table->expanded_group_id == group_id
+                                         ? _("Collapse selected group")
+                                         : _("Expand selected group"));
+  return sensitive;
+}
+
 static gboolean _jpg_checked(GtkWidget *widget)
 {
   const int item = GPOINTER_TO_INT(get_custom_data(widget));
@@ -534,6 +580,9 @@ void append_display(GtkWidget **menus, GList **lists, const dt_menus_t index)
                                   _jpg_combobox_changed, _jpg_checked, NULL, NULL, 0, 0);
 
   add_sub_menu_entry(menus, lists, _("Collapse grouped images"), index, NULL, collapse_grouped_callback, collapse_grouped_checked_callback, NULL, NULL, 0, 0);
+
+  add_sub_menu_entry(menus, lists, _("Expand selected group"), index, NULL, expand_selected_group_callback,
+                     NULL, NULL, expand_selected_group_sensitive_callback, 0, 0);
 
   add_sub_menu_entry(menus, lists, _("Show group borders"), index, NULL, group_borders_callback,
                      group_borders_checked_callback, NULL, NULL, GDK_KEY_p, DT_PRIMARY_MASK | GDK_SHIFT_MASK);
