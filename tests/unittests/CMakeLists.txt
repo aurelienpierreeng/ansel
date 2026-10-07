@@ -63,6 +63,7 @@ set(LIB_ANSEL_UNIT_TESTS
   test_drawlayer_batch_raster
   test_import_jobs
   test_auto_group
+  test_group_badge
   test_thumbtable_expansion
   test_lighttable_group_expansion
   test_display_group_expansion
@@ -104,7 +105,7 @@ target_compile_definitions(test_auto_group PRIVATE
 target_compile_definitions(test_thumbtable_expansion PRIVATE
   ANSEL_TEST_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
 
-foreach(test test_auto_group test_thumbtable_expansion)
+foreach(test test_auto_group test_group_badge test_thumbtable_expansion)
   set_target_properties(${test} PROPERTIES C_EXTENSIONS OFF)
   target_compile_definitions(${test} PRIVATE _DEFAULT_SOURCE _POSIX_C_SOURCE=200809L)
 endforeach()

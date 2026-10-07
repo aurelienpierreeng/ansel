@@ -759,12 +759,26 @@ static void _thumb_update_icons(dt_thumbnail_t *thumb)
 
   gboolean show = (thumb->over > DT_THUMBNAIL_OVERLAYS_NONE);
 
+  if(GTK_IS_WIDGET(thumb->w_top_eb))
+    gtk_widget_set_visible(thumb->w_top_eb, dt_thumbtable_info_is_grouped(thumb->info) || show || DEBUG);
   if(GTK_IS_WIDGET(thumb->w_local_copy))
     gtk_widget_set_visible(thumb->w_local_copy, (thumb->info.has_localcopy && show) || DEBUG);
   if(GTK_IS_WIDGET(thumb->w_altered))
     gtk_widget_set_visible(thumb->w_altered, (dt_thumbtable_info_is_altered(thumb->info) && show) || DEBUG);
   if(GTK_IS_WIDGET(thumb->w_group))
-    gtk_widget_set_visible(thumb->w_group, (dt_thumbtable_info_is_grouped(thumb->info) && show) || DEBUG);
+  {
+    const gboolean collapsed = !IS_NULL_PTR(thumb->table) && thumb->table->collapse_groups
+                               && (thumb->table->mode != DT_THUMBTABLE_MODE_FILEMANAGER
+                                   || thumb->table->expanded_group_id != thumb->info.group_id);
+    GtkDarktableThumbnailBtn *button = DTGTK_THUMBNAIL_BTN(thumb->w_group);
+    const gint flags = CPF_GROUPING_THUMBNAIL | (collapsed ? CPF_GROUPING_BADGE : 0);
+    if(button->icon_flags != flags)
+    {
+      button->icon_flags = flags;
+      gtk_widget_queue_draw(thumb->w_group);
+    }
+    gtk_widget_set_visible(thumb->w_group, dt_thumbtable_info_is_grouped(thumb->info) || DEBUG);
+  }
   if(GTK_IS_WIDGET(thumb->w_audio))
     gtk_widget_set_visible(thumb->w_audio, (thumb->info.has_audio && show) || DEBUG);
   if(GTK_IS_WIDGET(thumb->w_color))
@@ -1373,7 +1387,9 @@ GtkWidget *dt_thumbnail_create_widget(dt_thumbnail_t *thumb)
   gtk_box_pack_end(GTK_BOX(top_box), thumb->w_altered, FALSE, FALSE, 0);
 
   // the group bouton
-  thumb->w_group = dtgtk_thumbnail_btn_new(dtgtk_cairo_paint_grouping, 0, NULL);
+  thumb->w_group = dtgtk_thumbnail_btn_new(dtgtk_cairo_paint_grouping, CPF_GROUPING_THUMBNAIL,
+                                            &thumb->info.group_members);
+  dt_gui_remove_class(thumb->w_group, "dt_thumb_btn");
   dt_gui_add_class(thumb->w_group, "thumb-group");
   g_signal_connect(G_OBJECT(thumb->w_group), "button-release-event", G_CALLBACK(_event_grouping_release), thumb);
   g_signal_connect(G_OBJECT(thumb->w_group), "enter-notify-event", G_CALLBACK(_group_enter), thumb);
@@ -1644,8 +1660,8 @@ static int _thumb_resize_overlays(dt_thumbnail_t *thumb, int width, int height)
   // the altered icon
   gtk_widget_set_size_request(thumb->w_altered, icon_size, icon_size);
 
-  // the group bouton
-  gtk_widget_set_size_request(thumb->w_group, icon_size, icon_size);
+  const int group_height = roundf(1.4f * icon_size);
+  gtk_widget_set_size_request(thumb->w_group, roundf(1.4f * group_height), group_height);
 
   // the sound icon
   gtk_widget_set_size_request(thumb->w_audio, icon_size, icon_size);
