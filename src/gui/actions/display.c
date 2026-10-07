@@ -306,7 +306,13 @@ static gboolean profile_callback(GtkAccelGroup *group, GObject *acceleratable, g
   const gboolean profile_changed = dt_colorprofiles_set_display_profile_choice(pp->type, pp->filename);
 
   if(profile_changed)
+  {
     DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_CONTROL_PROFILE_USER_CHANGED, DT_COLORSPACES_PROFILE_TYPE_DISPLAY);
+    /* The signal only reaches the thumbnails. colorout reads the display profile in its
+     * commit_params(), on the main and the preview pipes alike, so the darkroom has to be told
+     * to recommit -- otherwise it keeps the previous profile until the next zoom or edit. */
+    dt_dev_pixelpipe_resync_history_all(dt_dev_get_global());
+  }
 
   return TRUE;
 }
@@ -338,7 +344,11 @@ static gboolean intent_callback(GtkAccelGroup *group, GObject *acceleratable, gu
   const gboolean intent_changed = dt_colorprofiles_set_display_intent(new_intent);
 
   if(intent_changed)
+  {
     DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_CONTROL_PROFILE_USER_CHANGED, DT_COLORSPACES_PROFILE_TYPE_DISPLAY);
+    // colorout reads the display intent in commit_params(): same reason as profile_callback()
+    dt_dev_pixelpipe_resync_history_all(dt_dev_get_global());
+  }
 
   return TRUE;
 }
