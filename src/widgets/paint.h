@@ -65,6 +65,8 @@ typedef enum dtgtk_cairo_paint_flags_t
   CPF_DIRECTION_RIGHT = 1 << 3,
   // we need flags from 1 << 0 to 1 << 4 for color labels
   // nothing may collide with those
+  CPF_GROUPING_BADGE = 1 << 5,
+  CPF_GROUPING_THUMBNAIL = 1 << 6, /**< Modern stack glyph; count visibility is independent. */
   CPF_ACTIVE = 1 << 11,
   CPF_PRELIGHT = 1 << 12,
   CPF_FOCUS = 1 << 13,
@@ -189,6 +191,8 @@ void dtgtk_cairo_paint_styles(cairo_t *cr, gint x, gint y, gint w, gint h, gint 
 void dtgtk_cairo_paint_help(cairo_t *cr, gint x, gint y, gint w, gint h, gint flags, void *data);
 /** paint the grouping icon. */
 void dtgtk_cairo_paint_grouping(cairo_t *cr, gint x, gint y, gint w, gint h, gint flags, void *data);
+/** Format the visible group count; returns FALSE when no badge is required. */
+gboolean dtgtk_grouping_badge_label(guint group_members, char label[4]);
 /** paint the preferences wheel. */
 void dtgtk_cairo_paint_preferences(cairo_t *cr, gint x, gint y, gint w, gint h, gint flags, void *data);
 /** paint the "show ovelays" icon. */
