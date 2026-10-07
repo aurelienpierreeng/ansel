@@ -630,6 +630,78 @@ static void test_auto_group_undo_failure_rolls_back_and_discards_stale_history(v
   _stop_gui_services(&control);
 }
 
+static void _assert_cached_group(const int32_t imgid, const int32_t groupid, const guint count)
+{
+  const dt_image_t *image = dt_image_cache_get(imgid, 'r');
+  assert_non_null(image);
+  assert_int_equal(image->group_id, groupid);
+  assert_int_equal(image->group_members, count);
+  dt_image_cache_read_release(image);
+}
+
+static void test_manual_group_mutations_refresh_all_cached_members(void **state G_GNUC_UNUSED)
+{
+  const int32_t film_id = testdb_make_film("/testdb/manual-group-refresh");
+  const int32_t first = testdb_make_image(film_id, "first.raw");
+  const int32_t second = testdb_make_image(film_id, "second.raw");
+  const int32_t third = testdb_make_image(film_id, "third.raw");
+  assert_true(dt_image_repository_set_group(first, first));
+  assert_true(dt_image_repository_set_group(second, second));
+  assert_true(dt_image_repository_set_group(third, third));
+  dt_control_t control;
+  _start_gui_services(&control);
+  _assert_cached_group(first, first, 1);
+  _assert_cached_group(second, second, 1);
+  _assert_cached_group(third, third, 1);
+
+  dt_grouping_add_to_group(first, second);
+  _dispatch_pending_events();
+  _assert_cached_group(first, first, 2);
+  _assert_cached_group(second, first, 2);
+  dt_grouping_add_to_group(first, third);
+  _dispatch_pending_events();
+  _assert_cached_group(first, first, 3);
+  _assert_cached_group(second, first, 3);
+  _assert_cached_group(third, first, 3);
+
+  assert_int_equal(dt_grouping_change_representative(second), second);
+  _dispatch_pending_events();
+  _assert_cached_group(first, second, 3);
+  _assert_cached_group(second, second, 3);
+  _assert_cached_group(third, second, 3);
+
+  assert_int_equal(dt_grouping_remove_from_group(third), second);
+  _dispatch_pending_events();
+  _assert_cached_group(third, third, 1);
+  _assert_cached_group(first, second, 2);
+  _assert_cached_group(second, second, 2);
+  assert_int_equal(dt_grouping_remove_from_group(first), second);
+  _dispatch_pending_events();
+  _assert_cached_group(first, first, 1);
+  _assert_cached_group(second, second, 1);
+
+  dt_grouping_add_to_group(first, second);
+  dt_grouping_add_to_group(first, third);
+  _dispatch_pending_events();
+  const int32_t new_leader = dt_grouping_remove_from_group(first);
+  _dispatch_pending_events();
+  _assert_cached_group(first, first, 1);
+  _assert_cached_group(second, new_leader, 2);
+  _assert_cached_group(third, new_leader, 2);
+  dt_grouping_remove_from_group(second);
+  dt_grouping_remove_from_group(third);
+  _dispatch_pending_events();
+  _assert_cached_group(second, second, 1);
+  _assert_cached_group(third, third, 1);
+  dt_image_cache_remove(first);
+  dt_image_cache_remove(second);
+  dt_image_cache_remove(third);
+  _assert_cached_group(first, first, 1);
+  _assert_cached_group(second, second, 1);
+  _assert_cached_group(third, third, 1);
+  _stop_gui_services(&control);
+}
+
 int main(int argc, char *argv[])
 {
   dt_datetime_init();
@@ -651,6 +723,7 @@ int main(int argc, char *argv[])
     cmocka_unit_test(test_auto_group_undo_does_not_batch_with_a_preceding_rating),
     cmocka_unit_test(test_auto_group_apply_refresh_undo_redo_then_manual_mutation_invalidates_history),
     cmocka_unit_test(test_grouping_invalidation_clears_both_history_directions),
+    cmocka_unit_test(test_manual_group_mutations_refresh_all_cached_members),
     cmocka_unit_test(test_auto_group_undo_failure_rolls_back_and_discards_stale_history),
     cmocka_unit_test(test_auto_group_plans_and_executes_ten_thousand_deterministic_candidates),
   };
