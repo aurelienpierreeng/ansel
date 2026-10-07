@@ -371,8 +371,6 @@ void dt_undo_clear(dt_undo_t *self, uint32_t filter)
   LOCK;
   _undo_clear_list(&self->undo_list, filter);
   _undo_clear_list(&self->redo_list, filter);
-  self->undo_list = NULL;
-  self->redo_list = NULL;
   self->disable_next = FALSE;
   UNLOCK;
 }
