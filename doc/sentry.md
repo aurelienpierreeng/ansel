@@ -302,12 +302,13 @@ existed on Windows at all, and asked users for `-d` runs that produced strictly 
   one thing and exit (`--help`, `-h`, `/?`, `--version`); `-d` and `--debug` were in it, so the
   flags that *produce* output sent every channel nowhere — no console, no file (#1472). They are
   out of that list now and must not go back in.
-- **The file used to live where a user cannot find it.** It was under `g_get_user_cache_dir()`,
-  which on Windows is `FOLDERID_InternetCache` — the shell folder still labelled "Temporary
-  Internet Files", Hidden and System, so Explorer does not show it even with hidden files shown
-  (#1473). Both the log and the thumbnail disk cache were affected; see
-  [`image-mipmap-cache.md`](image-mipmap-cache.md), which also records why "Windows clears that
-  folder" is not a claim to repeat.
+- **The file used to live where Windows deletes it and a user cannot find it.** It was under
+  `g_get_user_cache_dir()`, which on Windows is `FOLDERID_InternetCache` — the shell folder still
+  labelled "Temporary Internet Files". Storage Sense empties it, whenever it runs, of every file
+  not written in the last week or so — so the log of a user who has not opened Ansel for a week
+  is gone — and it is Hidden and System, so Explorer does not show it even with hidden files
+  shown (#1473). Both the log and the thumbnail disk cache were affected; the measurement is in
+  [`image-mipmap-cache.md`](image-mipmap-cache.md).
 
 So, to triage a Windows report:
 
