@@ -888,8 +888,21 @@ static gboolean _event_grouping_release(GtkWidget *widget, GdkEventButton *event
   dt_thumbnail_t *thumb = (dt_thumbnail_t *)user_data;
   thumb_return_if_fails(thumb, TRUE);
   if(thumb->disable_actions) return FALSE;
+  if(!gtk_widget_is_visible(thumb->widget) || !gtk_widget_is_visible(thumb->w_main)
+     || !gtk_widget_is_visible(thumb->w_top_eb) || !gtk_widget_is_visible(widget)) return FALSE;
   if(dtgtk_thumbnail_btn_is_hidden(widget)) return FALSE;
-  dt_grouping_change_representative(thumb->info.id);
+  if(thumb->info.id == thumb->info.group_id) return FALSE;
+  const int32_t old_group_id = thumb->info.group_id;
+  dt_thumbtable_t *table = thumb->table;
+  const int32_t new_group_id = dt_grouping_change_representative(thumb->info.id);
+  if(new_group_id != UNKNOWN_IMAGE)
+  {
+    if(!IS_NULL_PTR(table) && table->mode == DT_THUMBTABLE_MODE_FILEMANAGER
+       && table->expanded_group_id == old_group_id)
+      table->expanded_group_id = new_group_id;
+    dt_collection_update_query(dt_collection_get_global(), DT_COLLECTION_CHANGE_GROUP_REPRESENTATIVE,
+                                DT_COLLECTION_PROP_GROUPING, NULL);
+  }
   return FALSE;
 }
 
@@ -1457,7 +1470,7 @@ int dt_thumbnail_destroy(dt_thumbnail_t *thumb)
   if(thumb->widget)
   {
     GtkWidget *parent = gtk_widget_get_parent(thumb->widget);
-    if(parent && GTK_IS_CONTAINER(parent))
+    if(GTK_IS_CONTAINER(parent))
       gtk_container_remove(GTK_CONTAINER(parent), thumb->widget);
   }
   thumb->widget = NULL;
