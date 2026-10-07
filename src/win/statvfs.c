@@ -50,44 +50,52 @@
 
 #include "statvfs.h"
 
+/* GetDiskFreeSpaceEx**W**, not GetDiskFreeSpaceW, and the difference is the whole point of this
+ * rewrite. The old form takes a DRIVE ROOT, so the shim built one out of `path[0]`:
+ *
+ *     szDrive[0] = path[0]; szDrive[1] = ':'; szDrive[2] = '\\'; szDrive[3] = '\0';
+ *
+ * which is right for C:\... and wrong for everything else -- a UNC share (`\\server\share\...`
+ * became "\:\"), a redirected %LOCALAPPDATA%, a drive mounted as a folder. It then reported failure,
+ * and its one caller took that as "no room" and abandoned the write, so on such a machine EVERY
+ * thumbnail write failed silently. GetDiskFreeSpaceExW accepts any directory or file path and
+ * resolves the volume itself.
+ *
+ * The counts are expressed in BYTES with f_frsize == 1 rather than in clusters. Every consumer of
+ * this struct computes bytes as f_frsize * f_bavail, which that satisfies exactly; what it gives up
+ * is the true cluster geometry, which GetDiskFreeSpaceExW does not report and nothing here reads.
+ * The old code's f_bsize/f_frsize/f_blocks were real cluster figures, so do not reintroduce a
+ * consumer that expects them without adding a second query for the geometry.
+ *
+ * Returns 0 on success and -1 on failure, like POSIX. The previous version returned 1 on failure,
+ * which worked only because the single caller wrote `if(statvfs(...))`.
+ */
 int statvfs(const char *path, struct statvfs *buf)
 {
-  BOOL res;
+  if(IS_NULL_PTR(path) || IS_NULL_PTR(buf)) return -1;
 
-  DWORD lpSectorsPerCluster = 0;
-  DWORD lpBytesPerSector = 0;
-  DWORD lpNumberOfFreeClusters = 0;
-  DWORD lpTotalNumberOfClusters = 0;
-  char szDrive[4];
+  memset(buf, 0, sizeof(*buf));
+  buf->f_namemax = 250;
 
-  szDrive[0] = path[0];
-  szDrive[1] = ':';
-  szDrive[2] = '\\';
-  szDrive[3] = '\0';
+  wchar_t *wpath = g_utf8_to_utf16(path, -1, NULL, NULL, NULL);
+  if(IS_NULL_PTR(wpath)) return -1;
 
-  wchar_t *wszDrive = g_utf8_to_utf16(szDrive, -1, NULL, NULL, NULL);
+  ULARGE_INTEGER free_to_caller = { 0 };
+  ULARGE_INTEGER total_bytes = { 0 };
+  ULARGE_INTEGER total_free = { 0 };
+  const BOOL res = GetDiskFreeSpaceExW(wpath, &free_to_caller, &total_bytes, &total_free);
 
-  res = GetDiskFreeSpaceW(wszDrive, &lpSectorsPerCluster, &lpBytesPerSector, &lpNumberOfFreeClusters,
-                         &lpTotalNumberOfClusters);
+  dt_free(wpath);
 
-  dt_free(wszDrive);
+  if(!res) return -1;
 
-  buf->f_bsize = lpBytesPerSector;                        /* file system block size */
-  buf->f_frsize = lpBytesPerSector * lpSectorsPerCluster; /* fragment size */
-  buf->f_blocks = lpTotalNumberOfClusters;                /* size of fs in f_frsize units */
-  buf->f_bfree = lpNumberOfFreeClusters;                  /* # free blocks */
-  buf->f_bavail = lpNumberOfFreeClusters;                 /* # free blocks for unprivileged users */
-  buf->f_files = 0;                                       /* # inodes */
-  buf->f_ffree = 0;                                       /* # free inodes */
-  buf->f_favail = 0;                                      /* # free inodes for unprivileged users */
-  buf->f_fsid = lpNumberOfFreeClusters & 0xffff;          /* file system ID */
-  buf->f_flag = 0;                                        /* mount flags */
-  buf->f_namemax = 250;                                   /* maximum filename length */
+  buf->f_bsize = 1;                                  /* file system block size */
+  buf->f_frsize = 1;                                 /* fragment size: bytes, see above */
+  buf->f_blocks = (fsblkcnt_t)total_bytes.QuadPart;  /* size of fs in f_frsize units */
+  buf->f_bfree = (fsblkcnt_t)total_free.QuadPart;    /* # free blocks */
+  buf->f_bavail = (fsblkcnt_t)free_to_caller.QuadPart; /* # free blocks for unprivileged users */
 
-  if(res != 0)
-    return 0;
-  else
-    return 1;
+  return 0;
 }
 
 // clang-format off
