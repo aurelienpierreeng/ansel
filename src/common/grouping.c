@@ -35,6 +35,7 @@
 #include "database/collection_query.h"
 #include "database/image_repository.h"
 #include "caches/image_cache.h"
+#include "common/image_notify.h"
 
 int32_t dt_grouping_get_image_group(const int32_t image_id)
 {
@@ -59,32 +60,34 @@ void dt_grouping_add_to_group(const int32_t group_id, const int32_t image_id)
   img->group_id = group_id;
   dt_image_cache_write_release(img, DT_IMAGE_CACHE_SAFE);
   dt_undo_clear(dt_undo_get_global(), DT_UNDO_GROUPING);
+  GList *members = dt_image_repository_get_group_members(group_id, -1);
+  dt_image_notify_changed(members);
 }
 
-/** remove an image from a group */
+/** @brief Remove an image and refresh the derived counts of every member of its former group.
+ * @details Snapshot membership before writing. Even rows whose group ID stays the same have a
+ * new member count, so the final notification must include them after all write locks are released.
+ */
 int dt_grouping_remove_from_group(const int32_t image_id)
 {
   int new_group_id = -1;
-  GList *imgs = NULL;
 
   const dt_image_t *img = dt_image_cache_get(image_id, 'r');
-  if(!img) return -1;
+  if(IS_NULL_PTR(img)) return -1;
   const int img_group_id = img->group_id;
   dt_image_cache_read_release(img);
+  GList *imgs = dt_image_repository_get_group_members(img_group_id, -1);
   if(img_group_id == image_id)
   {
-    // get a new group_id for all the others in the group. also write it to the dt_image_t struct.
-    GList *others = dt_image_repository_get_group_members(img_group_id, image_id);
-    for(GList *o = others; o; o = g_list_next(o))
+    for(GList *o = imgs; !IS_NULL_PTR(o); o = g_list_next(o))
     {
       const int other_id = GPOINTER_TO_INT(o->data);
+      if(other_id == image_id) continue;
       if(new_group_id == -1) new_group_id = other_id;
       dt_image_t *other_img = dt_image_cache_get(other_id, 'w');
       other_img->group_id = new_group_id;
       dt_image_cache_write_release(other_img, DT_IMAGE_CACHE_SAFE);
-      imgs = g_list_prepend(imgs, GINT_TO_POINTER(other_id));
     }
-    g_list_free(others);
 
     if(new_group_id != -1)
     {
@@ -92,7 +95,7 @@ int dt_grouping_remove_from_group(const int32_t image_id)
     }
     else
     {
-      // no change was made, no point in raising signal, bailing early
+      g_list_free(imgs);
       return -1;
     }
   }
@@ -103,12 +106,10 @@ int dt_grouping_remove_from_group(const int32_t image_id)
     new_group_id = wimg->group_id;
     wimg->group_id = image_id;
     dt_image_cache_write_release(wimg, DT_IMAGE_CACHE_SAFE);
-    imgs = g_list_prepend(imgs, GINT_TO_POINTER(image_id));
-    // refresh also the group leader which may be alone now
-    imgs = g_list_prepend(imgs, GINT_TO_POINTER(img_group_id));
   }
 
   if(new_group_id != -1) dt_undo_clear(dt_undo_get_global(), DT_UNDO_GROUPING);
+  dt_image_notify_changed(imgs);
   return new_group_id;
 }
 
@@ -120,7 +121,6 @@ int dt_grouping_change_representative(const int32_t image_id)
   dt_image_cache_read_release(img);
   if(group_id == image_id) return UNKNOWN_IMAGE;
 
-  GList *imgs = NULL;
   GList *members = dt_image_repository_get_group_members(group_id, -1);
   for(GList *m = members; m; m = g_list_next(m))
   {
@@ -128,11 +128,10 @@ int dt_grouping_change_representative(const int32_t image_id)
     dt_image_t *other_img = dt_image_cache_get(other_id, 'w');
     other_img->group_id = image_id;
     dt_image_cache_write_release(other_img, DT_IMAGE_CACHE_SAFE);
-    imgs = g_list_prepend(imgs, GINT_TO_POINTER(other_id));
   }
-  g_list_free(members);
 
   dt_undo_clear(dt_undo_get_global(), DT_UNDO_GROUPING);
+  dt_image_notify_changed(members);
   return image_id;
 }
 
