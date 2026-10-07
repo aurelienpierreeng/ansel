@@ -129,6 +129,23 @@ decides for itself, against a value it read separately, is how re-selecting the 
 display profile came to reset the user to the system profile — an inherited "profile not found"
 fallback firing on the one case where nothing should happen.
 
+## Changing the display profile from the menu has to resync the darkroom
+
+*Found `ea59057346`, 2026-10-07.*
+
+`profile_callback()` and `intent_callback()` (`gui/actions/display.c`) raise
+`DT_SIGNAL_CONTROL_PROFILE_USER_CHANGED`. For a display profile only the thumbnail table listens:
+basicadj, the other listener, acts on the working profile alone. `colorout` reads the display
+profile and intent in `commit_params()`, on the main and the preview pipes, so the darkroom kept the
+previous profile until the next zoom or edit. Both callbacks resynced the darkroom until
+`a51ae2b322` (2025-03-14) replaced that with the signal. They now do both, and the resync goes
+through `dt_dev_pixelpipe_resync_history_all()`, as `gui/actions/run.c` does. colorout's key
+already carried the profile (`conversion_id`). What was missing was the commit that recomputes it.
+
+The cause was read from the source. The fix was confirmed in the darkroom on 2026-10-07: a display
+profile chosen from the menu now shows at once. The intent was not tried. With `-d dev`, a menu
+change should print `[dt_dev_pixelpipe_change]` for both pipes.
+
 ## The derived-profile memo is module-owned; image-derived profiles are not in it
 
 *Found `6bc232ea6f`, 2026-08-09.*
