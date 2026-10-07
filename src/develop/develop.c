@@ -760,6 +760,19 @@ void dt_dev_darkroom_pipeline(dt_develop_t *dev)
             && !IS_NULL_PTR(dev->gui_module)
             && dev->gui_module->request_mask_display != DT_DEV_PIXELPIPE_DISPLAY_NONE;
 
+      /**
+       * Same snapshot, for the overlays only the main pipe draws: the clipping and raw clipping
+       * indicators (iop/overexposed.c, iop/rawoverexposed.c disable themselves on any other pipe)
+       * and soft-proof or gamut check (iop/colorout.c applies the proofing mode to the FULL pipe
+       * only). The preview pipe never carries them.
+       */
+      dt_colorprofiles_settings_t profile_settings;
+      dt_colorprofiles_get_settings(&profile_settings);
+      const gboolean requested_overlay
+          = pipe == dev->pipe
+            && (dev->overexposed.enabled || dev->rawoverexposed.enabled
+                || profile_settings.mode != DT_PROFILE_NORMAL);
+
       // Connect GUI feedback for "pipe busy"
       dt_control_log_busy_enter();
       dt_control_toast_busy_enter();
@@ -877,12 +890,18 @@ void dt_dev_darkroom_pipeline(dt_develop_t *dev)
          * request snapshot and the runtime display mode because modules may
          * produce their mask through either mechanism.
          *
+         * Nor a main-pipe overlay: at zoom == fit the main pipe publishes the
+         * full frame too, and would overwrite the clean thumbnail the preview
+         * pipe has just written with clipping marks or a soft-proofed render.
+         * Skipped, the thumbnail keeps the preview pipe's.
+         *
          * This resamples non-linear uint8 at the end of the pipeline and is
          * therefore a low-quality resampling path.
          */
         if(!dt_dev_pixelpipe_get_realtime(pipe)
            && has_preview_size
            && !requested_mask_preview
+           && !requested_overlay
            && pipe->mask_display == DT_DEV_PIXELPIPE_DISPLAY_NONE)
           dt_dev_resync_mipmap_cache(dev, pipe, roi);
       }

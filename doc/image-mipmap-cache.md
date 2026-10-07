@@ -124,6 +124,54 @@ path answers with an 8x8 husk, and no later render replaces it. **Only a develop
 this**: an unaltered one is drawn from the embedded JPEG and never asks for the input at all,
 which is why the symptom reads as "one broken thumbnail" rather than as a cache bug.
 
+## The darkroom copies a frame into the thumbnail only when it carries no overlay
+
+*Found `ea59057346`, 2026-10-07.*
+
+At the end of a darkroom run, `dt_dev_darkroom_pipeline()` (`develop/develop.c`) copies the
+backbuffer into the mipmap cache (`dt_dev_resync_mipmap_cache()`, then
+`dt_mipmap_cache_swap_at_size()`) whenever the run has the preview's output size. Until
+`07aea1a673` (2026-06-19) only the preview pipe did this. Since then the main pipe does it too at
+zoom == fit, where both pipes render the same frame. `8f7c553fb6` (2026-06-21) kept mask previews
+out of that copy, but not the overlays that only the main pipe draws:
+
+- the clipping and raw clipping indicators (`overexposed` and `rawoverexposed` disable themselves
+  on any other pipe);
+- soft proof and gamut check (`colorout` applies the proofing mode to the FULL pipe only).
+
+After an edit at fit, the main pipe finished after the preview pipe and overwrote its clean copy.
+The disk cache then kept the overlay across restarts. A user reported clipping colours in a
+thumbnail.
+
+`requested_overlay` now gates the copy. Like `requested_mask_preview`, it is a snapshot taken
+before the run.
+
+Measured with `-d perf -d cache` on a 5208x3912 raw at fit. A copy prints `will fit a mip size 1`
+followed by `is synchronized from pipeline`. A lone `will fit` comes from `_preview_pipe_finished()`
+(`views/darkroom.c`) answering the finished signal of a run that copied nothing.
+
+- **Before** (`-d cache` alone): two copies per edit, about 50 ms apart (106.91/106.97 s,
+  113.21/113.27 s, 114.49/114.69 s, 124.49/124.54 s).
+- **After, an edit with an overlay on:** the pipes run preview, main, preview. The main run copies
+  nothing and the preview run after it does (23.20/23.28 s, 24.77/24.84 s, 30.61/30.68 s,
+  31.82/31.87 s).
+- **After, toggling the overlay:** the toolbox resyncs the main pipe alone, in 1-34 ms runs. Each
+  switch-off produces a copy (25.93, 34.86, 40.60, 43.71 s) and each switch-on produces none (27.29,
+  39.71, 42.31 s).
+- **After, an edit with no overlay:** both pipes copy, as before (36.76/36.80 s).
+
+The thumbnails stayed clean. Two limits, read from the source:
+
+- The snapshot reads the GUI state when the run starts, while the modules read it when they
+  commit, earlier. An overlay switched off between the two lets one overlay frame through. The
+  resync that the switch-off queues replaces it on the next run.
+- A thumbnail polluted before the fix stays until something rewrites it. Opening its image in the
+  darkroom does: the first run on entry copies a clean frame.
+
+The second size in a `synchronized` line is the entry's size before the downscale. It reads 720x450
+for an entry that was just allocated and the fitted size otherwise, so it does not mean the image
+was stretched.
+
 ## Releasing an image cache entry returns the LOCK, not the image
 
 *Found `2a0a1efe91`, 2026-09-06.*
