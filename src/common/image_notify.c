@@ -17,10 +17,25 @@
 */
 
 #include "common/image_notify.h"
+#include "system/macros.h"
 
 /* Written once, at startup, before any import job exists; read from whichever thread
  * imports. A lock would be guarding against a race nobody can create. */
 static dt_image_imported_handler_t _imported_handler = NULL;
+static dt_image_changed_handler_t _changed_handler = NULL;
+
+void dt_image_notify_set_changed_handler(dt_image_changed_handler_t handler)
+{
+  _changed_handler = handler;
+}
+
+void dt_image_notify_changed(GList *imgids)
+{
+  if(!IS_NULL_PTR(_changed_handler))
+    _changed_handler(imgids);
+  else
+    g_list_free(imgids);
+}
 
 void dt_image_notify_set_imported_handler(dt_image_imported_handler_t handler)
 {
