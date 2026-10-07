@@ -284,6 +284,12 @@ gchar *dt_database_get_most_recent_snap(const char* db_filename);
 void dt_database_start_transaction_debug(void);
 void dt_database_release_transaction_debug(void);
 void dt_database_rollback_transaction(void);
+/** @brief Start a transaction, returning FALSE when BEGIN fails without retaining the database lock. */
+gboolean dt_database_start_transaction_checked(void);
+/** @brief Commit a transaction, returning FALSE while retaining ownership for a rollback when COMMIT fails. */
+gboolean dt_database_release_transaction_checked(void);
+/** @brief Roll back a transaction, returning FALSE when SQLite rejects the rollback. */
+gboolean dt_database_rollback_transaction_checked(void);
 void dt_database_begin_transaction_batch(void);
 void dt_database_end_transaction_batch(void);
 

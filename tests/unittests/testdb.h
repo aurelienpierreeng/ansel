@@ -39,7 +39,9 @@
 #include <setjmp.h>
 #include <stdint.h>
 #include <cmocka.h>
+#include <glib/gstdio.h>
 
+#include "common/file_location.h"
 #include "database/collection_query.h"
 #include "database/colorlabel_repository.h"
 #include "database/database.h"
@@ -52,11 +54,31 @@
 #include "database/style_repository.h"
 #include "database/tag_repository.h"
 
+typedef struct testdb_paths_t
+{
+  char *configdir;
+  char *cachedir;
+} testdb_paths_t;
+
 static inline int testdb_setup(void **state)
 {
-  (void)state;
-  const dt_database_params_t params = { .alternative = NULL,
-                                        .library = ":memory:",
+  testdb_paths_t *paths = g_new0(testdb_paths_t, 1);
+  paths->configdir = g_dir_make_tmp("ansel-test-config-XXXXXX", NULL);
+  paths->cachedir = g_dir_make_tmp("ansel-test-cache-XXXXXX", NULL);
+  if(IS_NULL_PTR(paths->configdir) || IS_NULL_PTR(paths->cachedir))
+  {
+    if(!IS_NULL_PTR(paths->configdir)) g_rmdir(paths->configdir);
+    if(!IS_NULL_PTR(paths->cachedir)) g_rmdir(paths->cachedir);
+    g_free(paths->configdir);
+    g_free(paths->cachedir);
+    g_free(paths);
+    return -1;
+  }
+  dt_loc_init_user_config_dir(paths->configdir);
+  dt_loc_init_user_cache_dir(paths->cachedir);
+  *state = paths;
+  const dt_database_params_t params = { .alternative = ":memory:",
+                                         .library = ":memory:",
                                         .load_data = FALSE,
                                         .has_gui = FALSE,
                                         .verbose = FALSE };
@@ -65,7 +87,7 @@ static inline int testdb_setup(void **state)
 
 static inline int testdb_teardown(void **state)
 {
-  (void)state;
+  testdb_paths_t *paths = *state;
   /* Every cleanup is idempotent and safe for repositories the test never touched. The
    * connection cannot close over a live statement, so this order is load-bearing. */
   dt_collection_query_cleanup();
@@ -78,6 +100,11 @@ static inline int testdb_teardown(void **state)
   dt_style_repository_cleanup();
   dt_tag_repository_cleanup();
   dt_database_close();
+  g_rmdir(paths->configdir);
+  g_rmdir(paths->cachedir);
+  g_free(paths->configdir);
+  g_free(paths->cachedir);
+  g_free(paths);
   return 0;
 }
 
