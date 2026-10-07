@@ -143,6 +143,7 @@
 #include "common/l10n.h"
 #include "metadata/metadata.h"
 #include "common/image_notify.h"
+#include "common/auto_group.h"
 #include "develop/pipeline_notify.h"
 #include "history/notify.h"
 #include "history/presets.h"
@@ -758,6 +759,12 @@ static void _metadata_geotags_changed(const GList *imgs)
 static void _image_imported(const int32_t imgid)
 {
   DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_IMAGE_IMPORT, imgid);
+}
+
+/** @brief Bridge backend image changes to the control signal, transferring list ownership. */
+static void _images_changed(GList *imgids)
+{
+  DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_IMAGE_INFO_CHANGED, imgids);
 }
 
 /* History, styles and presets state what happened; turning that into a signal is ours. */
@@ -1441,6 +1448,7 @@ int dt_init(int argc, char *argv[], const gboolean init_gui, const gboolean load
   dt_database_set_renamed_handler(_database_renamed);
   dt_metadata_set_notify_handler(_metadata_notify);
   dt_history_set_message_handler(_history_notify);
+  dt_auto_group_set_message_handler(_history_notify);
   dt_history_set_toast_handler(_history_toast);
   dt_presets_set_autoapply_resolver(_presets_can_autoapply);
   dt_history_set_operation_name_resolver(_history_operation_name);
@@ -1549,6 +1557,7 @@ int dt_init(int argc, char *argv[], const gboolean init_gui, const gboolean load
   dt_metadata_set_tags_changed_handler(_metadata_tags_changed);
   dt_metadata_set_geotags_changed_handler(_metadata_geotags_changed);
   dt_image_notify_set_imported_handler(_image_imported);
+  dt_image_notify_set_changed_handler(_images_changed);
   dt_pipeline_set_message_handler(_pipeline_message);
   dt_pipeline_set_busy_handler(_pipeline_busy);
   // Same reason for these two: they raise signals, so they wait for the signal system.

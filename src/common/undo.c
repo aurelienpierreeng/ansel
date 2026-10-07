@@ -47,12 +47,15 @@ typedef struct dt_undo_item_t
   void (*free_data)(gpointer data);
 } dt_undo_item_t;
 
+static void _undo_clear_list(GList **list, uint32_t filter);
+
 dt_undo_t *dt_undo_init(void)
 {
   dt_undo_t *udata = malloc(sizeof(dt_undo_t));
   udata->undo_list = NULL;
   udata->redo_list = NULL;
   udata->disable_next = FALSE;
+  udata->deferred_clear = DT_UNDO_NONE;
   udata->locked = FALSE;
   dt_pthread_mutex_init(&udata->mutex, NULL);
   udata->group = DT_UNDO_NONE;
@@ -254,6 +257,14 @@ static void _undo_do_undo_redo(dt_undo_t *self, uint32_t filter, dt_undo_action_
       break;
     }
   }
+  if(self->deferred_clear)
+  {
+    const uint32_t deferred_filter = self->deferred_clear;
+    self->deferred_clear = DT_UNDO_NONE;
+    _undo_clear_list(&self->undo_list, deferred_filter);
+    _undo_clear_list(&self->redo_list, deferred_filter);
+    self->disable_next = FALSE;
+  }
   UNLOCK;
 
   if(imgs)
@@ -373,6 +384,12 @@ void dt_undo_clear(dt_undo_t *self, uint32_t filter)
   _undo_clear_list(&self->redo_list, filter);
   self->disable_next = FALSE;
   UNLOCK;
+}
+
+void dt_undo_defer_clear(dt_undo_t *self, const uint32_t filter)
+{
+  if(IS_NULL_PTR(self)) return;
+  self->deferred_clear |= filter;
 }
 
 static void _undo_iterate(GList *list, uint32_t filter, gpointer user_data,
