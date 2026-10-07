@@ -53,6 +53,10 @@ typedef enum dt_thumbnail_border_t
   DT_THUMBNAIL_BORDER_TOP = 1 << 1,
   DT_THUMBNAIL_BORDER_RIGHT = 1 << 2,
   DT_THUMBNAIL_BORDER_BOTTOM = 1 << 3,
+  DT_THUMBNAIL_BORDER_INNER_TOP_LEFT = 1 << 4, /**< Concave join between two inset perimeter segments. */
+  DT_THUMBNAIL_BORDER_INNER_TOP_RIGHT = 1 << 5,
+  DT_THUMBNAIL_BORDER_INNER_BOTTOM_LEFT = 1 << 6,
+  DT_THUMBNAIL_BORDER_INNER_BOTTOM_RIGHT = 1 << 7,
 } dt_thumbnail_border_t;
 
 typedef enum dt_thumbnail_overlay_t

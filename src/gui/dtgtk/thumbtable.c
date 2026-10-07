@@ -638,22 +638,22 @@ gboolean dt_thumbtable_get_thumbnail_info(dt_thumbtable_t *table, int32_t imgid,
 #define CLAMP_ROW(rowid) CLAMP(rowid, 0, table->collection_count - 1)
 #define IS_COLLECTION_EDGE(rowid) (rowid < 0 || rowid >= table->collection_count)
 
+/** @brief Refresh the visible group perimeter without changing thumbnail allocations.
+ * @details The grid paints separation inside its cell stride; border state never changes layout.
+ */
 void _add_thumbnail_group_borders(dt_thumbtable_t *table, dt_thumbnail_t *thumb)
 {
-  // Reset all CSS classes
   dt_thumbnail_border_t borders = 0;
+  const gboolean group_expanded = !table->collapse_groups
+                                 || (table->mode == DT_THUMBTABLE_MODE_FILEMANAGER
+                                     && table->expanded_group_id == thumb->info.group_id);
+  if(dt_thumbtable_info_is_grouped(thumb->info) && table->draw_group_borders && group_expanded)
+    table->ops->group_borders(table, thumb, &borders);
+  if(borders == thumb->group_borders) return;
+
+  dt_thumbnail_set_group_border(thumb, DT_THUMBNAIL_BORDER_NONE);
   dt_thumbnail_set_group_border(thumb, borders);
-
-  const int32_t rowid = thumb->rowid;
-
-  // Ungrouped image: abort
-  if(!dt_thumbtable_info_is_grouped(table->lut[rowid].thumb->info) || !table->draw_group_borders) return;
-
-  // The frontend adds the mode-specific border flags (grid closes on all four neighbours; the
-  // filmstrip always closes top+bottom and checks only its horizontal neighbours).
-  table->ops->group_borders(table, thumb, &borders);
-
-  dt_thumbnail_set_group_border(thumb, borders);
+  gtk_widget_queue_draw(thumb->widget);
 }
 
 void _add_thumbnail_at_rowid(dt_thumbtable_t *table, const size_t rowid, const int32_t mouse_over)
@@ -711,13 +711,7 @@ void _add_thumbnail_at_rowid(dt_thumbtable_t *table, const size_t rowid, const i
 
   table->lut[rowid].thumb = thumb;
 
-  // Resize
   gboolean size_changed = (table->thumb_height != thumb->height || table->thumb_width != thumb->width);
-  if(new_item || size_changed || table->overlays != thumb->over)
-  {
-    dt_thumbnail_set_overlay(thumb, table->overlays);
-    dt_thumbnail_resize(thumb, table->thumb_width, table->thumb_height);
-  }
 
   // Actually moving the widgets in the grid is more expensive, do it only if necessary
   if(new_item)
@@ -731,6 +725,12 @@ void _add_thumbnail_at_rowid(dt_thumbtable_t *table, const size_t rowid, const i
     _set_thumb_position(table, thumb);
     table->ops->move_child(table, thumb);
     //fprintf(stdout, "moving new thumb at #%lu: %i, %i\n", rowid, thumb->x, thumb->y);
+  }
+
+  if(new_item || size_changed || table->overlays != thumb->over)
+  {
+    dt_thumbnail_set_overlay(thumb, table->overlays);
+    dt_thumbnail_resize(thumb, table->thumb_width, table->thumb_height);
   }
 
   // Update visual states and flags. Mouse over is not connected to a signal and cheap to update

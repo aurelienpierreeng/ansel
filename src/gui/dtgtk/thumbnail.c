@@ -1033,10 +1033,63 @@ static gboolean _event_star_leave(GtkWidget *widget, GdkEventCrossing *event, gp
 }
 
 
+/** @brief Paint a separated group perimeter inside the grid's unchanged cell stride.
+ * @details Cell allocations overlap through the original negative CSS margins. Drawing against
+ * the nominal stride, rather than that larger allocation, keeps neighbouring outlines apart
+ * without shrinking images. Rectangles meet without the tapered joins of transparent CSS borders.
+ * The four diagonal flags complete concave corners; filmstrip borders remain CSS-painted.
+ */
 gboolean _event_expose(GtkWidget *self, cairo_t *cr, gpointer user_data)
 {
   dt_thumbnail_t *thumb = (dt_thumbnail_t *)user_data;
   thumb_return_if_fails(thumb, TRUE);
+  if(IS_NULL_PTR(thumb->table) || thumb->table->mode != DT_THUMBTABLE_MODE_FILEMANAGER
+     || thumb->group_borders == DT_THUMBNAIL_BORDER_NONE) return FALSE;
+
+  GtkStyleContext *context = gtk_widget_get_style_context(self);
+  const GtkStateFlags state = gtk_widget_get_state_flags(self);
+  GtkBorder border;
+  gtk_style_context_get_border(context, state, &border);
+  GdkRGBA color;
+  const char *color_name = gtk_style_context_has_class(context, "hovered-group")
+                             ? "group_border_hover" : "group_border";
+  if(!gtk_style_context_lookup_color(context, color_name, &color)) return FALSE;
+
+  const double width = thumb->width;
+  const double height = thumb->height;
+  const double thickness = border.top;
+  const double gap = MAX(1.0, round(0.0625 * DT_GUI_EM_SIZE));
+  if(MIN(width, height) <= 2.0 * (gap + thickness)) return FALSE;
+  const dt_thumbnail_border_t borders = thumb->group_borders;
+  const double left = borders & DT_THUMBNAIL_BORDER_LEFT ? gap : 0.0;
+  const double right = borders & DT_THUMBNAIL_BORDER_RIGHT ? width - gap : width;
+  const double top = borders & DT_THUMBNAIL_BORDER_TOP ? gap : 0.0;
+  const double bottom = borders & DT_THUMBNAIL_BORDER_BOTTOM ? height - gap : height;
+
+  cairo_save(cr);
+  cairo_rectangle(cr, 0, 0, width, height);
+  cairo_clip(cr);
+  gdk_cairo_set_source_rgba(cr, &color);
+  if(borders & DT_THUMBNAIL_BORDER_TOP)
+    cairo_rectangle(cr, left, top, right - left, thickness);
+  if(borders & DT_THUMBNAIL_BORDER_BOTTOM)
+    cairo_rectangle(cr, left, bottom - thickness, right - left, thickness);
+  if(borders & DT_THUMBNAIL_BORDER_LEFT)
+    cairo_rectangle(cr, left, top, thickness, bottom - top);
+  if(borders & DT_THUMBNAIL_BORDER_RIGHT)
+    cairo_rectangle(cr, right - thickness, top, thickness, bottom - top);
+  for(int corner = 0; corner < 4; corner++)
+  {
+    if(!(borders & (DT_THUMBNAIL_BORDER_INNER_TOP_LEFT << corner))) continue;
+    const double x = corner % 2 ? width : 0;
+    const double y = corner / 2 ? height : 0;
+    const double dx = corner % 2 ? -1.0 : 1.0;
+    const double dy = corner / 2 ? -1.0 : 1.0;
+    cairo_rectangle(cr, x, y + dy * gap, dx * (gap + thickness), dy * thickness);
+    cairo_rectangle(cr, x + dx * gap, y, dx * thickness, dy * (gap + thickness));
+  }
+  cairo_fill(cr);
+  cairo_restore(cr);
   return FALSE;
 }
 
@@ -1195,7 +1248,7 @@ GtkWidget *dt_thumbnail_create_widget(dt_thumbnail_t *thumb)
   g_signal_connect(G_OBJECT(thumb->widget), "enter-notify-event", G_CALLBACK(_event_main_enter), thumb);
   g_signal_connect(G_OBJECT(thumb->widget), "leave-notify-event", G_CALLBACK(_event_main_leave), thumb);
   g_signal_connect(G_OBJECT(thumb->widget), "motion-notify-event", G_CALLBACK(_event_main_motion), thumb);
-  g_signal_connect(G_OBJECT(thumb->widget), "draw", G_CALLBACK(_event_expose), thumb);
+  g_signal_connect_after(G_OBJECT(thumb->widget), "draw", G_CALLBACK(_event_expose), thumb);
 
   // Main widget
   thumb->w_main = gtk_overlay_new();
