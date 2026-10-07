@@ -29,6 +29,7 @@
 
 #include "common/grouping.h"
 #include "common/collection.h"
+#include "common/undo.h"
 #include "system/macros.h"
 #include "system/mem_alloc.h"
 #include "database/collection_query.h"
@@ -46,12 +47,18 @@ int32_t dt_grouping_get_image_group(const int32_t image_id)
 /** add an image to a group */
 void dt_grouping_add_to_group(const int32_t group_id, const int32_t image_id)
 {
+  const dt_image_t *const current = dt_image_cache_get(image_id, 'r');
+  const int32_t current_group_id = current->group_id;
+  dt_image_cache_read_release(current);
+  if(current_group_id == group_id) return;
+
   // remove from old group
   dt_grouping_remove_from_group(image_id);
 
   dt_image_t *img = dt_image_cache_get(image_id, 'w');
   img->group_id = group_id;
   dt_image_cache_write_release(img, DT_IMAGE_CACHE_SAFE);
+  dt_undo_clear(dt_undo_get_global(), DT_UNDO_GROUPING);
 }
 
 /** remove an image from a group */
@@ -101,6 +108,7 @@ int dt_grouping_remove_from_group(const int32_t image_id)
     imgs = g_list_prepend(imgs, GINT_TO_POINTER(img_group_id));
   }
 
+  if(new_group_id != -1) dt_undo_clear(dt_undo_get_global(), DT_UNDO_GROUPING);
   return new_group_id;
 }
 
@@ -110,6 +118,7 @@ int dt_grouping_change_representative(const int32_t image_id)
   dt_image_t *img = dt_image_cache_get(image_id, 'r');
   const int group_id = img->group_id;
   dt_image_cache_read_release(img);
+  if(group_id == image_id) return UNKNOWN_IMAGE;
 
   GList *imgs = NULL;
   GList *members = dt_image_repository_get_group_members(group_id, -1);
@@ -123,6 +132,7 @@ int dt_grouping_change_representative(const int32_t image_id)
   }
   g_list_free(members);
 
+  dt_undo_clear(dt_undo_get_global(), DT_UNDO_GROUPING);
   return image_id;
 }
 
