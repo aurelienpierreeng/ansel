@@ -931,6 +931,13 @@
     <longdescription/>
   </dtconfig>
   <dtconfig>
+    <name>plugins/lighttable/auto_group/interval</name>
+    <type min="0" max="3600">int</type>
+    <default>1</default>
+    <shortdescription>automatic grouping interval in seconds</shortdescription>
+    <longdescription>maximum time between consecutive images to place them in the same automatic group</longdescription>
+  </dtconfig>
+  <dtconfig>
     <name>lighttable/embedded_jpg</name>
     <type>int</type>
     <default>1</default>

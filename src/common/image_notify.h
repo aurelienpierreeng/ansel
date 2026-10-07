@@ -49,6 +49,15 @@ void dt_image_notify_set_imported_handler(dt_image_imported_handler_t handler);
 /** @brief Raise it. Internal to common/image.c. */
 void dt_image_notify_imported(const int32_t imgid);
 
+/** @brief Receive changed image IDs. The handler takes ownership of the list. */
+typedef void (*dt_image_changed_handler_t)(GList *imgids);
+
+/** @brief Install the image-information listener at startup, or NULL for a headless run. */
+void dt_image_notify_set_changed_handler(dt_image_changed_handler_t handler);
+
+/** @brief Transfer changed image IDs to the listener; free the list when no listener is installed. */
+void dt_image_notify_changed(GList *imgids);
+
 G_END_DECLS
 
 #endif // DT_COMMON_IMAGE_NOTIFY_H
