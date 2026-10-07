@@ -75,9 +75,16 @@ static const float dt_iop_rawoverexposed_colors[][4] __attribute__((aligned(64))
   { 0.0f, 0.0f, 0.0f, 1.0f }  // black
 };
 
+/* The indicator settings, sealed by commit_params() from the darkroom's GUI state and folded into
+ * the pipeline cache key by runtime_data_hash(); process()/process_cl() render from them rather
+ * than re-reading dev->rawoverexposed. The per-channel raw thresholds are derived from `threshold`
+ * at process time, into a local, and never written back here: whatever piece->data holds at the
+ * next commit is hashed as if it were a setting. */
 typedef struct dt_iop_rawoverexposed_data_t
 {
-  unsigned int threshold[4];
+  dt_dev_rawoverexposed_mode_t mode;
+  dt_dev_rawoverexposed_colorscheme_t colorscheme;
+  float threshold;
 } dt_iop_rawoverexposed_data_t;
 
 typedef struct dt_iop_rawoverexposed_global_data_t
@@ -108,28 +115,26 @@ int default_colorspace(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, const dt
 }
 
 __DT_CLONE_TARGETS__
-static void process_common_setup(dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece)
+static void process_common_setup(dt_iop_module_t *self, const dt_dev_pixelpipe_iop_t *piece,
+                                 unsigned int threshold[4])
 {
   dt_develop_t *dev = self->dev;
-  dt_iop_rawoverexposed_data_t *d = piece->data;
+  const dt_iop_rawoverexposed_data_t *const d = piece->data;
 
   // 4BAYER is not supported by this module yet anyway.
   const int ch = (dev->image_storage.flags & DT_IMAGE_4BAYER) ? 4 : 3;
 
-  // the clipping is detected as (raw value > threshold)
-  float threshold = dev->rawoverexposed.threshold;
-
   for(int k = 0; k < ch; k++)
   {
-    // here is our threshold
-    float chthr = threshold;
+    // here is our threshold: the clipping is detected as (raw value > threshold)
+    float chthr = d->threshold;
 
     // "undo" rawprepare iop
     chthr *= piece->dsc_in.rawprepare.raw_white_point - piece->dsc_in.rawprepare.raw_black_level;
     chthr += piece->dsc_in.rawprepare.raw_black_level;
 
     // and this is that threshold, but in raw input buffer values
-    d->threshold[k] = (unsigned int)chthr;
+    threshold[k] = (unsigned int)chthr;
   }
 }
 
@@ -141,7 +146,8 @@ int process(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_
   const dt_iop_roi_t *const roi_out = &piece->roi_out;
   const dt_iop_rawoverexposed_data_t *const d = piece->data;
 
-  process_common_setup(self, piece);
+  unsigned int threshold[4] = { 0 };
+  process_common_setup(self, piece, threshold);
 
   dt_develop_t *dev = self->dev;
   const dt_image_t *const image = &(dev->image_storage);
@@ -150,8 +156,8 @@ int process(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_
   const int ch = piece->dsc_in.channels;
   const double iop_order = self->iop_order;
 
-  const dt_dev_rawoverexposed_mode_t mode = dev->rawoverexposed.mode;
-  const int colorscheme = dev->rawoverexposed.colorscheme;
+  const dt_dev_rawoverexposed_mode_t mode = d->mode;
+  const int colorscheme = d->colorscheme;
   const float *const color = dt_iop_rawoverexposed_colors[colorscheme];
 
   dt_iop_image_copy_by_size(ovoid, ivoid, roi_out->width, roi_out->height, ch);
@@ -229,7 +235,7 @@ int process(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_
       const float in = raw[pin];
 
       // was the raw pixel clipped?
-      if(in < d->threshold[c]) continue;
+      if(in < threshold[c]) continue;
 
       switch(mode)
       {
@@ -291,12 +297,13 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
   size_t origin[] = { 0, 0, 0 };
   size_t region[] = { width, height, 1 };
 
-  process_common_setup(self, piece);
+  unsigned int threshold[4] = { 0 };
+  process_common_setup(self, piece, threshold);
 
   err = dt_opencl_enqueue_copy_image(devid, dev_in, dev_out, origin, origin, region);
   if(err != CL_SUCCESS) goto error;
 
-  const int colorscheme = dev->rawoverexposed.colorscheme;
+  const int colorscheme = d->colorscheme;
   const float *const color = dt_iop_rawoverexposed_colors[colorscheme];
 
   // NOT FROM THE PIPE !!!
@@ -336,7 +343,7 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
   if(err != CL_SUCCESS) goto error;
 
   int kernel;
-  switch(dev->rawoverexposed.mode)
+  switch(d->mode)
   {
     case DT_DEV_RAWOVEREXPOSED_MODE_MARK_CFA:
       kernel = gd->kernel_rawoverexposed_mark_cfa;
@@ -366,7 +373,7 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
     if(IS_NULL_PTR(dev_xtrans)) goto error;
   }
 
-  dev_thresholds = dt_opencl_copy_host_to_device_constant(devid, sizeof(unsigned int) * 4, (void *)d->threshold);
+  dev_thresholds = dt_opencl_copy_host_to_device_constant(devid, sizeof(threshold), (void *)threshold);
   if(IS_NULL_PTR(dev_thresholds)) goto error;
 
   size_t sizes[2] = { ROUNDUPDWD(width, devid), ROUNDUPDHT(height, devid) };
@@ -382,9 +389,9 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
   dt_opencl_set_kernel_arg(devid, kernel, 9, sizeof(cl_mem), &dev_xtrans);
   dt_opencl_set_kernel_arg(devid, kernel, 10, sizeof(cl_mem), &dev_thresholds);
 
-  if(dev->rawoverexposed.mode == DT_DEV_RAWOVEREXPOSED_MODE_MARK_CFA)
+  if(d->mode == DT_DEV_RAWOVEREXPOSED_MODE_MARK_CFA)
     dt_opencl_set_kernel_arg(devid, kernel, 11, sizeof(cl_mem), &dev_colors);
-  else if(dev->rawoverexposed.mode == DT_DEV_RAWOVEREXPOSED_MODE_MARK_SOLID)
+  else if(d->mode == DT_DEV_RAWOVEREXPOSED_MODE_MARK_SOLID)
     dt_opencl_set_kernel_arg(devid, kernel, 11, 4 * sizeof(float), color);
 
   err = dt_opencl_enqueue_kernel_2d(devid, kernel, sizes);
@@ -448,6 +455,10 @@ void commit_params(dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pixelpipe_
                    dt_dev_pixelpipe_iop_t *piece)
 {
   dt_develop_t *dev = self->dev;
+  dt_iop_rawoverexposed_data_t *d = piece->data;
+  d->mode = dev->rawoverexposed.mode;
+  d->colorscheme = dev->rawoverexposed.colorscheme;
+  d->threshold = dev->rawoverexposed.threshold;
 
   if(pipe->type != DT_DEV_PIXELPIPE_FULL || !dev->rawoverexposed.enabled || !dev->gui_attached) piece->enabled = 0;
 
@@ -456,6 +467,12 @@ void commit_params(dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pixelpipe_
   if(image->flags & DT_IMAGE_4BAYER) piece->enabled = 0;
 
   if(image->dsc.datatype != TYPE_UINT16 || !image->dsc.filters) piece->enabled = 0;
+}
+
+gboolean runtime_data_hash(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe,
+                           const dt_dev_pixelpipe_iop_t *piece)
+{
+  return TRUE;
 }
 
 void init_global(dt_iop_module_so_t *module)
@@ -498,8 +515,9 @@ void init(dt_iop_module_t *module)
   module->default_enabled = 1;
   module->params_size = sizeof(dt_iop_rawoverexposed_t);
 
-  // This module permanently bypasses the cache because it takes input from GUI
-  // and doesn't leave internal parameters to compute an integrity hash on.
+  // Bypasses the cache from here down while the indicator is shown. What keeps a changed setting
+  // from being served the previous frame is runtime_data_hash(), not this: a bypass leaves the
+  // hash unchanged, so the last module found the displayed cacheline under it and reused it.
   dt_iop_set_cache_bypass(module, TRUE);
 }
 
