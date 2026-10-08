@@ -828,6 +828,30 @@ If a flushed entry is then empty (no host data + no vRAM on any device), remove 
 hash table via `g_hash_table_iter_remove` — do NOT subtract `current_memory` manually, the
 `_free_cache_entry` GDestroyNotify handles it.
 
+### The flush frees nothing somebody holds
+
+*Found against `7230d1b355`, 2026-10-08 (issue #1546).*
+
+`dt_dev_pixelpipe_cache_flush()` empties the hash table through `_for_each_remove()`. That predicate
+spared locked entries only, although the header promises that referenced ones stay too. The lock is
+not what marks a line as in use. A backbuffer keepalive, a scope's, or toneequal's
+`thumb_preview_entry` holds a reference and no lock, so the flush freed such a line under its
+holder. The arena got its pixels back while they were still on screen, and the holder's release by
+pointer later decremented freed memory. The predicate now has the same refcount guard as
+`_non_thread_safe_cache_remove()` and `_for_each_remove_old()`.
+`tests/unittests/test_pipe_cache_flush.c` pins it.
+
+That this caused any crash is **not** established. Two use-after-frees on held entries seen on
+Windows that day had this shape, but a minidump holds no heap, so what freed them is unknown. The
+defect itself was found by reading every way an entry leaves the table: this was the only one that
+ignored the refcount.
+
+A consequence of the guard, read rather than measured: a held line now survives the flush. When
+the darkroom reruns at an unchanged hash, `ref_host_entry_by_hash()` finds the frame on screen, so
+the flush does not recompute it. Recomputing it would mean unpublishing a held entry while keeping
+it alive, and nothing can do that today. Its holder would release it by pointer, but removal goes
+through the table by hash, where by then a new entry may answer to the same hash.
+
 ### A peek retains nothing: keep or release only what a retained lookup handed you
 
 *Found `f4d963f8ca`, 2026-09-27.*
