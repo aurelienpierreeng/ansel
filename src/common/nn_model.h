@@ -66,6 +66,19 @@ typedef void *(*dt_nn_alloc_f)(size_t bytes, int long_lived);
 typedef void (*dt_nn_free_f)(void *ptr);
 void dt_nn_set_allocator(dt_nn_alloc_f alloc_fn, dt_nn_free_f free_fn);
 
+/* Cancellation injection, on the same terms as the allocator: a forward can
+ * take tens of seconds on CPU, and the pipeline's kill switch is only read
+ * between modules, so without this a stale forward always runs to the end.
+ * The executor asks the hook between U-Net levels, on the calling thread
+ * (never inside an OpenMP region); a non-zero answer abandons the forward,
+ * which then returns DT_NN_CANCELLED. The OpenCL executor asks at the same
+ * points but first waits for the device queue, which costs one sync per
+ * level while a hook is set. Unset, a forward is never cancelled
+ * (the standalone fixture test). */
+#define DT_NN_CANCELLED 2
+typedef int (*dt_nn_cancel_f)(void);
+void dt_nn_set_cancel(dt_nn_cancel_f cancel_fn);
+
 dt_nn_model_t *dt_nn_model_load(const char *path, char *err, size_t err_len);
 
 void dt_nn_model_free(dt_nn_model_t *model);
@@ -122,8 +135,9 @@ float dt_nn_unet_scratch_maxblock_per_px(const dt_nn_model_t *model);
 size_t dt_nn_unet_scratch_bytes(const dt_nn_model_t *model, int width, int height);
 
 /* Run the network. in: in_channels planar w*h float32 planes; out: one w*h
- * plane (may not alias in). Returns 0 on success, non-zero on allocation
- * failure or misaligned dimensions. Thread-safe for concurrent calls on the
+ * plane (may not alias in). Returns 0 on success, DT_NN_CANCELLED when the
+ * cancel hook asked to stop, other non-zero on allocation failure or
+ * misaligned dimensions. Thread-safe for concurrent calls on the
  * same model (weights are read-only; scratch is per-call). */
 int dt_nn_unet_apply(const dt_nn_model_t *model, const float *in, float *out, int width, int height);
 
