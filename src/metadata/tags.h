@@ -114,8 +114,8 @@ gboolean dt_tag_exists(const char *name, guint *tagid);
 /** attach a tag on images list. tagid id of tag to attach. img the list of image
  * id to attach tag to */
 gboolean dt_tag_attach_images(const guint tagid, const GList *img, const gboolean undo_on);
-/** attach a tag on images. tagid id of tag to attach. imgid the image
- * id to attach tag to, if < 0 images to act on are used. */
+/** attach a tag on one image. tagid id of tag to attach. imgid the image
+ * id to attach the tag to. An id <= 0 is refused. */
 gboolean dt_tag_attach(const guint tagid, const int32_t imgid, const gboolean undo_on, const gboolean group_on);
 
 /** check if a tag is attached to the given image */
