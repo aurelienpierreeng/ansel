@@ -196,6 +196,7 @@
 @define-color graph_scope_restricted @grey_30;
 @define-color inset_histogram alpha(@grey_95, 0.50);
 @define-color group_border #997D00;
+@define-color group_border_hover shade(@group_border, 1.3);
 
 /* Primaries & Color labels */
 @define-color graph_red rgb(237, 30, 20);
@@ -1526,6 +1527,10 @@ menu.dt-masks-context-menu menuitem.dt-masks-checked:not(:disabled) label.dt-mas
 
 .dt_group_bottom.hovered-group {
   border-bottom-color: shade(@group_border, 1.3);
+}
+
+#thumbtable-filemanager .thumb-cell {
+  border-color: transparent;
 }
 
 .dt_group_top.hovered-group {

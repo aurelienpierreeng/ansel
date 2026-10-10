@@ -20,6 +20,7 @@
 #include "widgets/accelerators.h"
 #include "common/selection.h"
 #include "common/act_on.h"
+#include "gui/auto_group.h"
 #include "control/jobs/control_jobs.h"
 #include "common/image.h"
 #include "system/macros.h"
@@ -28,6 +29,17 @@
 #include "metadata/ratings.h"
 #include "control/redraw.h"
 #include "common/collection.h"
+#include "gui/application.h"
+
+static gboolean auto_group_images_callback(GtkAccelGroup *group G_GNUC_UNUSED, GObject *acceleratable G_GNUC_UNUSED,
+                                           guint keyval G_GNUC_UNUSED, GdkModifierType mods G_GNUC_UNUSED,
+                                           gpointer user_data G_GNUC_UNUSED)
+{
+  if(!_is_lighttable()) return TRUE;
+
+  dt_gui_auto_group_show(GTK_WINDOW(dt_gui_main_window()));
+  return TRUE;
+}
 
 static gboolean rotate_counterclockwise_callback(GtkAccelGroup *group, GObject *acceleratable, guint keyval, GdkModifierType mods, gpointer user_data)
 {
@@ -314,5 +326,8 @@ void append_image(GtkWidget **menus, GList **lists, const dt_menus_t index)
                      has_active_images, GDK_KEY_g, DT_PRIMARY_MASK);
 
   add_sub_menu_entry(menus, lists, _("Ungroup images"), index, NULL, ungroup_images_callback, NULL, NULL,
-                     has_active_images, GDK_KEY_g, DT_PRIMARY_MASK | GDK_SHIFT_MASK);
+                      has_active_images, GDK_KEY_g, DT_PRIMARY_MASK | GDK_SHIFT_MASK);
+
+  add_sub_menu_entry(menus, lists, _("Auto group…"), index, NULL, auto_group_images_callback, NULL, NULL,
+                     &_is_lighttable, 0, 0);
 }
