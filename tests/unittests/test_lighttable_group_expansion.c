@@ -20,20 +20,9 @@ static void test_group_member_lookup_excludes_requested_member(void **state G_GN
   const int32_t film_id = testdb_make_film("/testdb/lighttable-expansion");
   const int32_t representative = testdb_make_image(film_id, "representative.raw");
   const int32_t member = testdb_make_image(film_id, "member.raw");
-  dt_image_t image;
-
-  dt_image_init(&image);
-  image.id = representative;
-  image.film_id = film_id;
-  image.group_id = representative;
-  g_strlcpy(image.filename, "representative.raw", sizeof(image.filename));
-  dt_image_repository_store(&image);
-  dt_image_init(&image);
-  image.id = member;
-  image.film_id = film_id;
-  image.group_id = member;
-  g_strlcpy(image.filename, "member.raw", sizeof(image.filename));
-  dt_image_repository_store(&image);
+  assert_true(representative > 0);
+  assert_true(member > 0);
+  assert_true(dt_image_repository_set_group(representative, representative));
   assert_true(dt_image_repository_set_group(member, representative));
   GList *members = dt_image_repository_get_group_members(representative, representative);
   assert_int_equal(g_list_length(members), 1);
