@@ -725,10 +725,19 @@ void dt_history_repository_foreach_mask_item(const int32_t imgid,
   DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, imgid);
   while(sqlite3_step(stmt) == SQLITE_ROW)
   {
-    cb(user_data, sqlite3_column_int(stmt, 8), sqlite3_column_int(stmt, 1),
-       sqlite3_column_int(stmt, 2), (const char *)sqlite3_column_text(stmt, 3),
-       sqlite3_column_int(stmt, 4), sqlite3_column_blob(stmt, 5), sqlite3_column_bytes(stmt, 5),
-       sqlite3_column_int(stmt, 6), sqlite3_column_blob(stmt, 7), sqlite3_column_bytes(stmt, 7));
+    const dt_history_repository_mask_row_t row = {
+      .num = sqlite3_column_int(stmt, 8),
+      .mask_id = sqlite3_column_int(stmt, 1),
+      .form = sqlite3_column_int(stmt, 2),
+      .name = (const char *)sqlite3_column_text(stmt, 3),
+      .version = sqlite3_column_int(stmt, 4),
+      .points = sqlite3_column_blob(stmt, 5),
+      .points_len = sqlite3_column_bytes(stmt, 5),
+      .points_count = sqlite3_column_int(stmt, 6),
+      .source = sqlite3_column_blob(stmt, 7),
+      .source_len = sqlite3_column_bytes(stmt, 7),
+    };
+    cb(user_data, &row);
   }
   sqlite3_finalize(stmt);
 }

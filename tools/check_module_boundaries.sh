@@ -421,10 +421,10 @@ fi
 #
 # What is counted, and why each is counted THIS way rather than more ambitiously:
 #
-#   includes       Files outside src/develop/masks/ that include the module's two public
-#                  headers. develop/blend.h is one of them, which is how the whole masks
-#                  surface reaches every IOP in the tree; that single edge is worth more than
-#                  the other twenty put together and it is the one P2 removes.
+#   includes       Files outside src/develop/masks/ that include the module's form or group
+#                  API. A client changing from the broad form API to the group API is still one
+#                  client of the same module, not a new dependency. The separate per-header
+#                  counts still record whether either public surface grows.
 #
 #   members        Direct reads of a masks-owned struct member from outside the module. The
 #                  member list is CURATED on purpose: it holds only names that no other struct
@@ -466,14 +466,16 @@ fi
 #                  snapshots that were supposed to be frozen. The module's own interface headers
 #                  are excluded; naming the type there is the design, not the leak.
 # 19 -> 18 and 34 -> 30 when tests/unittests/test_masks_raster_contract.c left src/ for
-# tests/, where every other test in the tree lives. The ratchet counts what src/ reaches into,
-# so a test moving out of src/ lowers it -- but nothing about the module's enclosure changed,
-# and the test still names those types. Lowered because the rule is that a count which falls
-# is written down, not because ground was won here.
-masks_include_baseline=18
+# tests/, where every other test in the tree lives. 18 -> 17 and 30 -> 28 replace
+# common/xmp_sidecar.cc's masks.h include and direct membership-row accesses with the masks-owned
+# serialized-group API. The first reduction only records a test relocation; the second encloses
+# the serialized membership layout inside the masks module. The form/group client count stayed
+# at 19 because XMP remained a client while changing headers.
+masks_api_include_baseline=19
+masks_include_baseline=17
 masks_gui_include_baseline=11
 masks_types_include_baseline=4
-masks_group_include_baseline=4
+masks_group_include_baseline=5
 # 75 -> 73 when the shape manager's "Add shape ..." menu took a shape's id and kind from
 # dt_masks_form_get_info() instead of reading them off the form. 73 -> 68 when retouch's ROI
 # planning and its CPU/OpenCL shape loops read group members through rt_pipe_member_form() /
@@ -485,7 +487,7 @@ masks_alloc_baseline=1
 # retouch resolved every pipeline-side shape through dt_masks_get_from_id_in_pipe().
 masks_forms_baseline=67
 # 30 -> 27 for the same reason: retouch unpacks a membership row in one place instead of five.
-masks_row_baseline=27
+masks_row_baseline=25
 
 # Members no other struct in the tree uses. Keep it that way: adding an ambiguous name here
 # buys a bigger number and loses the gate.
@@ -499,19 +501,22 @@ masks_members="${masks_members}|handle_border_selected|handle_border_hovered"
 # Drop whole-line comments so a count cannot move because somebody described the code.
 masks_strip() { grep -vE ':[0-9]+:[[:space:]]*(\*|//)'; }
 
-masks_include_now=$(grep -rn '^[ \t]*#[ \t]*include[ \t]*"develop/masks\.h"' \
+masks_api_include_now=$(grep -rlE '^[ \t]*#[ \t]*include[ \t]*"develop/(masks|masks_group)\.h"' \
+                        src/ --include='*.c' --include='*.h' --include='*.cc' 2>/dev/null \
+                        | grep -cv '^src/develop/masks/')
+masks_include_now=$(grep -rlE '^[ \t]*#[ \t]*include[ \t]*"develop/masks\.h"' \
                     src/ --include='*.c' --include='*.h' --include='*.cc' 2>/dev/null \
                     | grep -cv '^src/develop/masks/')
 masks_gui_include_now=$(grep -rn '^[ \t]*#[ \t]*include[ \t]*"develop/masks_gui\.h"' \
                         src/ --include='*.c' --include='*.h' --include='*.cc' 2>/dev/null \
                         | grep -cv '^src/develop/masks/')
-# The module publishes FOUR headers in src/develop/, not two. masks_types.h and masks_group.h
-# were included from outside and counted by nothing, so that part of the surface could grow
-# without moving any number here. Measured when this was added: 4 and 4.
+# The module publishes FOUR headers in src/develop/. masks_types.h was included from outside and
+# counted by nothing. masks_group.h had its own count; the form/group API count combines its
+# clients with masks.h clients, while the per-header counts preserve both header surfaces.
 masks_types_include_now=$(grep -rn '^[ \t]*#[ \t]*include[ \t]*"develop/masks_types\.h"' \
                           src/ --include='*.c' --include='*.h' --include='*.cc' 2>/dev/null \
                           | grep -cv '^src/develop/masks/')
-masks_group_include_now=$(grep -rn '^[ \t]*#[ \t]*include[ \t]*"develop/masks_group\.h"' \
+masks_group_include_now=$(grep -rlE '^[ \t]*#[ \t]*include[ \t]*"develop/masks_group\.h"' \
                           src/ --include='*.c' --include='*.h' --include='*.cc' 2>/dev/null \
                           | grep -cv '^src/develop/masks/')
 
@@ -534,10 +539,11 @@ masks_row_now=$(grep -rnE '\bdt_masks_form_group_t\b' \
                 src/ --include='*.c' --include='*.cc' --include='*.h' 2>/dev/null \
                 | grep -vE "${masks_own_headers}" | masks_strip | wc -l)
 
-echo "masks:         ${masks_include_now} include masks.h, ${masks_gui_include_now} include masks_gui.h" \
-     "(baselines ${masks_include_baseline}, ${masks_gui_include_baseline}),"
-echo "               ${masks_types_include_now} include masks_types.h, ${masks_group_include_now} include masks_group.h" \
-     "(baselines ${masks_types_include_baseline}, ${masks_group_include_baseline}),"
+echo "masks:         ${masks_api_include_now} form/group API clients, ${masks_gui_include_now} include masks_gui.h" \
+     "(baselines ${masks_api_include_baseline}, ${masks_gui_include_baseline}),"
+echo "               ${masks_include_now} include masks.h, ${masks_group_include_now} include masks_group.h" \
+     "(baselines ${masks_include_baseline}, ${masks_group_include_baseline}),"
+echo "               ${masks_types_include_now} include masks_types.h (baseline ${masks_types_include_baseline}),"
 echo "               ${masks_member_now} external struct-member reads, ${masks_write_now} of them writes" \
      "(baselines ${masks_member_baseline}, ${masks_write_baseline}),"
 echo "               ${masks_alloc_now} external allocations, ${masks_forms_now} direct ->forms touches" \
@@ -557,7 +563,8 @@ masks_check() { # name now baseline
     masks_findings=$((masks_findings + 1))
   fi
 }
-masks_check "masks.h includers"    "${masks_include_now}"     "${masks_include_baseline}"
+masks_check "form/group API clients" "${masks_api_include_now}" "${masks_api_include_baseline}"
+masks_check "masks.h includers" "${masks_include_now}" "${masks_include_baseline}"
 masks_check "masks_gui.h includers" "${masks_gui_include_now}" "${masks_gui_include_baseline}"
 masks_check "masks_types.h includers" "${masks_types_include_now}" "${masks_types_include_baseline}"
 masks_check "masks_group.h includers" "${masks_group_include_now}" "${masks_group_include_baseline}"
