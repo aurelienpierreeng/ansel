@@ -44,6 +44,20 @@ int process_harmonic(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pip
                      void *const restrict ovoid, const dt_iop_roi_t *const roi_in,
                      const dt_iop_roi_t *const roi_out, const dt_aligned_pixel_t clips)
 {
+#ifdef HAVE_OPENCL
+  // The GPU sparse-solver self-test lives here as well as in process_harmonic_cl(): on a device
+  // whose memory budget throws this whole module back to the CPU before any kernel runs (an
+  // 8 GB Apple M1 at full sensor resolution), the CL path is otherwise never entered and
+  // HL_SPCL_TEST could not exercise the double-float Cholesky at all. It allocates its own
+  // small device buffers and touches nothing of the image.
+  if(pipe->devid >= 0)
+  {
+    _sp_chol_cl_selftest(pipe->devid, self->global_data, pipe);
+    _joint_core_stage_cl_selftest(pipe->devid, self->global_data, pipe);   // HL_CORECL_TEST
+    _aniso_stage_cl_selftest(pipe->devid, self->global_data, pipe);        // HL_ANISOCL_TEST
+    _selfdome_stage_cl_selftest(pipe->devid, self->global_data, pipe);     // HL_DOMECL_TEST
+  }
+#endif
   int err_code = 0;
 
   // Every CFA helper below (normalization, knee estimate/apply, Bayer gather, remosaic) reads

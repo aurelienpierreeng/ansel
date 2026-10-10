@@ -554,6 +554,7 @@ static int dt_opencl_device_init(dt_opencl_t *cl, const int dev, cl_device_id *d
   cl->dev[dev].summary = CL_COMPLETE;
   cl->dev[dev].used_global_mem = 0;
   cl->dev[dev].nvidia_sm_20 = 0;
+  cl->dev[dev].fp64 = 0;
   cl->dev[dev].vendor = NULL;
   cl->dev[dev].runtime_id = NULL;
   cl->dev[dev].name = NULL;
@@ -713,6 +714,12 @@ static int dt_opencl_device_init(dt_opencl_t *cl, const int dev, cl_device_id *d
 
   cl->dev[dev].cltype = (unsigned int)type;
 
+  // real double-precision support, from the device itself and not from the compiler macro
+  cl_device_fp_config fp64_config = 0;
+  (cl->dlocl->symbols->dt_clGetDeviceInfo)(devid, CL_DEVICE_DOUBLE_FP_CONFIG, sizeof(cl_device_fp_config),
+                                           &fp64_config, NULL);
+  cl->dev[dev].fp64 = (fp64_config != 0);
+
 
   if(!strncasecmp(vendor, "NVIDIA", 6))
   {
@@ -728,8 +735,9 @@ static int dt_opencl_device_init(dt_opencl_t *cl, const int dev, cl_device_id *d
     cl->dev[dev].micro_nap = (is_cpu_device) ? 1000 : 250;
 
   dt_print_nts(DT_DEBUG_OPENCL, "   DRIVER VERSION:           %s\n", driverversion);
-  dt_print_nts(DT_DEBUG_OPENCL, "   DEVICE VERSION:           %s%s\n", deviceversion,
-     cl->dev[dev].nvidia_sm_20 ? ", SM_20 SUPPORT" : "");
+  dt_print_nts(DT_DEBUG_OPENCL, "   DEVICE VERSION:           %s%s%s\n", deviceversion,
+     cl->dev[dev].nvidia_sm_20 ? ", SM_20 SUPPORT" : "",
+     cl->dev[dev].fp64 ? ", FP64" : ", NO FP64 (double-float kernels)");
   dt_print_nts(DT_DEBUG_OPENCL, "   DEVICE_TYPE:              %s%s%s\n",
       ((type & CL_DEVICE_TYPE_CPU) == CL_DEVICE_TYPE_CPU) ? "CPU" : "",
       ((type & CL_DEVICE_TYPE_GPU) == CL_DEVICE_TYPE_GPU) ? "GPU" : "",
@@ -972,9 +980,10 @@ static int dt_opencl_device_init(dt_opencl_t *cl, const int dev, cl_device_id *d
   gchar *my_option = g_strdup(compile_opt);
   dt_conf_set_string(compile_option_name_cname, my_option);
 
-  cl->dev[dev].options = g_strdup_printf("-w %s %s -D%s=1 -I%s",
+  cl->dev[dev].options = g_strdup_printf("-w %s %s%s -D%s=1 -I%s",
                             my_option,
                             (cl->dev[dev].nvidia_sm_20 ? " -DNVIDIA_SM_20=1" : ""),
+                            (cl->dev[dev].fp64 ? " -DDT_DEVICE_FP64=1" : ""),
                             dt_opencl_get_vendor_by_id(vendor_id), escapedkerneldir);
   // Keep kernel checksum stable when the runtime kernel path changes (e.g. AppImage mount point).
   const char *kerneldir_token = "<ansel-kernels>";
@@ -984,9 +993,10 @@ static int dt_opencl_device_init(dt_opencl_t *cl, const int dev, cl_device_id *d
 #else
   escapedkerneldir_md5 = g_strdup(kerneldir_token);
 #endif
-  cl->dev[dev].options_md5 = g_strdup_printf("-w %s %s -D%s=1 -I%s",
+  cl->dev[dev].options_md5 = g_strdup_printf("-w %s %s%s -D%s=1 -I%s",
                                my_option,
                                (cl->dev[dev].nvidia_sm_20 ? " -DNVIDIA_SM_20=1" : ""),
+                               (cl->dev[dev].fp64 ? " -DDT_DEVICE_FP64=1" : ""),
                                dt_opencl_get_vendor_by_id(vendor_id), escapedkerneldir_md5);
 
   dt_print_nts(DT_DEBUG_OPENCL, "   CL COMPILER OPTION:       %s\n", my_option);
@@ -1001,7 +1011,7 @@ static int dt_opencl_device_init(dt_opencl_t *cl, const int dev, cl_device_id *d
    * binaries that were built from it -- an omission here does not fail, it silently keeps
    * running yesterday's kernel. lensserious_eval.h is LensSerious's evaluator, installed
    * beside the kernels by data/kernels/CMakeLists.txt. */
-  const char *clincludes[DT_OPENCL_MAX_INCLUDES] = { "rgb_norms.h", "noise_generator.h", "color_conversion.h", "colorspaces.cl", "colorspace.h", "common.h", "lensserious_eval.h", NULL };
+  const char *clincludes[DT_OPENCL_MAX_INCLUDES] = { "rgb_norms.h", "noise_generator.h", "color_conversion.h", "colorspaces.cl", "colorspace.h", "common.h", "compensated.h", "hl_real.h", "lensserious_eval.h", NULL };
   char *includemd5[DT_OPENCL_MAX_INCLUDES] = { NULL };
   dt_opencl_md5sum(clincludes, includemd5);
 
@@ -1189,6 +1199,7 @@ static const _gpu_runtime_t _gpu_runtimes[] = {
   { "intelocl",         "Intel(R) OpenCL", "intel" },
   { "libnvidia-opencl", "NVIDIA",          "nvidia" },
   { "nvopencl",         "NVIDIA",          "nvidia" },
+  { "OpenCL.framework", "Apple",           "apple" },    // macOS OpenCL-on-Metal shim, see dt_opencl_get_device_available()
   { NULL, NULL, NULL }
 };
 
@@ -3168,6 +3179,12 @@ void dt_opencl_check_tuning(const int devid)
       cl->dev[devid].name, devid);
 }
 
+gboolean dt_opencl_device_has_fp64(const int devid)
+{
+  if(!(_opencl && _opencl->inited) || devid < 0 || devid >= _opencl->num_devs) return FALSE;
+  return _opencl->dev[devid].fp64 ? TRUE : FALSE;
+}
+
 cl_ulong dt_opencl_get_device_available(const int devid)
 {
   if(!(_opencl && _opencl->inited) || devid < 0) return 0;
@@ -3208,7 +3225,18 @@ cl_ulong dt_opencl_get_device_available(const int devid)
     if(system_available > 0)
       available = MIN(available, (cl_ulong)((system_available > reserved) ? system_available - reserved : 0));
 
-    available = MIN(available, (cl_ulong)(_opencl->dev[devid].max_mem_alloc / 2));
+    /* Limit 2 is Intel's. Apple's OpenCL-on-Metal shim reports CL_DEVICE_MAX_MEM_ALLOC_SIZE
+     * as 3/16 of its global memory -- 1024 MiB of 5461 on an 8 GB M1, 2048 of 10923 on a
+     * 16 GB M2 Pro, 3410 of 18186 on a 24 GB M4 Pro -- so this clamp made the budget about a
+     * sixteenth of the RAM (512 MiB, 1 GiB, 1.7 GiB), and unified memory on Apple silicon has
+     * no per-context aperture of that kind (Metal's own per-buffer limit is about half the
+     * machine). The two bounds above track real memory and keep refusing what does not fit:
+     * measured on the 8 GB M1, the harmonic highlights working set (2392 MiB) is still sent
+     * to the CPU by the live-RAM bound, correctly, while on 16 and 18 GB Macs (M2 Pro, M3 Pro,
+     * M4) the whole pipeline runs on the GPU. */
+    const char *runtime = _opencl->dev[devid].runtime_id;
+    const gboolean apple_shim = !IS_NULL_PTR(runtime) && !strcmp(runtime, "apple");
+    if(!apple_shim) available = MIN(available, (cl_ulong)(_opencl->dev[devid].max_mem_alloc / 2));
   }
   return available;
 }

@@ -19,7 +19,7 @@
 #ifndef DT_MATH_SPARSE_CHOLESKY_CL_H
 #define DT_MATH_SPARSE_CHOLESKY_CL_H
 
-// Reusable GPU sparse SPD Cholesky solver (double precision, level-scheduled), factored out
+// Reusable GPU sparse SPD Cholesky solver (double or double-float, level-scheduled), factored out
 // of the highlights harmonic-transposition code. Host-side symbolic analysis (reusing the
 // CPU solver's elimination tree / reach), device-side numeric factorization and triangular
 // solves. The numeric kernels live in data/kernels/highlights_sparse.cl; the caller owns
@@ -32,6 +32,10 @@
 
 #ifdef HAVE_OPENCL
 #include "common/opencl.h"
+
+// hl_real_t on the device is 8 bytes either way: a double where the device has fp64, a float2
+// (hi, lo) double-float elsewhere (data/kernels/hl_real.h). Buffers are sized with this.
+#define DT_HL_REAL_BYTES 8
 
 // Handles of the four data/kernels/highlights_sparse.cl kernels the solver enqueues.
 typedef struct
@@ -100,6 +104,38 @@ static inline cl_mem _sp_cl_upload(const int devid, const void *data, const size
     return NULL;
   }
   return mem;
+}
+
+// A host double vector on its way to the device: as is where the device computes in double,
+// split into (hi, lo) floats where it computes in double-float. Same byte count either way.
+static inline cl_mem _sp_cl_upload_real(const int devid, const double *const src, const size_t n)
+{
+  if(dt_opencl_device_has_fp64(devid)) return _sp_cl_upload(devid, src, sizeof(double) * n);
+  cl_float2 *split = malloc(sizeof(cl_float2) * n);
+  if(IS_NULL_PTR(split)) return NULL;
+  for(size_t i = 0; i < n; i++)
+  {
+    const float hi = (float)src[i];
+    split[i].s[0] = hi;
+    split[i].s[1] = (float)(src[i] - (double)hi);
+  }
+  cl_mem mem = _sp_cl_upload(devid, split, sizeof(cl_float2) * n);
+  free(split);
+  return mem;
+}
+
+// ... and back: 1 on success, 0 on a failed read
+static inline int _sp_cl_read_real(const int devid, double *const dst, cl_mem mem, const size_t n)
+{
+  if(dt_opencl_device_has_fp64(devid))
+    return dt_opencl_read_buffer_from_device(devid, dst, mem, 0, sizeof(double) * n, CL_TRUE) == CL_SUCCESS;
+  cl_float2 *split = malloc(sizeof(cl_float2) * n);
+  if(IS_NULL_PTR(split)) return 0;
+  const int ok = dt_opencl_read_buffer_from_device(devid, split, mem, 0, sizeof(cl_float2) * n, CL_TRUE) == CL_SUCCESS;
+  if(ok)
+    for(size_t i = 0; i < n; i++) dst[i] = (double)split[i].s[0] + (double)split[i].s[1];
+  free(split);
+  return ok;
 }
 
 // Factor the matrix A (upper-triangular compressed-sparse-column, symmetric positive
@@ -396,7 +432,7 @@ static inline _sp_chol_cl_t *_sp_chol_factor_cl(const int devid, const _sp_chol_
 
   // upload all the symbolic metadata + the seeded values to the device
   const double _tf1 = dt_get_wtime();
-  factor->values = _sp_cl_upload(devid, values_host, sizeof(double) * factor->n_nonzero);
+  factor->values = _sp_cl_upload_real(devid, values_host, factor->n_nonzero);
   factor->colptr = _sp_cl_upload(devid, colptr, sizeof(int) * (dimension + 1));
   factor->rowind = _sp_cl_upload(devid, rowind, sizeof(int) * factor->n_nonzero);
   factor->contptr = _sp_cl_upload(devid, contptr_h, sizeof(int) * ((size_t)factor->n_nonzero + 1));
@@ -551,7 +587,7 @@ static inline int _sp_chol_solve_cl(const _sp_chol_cl_t *const factor, const _sp
     dt_opencl_set_kernel_arg(devid, kernel_fwd, 6, sizeof(cl_mem), &factor->levcols);
     dt_opencl_set_kernel_arg(devid, kernel_fwd, 7, sizeof(int), &factor->lev_off[level]);
     dt_opencl_set_kernel_arg(devid, kernel_fwd, 8, sizeof(int), &n_level_cols);
-    dt_opencl_set_kernel_arg(devid, kernel_fwd, 9, sizeof(double) * local_size, NULL);
+    dt_opencl_set_kernel_arg(devid, kernel_fwd, 9, DT_HL_REAL_BYTES * local_size, NULL);
     if(dt_opencl_enqueue_kernel_2d_with_local(devid, kernel_fwd, sizes, local) != CL_SUCCESS) return 1;
   }
 
@@ -570,7 +606,7 @@ static inline int _sp_chol_solve_cl(const _sp_chol_cl_t *const factor, const _sp
     dt_opencl_set_kernel_arg(devid, kernel_bwd, 4, sizeof(cl_mem), &factor->levrows_bwd);
     dt_opencl_set_kernel_arg(devid, kernel_bwd, 5, sizeof(int), &factor->lev_off_bwd[level]);
     dt_opencl_set_kernel_arg(devid, kernel_bwd, 6, sizeof(int), &n_level_cols);
-    dt_opencl_set_kernel_arg(devid, kernel_bwd, 7, sizeof(double) * local_size, NULL);
+    dt_opencl_set_kernel_arg(devid, kernel_bwd, 7, DT_HL_REAL_BYTES * local_size, NULL);
     if(dt_opencl_enqueue_kernel_2d_with_local(devid, kernel_bwd, sizes, local) != CL_SUCCESS) return 1;
   }
   return 0;

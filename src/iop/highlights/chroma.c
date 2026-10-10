@@ -748,10 +748,9 @@ static cl_int _aniso_pyramid_cl(const int devid, void *gd_void, cl_mem ratios, c
   dt_iop_highlights_global_data_t *global_data = (dt_iop_highlights_global_data_t *)gd_void;
   cl_int cl_err = CL_SUCCESS;
 
-  // The stage-2 reduction finalizers this needs are compiled only where the fp64 extension
-  // is (data/kernels/highlights_harmonic.cl). Without them the caller falls back to the CPU
-  // twin, the same way the sparse solver and the PDE/aniso stages already do.
-  if(global_data->kernel_hl_reduce_finalize < 0) return DT_OPENCL_DEFAULT_ERROR; // no fp64 device
+  // Defensive: a finalizer that failed to build on this device (handle -1) sends the caller to
+  // its CPU twin, the same way the sparse solver and the PDE/aniso stages do.
+  if(global_data->kernel_hl_reduce_finalize < 0) return DT_OPENCL_DEFAULT_ERROR; // kernel unavailable
 
   cl_mem gnorm_dev = dt_opencl_alloc_device_buffer(devid, sizeof(float)); // gradient-mean normaliser, device-resident
   // the pyramid levels run reaction-free; the "inpaint a flat color" pull is applied by the
@@ -1015,7 +1014,7 @@ cl_int _aniso_stage_cl(const int devid, void *gd_void, cl_mem estimate, cl_mem v
   const float react = solid_color * solid_color * 4.f;
   float react_target[3] = { 0.f, 0.f, 0.f };
 
-  if(global_data->kernel_hl_aniso_rhs < 0 || global_data->kernel_hl_aniso_scatter < 0) return cl_err; // no fp64
+  if(global_data->kernel_hl_aniso_rhs < 0 || global_data->kernel_hl_aniso_scatter < 0) return cl_err; // kernel unavailable
 
   cl_mem valid_packed = dt_opencl_alloc_device_buffer(devid, sizeof(float) * region_pixels * 4);
   cl_mem luminance = dt_opencl_alloc_device_buffer(devid, sizeof(float) * region_pixels);
@@ -1247,7 +1246,7 @@ cl_int _aniso_stage_cl(const int devid, void *gd_void, cl_mem estimate, cl_mem v
   // edge weights on the device (they steer the RHS kernels too), compact download for assembly
   perm_grid_dev = _sp_cl_upload(devid, perm_grid, sizeof(int) * n_unknowns);
   edge_weights_dev = dt_opencl_alloc_device_buffer(devid, sizeof(float) * (size_t)n_unknowns * 8);
-  rhs_dev = dt_opencl_alloc_device_buffer(devid, sizeof(double) * n_unknowns);
+  rhs_dev = dt_opencl_alloc_device_buffer(devid, DT_HL_REAL_BYTES * n_unknowns);
   if(!perm_grid_dev || !edge_weights_dev || !rhs_dev)
   {
     cl_err = DT_OPENCL_DEFAULT_ERROR;
