@@ -51,6 +51,7 @@ set(LIB_ANSEL_UNIT_TESTS
   test_pipe_cache_pressure
   test_pipe_cache_host_stale
   test_pipe_cache_auto_destroy
+  test_pipe_cache_flush
   test_pipe_cache_alloc_refusals
   test_backbuf_publish
   test_conf_value_lifetime
