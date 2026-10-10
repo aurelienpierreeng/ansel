@@ -23,7 +23,6 @@
 #include "win/main_wrapper.h"
 #endif
 
-static char *_rawspeed_datadir = NULL;
 static dt_imageio_t _imageio = { 0 };
 static dt_conf_t _conf = { 0 };
 
@@ -46,25 +45,7 @@ static int _setup(void **state)
   dt_conf_set_int("plugins/lighttable/collect/item0", DT_COLLECTION_PROP_FILENAME);
   dt_conf_set_string("plugins/lighttable/collect/string0", "%");
   dt_conf_set_bool("plugins/lighttable/collect/recursive0", FALSE);
-  _rawspeed_datadir = g_dir_make_tmp("ansel-test-rawspeed-XXXXXX", NULL);
-  if(IS_NULL_PTR(_rawspeed_datadir)) return -1;
-
-  char *const rawspeed_dir = g_build_filename(_rawspeed_datadir, "rawspeed", NULL);
-  char *const cameras_xml = g_build_filename(rawspeed_dir, "cameras.xml", NULL);
-  char *const source_xml = g_build_filename(ANSEL_TEST_SOURCE_DIR, "src", "external", "rawspeed", "data",
-                                             "cameras.xml", NULL);
-  GFile *const source_file = g_file_new_for_path(source_xml);
-  GFile *const destination_file = g_file_new_for_path(cameras_xml);
-  const gboolean copied = g_mkdir(rawspeed_dir, 0700) == 0
-                           && g_file_copy(source_file, destination_file, G_FILE_COPY_NONE, NULL, NULL, NULL, NULL);
-  g_object_unref(destination_file);
-  g_object_unref(source_file);
-  dt_free(source_xml);
-  dt_free(cameras_xml);
-  dt_free(rawspeed_dir);
-  if(!copied) return -1;
-
-  dt_loc_init_datadir(NULL, _rawspeed_datadir);
+  dt_loc_init_datadir(NULL, ANSEL_TEST_DATADIR);
   darktable.imageio = &_imageio;
   dt_collection_init_global();
   return 0;
@@ -74,20 +55,11 @@ static int _teardown(void **state)
 {
   dt_collection_cleanup_global();
   dt_image_cache_cleanup();
-  char *const rawspeed_dir = g_build_filename(_rawspeed_datadir, "rawspeed", NULL);
-  char *const cameras_xml = g_build_filename(rawspeed_dir, "cameras.xml", NULL);
-  g_remove(cameras_xml);
-  g_rmdir(rawspeed_dir);
-  g_rmdir(_rawspeed_datadir);
-  dt_free(cameras_xml);
-  dt_free(rawspeed_dir);
   dt_conf_cleanup(&_conf);
   darktable.conf = NULL;
   dt_free(darktable.datadir);
   darktable.datadir = NULL;
   darktable.imageio = NULL;
-  dt_free(_rawspeed_datadir);
-  _rawspeed_datadir = NULL;
   return testdb_teardown(state);
 }
 
