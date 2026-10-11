@@ -1,6 +1,7 @@
 /*
    This file is part of Ansel,
    Copyright (C) 2026 Aurélien PIERRE.
+   Copyright (C) 2026 Guillaume Stutin.
 
    Ansel is free software: you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -101,7 +102,12 @@ int process_harmonic(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pip
   int knee_on = 0;
   if(allow_knee)
   {
-    _hl_knee_estimate(input, width, height, filters, roi_in, xtrans, knee_clipraw, knee, pipe);
+    if(_hl_knee_estimate(input, width, height, filters, roi_in, xtrans, knee_clipraw, knee, pipe))
+    {
+      // the pipe abandoned this run during the estimate
+      err_code = 1;
+      goto error;
+    }
     knee_on = knee[0].engaged || knee[1].engaged || knee[2].engaged;
   }
 
@@ -194,15 +200,28 @@ int process_harmonic(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pip
   // FLOW steps 3-8 (per region): reconstruct each connected clipped region on its padded window. Regions
   // are independent (their padded read boxes were merged when they overlapped, in _segment_clipped_regions),
   // so this loop is embarrassingly parallel across regions and linear in the total padded area.
-  for(int region_index = 0; region_index < nreg; region_index++)
-    _region_guided_filter(interpolated, clipping_mask, depth, width, &regions[region_index], pipe,
-                          data->solid_color, data->iterations, data->noise_level, _hl_floor_gate(clips),
-                          dt_dev_get_module_scale(pipe, roi_in));
+  //
+  // The pipe abandoned this run: stop between two regions. A region's rebuild is not cut any finer.
+  // A new request may lower the killswitch again before the loop ends, hence the latch.
+  gboolean abandoned = FALSE;
+  for(int region_index = 0; region_index < nreg && !abandoned; region_index++)
+  {
+    abandoned = dt_dev_pixelpipe_has_shutdown(pipe);
+    if(!abandoned)
+      _region_guided_filter(interpolated, clipping_mask, depth, width, &regions[region_index], pipe,
+                            data->solid_color, data->iterations, data->noise_level, _hl_floor_gate(clips),
+                            dt_dev_get_module_scale(pipe, roi_in));
+  }
 
 
   free(regions);
   dt_pixelpipe_cache_free_align(maskb);
   dt_pixelpipe_cache_free_align(depth);
+  if(abandoned)
+  {
+    err_code = 1;
+    goto error;
+  }
 
   // The composition reads `input` back for unmasked pixels, so the band correction must also go
   // through a corrected CFA copy -- otherwise the output band would keep the biased values the
@@ -329,16 +348,23 @@ static int _harmonic_reconstruct_host(struct dt_iop_module_t *self, const dt_dev
   _hl_region_t *regions = NULL;
   const int nreg = _segment_clipped_regions(maskb, depth, width, height, 1.25f, 8, 256, &regions);
 
-  // FLOW steps 3-8 (per region): CPU per-region reconstruction, same call as the CPU drivers.
-  for(int region_index = 0; region_index < nreg; region_index++)
-    _region_guided_filter(interpolated, clipping_mask, depth, width, &regions[region_index], pipe,
-                          data->solid_color, data->iterations, data->noise_level, _hl_floor_gate(clips),
-                          dt_dev_get_module_scale(pipe, roi_in));
+  // FLOW steps 3-8 (per region): CPU per-region reconstruction, same call and same stop between two
+  // regions as the CPU drivers.
+  gboolean abandoned = FALSE;
+  for(int region_index = 0; region_index < nreg && !abandoned; region_index++)
+  {
+    abandoned = dt_dev_pixelpipe_has_shutdown(pipe);
+    if(!abandoned)
+      _region_guided_filter(interpolated, clipping_mask, depth, width, &regions[region_index], pipe,
+                            data->solid_color, data->iterations, data->noise_level, _hl_floor_gate(clips),
+                            dt_dev_get_module_scale(pipe, roi_in));
+  }
 
 
   free(regions);
   dt_pixelpipe_cache_free_align(maskb);
   dt_pixelpipe_cache_free_align(depth);
+  if(abandoned) return 1;
 
   if(knee_on)
   {
@@ -575,6 +601,14 @@ static cl_int _harmonic_reconstruct_cl(struct dt_iop_module_t *self, const dt_de
     if(override_env) cpu_px = (size_t)strtoull(override_env, NULL, 10);
     for(int region_index = 0; region_index < nreg && cl_err == CL_SUCCESS; region_index++)
     {
+      // The pipe abandoned this run: stop before each region, once the previous one has run on the
+      // device (the host enqueues a big region's ~1000 launches far ahead of it). The first region
+      // follows the blocking upload of the depth map, so the host is in step with the device there.
+      if((region_index == 0 || dt_opencl_finish(devid)) && dt_dev_pixelpipe_has_shutdown(pipe))
+      {
+        cl_err = DT_OPENCL_DEFAULT_ERROR;
+        break;
+      }
       // routing key = the PADDED read-window area (rx0..rx1 x ry0..ry1), the same window either path
       // reconstructs -- not the bare clipped bbox
       const size_t region_px = (size_t)(regions[region_index].rx1 - regions[region_index].rx0 + 1)
@@ -1004,6 +1038,12 @@ cl_int process_harmonic_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_
     dt_opencl_release_mem_object(mask_buf);
     dt_opencl_release_mem_object(corr_buf);
     if(gpu_err == CL_SUCCESS) goto remosaic; // device middle succeeded -> straight to the GPU remosaic
+    if(dt_dev_pixelpipe_has_shutdown(pipe))
+    {
+      // the device middle stopped on the killswitch: the host middle would redo it for nobody
+      cl_err = gpu_err;
+      goto fallback;
+    }
     // GPU middle unavailable (fp64 device, grain requested, oversized hole...): host middle below
     HL_CL_RELEASE(corr_cl);
     dt_print(DT_DEBUG_OPENCL, "[opencl_highlights] harmonic GPU middle failed (%i), using the host middle\n",
@@ -1165,6 +1205,8 @@ fallback:
   dt_pixelpipe_cache_free_align(h_mask);
   dt_pixelpipe_cache_free_align(h_raw);
   dt_pixelpipe_cache_free_align(input_corr);
+  // a run the pipe abandoned fails here, without being redone on the host
+  if(dt_dev_pixelpipe_has_shutdown(pipe)) return DT_OPENCL_DEFAULT_ERROR;
   // preference 3 (last resort): a GPU gather/remosaic step failed -> the bit-identical host roundtrip.
   return _harmonic_cl_roundtrip(self, pipe, piece, dev_in, dev_out, roi_in, roi_out, clips);
 }
