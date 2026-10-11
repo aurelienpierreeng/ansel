@@ -13,7 +13,7 @@
    Copyright (C) 2022 Hanno Schwalm.
    Copyright (C) 2022 Martin Bařinka.
    Copyright (C) 2022 Philipp Lutz.
-   Copyright (C) 2023, 2025 Guillaume Stutin.
+   Copyright (C) 2023, 2025-2026 Guillaume Stutin.
    Copyright (C) 2023 Luca Zulberti.
    Copyright (C) 2024 Alynx Zhou.
    
@@ -966,7 +966,8 @@ static void dump_PFM(const char *filename, const float* out, const uint32_t w, c
 #endif
 
 __DT_CLONE_TARGETS__
-static inline int wavelets_process(const float *const restrict in, float *const restrict reconstructed,
+static inline int wavelets_process(const dt_dev_pixelpipe_t *pipe,
+                                   const float *const restrict in, float *const restrict reconstructed,
                                    const uint8_t *const restrict mask, const size_t width,
                                    const size_t height, const dt_iop_diffuse_data_t *const data,
                                    const float zoom, const int scales,
@@ -1001,6 +1002,14 @@ static inline int wavelets_process(const float *const restrict in, float *const 
 
   for(int s = 0; s < scales; ++s)
   {
+    // The pipe abandoned this run: stop between two scales, a run being up to 500 iterations of a
+    // decomposition and a synthesis over up to MAX_NUM_SCALES full-image passes each.
+    if(dt_dev_pixelpipe_has_shutdown(pipe))
+    {
+      dt_pixelpipe_cache_free_align(tempbuf);
+      return 1;
+    }
+
     const int mult = 1 << s;
 
     const float *restrict buffer_in;
@@ -1043,6 +1052,9 @@ static inline int wavelets_process(const float *const restrict in, float *const 
 
   for(int s = scales - 1; s > -1; --s)
   {
+    // the same stop, between two scales of the synthesis
+    if(dt_dev_pixelpipe_has_shutdown(pipe)) return 1;
+
     const int mult = 1 << s;
     const float current_radius = equivalent_sigma_at_step(B_SPLINE_SIGMA, s);
     const float real_radius = current_radius * zoom;
@@ -1229,7 +1241,7 @@ int process(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_
     if(it == (int)iterations - 1)
       temp_out = out;
 
-    if(wavelets_process(temp_in, temp_out, mask, roi_out->width, roi_out->height,
+    if(wavelets_process(pipe, temp_in, temp_out, mask, roi_out->width, roi_out->height,
                         data, zoom, scales, has_mask, HF, LF_odd, LF_even))
     {
       err = 1;
@@ -1572,6 +1584,10 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
       temp_out = temp1;
     }
 
+    // The pipe abandoned this run: stop between two iterations. The host enqueues the whole run far
+    // ahead of the device, so the killswitch is read once the previous iteration has run on it.
+    if(it > 0 && dt_opencl_finish(devid) && dt_dev_pixelpipe_has_shutdown(pipe)) goto error;
+
     if(it == (int)iterations - 1) temp_out = dev_out;
     err = wavelets_process_cl(devid, temp_in, temp_out, mask, sizes, width, height,
                               data, gd, zoom, scales, has_mask, HF, LF_odd, LF_even);
@@ -1595,7 +1611,8 @@ error:
   dt_opencl_release_mem_object(LF_odd);
   for(int s = 0; s < scales; s++) dt_opencl_release_mem_object(HF[s]);
 
-  dt_print(DT_DEBUG_OPENCL, "[opencl_diffuse] couldn't enqueue kernel! %d\n", err);
+  // an abandoned run comes here with the last iteration's CL_SUCCESS: there is no error to report
+  if(err != CL_SUCCESS) dt_print(DT_DEBUG_OPENCL, "[opencl_diffuse] couldn't enqueue kernel! %d\n", err);
   return FALSE;
 }
 
