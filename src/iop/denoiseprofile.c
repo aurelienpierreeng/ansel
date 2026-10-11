@@ -1400,6 +1400,14 @@ static int process_wavelets(struct dt_iop_module_t *self, const dt_dev_pixelpipe
 
   for(int scale = 0; scale < max_scale; scale++)
   {
+    // The pipe abandoned this run: stop between two scales, each a full-image edge-aware pass.
+    if(dt_dev_pixelpipe_has_shutdown(pipe))
+    {
+      dt_pixelpipe_cache_free_align(buf);
+      dt_pixelpipe_cache_free_align(tmp);
+      dt_pixelpipe_cache_free_align(precond);
+      return 1;
+    }
     const float sigma = 1.0f;
     const float varf = sqrtf(2.0f + 2.0f * 4.0f * 4.0f + 6.0f * 6.0f) / 16.0f; // about 0.5
     const float sigma_band = powf(varf, scale) * sigma;
