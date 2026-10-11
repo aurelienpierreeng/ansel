@@ -132,6 +132,10 @@ int dt_cache_seed(dt_cache_t *cache, const uint32_t key, const void *data, size_
 // is locked)
 void dt_cache_gc(dt_cache_t *cache, const float fill_ratio);
 
+// Same walk, but taking cache->lock first -- which is what any caller outside cache.c needs,
+// since dt_cache_gc() above deliberately takes no lock. Returns the cost reclaimed.
+size_t dt_cache_gc_locked(dt_cache_t *cache, const float fill_ratio);
+
 // iterate over all currently contained data blocks.
 // not thread safe! only use this for init/cleanup!
 // returns non zero the first time process() returns non zero.

@@ -319,6 +319,21 @@ restart:
   return 0;
 }
 
+/* dt_cache_gc() is documented as "will never lock", and it means it: it walks cache->lru and
+ * mutates cache->hashtable with no mutex of its own, because both callers inside this file already
+ * hold cache->lock. A caller outside this file cannot hold that lock, so it must come through
+ * here. Returns the cost actually reclaimed, read under the same hold as the eviction so the
+ * number describes the walk that produced it. */
+size_t dt_cache_gc_locked(dt_cache_t *cache, const float fill_ratio)
+{
+  dt_pthread_mutex_lock(&cache->lock);
+  const size_t before = cache->cost;
+  dt_cache_gc(cache, fill_ratio);
+  const size_t reclaimed = before - cache->cost;
+  dt_pthread_mutex_unlock(&cache->lock);
+  return reclaimed;
+}
+
 // best-effort garbage collection. never blocks, never fails. well, sometimes it just doesn't free anything.
 void dt_cache_gc(dt_cache_t *cache, const float fill_ratio)
 {

@@ -800,6 +800,15 @@ void dt_gui_preferences_show()
   if(restart_required)
     dt_control_log(_("Ansel needs to be restarted for settings to take effect"));
 
+  /* Persist now, not at exit. dt_conf_set_*() only writes the in-memory table; the only thing
+   * that puts it on disk is dt_conf_save(), and until this call the sole caller on the normal
+   * path was dt_conf_cleanup() at the tail of dt_cleanup(). So every preference the user set --
+   * however long ago -- was lost if the process did not reach the end of its own teardown, which
+   * is what "my settings are not saved" reports (#1476, #1482) actually describe. A settings file
+   * is a few kilobytes of text and the user has just clicked out of a dialog, so there is no
+   * reason to defer it. */
+  dt_conf_flush();
+
   DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_PREFERENCES_CHANGE);
 }
 

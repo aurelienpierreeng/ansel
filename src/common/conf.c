@@ -951,8 +951,23 @@ static void dt_conf_print(const gchar *key, const gchar *val, FILE *f)
   fprintf(f, "%s=%s\n", key, val);
 }
 
+/** @brief Write the whole table to @p cf->filename.
+ *
+ * Takes cf->mutex for the walk. It did not, which was survivable only while the sole caller on the
+ * normal path was dt_conf_cleanup(), with every other thread already joined: `cf->table` is read
+ * key by key here and written under the mutex by every dt_conf_set_*(), so an unlocked walk
+ * concurrent with a write reads a GHashTable mid-rehash. Now that the settings are also saved while
+ * the application is running -- when the preferences dialog closes, and before the teardown that
+ * can fail -- the lock is what makes those calls legal.
+ *
+ * The file is written inside the critical section on purpose. It is a few kilobytes of text and the
+ * alternative is copying the table out under the lock and writing afterwards, which buys nothing at
+ * this size and adds a second copy of every value to get wrong.
+ */
 void dt_conf_save(dt_conf_t *cf)
 {
+  dt_pthread_mutex_lock(&cf->mutex);
+
   FILE *f = g_fopen(cf->filename, "wb");
   if(!IS_NULL_PTR(f))
   {
@@ -970,7 +985,21 @@ void dt_conf_save(dt_conf_t *cf)
     sorted = NULL;
     fclose(f);
   }
+
+  dt_pthread_mutex_unlock(&cf->mutex);
 }
+/** @brief dt_conf_save() for the singleton, so a caller does not have to name darktable.conf.
+ *
+ * Every other public setter and getter here already takes no dt_conf_t *; save and cleanup were the
+ * exceptions, which meant a caller that only wants the settings on disk had to reach for the global
+ * -- and src/gui/preferences.c, the most obvious such caller, deliberately does not include
+ * darktable.h. */
+void dt_conf_flush(void)
+{
+  if(IS_NULL_PTR(darktable.conf)) return;
+  dt_conf_save(darktable.conf);
+}
+
 void dt_conf_cleanup(dt_conf_t *cf)
 {
   dt_conf_save(cf);
