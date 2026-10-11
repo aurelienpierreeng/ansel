@@ -41,6 +41,7 @@
     Copyright (C) 2022 Martin Bařinka.
     Copyright (C) 2022 Philipp Lutz.
     Copyright (C) 2022 Sebatian Glasl.
+    Copyright (C) 2026 Guillaume Stutin.
     
     darktable is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -363,6 +364,14 @@ static int process_wavelets(struct dt_iop_module_t *self, const struct dt_dev_pi
   // that we don't need to store it past the current scale's iteration
   for(int scale = 0; scale < max_scale; scale++)
   {
+    // The pipe abandoned this run: stop between two scales, each a full-image edge-aware pass.
+    if(dt_dev_pixelpipe_has_shutdown(pipe))
+    {
+      dt_pixelpipe_cache_free_align(detail);
+      dt_pixelpipe_cache_free_align(tmp);
+      dt_pixelpipe_cache_free_align(tmp2);
+      return 1;
+    }
     decompose(buf2, buf1, detail, scale, sharp[scale], width, height);
     synthesize(out, out, detail, thrs[scale], boost[scale], width, height);
     if(scale == 0) buf1 = (float *)tmp2; // now switch to second scratch for buffer ping-pong between buf1 and buf2
