@@ -10,6 +10,7 @@
     Copyright (C) 2022 Philipp Lutz.
     Copyright (C) 2023 Luca Zulberti.
     Copyright (C) 2024 Alynx Zhou.
+    Copyright (C) 2026 Guillaume Stutin.
     
     darktable is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -551,8 +552,19 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
     dt_free_align(kernel);
     return 1;
   }
-  __OMP_PARALLEL_FOR__(collapse(2))
+  // The pipe abandoned this run: the rows not started yet are skipped and the module fails. One
+  // convolution of up to (2 * 128 + 1)² taps per pixel at full resolution has no other step to stop
+  // at than its rows. A new request may lower the killswitch again before the loop ends, hence the
+  // latch, shared since the macro makes every variable firstprivate.
+  dt_atomic_int abandoned = FALSE;
+  __OMP_PARALLEL_FOR__(shared(abandoned))
   for(int i = 0; i < roi_out->height; i++)
+  {
+    if(dt_atomic_get_int(&abandoned) || dt_dev_pixelpipe_has_shutdown(pipe))
+    {
+      dt_atomic_set_int(&abandoned, TRUE);
+      continue;
+    }
     for(int j = 0; j < roi_out->width; j++)
     {
       const size_t index = ((i * roi_out->width) + j) * 4;
@@ -601,8 +613,9 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
       // copy alpha
       out[index + 3] = in[index + 3];
     }
+  }
   dt_free_align(kernel);
-  return 0;
+  return dt_atomic_get_int(&abandoned);
 }
 
 
