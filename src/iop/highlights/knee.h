@@ -1,6 +1,7 @@
 /*
    This file is part of Ansel,
    Copyright (C) 2026 Aurélien PIERRE.
+   Copyright (C) 2026 Guillaume Stutin.
 
    Ansel is free software: you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -53,11 +54,12 @@ static inline void _knee_blur(const float *const restrict in, float *const restr
 // binning of the CFA instead gives co-located R / mean-G / B per cell with no inter-site
 // interpolation (the "quad-binned copy of the raw mosaic" of the article). `clipval_raw` is the
 // clip level per channel in raw units (= clips / DET). Writes 3 curves (engaged = 0 means
-// identity). Never fails: any shortage of data or memory returns identity.
-void _hl_knee_estimate(const float *const restrict input, const size_t width, const size_t height,
-                       const uint32_t filters, const dt_iop_roi_t *const roi_in, const uint8_t (*const xtrans)[6],
-                       const dt_aligned_pixel_t clipval_raw, _hl_knee_curve_t curves[3],
-                       const dt_dev_pixelpipe_t *pipe);
+// identity). Any shortage of data or memory returns 0 with identity. Returns 1 when `pipe` abandoned
+// the run: the curves are then not to be used.
+int _hl_knee_estimate(const float *const restrict input, const size_t width, const size_t height,
+                      const uint32_t filters, const dt_iop_roi_t *const roi_in, const uint8_t (*const xtrans)[6],
+                      const dt_aligned_pixel_t clipval_raw, _hl_knee_curve_t curves[3],
+                      const dt_dev_pixelpipe_t *pipe);
 
 // Step 2 application on the demosaiced [R,G,B,norm] buffer: for each engaged channel whose value
 // lies in the band, replace v by k^-1(v) = v + L(v). Keeps the norm channel consistent with the
