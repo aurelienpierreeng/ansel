@@ -3,6 +3,7 @@
     Copyright (C) 2020 Ralf Brown.
     Copyright (C) 2022 Martin Bařinka.
     Copyright (C) 2025 Aurélien PIERRE.
+    Copyright (C) 2026 Guillaume Stutin.
     
     darktable is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -21,7 +22,7 @@
 #define DT_PIXEL_NLMEANS_CORE_H
 
 #include "iop/iop_api.h"
-#include "develop/develop.h"
+#include "pixel/format.h"
 
 struct dt_nlmeans_param_t
 {
@@ -35,7 +36,7 @@ struct dt_nlmeans_param_t
   int search_radius;	// radius around a pixel in which to compare patches (default = 7)
   int decimate;         // set to 1 to search only half the patches in the neighborhood (default = 0)
   const float* const norm; // array of four per-channel weight factors
-  dt_dev_pixelpipe_type_t pipetype;
+  const struct dt_dev_pixelpipe_t *pipe; // whose killswitch abandons the run; NULL never abandons
   int kernel_init;	// CL: initialization (runs once)
   int kernel_dist;	// CL: compute channel-normed squared pixel differences (runs for each patch)
   int kernel_horiz;	// CL: horizontal sum (runs for each patch)
@@ -44,9 +45,10 @@ struct dt_nlmeans_param_t
 };
 typedef struct dt_nlmeans_param_t dt_nlmeans_param_t;
 
-void nlmeans_denoise(const float *const inbuf, float *const outbuf,
-                     const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out,
-                     const dt_nlmeans_param_t *const params);
+// Returns 0, or 1 when the scratch allocation failed or the pipe abandoned the run (outbuf is then garbage).
+int nlmeans_denoise(const float *const inbuf, float *const outbuf,
+                    const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out,
+                    const dt_nlmeans_param_t *const params);
 
 void nlmeans_denoise_sse2(const float *const inbuf, float *const outbuf,
                           const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out,

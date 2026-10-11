@@ -8,6 +8,7 @@
     Copyright (C) 2022 Martin Bařinka.
     Copyright (C) 2024 Alynx Zhou.
     Copyright (C) 2025-2026 Aurélien PIERRE.
+    Copyright (C) 2026 Guillaume Stutin.
     
     darktable is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -312,9 +313,9 @@ static int compute_slice_width(const int width)
 }
 
 __DT_CLONE_TARGETS__
-void nlmeans_denoise(const float *const inbuf, float *const outbuf,
-                     const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out,
-                     const dt_nlmeans_param_t *const params)
+int nlmeans_denoise(const float *const inbuf, float *const outbuf,
+                    const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out,
+                    const dt_nlmeans_param_t *const params)
 {
   // define the factors for applying blending between the original image and the denoised version
   // if running in RGB space, 'luma' should equal 'chroma'
@@ -340,15 +341,29 @@ void nlmeans_denoise(const float *const inbuf, float *const outbuf,
 #endif /* CACHE_PIXDIFFS */
   size_t padded_scratch_size;
   float *const restrict scratch_buf = dt_pixelpipe_cache_alloc_perthread_float(scratch_size, &padded_scratch_size);
-  if(IS_NULL_PTR(scratch_buf)) return;
+  if(IS_NULL_PTR(scratch_buf))
+  {
+    dt_pixelpipe_cache_free_align(patches);
+    return 1;
+  }
 
   const int chk_height = compute_slice_height(roi_out->height);
   const int chk_width = compute_slice_width(roi_out->width);
-  __OMP_PARALLEL_FOR__(num_threads(dt_get_num_openmp_threads()) collapse(2))
+  // The pipe abandoned this run: the chunks not started yet are skipped and the run fails. A chunk
+  // goes through every patch, so it is the step the run can be stopped at from inside the parallel
+  // loop. A new request may lower the killswitch again before the loop ends, hence the latch,
+  // shared since the macro makes every variable firstprivate.
+  dt_atomic_int abandoned = FALSE;
+  __OMP_PARALLEL_FOR__(num_threads(dt_get_num_openmp_threads()) collapse(2) shared(abandoned))
   for (int chunk_top = 0 ; chunk_top < roi_out->height; chunk_top += chk_height)
   {
     for (int chunk_left = 0; chunk_left < roi_out->width; chunk_left += chk_width)
     {
+      if(dt_atomic_get_int(&abandoned) || dt_dev_pixelpipe_has_shutdown(params->pipe))
+      {
+        dt_atomic_set_int(&abandoned, TRUE);
+        continue;
+      }
       // locate our scratch space within the big buffer allocated above
       // we'll offset by chunk_left so that we don't have to subtract on every access
       float *const restrict tmpbuf = dt_get_perthread(scratch_buf, padded_scratch_size);
@@ -528,7 +543,7 @@ void nlmeans_denoise(const float *const inbuf, float *const outbuf,
   // clean up: free the work space
   dt_pixelpipe_cache_free_align(patches);
   dt_pixelpipe_cache_free_align(scratch_buf);
-  return;
+  return dt_atomic_get_int(&abandoned);
 }
 
 /**************************************************************/
@@ -657,6 +672,13 @@ int nlmeans_denoise_cl(const dt_nlmeans_param_t *const params, const int devid,
 
   for(int p = 0; p < num_patches; p++)
   {
+    // The pipe abandoned this run: stop between two patches. The host enqueues the whole run far
+    // ahead of the device, so the killswitch is read once the previous patch has run on it.
+    if(p > 0 && dt_opencl_finish(devid) && dt_dev_pixelpipe_has_shutdown(params->pipe))
+    {
+      err = DT_OPENCL_DEFAULT_ERROR;
+      break;
+    }
     const patch_t *patch = &patches[p];
     int q[2] = { patch->rows, patch->cols };
 
@@ -750,6 +772,13 @@ int nlmeans_denoiseprofile_cl(const dt_nlmeans_param_t *const params, const int 
 
   for(int p = 0; p < num_patches; p++)
   {
+    // The pipe abandoned this run: stop between two patches. The host enqueues the whole run far
+    // ahead of the device, so the killswitch is read once the previous patch has run on it.
+    if(p > 0 && dt_opencl_finish(devid) && dt_dev_pixelpipe_has_shutdown(params->pipe))
+    {
+      err = DT_OPENCL_DEFAULT_ERROR;
+      break;
+    }
     const patch_t *patch = &patches[p];
     int q[2] = { patch->rows, patch->cols };
 
