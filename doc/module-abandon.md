@@ -94,14 +94,14 @@ is then skipped and the module runs to its end as it did before: a late stop, ne
 | Module | CPU stops between | OpenCL stops between |
 |---|---|---|
 | AI denoise (`rawdenoiseai`) | U-Net levels, via `dt_nn_set_cancel()` (`common/nn_model.h`) | U-Net levels, after `dt_opencl_finish()` |
-| diffuse or sharpen (`diffuse`) | two scales, of the decomposition and of the synthesis (`iop/diffuse.c:1007`, `:1056`) | two iterations (`iop/diffuse.c:1589`) |
+| diffuse or sharpen (`diffuse`) | two scales, of the decomposition and of the synthesis (`iop/diffuse.c:1007`, `:1056`) | two iterations (`iop/diffuse.c:1579`) |
 | blurs (`blurs`) | rows (`iop/blurs.c:563`) | — |
 | astrophoto denoise (`nlmeans`) | chunks of the NL-means core (`pixel/nlmeans_core.c:362`) | two patches (`iop/nlmeans.c:312`) |
 | denoise (profiled), non-local means (`denoiseprofile`) | chunks of the same core | two patches (`iop/denoiseprofile.c:2029`) |
 | denoise (profiled), wavelets (`denoiseprofile`) | two scales (`iop/denoiseprofile.c:1404`) | — |
 | contrast equalizer (`atrous`) | two scales (`iop/atrous.c:368`) | — |
 | highlight reconstruction, guided laplacians (`highlights`) | two iterations (`iop/highlights/laplacian.c:531`) | two iterations, all three CFA paths (`laplacian.c:956`, `:1235`, `:1512`) |
-| highlight reconstruction, harmonic (`highlights`) | two scales of the knee estimate (`iop/highlights/knee.c:201`), then before each clipped region (`process.c:209`, `:356`) | before each region (`process.c:607`) |
+| highlight reconstruction, harmonic (`highlights`) | two scales of the knee estimate (`iop/highlights/knee.c:201`), then before each clipped region (`process.c:97`) | before each region (`process.c:577`) |
 
 Notes per module:
 
@@ -110,20 +110,22 @@ Notes per module:
 - **NL-means on OpenCL does not run the core.** `nlmeans.c` and `denoiseprofile.c` both define
   `USE_NEW_IMPL_CL 0`, so their `process_cl()` runs its own patch loop (`nlmeans.c:241`,
   `denoiseprofile.c:1925`) and never calls `nlmeans_denoise_cl()` or
-  `nlmeans_denoiseprofile_cl()`. Those two carry the same check (`nlmeans_core.c:677`, `:777`) for
-  the day the switch flips, and nothing exercises them. A check placed only in the core does
+  `nlmeans_denoiseprofile_cl()`. Those two share one patch loop, `nlmeans_cl_run()`, which carries
+  the check (`nlmeans_core.c:679`) for the day the switch flips, and nothing exercises it. A check placed only in the core does
   nothing on a GPU: the mid-run test below caught astrophoto denoise running to its end that way.
 - **NL-means on CPU** does run the core. `nlmeans_denoise()` returns `int`: besides an abandoned
   run, it fails on a scratch allocation failure, from which it used to return silently with
   `outbuf` unwritten. `dt_nlmeans_param_t.pipe` replaced `pipetype`, which nothing read.
 - **harmonic.** On CPU, the knee estimate (`_hl_knee_estimate()`) runs ahead of every region and
   measured 1.83 s of a 3.6 s module under gdb on the test image below, so it stops between its
-  five scales and returns 1 for the driver to fail. A region's own solve is not cut:
+  five scales and returns 1 for the driver to fail. The region loop, with its check, is
+  `_harmonic_reconstruct_regions()`, run by the CPU driver and by the host middle of the OpenCL
+  one. A region's own solve is not cut:
   `_region_guided_filter()` and its callees are all `void`, and a finer stop would need a return
   code through every one of them. On OpenCL the knee estimate runs on the device and is not cut;
   the first region check needs no sync, since it follows the blocking upload of the depth map. A
   device middle that stopped on the killswitch goes neither to the host middle nor to the host
-  roundtrip, which would redo the run for nobody (`process.c:1041`, `:1209`).
+  roundtrip, which would redo the run for nobody (`process.c:1011`, `:1179`).
 
 ## What is not covered, and why
 
