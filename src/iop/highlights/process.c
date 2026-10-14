@@ -52,7 +52,7 @@
 // (Euclidean distance transform of the any-clip mask). A hole's reconstruction radius is the max
 // of this over the hole -- its true "reach needed", independent of the bbox shape.
 __DT_CLONE_TARGETS__
-static int _harmonic_reconstruct_regions(float *const restrict interpolated, const float *const restrict clipping_mask,
+static int _harmonic_reconstruct_regions(float *const interpolated, const float *const clipping_mask,
                                          const dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_iop_t *piece,
                                          const dt_iop_roi_t *const roi_in, const dt_aligned_pixel_t clips)
 {
