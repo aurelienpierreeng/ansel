@@ -1,6 +1,24 @@
 #!/usr/bin/env bash
+#   This file is part of the Ansel project.
+#   Copyright (C) 2026 Guillaume Stutin.
+#
+#   Ansel is free software: you can redistribute it and/or modify
+#   it under the terms of the GNU General Public License as published by
+#   the Free Software Foundation, either version 3 of the License, or
+#   (at your option) any later version.
+#
+#   Ansel is distributed in the hope that it will be useful,
+#   but WITHOUT ANY WARRANTY; without even the implied warranty of
+#   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#   GNU General Public License for more details.
+#
+#   You should have received a copy of the GNU General Public License
+#   along with Ansel.  If not, see <http://www.gnu.org/licenses/>.
 #
 # Tell a scheduled nightly whether the packages it would build are already published.
+#
+# Every nightly asks it first -- win, lin, mac, flatpak and docker -- so that all of them agree
+# on what "already published" means.
 #
 # The nightlies run on a cron, whether master moved or not, and used to rebuild the same head
 # every night: four nights in a row on f484018567, each of them an hour or more per platform
@@ -40,9 +58,16 @@ if [ -z "${sha}" ]; then
 fi
 # One line per asset, `<release tag> <asset name>`. nightly-prune.yml keeps twelve months, so
 # one page of a hundred releases holds every one of them.
-published="$(gh api "repos/${GITHUB_REPOSITORY}/releases?per_page=100" \
-  --jq '.[] | select(.tag_name | test("^nightly-[0-9]{4}-[0-9]{2}$")) | .tag_name as $t | .assets[] | "\($t) \(.name)"' \
-  2>/dev/null)" || published=""
+#
+# A release list that cannot be read answers "not published", so the nightly builds as it did
+# before it asked: a wasted build is cheaper than a night with no package. The warning is what
+# keeps that from passing unseen.
+# shellcheck disable=SC2016  # `$t' is jq's variable, not the shell's.
+if ! published="$(gh api "repos/${GITHUB_REPOSITORY}/releases?per_page=100" \
+  --jq '.[] | select(.tag_name | test("^nightly-[0-9]{4}-[0-9]{2}$")) | .tag_name as $t | .assets[] | "\($t) \(.name)"')"; then
+  echo "::warning::could not list the nightly releases; every package is taken as missing"
+  published=""
+fi
 
 # The version string ends in `g<hash>` when a tag describes the commit, and is the bare hash
 # when none does (tools/get_git_version_string.sh); whatever follows the last `g' is the hash

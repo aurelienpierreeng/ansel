@@ -27,6 +27,8 @@ Five things, each with one job:
 | **Package managers** | Flatpak repo on R2, Homebrew tap, Scoop bucket | `flatpak update`, `brew upgrade`, `scoop update` — the OS-native path. |
 
 The per-OS workflows stay dumb: build, upload to the month's release, notify Matrix.
+Each of them first asks the releases whether tonight's commit is already there, and builds
+only what is missing — see *A commit already published is not built again* below.
 Everything that knows about downstream lives in `nightly-manifest.yml`, so adding a
 consumer is one `publish` line there and nothing in five workflows.
 
@@ -245,23 +247,75 @@ Measured on 2026-09-15: the step died on the arm64 name and took a perfectly goo
 it. The rename is also the one place that knows this spelling, so the Matrix notification uses
 the names verbatim instead of converting them again.
 
-**Only the architectures the release lacks for this commit are built.** The cron fires whether
-master moved or not, and every night on an unchanged head used to rebuild both DMGs, after which
-`tip` *replaced* the identical packages already in the release — `f484018567` was built and
-republished four nights running, the Intel half at up to six hours each. A first job,
-`published`, asks `tools/nightly_published.sh` for each architecture's asset and hands the build
-job the filtered matrix, so the matrix itself is defined there as JSON. The decision is per
-architecture: an Intel job killed at the ceiling leaves the arm64 DMG published, and the next
-night rebuilds Intel alone. When nothing is left, the build job is skipped (an empty matrix is an
-error to GitHub, not a no-op) and so is publishing, which would otherwise fail on finding no DMG.
-A manual dispatch skips the question and builds everything.
+## A commit already published is not built again
 
-The Linux and Windows nightlies ask the same question through a `published` job of their own,
-all or nothing since each builds one package. On an unchanged head they used to rebuild and then
-fail to publish: their files carry the `~` of the version string, so `tip` did not recognise the
-asset already there and GitHub refused the duplicate with `422 already_exists`. Both now also
-rename `~` to `.` before `tip`, as macOS does, so a manual dispatch on a published commit
-replaces the package instead of failing.
+*Measured 2026-09-22 and 2026-10-14; re-checked against `73ec46a31b` on 2026-10-14. The runs
+quoted are on `master`.*
+
+The cron fires whether master moved or not, so a night with no new commit rebuilt the commit of
+the night before. `f484018567` was built four nights running (2026-09-18 to 21), the Intel half
+at up to six hours each. What each nightly then did with it, measured on 2026-10-04, the second
+night on `65e7a3adea`:
+
+| workflow | built? | upload | Matrix |
+|---|---|---|---|
+| win-nightly (run 37196468832) | yes, 25 min | **failed**, `422 already_exists` | not sent |
+| lin-nightly (run 37196715197) | yes, 20 min | **failed**, same | not sent |
+| flatpak-nightly (run 37200713054) | yes, 18 min | **failed**, same | not sent |
+| mac-nightly (run 37196608646) | yes, arm64 14 min, **Intel 2 h 27** | **replaced** both DMGs | sent |
+| docker-image (run 37196674752) | yes, 25 min | **replaced** the image on Docker Hub and the archive | it sends none |
+
+The three failures are the `~` of the local filename (see the rename above): `tip` takes the
+asset for a new one and GitHub refuses the duplicate. macOS had lost that accident when its
+packages were renamed to the release's spelling, so it replaced identical DMGs, stayed green and
+announced a package nobody had changed. The archive Docker attaches is already spelled with `.`.
+
+So every nightly starts with a `published` job on `ubuntu-latest` that asks
+`tools/nightly_published.sh`, one script for all five so that they agree on what "already
+published" means:
+
+- **It matches the commit hash in the asset names, never the rebuilt version string.** Both
+  halves of `0.0.0+5241.g7230d1b355` depend on the clone rather than on the commit: the count on
+  the depth of the history, and the abbreviation on the number of objects in it. Measured
+  2026-09-22: the same commit abbreviates to 9 digits in a blobless clone and to 10 in the
+  build's. Measured 2026-10-14: a 5000-commit fetch made the way `actions/checkout` makes it, at
+  `7230d1b355`, answers `0.0.0+5241~g7230d1b355` (297 665 objects in the pack) — right today,
+  but only as long as nobody changes a depth. Matching the hash needs neither, so the job checks
+  out at depth 1.
+- **It looks in every `nightly-*` release**, not only this month's: a commit built on the 30th is
+  not new on the 1st, and the manifest walks the releases newest-first, so it still finds that
+  package.
+- The templates are `ansel-@VERSION@-win64.exe`, `Ansel-@VERSION@-x86_64.AppImage` with its
+  `.zsync`, `Ansel-@VERSION@-x86_64.flatpak`, `Ansel-@VERSION@-docker.tar.zst`, and
+  `Ansel-@VERSION@-<arch>.dmg` with `<arch>` what `$(arch)` prints — `arm64`, or `i386` on Intel.
+- **What else a workflow publishes is not asked about**, because it goes out earlier in the same
+  job and a failure there stops the job before the release asset is uploaded: the Flatpak OSTree
+  repository on R2 (when R2 is configured), and the image on Docker Hub.
+- **The build checks out the sha the `published` job judged**, not the branch a second time, so
+  a push landing between the two jobs cannot have one commit checked and another built.
+- **A release list that cannot be read counts as "not published"**, with a warning: the nightly
+  then builds as it did before it asked, since a wasted build costs less than a night without a
+  package.
+- **A manual dispatch skips the question and builds everything.** Windows, Linux and Flatpak
+  rename `~` to `.` before `tip`, as macOS does, so a dispatched rebuild of a published commit
+  replaces its package instead of failing on `422`.
+
+Windows, Linux, Flatpak and Docker have one package each: `published` outputs `build=true|false`,
+and a skipped build skips what publishes with it — green run, nothing published, nothing
+announced, nothing pushed to Docker Hub.
+
+**macOS decides per architecture**, because the two fail independently: on 2026-10-06 and
+2026-10-08 only arm64 shipped, and on those commits the next night builds Intel alone. The
+`published` job therefore owns the matrix, defined there as JSON, and hands the build only the
+missing architectures. When nothing is left, the build job is skipped — an empty matrix is an
+error to GitHub, not a no-op — and so is publishing, which would otherwise fail on finding no
+DMG. The Matrix message names only the packages the release check found there, and is sent
+whenever there is at least one: a package that arrived is announced even when the other did not,
+while the job still fails for the missing one.
+
+**One cost:** the Intel job is also what keeps its Homebrew kegs warm, and GitHub evicts a cache
+entry not read for 7 days. A week without a commit would leave the next Intel build cold, which
+does not fit in six hours (see above); `mac-brew-cache.yml` is the way back.
 
 ## Secrets and settings to create
 
