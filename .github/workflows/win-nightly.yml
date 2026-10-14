@@ -43,11 +43,15 @@ jobs:
   # commit's package. The release is asked first; tools/nightly_published.sh matches the commit
   # hash in the asset names. A manual dispatch builds anyway, since rebuilding on purpose is
   # what someone dispatching wants.
+  #
+  # The build checks out the commit judged here, not the branch again, so a push landing in
+  # between cannot have one commit checked and another built.
   published:
     if: github.repository == 'aurelienpierreeng/ansel' || github.event_name == 'workflow_dispatch'
     name: Is this commit already published
     runs-on: ubuntu-latest
     outputs:
+      sha: ${{ steps.check.outputs.sha }}
       build: ${{ steps.check.outputs.build }}
     steps:
       - uses: actions/checkout@v6
@@ -61,6 +65,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           EVENT: ${{ github.event_name }}
         run: |
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
           if [ "${EVENT}" != "workflow_dispatch" ] && tools/nightly_published.sh \
             'ansel-@VERSION@-win64.exe'; then
             echo "already published for this commit, not rebuilt"
@@ -87,7 +92,7 @@ jobs:
         generator:
           - Ninja
         branch:
-          - { code: "${{ github.ref_name }}", label: stable }
+          - { label: stable }
         msystem:
           - UCRT64
     defaults:
@@ -105,7 +110,6 @@ jobs:
       CMAKE_BUILD_TYPE: ${{ matrix.btype }}
       GENERATOR: ${{ matrix.generator }}
       TARGET: ${{ matrix.target }}
-      BRANCH: ${{ matrix.branch.code }}
       BUILD_NAME: ${{ matrix.branch.label }}
     steps:
       - uses: msys2/setup-msys2@v2
@@ -115,7 +119,7 @@ jobs:
       - name: Checkout ansel source
         uses: actions/checkout@v6
         with:
-          ref: ${{ env.BRANCH }}
+          ref: ${{ needs.published.outputs.sha }}
           fetch-depth: 5000
           fetch-tags: true
           submodules: true

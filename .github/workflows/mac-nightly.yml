@@ -49,11 +49,15 @@ jobs:
   #
   # The matrix therefore lives here, as the list this job filters. Each entry is one runner;
   # `package' is the release asset it produces, `@VERSION@' standing for the version string.
+  #
+  # The build checks out the commit judged here, not the branch again, so a push landing in
+  # between cannot have one commit checked and another built.
   published:
     if: github.repository == 'aurelienpierreeng/ansel' || github.event_name == 'workflow_dispatch'
     name: Packages this commit still lacks
     runs-on: ubuntu-latest
     outputs:
+      sha: ${{ steps.select.outputs.sha }}
       builds: ${{ steps.select.outputs.builds }}
     steps:
       - uses: actions/checkout@v6
@@ -91,12 +95,17 @@ jobs:
               selected="$(jq -c --argjson b "${build}" '. + [$b]' <<< "${selected}")"
             fi
           done < <(jq -c '.[]' <<< "${all}")
-          echo "builds=${selected}" >> "$GITHUB_OUTPUT"
+          {
+            echo "sha=$(git rev-parse HEAD)"
+            echo "builds=${selected}"
+          } >> "$GITHUB_OUTPUT"
 
   MacOS:
     needs: published
     # An empty matrix is an error, not a no-op, so a night with nothing left to build skips the job.
-    if: ${{ needs.published.outputs.builds != '[]' }}
+    # The result is asked as well, so a skipped `published' (a fork's cron) never reaches
+    # fromJSON with an empty output.
+    if: ${{ needs.published.result == 'success' && needs.published.outputs.builds != '[]' }}
     name: Nightly Ansel Mac OS build
     runs-on: ${{ matrix.build.os }}
     strategy:
@@ -113,7 +122,7 @@ jobs:
         generator:
           - Ninja
         branch:
-          - { code: "${{ github.ref_name }}", label: stable }
+          - { label: stable }
     env:
       DEVELOPER_DIR: /Applications/Xcode_${{ matrix.build.xcode }}.app/Contents/Developer
       CC: ${{ matrix.compiler.CC }}
@@ -126,12 +135,11 @@ jobs:
       CMAKE_BUILD_TYPE: ${{ matrix.btype }}
       GENERATOR: ${{ matrix.generator }}
       TARGET: ${{ matrix.target }}
-      BRANCH: ${{ matrix.branch.code }}
       BUILD_NAME: ${{ matrix.branch.label }}
     steps:
       - uses: actions/checkout@v6
         with:
-          ref: ${{ env.BRANCH }}
+          ref: ${{ needs.published.outputs.sha }}
           fetch-depth: 5000
           submodules: true
           fetch-tags: true
@@ -347,7 +355,6 @@ jobs:
       # workspace would otherwise reach `tip' as an empty file list and the run would pass
       # having shipped nothing -- the failure this job exists to make visible.
       - name: Check that something was built
-        id: dmgs
         run: |
           mapfile -t dmgs < <(find . -type f -iname 'Ansel-*.dmg' -printf '%f\n' | sort)
           if [ "${#dmgs[@]}" -eq 0 ]; then
@@ -356,7 +363,6 @@ jobs:
           fi
           printf 'Publishing %d package(s):\n' "${#dmgs[@]}"
           printf '  %s\n' "${dmgs[@]}"
-          printf 'names=%s\n' "${dmgs[*]}" >> "$GITHUB_OUTPUT"
       # One package per step, so one of them failing cannot take the other with it. tip ends on
       # a bare loop -- `for artifact in artifacts: gh_release.upload_asset(artifact)', with no
       # try/except -- so the first upload to raise kills the process and every file still
@@ -392,37 +398,44 @@ jobs:
 
       # The release is asked what it holds, rather than the upload steps being believed. This
       # is what makes continue-on-error above safe: a package that did not arrive fails the
-      # job here, by name, after every package has had its turn.
+      # job here, by name, after every package has had its turn. The packages that did arrive
+      # are its output, and the only ones the Matrix message may announce.
       - name: Check every package reached the release
+        id: arrived
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           published="$(gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${TAG}" --jq '.assets[].name')"
+          arrived=()
           missing=()
           for f in Ansel-*.dmg; do
             [ -e "${f}" ] || continue
             if grep -Fxq -- "${f}" <<< "${published}"; then
               echo "published: ${f}"
+              arrived+=("${f}")
             else
               missing+=("${f}")
             fi
           done
+          printf 'names=%s\n' "${arrived[*]}" >> "$GITHUB_OUTPUT"
           if [ "${#missing[@]}" -gt 0 ]; then
             printf 'NOT published: %s\n' "${missing[@]}" >&2
             exit 1
           fi
 
+      # A package that reached the release is announced even when the other did not: the job
+      # still fails for the missing one, and the message only ever names what was sent. No
+      # package sent, no message.
       - name: Install dependencies
+        if: ${{ !cancelled() && steps.arrived.outputs.names != '' }}
         run: |
           python -m pip install simplematrixbotlib
 
-      # The message names whatever was actually published, one package or two, instead of
-      # announcing both architectures unconditionally. The names arrive through the
-      # environment rather than expanded into the script body.
+      # The names arrive through the environment rather than expanded into the script body.
       - name: Notify Matrix
-        if: ${{ success() }}
+        if: ${{ !cancelled() && steps.arrived.outputs.names != '' }}
         env:
-          NAMES: ${{ steps.dmgs.outputs.names }}
+          NAMES: ${{ steps.arrived.outputs.names }}
         run: |
           links=""
           count=0

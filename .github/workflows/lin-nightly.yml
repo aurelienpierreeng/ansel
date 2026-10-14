@@ -1,7 +1,7 @@
 #   This file is part of the Ansel project.
 #   Copyright (C) 2022-2026 Aurélien PIERRE.
 #   Copyright (C) 2023-2024 Alynx Zhou.
-#   Copyright (C) 2025 Guillaume Stutin.
+#   Copyright (C) 2025-2026 Guillaume Stutin.
 #   
 #   Ansel is free software: you can redistribute it and/or modify
 #   it under the terms of the GNU General Public License as published by
@@ -38,11 +38,15 @@ jobs:
   # commit's package. The release is asked first; tools/nightly_published.sh matches the commit
   # hash in the asset names. A manual dispatch builds anyway, since rebuilding on purpose is
   # what someone dispatching wants.
+  #
+  # The build checks out the commit judged here, not the branch again, so a push landing in
+  # between cannot have one commit checked and another built.
   published:
     if: github.repository == 'aurelienpierreeng/ansel' || github.event_name == 'workflow_dispatch'
     name: Is this commit already published
     runs-on: ubuntu-latest
     outputs:
+      sha: ${{ steps.check.outputs.sha }}
       build: ${{ steps.check.outputs.build }}
     steps:
       - uses: actions/checkout@v6
@@ -56,6 +60,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           EVENT: ${{ github.event_name }}
         run: |
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
           if [ "${EVENT}" != "workflow_dispatch" ] && tools/nightly_published.sh \
             'Ansel-@VERSION@-x86_64.AppImage' \
             'Ansel-@VERSION@-x86_64.AppImage.zsync'; then
@@ -83,7 +88,7 @@ jobs:
         generator:
           - Ninja
         branch:
-          - { code: "${{ github.ref_name }}", label: stable }
+          - { label: stable }
     env:
       CC: ${{ matrix.compiler.CC }}
       CXX: ${{ matrix.compiler.CXX }}
@@ -97,7 +102,6 @@ jobs:
       GENERATOR: ${{ matrix.generator }}
       TARGET: ${{ matrix.target }}
       DARKTABLE_CLI: ${{ github.workspace }}/AppDir/usr/bin/ansel-cli
-      BRANCH: ${{ matrix.branch.code }}
       BUILD_NAME: ${{ matrix.branch.label }}
     steps:
       - name: Enable Ubuntu repositories
@@ -109,7 +113,7 @@ jobs:
       - name: Checkout ansel source
         uses: actions/checkout@v6
         with:
-          ref: ${{ env.BRANCH }}
+          ref: ${{ needs.published.outputs.sha }}
           fetch-depth: 5000
           fetch-tags: true
           submodules: true
