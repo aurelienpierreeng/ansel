@@ -13,7 +13,7 @@
    Copyright (C) 2022 Hanno Schwalm.
    Copyright (C) 2022 Martin Bařinka.
    Copyright (C) 2022 Philipp Lutz.
-   Copyright (C) 2023, 2025 Guillaume Stutin.
+   Copyright (C) 2023, 2025-2026 Guillaume Stutin.
    Copyright (C) 2023 Luca Zulberti.
    Copyright (C) 2024 Alynx Zhou.
    
@@ -966,7 +966,8 @@ static void dump_PFM(const char *filename, const float* out, const uint32_t w, c
 #endif
 
 __DT_CLONE_TARGETS__
-static inline int wavelets_process(const float *const restrict in, float *const restrict reconstructed,
+static inline int wavelets_process(const dt_dev_pixelpipe_t *pipe,
+                                   const float *const restrict in, float *const restrict reconstructed,
                                    const uint8_t *const restrict mask, const size_t width,
                                    const size_t height, const dt_iop_diffuse_data_t *const data,
                                    const float zoom, const int scales,
@@ -1001,6 +1002,14 @@ static inline int wavelets_process(const float *const restrict in, float *const 
 
   for(int s = 0; s < scales; ++s)
   {
+    // The pipe abandoned this run: stop between two scales, a run being up to 500 iterations of a
+    // decomposition and a synthesis over up to MAX_NUM_SCALES full-image passes each.
+    if(dt_dev_pixelpipe_has_shutdown(pipe))
+    {
+      dt_pixelpipe_cache_free_align(tempbuf);
+      return 1;
+    }
+
     const int mult = 1 << s;
 
     const float *restrict buffer_in;
@@ -1043,6 +1052,9 @@ static inline int wavelets_process(const float *const restrict in, float *const 
 
   for(int s = scales - 1; s > -1; --s)
   {
+    // the same stop, between two scales of the synthesis
+    if(dt_dev_pixelpipe_has_shutdown(pipe)) return 1;
+
     const int mult = 1 << s;
     const float current_radius = equivalent_sigma_at_step(B_SPLINE_SIGMA, s);
     const float real_radius = current_radius * zoom;
@@ -1229,7 +1241,7 @@ int process(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_
     if(it == (int)iterations - 1)
       temp_out = out;
 
-    if(wavelets_process(temp_in, temp_out, mask, roi_out->width, roi_out->height,
+    if(wavelets_process(pipe, temp_in, temp_out, mask, roi_out->width, roi_out->height,
                         data, zoom, scales, has_mask, HF, LF_odd, LF_even))
     {
       err = 1;
@@ -1482,6 +1494,7 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
   dt_iop_diffuse_global_data_t *const gd = (dt_iop_diffuse_global_data_t *)self->global_data;
 
   int out_of_memory = FALSE;
+  int success = FALSE;
 
   cl_int err = -999;
 
@@ -1495,9 +1508,6 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
 
   cl_mem temp1 = dt_opencl_alloc_device(devid, sizes[0], sizes[1], sizeof(float) * 4);
   cl_mem temp2 = dt_opencl_alloc_device(devid, sizes[0], sizes[1], sizeof(float) * 4);
-
-  cl_mem temp_in = NULL;
-  cl_mem temp_out = NULL;
 
   cl_mem mask = dt_opencl_alloc_device(devid, sizes[0], sizes[1], sizeof(uint8_t));
 
@@ -1526,7 +1536,7 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
   if(IS_NULL_PTR(mask) || IS_NULL_PTR(temp1) || IS_NULL_PTR(temp2) || IS_NULL_PTR(LF_odd) || IS_NULL_PTR(LF_even) || out_of_memory)
   {
     err = CL_MEM_OBJECT_ALLOCATION_FAILURE;
-    goto error;
+    goto cleanup;
   }
 
   const int has_mask = (data->threshold > 0.f);
@@ -1540,7 +1550,7 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
     dt_opencl_set_kernel_arg(devid, gd->kernel_diffuse_build_mask, 3, sizeof(int), (void *)&roi_out->width);
     dt_opencl_set_kernel_arg(devid, gd->kernel_diffuse_build_mask, 4, sizeof(int), (void *)&roi_out->height);
     err = dt_opencl_enqueue_kernel_2d(devid, gd->kernel_diffuse_build_mask, sizes);
-    if(err != CL_SUCCESS) goto error;
+    if(err != CL_SUCCESS) goto cleanup;
 
     // init the inpainting area with noise
     dt_opencl_set_kernel_arg(devid, gd->kernel_diffuse_inpaint_mask, 0, sizeof(cl_mem), (void *)&temp1);
@@ -1549,45 +1559,29 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
     dt_opencl_set_kernel_arg(devid, gd->kernel_diffuse_inpaint_mask, 3, sizeof(int), (void *)&roi_out->width);
     dt_opencl_set_kernel_arg(devid, gd->kernel_diffuse_inpaint_mask, 4, sizeof(int), (void *)&roi_out->height);
     err = dt_opencl_enqueue_kernel_2d(devid, gd->kernel_diffuse_inpaint_mask, sizes);
-    if(err != CL_SUCCESS) goto error;
+    if(err != CL_SUCCESS) goto cleanup;
 
     in = temp1;
   }
 
+  // iteration 0 reads `in` and the last one writes `dev_out`; temp1 and temp2 take turns in between
+  cl_mem ping_pong[2] = { temp1, temp2 };
   for(int it = 0; it < iterations; it++)
   {
-    if(it == 0)
-    {
-      temp_in = in;
-      temp_out = temp2;
-    }
-    else if(it % 2 == 0)
-    {
-      temp_in = temp1;
-      temp_out = temp2;
-    }
-    else
-    {
-      temp_in = temp2;
-      temp_out = temp1;
-    }
-
-    if(it == (int)iterations - 1) temp_out = dev_out;
+    cl_mem temp_in = (it == 0) ? in : ping_pong[it % 2];
+    cl_mem temp_out = (it == iterations - 1) ? dev_out : ping_pong[(it + 1) % 2];
     err = wavelets_process_cl(devid, temp_in, temp_out, mask, sizes, width, height,
                               data, gd, zoom, scales, has_mask, HF, LF_odd, LF_even);
-    if(err != CL_SUCCESS) goto error;
+
+    // The pipe abandoned this run: stop between two iterations. The host enqueues the whole run far
+    // ahead of the device, so the killswitch is read once this iteration has run on it.
+    if(err != CL_SUCCESS
+       || (it < iterations - 1 && dt_opencl_finish(devid) && dt_dev_pixelpipe_has_shutdown(pipe)))
+      goto cleanup;
   }
+  success = TRUE;
 
-  // cleanup and exit on success
-  dt_opencl_release_mem_object(mask);
-  dt_opencl_release_mem_object(temp1);
-  dt_opencl_release_mem_object(temp2);
-  dt_opencl_release_mem_object(LF_even);
-  dt_opencl_release_mem_object(LF_odd);
-  for(int s = 0; s < scales; s++) dt_opencl_release_mem_object(HF[s]);
-  return TRUE;
-
-error:
+cleanup:
   dt_opencl_release_mem_object(temp1);
   dt_opencl_release_mem_object(temp2);
   dt_opencl_release_mem_object(mask);
@@ -1595,8 +1589,9 @@ error:
   dt_opencl_release_mem_object(LF_odd);
   for(int s = 0; s < scales; s++) dt_opencl_release_mem_object(HF[s]);
 
-  dt_print(DT_DEBUG_OPENCL, "[opencl_diffuse] couldn't enqueue kernel! %d\n", err);
-  return FALSE;
+  // an abandoned run comes here with the last iteration's CL_SUCCESS: there is no error to report
+  if(err != CL_SUCCESS) dt_print(DT_DEBUG_OPENCL, "[opencl_diffuse] couldn't enqueue kernel! %d\n", err);
+  return success;
 }
 
 void init_global(dt_iop_module_so_t *module)

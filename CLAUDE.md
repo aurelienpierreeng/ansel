@@ -126,6 +126,7 @@ remain right for what is fine to miss: progress, confirmation, a passing state.
 |---|---|
 | [`doc/pipeline-cache.md`](doc/pipeline-cache.md) | the pixelpipe cache: keys, refcounts, peeks, memory pressure |
 | [`doc/pipeline-history.md`](doc/pipeline-history.md) | history snapshots, the darkroom worker, the transient slot |
+| [`doc/module-abandon.md`](doc/module-abandon.md) | which modules stop mid-run when the pipe abandons it, and how |
 | [`doc/image-mipmap-cache.md`](doc/image-mipmap-cache.md) | thumbnail invalidation, image cache entry locks |
 | [`doc/raw-roi-cfa.md`](doc/raw-roi-cfa.md) | RAW-domain ROI offsets, CFA phase, tile-grid dependence |
 | [`doc/resizing-scaling.md`](doc/resizing-scaling.md) | ROI planning and scaling |

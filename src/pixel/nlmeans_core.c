@@ -8,6 +8,7 @@
     Copyright (C) 2022 Martin Bařinka.
     Copyright (C) 2024 Alynx Zhou.
     Copyright (C) 2025-2026 Aurélien PIERRE.
+    Copyright (C) 2026 Guillaume Stutin.
     
     darktable is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -312,9 +313,9 @@ static int compute_slice_width(const int width)
 }
 
 __DT_CLONE_TARGETS__
-void nlmeans_denoise(const float *const inbuf, float *const outbuf,
-                     const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out,
-                     const dt_nlmeans_param_t *const params)
+int nlmeans_denoise(const float *const inbuf, float *const outbuf,
+                    const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out,
+                    const dt_nlmeans_param_t *const params)
 {
   // define the factors for applying blending between the original image and the denoised version
   // if running in RGB space, 'luma' should equal 'chroma'
@@ -340,15 +341,29 @@ void nlmeans_denoise(const float *const inbuf, float *const outbuf,
 #endif /* CACHE_PIXDIFFS */
   size_t padded_scratch_size;
   float *const restrict scratch_buf = dt_pixelpipe_cache_alloc_perthread_float(scratch_size, &padded_scratch_size);
-  if(IS_NULL_PTR(scratch_buf)) return;
+  if(IS_NULL_PTR(scratch_buf))
+  {
+    dt_pixelpipe_cache_free_align(patches);
+    return 1;
+  }
 
   const int chk_height = compute_slice_height(roi_out->height);
   const int chk_width = compute_slice_width(roi_out->width);
-  __OMP_PARALLEL_FOR__(num_threads(dt_get_num_openmp_threads()) collapse(2))
+  // The pipe abandoned this run: the chunks not started yet are skipped and the run fails. A chunk
+  // goes through every patch, so it is the step the run can be stopped at from inside the parallel
+  // loop. A new request may lower the killswitch again before the loop ends, hence the latch,
+  // shared since the macro makes every variable firstprivate.
+  dt_atomic_int abandoned = FALSE;
+  __OMP_PARALLEL_FOR__(num_threads(dt_get_num_openmp_threads()) collapse(2) shared(abandoned))
   for (int chunk_top = 0 ; chunk_top < roi_out->height; chunk_top += chk_height)
   {
     for (int chunk_left = 0; chunk_left < roi_out->width; chunk_left += chk_width)
     {
+      if(dt_atomic_get_int(&abandoned) || dt_dev_pixelpipe_has_shutdown(params->pipe))
+      {
+        dt_atomic_set_int(&abandoned, TRUE);
+        continue;
+      }
       // locate our scratch space within the big buffer allocated above
       // we'll offset by chunk_left so that we don't have to subtract on every access
       float *const restrict tmpbuf = dt_get_perthread(scratch_buf, padded_scratch_size);
@@ -528,7 +543,7 @@ void nlmeans_denoise(const float *const inbuf, float *const outbuf,
   // clean up: free the work space
   dt_pixelpipe_cache_free_align(patches);
   dt_pixelpipe_cache_free_align(scratch_buf);
-  return;
+  return dt_atomic_get_int(&abandoned);
 }
 
 /**************************************************************/
@@ -619,8 +634,10 @@ static inline cl_int nlmeans_cl_accu(const int devid, const int kernel, cl_mem d
 #endif /* HAVE_OPENCL */
 
 #ifdef HAVE_OPENCL
-int nlmeans_denoise_cl(const dt_nlmeans_param_t *const params, const int devid,
-                       cl_mem dev_in, cl_mem dev_out, const dt_iop_roi_t *const roi_in)
+// The patch loop of both kernel sets. The profiled one (`profile`) gives no channel norms to its distance
+// kernel, gives the central pixel weight and the distances to its vertical kernel, and no nap to the GPU.
+static int nlmeans_cl_run(const dt_nlmeans_param_t *const params, const int devid, cl_mem dev_in,
+                          cl_mem dev_out, const dt_iop_roi_t *const roi_in, const gboolean profile)
 {
   const int width = roi_in->width;
   const int height = roi_in->height;
@@ -657,18 +674,29 @@ int nlmeans_denoise_cl(const dt_nlmeans_param_t *const params, const int devid,
 
   for(int p = 0; p < num_patches; p++)
   {
+    // The pipe abandoned this run: stop between two patches. The host enqueues the whole run far
+    // ahead of the device, so the killswitch is read once the previous patch has run on it.
+    if(p > 0 && dt_opencl_finish(devid) && dt_dev_pixelpipe_has_shutdown(params->pipe))
+    {
+      err = DT_OPENCL_DEFAULT_ERROR;
+      break;
+    }
     const patch_t *patch = &patches[p];
     int q[2] = { patch->rows, patch->cols };
 
-    // compute channel-normed squared differences between input pixels and shifted (by q) pixels
+    // compute squared differences between input pixels and shifted (by q) pixels, channel-normed
+    // unless profiled
     cl_mem dev_U4 = buckets[bucket_next(&state, NUM_BUCKETS)];
     dt_opencl_set_kernel_arg(devid, params->kernel_dist, 0, sizeof(cl_mem), (void *)&dev_in);
     dt_opencl_set_kernel_arg(devid, params->kernel_dist, 1, sizeof(cl_mem), (void *)&dev_U4);
     dt_opencl_set_kernel_arg(devid, params->kernel_dist, 2, sizeof(int), (void *)&width);
     dt_opencl_set_kernel_arg(devid, params->kernel_dist, 3, sizeof(int), (void *)&height);
     dt_opencl_set_kernel_arg(devid, params->kernel_dist, 4, 2 * sizeof(int), (void *)&q);
-    dt_opencl_set_kernel_arg(devid, params->kernel_dist, 5, sizeof(float), (void *)&nL2);
-    dt_opencl_set_kernel_arg(devid, params->kernel_dist, 6, sizeof(float), (void *)&nC2);
+    if(!profile)
+    {
+      dt_opencl_set_kernel_arg(devid, params->kernel_dist, 5, sizeof(float), (void *)&nL2);
+      dt_opencl_set_kernel_arg(devid, params->kernel_dist, 6, sizeof(float), (void *)&nC2);
+    }
     err = dt_opencl_enqueue_kernel_2d(devid, params->kernel_dist, sizes);
     if(err != CL_SUCCESS) break;
 
@@ -681,6 +709,7 @@ int nlmeans_denoise_cl(const dt_nlmeans_param_t *const params, const int devid,
     const size_t sizesl[3] = { ROUNDUPDWD(width, devid), bheight, 1 };
     const size_t local[3] = { 1, vblocksize, 1 };
     const float sharpness = params->sharpness;
+    const float central_pixel_weight = params->center_weight;
     cl_mem dev_U4_tt = buckets[bucket_next(&state, NUM_BUCKETS)];
     dt_opencl_set_kernel_arg(devid, params->kernel_vert, 0, sizeof(cl_mem), (void *)&dev_U4_t);
     dt_opencl_set_kernel_arg(devid, params->kernel_vert, 1, sizeof(cl_mem), (void *)&dev_U4_tt);
@@ -690,6 +719,11 @@ int nlmeans_denoise_cl(const dt_nlmeans_param_t *const params, const int devid,
     dt_opencl_set_kernel_arg(devid, params->kernel_vert, 5, sizeof(int), (void *)&P);
     dt_opencl_set_kernel_arg(devid, params->kernel_vert, 6, sizeof(float), (void *)&sharpness);
     dt_opencl_set_kernel_arg(devid, params->kernel_vert, 7, (vblocksize + 2 * P) * sizeof(float), NULL);
+    if(profile)
+    {
+      dt_opencl_set_kernel_arg(devid, params->kernel_vert, 8, sizeof(float), (void *)&central_pixel_weight);
+      dt_opencl_set_kernel_arg(devid, params->kernel_vert, 9, sizeof(cl_mem), ((void *)&dev_U4));
+    }
     err = dt_opencl_enqueue_kernel_2d_with_local(devid, params->kernel_vert, sizesl, local);
     if(err != CL_SUCCESS) break;
 
@@ -698,7 +732,7 @@ int nlmeans_denoise_cl(const dt_nlmeans_param_t *const params, const int devid,
     if(err != CL_SUCCESS) break;
 
     // indirectly give gpu some air to breathe (and to do display related stuff)
-    dt_iop_nap(dt_opencl_micro_nap(devid));
+    if(!profile) dt_iop_nap(dt_opencl_micro_nap(devid));
   }
 
 error:
@@ -713,92 +747,18 @@ error:
 #endif /* HAVE_OPENCL */
 
 #ifdef HAVE_OPENCL
+int nlmeans_denoise_cl(const dt_nlmeans_param_t *const params, const int devid,
+                       cl_mem dev_in, cl_mem dev_out, const dt_iop_roi_t *const roi_in)
+{
+  return nlmeans_cl_run(params, devid, dev_in, dev_out, roi_in, FALSE);
+}
+#endif /* HAVE_OPENCL */
+
+#ifdef HAVE_OPENCL
 int nlmeans_denoiseprofile_cl(const dt_nlmeans_param_t *const params, const int devid,
                               cl_mem dev_in, cl_mem dev_out, const dt_iop_roi_t *const roi_in)
 {
-  const int width = roi_in->width;
-  const int height = roi_in->height;
-  const int P = params->patch_radius;
-  const float norm = params->sharpness;
-
-  // define the patches to be compared when denoising a pixel
-  const size_t stride = 4 * roi_in->width;
-  int num_patches;
-  int max_shift;
-  struct patch_t* patches = define_patches(params,stride,&num_patches,&max_shift);
-
-  cl_int err = -999;
-  cl_mem buckets[NUM_BUCKETS] = { NULL };
-  unsigned int state = 0;
-  for(int k = 0; k < NUM_BUCKETS; k++)
-  {
-    buckets[k] = dt_opencl_alloc_device_buffer(devid, sizeof(float) * width * height);
-    if(buckets[k] == NULL) goto error;
-  }
-
-  int hblocksize;
-  int vblocksize;
-  get_blocksizes(&hblocksize, &vblocksize, P, devid, params->kernel_horiz, params->kernel_vert);
-
-  // zero the output buffer into which we will be accumulating results
-  err = nlmeans_cl_init(devid,params->kernel_init,dev_out,height,width);
-  if(err != CL_SUCCESS) goto error;
-
-  const size_t bwidth = ROUNDUP(width, hblocksize);
-  const size_t bheight = ROUNDUP(height, vblocksize);
-  const size_t sizes[] = { ROUNDUPDWD(width, devid), ROUNDUPDHT(height, devid), 1 };
-
-  for(int p = 0; p < num_patches; p++)
-  {
-    const patch_t *patch = &patches[p];
-    int q[2] = { patch->rows, patch->cols };
-
-    // compute squared differences between input pixels and shifted (by q) pixels
-    cl_mem dev_U4 = buckets[bucket_next(&state, NUM_BUCKETS)];
-    dt_opencl_set_kernel_arg(devid, params->kernel_dist, 0, sizeof(cl_mem), (void *)&dev_in);
-    dt_opencl_set_kernel_arg(devid, params->kernel_dist, 1, sizeof(cl_mem), (void *)&dev_U4);
-    dt_opencl_set_kernel_arg(devid, params->kernel_dist, 2, sizeof(int), (void *)&width);
-    dt_opencl_set_kernel_arg(devid, params->kernel_dist, 3, sizeof(int), (void *)&height);
-    dt_opencl_set_kernel_arg(devid, params->kernel_dist, 4, 2 * sizeof(int), (void *)&q);
-    err = dt_opencl_enqueue_kernel_2d(devid, params->kernel_dist, sizes);
-    if(err != CL_SUCCESS) break;
-
-    // add up individual columns
-    cl_mem dev_U4_t = buckets[bucket_next(&state, NUM_BUCKETS)];
-    err = nlmeans_cl_horiz(devid,params->kernel_horiz,dev_U4,dev_U4_t,P,q,height,width,bwidth,hblocksize);
-    if(err != CL_SUCCESS) break;
-
-    // add together the column sums and compute the weighting of the current patch for each pixel
-    const size_t sizesl[3] = { ROUNDUPDWD(width, devid), bheight, 1 };
-    const size_t local[3] = { 1, vblocksize, 1 };
-    const float central_pixel_weight = params->center_weight;
-    cl_mem dev_U4_tt = buckets[bucket_next(&state, NUM_BUCKETS)];
-    dt_opencl_set_kernel_arg(devid, params->kernel_vert, 0, sizeof(cl_mem), (void *)&dev_U4_t);
-    dt_opencl_set_kernel_arg(devid, params->kernel_vert, 1, sizeof(cl_mem), (void *)&dev_U4_tt);
-    dt_opencl_set_kernel_arg(devid, params->kernel_vert, 2, sizeof(int), (void *)&width);
-    dt_opencl_set_kernel_arg(devid, params->kernel_vert, 3, sizeof(int), (void *)&height);
-    dt_opencl_set_kernel_arg(devid, params->kernel_vert, 4, 2 * sizeof(int), (void *)&q);
-    dt_opencl_set_kernel_arg(devid, params->kernel_vert, 5, sizeof(int), (void *)&P);
-    dt_opencl_set_kernel_arg(devid, params->kernel_vert, 6, sizeof(float), (void *)&norm);
-    dt_opencl_set_kernel_arg(devid, params->kernel_vert, 7, (vblocksize + 2 * P) * sizeof(float), NULL);
-    dt_opencl_set_kernel_arg(devid, params->kernel_vert, 8, sizeof(float), (void *)&central_pixel_weight);
-    dt_opencl_set_kernel_arg(devid, params->kernel_vert, 9, sizeof(cl_mem), ((void *)&dev_U4));
-    err = dt_opencl_enqueue_kernel_2d_with_local(devid, params->kernel_vert, sizesl, local);
-    if(err != CL_SUCCESS) break;
-
-    // add weighted proportion of patch's center pixel to output pixel
-    err = nlmeans_cl_accu(devid,params->kernel_accu,dev_in,dev_U4_tt,dev_out,q,height,width,sizes);
-    if(err != CL_SUCCESS) break;
-  }
-
-error:
-  // clean up and return status
-  dt_pixelpipe_cache_free_align(patches);
-  for(int k = 0; k < NUM_BUCKETS; k++)
-  {
-    dt_opencl_release_mem_object(buckets[k]);
-  }
-  return err;
+  return nlmeans_cl_run(params, devid, dev_in, dev_out, roi_in, TRUE);
 }
 #endif /* HAVE_OPENCL */
 // clang-format off

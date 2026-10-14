@@ -1,6 +1,7 @@
 /*
    This file is part of Ansel,
    Copyright (C) 2026 Aurélien PIERRE.
+   Copyright (C) 2026 Guillaume Stutin.
 
    Ansel is free software: you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -37,6 +38,74 @@
 #include <math.h>
 #include <stdlib.h>
 #include <string.h>
+
+// FLOW steps 1b and 3-8, shared by the CPU driver and the host middle of the OpenCL one: reconstruct every
+// clipped region of `interpolated` in place. Returns 1 when an allocation fails, or when the pipe abandoned
+// the run between two regions.
+//
+// MATHS BRIDGE -- Step 1 (segmentation + depth), article "The algorithm" step 1: the any-clip mask's
+// Euclidean distance transform gives each clipped pixel its depth delta(x) (distance to the nearest
+// valid pixel); connected-component segmentation then groups clipped pixels into regions, each
+// carrying its reconstruction radius R = max delta over the region.
+//
+// Per-pixel reconstruction depth = distance from each clipped pixel to the nearest valid one
+// (Euclidean distance transform of the any-clip mask). A hole's reconstruction radius is the max
+// of this over the hole -- its true "reach needed", independent of the bbox shape.
+__DT_CLONE_TARGETS__
+static int _harmonic_reconstruct_regions(float *const interpolated, const float *const clipping_mask,
+                                         const dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_iop_t *piece,
+                                         const dt_iop_roi_t *const roi_in, const dt_aligned_pixel_t clips)
+{
+  const size_t width = roi_in->width;
+  const size_t height = roi_in->height;
+  const size_t npix = width * height;
+  float *const restrict depth = dt_pixelpipe_cache_alloc_align_float(npix, pipe);
+  if(IS_NULL_PTR(depth)) return 1;
+  uint8_t *const restrict maskb = (uint8_t *)dt_pixelpipe_cache_alloc_align(npix, pipe);
+  if(IS_NULL_PTR(maskb))
+  {
+    dt_pixelpipe_cache_free_align(depth);
+    return 1;
+  }
+  __OMP_PARALLEL_FOR__()
+  for(size_t i = 0; i < npix; i++)
+  {
+    // seed the distance transform: clipped pixels = +inf (to be filled with delta), valid = 0
+    depth[i] = (clipping_mask[i * 4 + 3] > 0.5f) ? (float)DT_DISTANCE_TRANSFORM_MAX : 0.f;
+    maskb[i] = (clipping_mask[i * 4 + 3] >= 1e-3f); // binary any-clip mask for the connected-component pass
+  }
+  dt_image_distance_transform(NULL, depth, width, height, 0.f,
+                              DT_DISTANCE_TRANSFORM_NONE); // depth[] <- delta(x) (EDT)
+
+  // Segment the clipped areas into connected regions and reconstruct each at full resolution with a
+  // coarse->fine full-value guided filter (only clipped neighbourhoods are touched). Each region is
+  // padded by its reconstruction radius (the deepest clip-to-valid distance), so the padding gives
+  // the colour-line fit a valid rim as far out as the deepest pixel needs, and no farther.
+  const dt_iop_highlights_data_t *const data = (const dt_iop_highlights_data_t *)piece->data;
+  _hl_region_t *regions = NULL;
+  // 8-neighbour connected components; pad = ceil(1.25 * R) clamped to [8, 256] px around each region
+  const int nreg = _segment_clipped_regions(maskb, depth, width, height, 1.25f, 8, 256, &regions);
+
+  // FLOW steps 3-8 (per region): reconstruct each connected clipped region on its padded window. Regions
+  // are independent (their padded read boxes were merged when they overlapped, in _segment_clipped_regions),
+  // so this loop is embarrassingly parallel across regions and linear in the total padded area.
+  //
+  // The pipe abandoned this run: stop between two regions. A region's rebuild is not cut any finer.
+  int abandoned = 0;
+  for(int region_index = 0; region_index < nreg; region_index++)
+  {
+    abandoned = dt_dev_pixelpipe_has_shutdown(pipe);
+    if(abandoned) break;
+    _region_guided_filter(interpolated, clipping_mask, depth, width, &regions[region_index], pipe,
+                          data->solid_color, data->iterations, data->noise_level, _hl_floor_gate(clips),
+                          dt_dev_get_module_scale(pipe, roi_in));
+  }
+
+  free(regions);
+  dt_pixelpipe_cache_free_align(maskb);
+  dt_pixelpipe_cache_free_align(depth);
+  return abandoned;
+}
 
 __DT_CLONE_TARGETS__
 int process_harmonic(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe,
@@ -101,7 +170,12 @@ int process_harmonic(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pip
   int knee_on = 0;
   if(allow_knee)
   {
-    _hl_knee_estimate(input, width, height, filters, roi_in, xtrans, knee_clipraw, knee, pipe);
+    if(_hl_knee_estimate(input, width, height, filters, roi_in, xtrans, knee_clipraw, knee, pipe))
+    {
+      // the pipe abandoned this run during the estimate
+      err_code = 1;
+      goto error;
+    }
     knee_on = knee[0].engaged || knee[1].engaged || knee[2].engaged;
   }
 
@@ -149,60 +223,12 @@ int process_harmonic(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pip
   // gather then freezes into the per-pixel floors clip0).
   if(knee_on) _hl_knee_apply_interpolated(interpolated, size, clipvaln, normalization, knee);
 
-  // MATHS BRIDGE -- Step 1 (segmentation + depth), article "The algorithm" step 1: the any-clip mask's
-  // Euclidean distance transform gives each clipped pixel its depth delta(x) (distance to the nearest
-  // valid pixel); connected-component segmentation then groups clipped pixels into regions, each
-  // carrying its reconstruction radius R = max delta over the region.
-  //
-  // Per-pixel reconstruction depth = distance from each clipped pixel to the nearest valid one
-  // (Euclidean distance transform of the any-clip mask). A hole's reconstruction radius is the max
-  // of this over the hole -- its true "reach needed", independent of the bbox shape.
-  const size_t npix = (size_t)width * height;
-  float *const restrict depth = dt_pixelpipe_cache_alloc_align_float(npix, pipe);
-  if(!depth)
+  // FLOW steps 1b and 3-8: depth, segmentation, then the per-region reconstruction
+  if(_harmonic_reconstruct_regions(interpolated, clipping_mask, pipe, piece, roi_in, clips))
   {
     err_code = 1;
     goto error;
   }
-  uint8_t *const restrict maskb = (uint8_t *)dt_pixelpipe_cache_alloc_align(npix, pipe);
-  if(!maskb)
-  {
-    dt_pixelpipe_cache_free_align(depth);
-    err_code = 1;
-    goto error;
-  }
-  __OMP_PARALLEL_FOR__()
-  for(size_t i = 0; i < npix; i++)
-  {
-    // seed the distance transform: clipped pixels = +inf (to be filled with delta), valid = 0
-    depth[i] = (clipping_mask[i * 4 + 3] > 0.5f) ? (float)DT_DISTANCE_TRANSFORM_MAX : 0.f;
-    maskb[i] = (clipping_mask[i * 4 + 3] >= 1e-3f); // binary any-clip mask for the connected-component pass
-  }
-  dt_image_distance_transform(NULL, depth, width, height, 0.f,
-                              DT_DISTANCE_TRANSFORM_NONE); // depth[] <- delta(x) (EDT)
-
-  // Segment the clipped areas into connected regions and reconstruct each at full resolution with a
-  // coarse->fine full-value guided filter (only clipped neighbourhoods are touched). Each region is
-  // padded by its reconstruction radius (the deepest clip-to-valid distance), so the padding gives
-  // the colour-line fit a valid rim as far out as the deepest pixel needs, and no farther.
-  const dt_iop_highlights_data_t *const data = (const dt_iop_highlights_data_t *)piece->data;
-  _hl_region_t *regions = NULL;
-  // 8-neighbour connected components; pad = ceil(1.25 * R) clamped to [8, 256] px around each region
-  const int nreg = _segment_clipped_regions(maskb, depth, width, height, 1.25f, 8, 256, &regions);
-
-
-  // FLOW steps 3-8 (per region): reconstruct each connected clipped region on its padded window. Regions
-  // are independent (their padded read boxes were merged when they overlapped, in _segment_clipped_regions),
-  // so this loop is embarrassingly parallel across regions and linear in the total padded area.
-  for(int region_index = 0; region_index < nreg; region_index++)
-    _region_guided_filter(interpolated, clipping_mask, depth, width, &regions[region_index], pipe,
-                          data->solid_color, data->iterations, data->noise_level, _hl_floor_gate(clips),
-                          dt_dev_get_module_scale(pipe, roi_in));
-
-
-  free(regions);
-  dt_pixelpipe_cache_free_align(maskb);
-  dt_pixelpipe_cache_free_align(depth);
 
   // The composition reads `input` back for unmasked pixels, so the band correction must also go
   // through a corrected CFA copy -- otherwise the output band would keep the biased values the
@@ -261,9 +287,9 @@ error:;
 
 // Shared host middle of the harmonic reconstruction: knee estimation/correction, distance
 // transform, segmentation and the per-region rebuild -- everything between the gather and the
-// remosaic, CFA-agnostic. Used by the OpenCL hybrid driver after its GPU gather; the CPU
-// drivers keep their historical inline copies (same code, kept verbatim to avoid touching the
-// validated path -- unify when the CPU drivers next change).
+// remosaic, CFA-agnostic. Used by the OpenCL hybrid driver after its GPU gather. The depth,
+// segmentation and per-region rebuild are the CPU driver's own (_harmonic_reconstruct_regions); the
+// knee steps around them are a copy of the CPU driver's.
 // On success *remosaic_input_out points to `input` or to a knee-corrected CFA copy
 // (*input_corr_out, caller frees with dt_pixelpipe_cache_free_align).
 //
@@ -271,9 +297,8 @@ error:;
 // and GPU remosaic bracket a host middle). It runs the once-per-image steps BETWEEN the gather and the
 // remosaic on host planes the GPU already produced: step 2 knee application (_hl_knee_apply_interpolated),
 // step 1b depth + segmentation (distance transform + _segment_clipped_regions), then steps 3-8 per region
-// via the CPU _region_guided_filter. Identical code to process_harmonic's middle (kept as a
-// separate copy to avoid touching the validated CPU driver); it is the fallback the device middle
-// (_harmonic_reconstruct_cl) drops to when the GPU middle cannot run.
+// via the CPU _region_guided_filter -- the same steps as process_harmonic's middle. It is the fallback
+// the device middle (_harmonic_reconstruct_cl) drops to when the GPU middle cannot run.
 __DT_CLONE_TARGETS__
 static int _harmonic_reconstruct_host(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe,
                                       const dt_dev_pixelpipe_iop_t *piece, const float *const restrict input,
@@ -308,37 +333,8 @@ static int _harmonic_reconstruct_host(struct dt_iop_module_t *self, const dt_dev
 
   if(knee_on) _hl_knee_apply_interpolated(interpolated, size, clipvaln, normalization, knee);
 
-  const size_t npix = size;
-  float *const restrict depth = dt_pixelpipe_cache_alloc_align_float(npix, pipe);
-  if(!depth) return 1;
-  uint8_t *const restrict maskb = (uint8_t *)dt_pixelpipe_cache_alloc_align(npix, pipe);
-  if(!maskb)
-  {
-    dt_pixelpipe_cache_free_align(depth);
-    return 1;
-  }
-  __OMP_PARALLEL_FOR__()
-  for(size_t i = 0; i < npix; i++)
-  {
-    depth[i] = (clipping_mask[i * 4 + 3] > 0.5f) ? (float)DT_DISTANCE_TRANSFORM_MAX : 0.f;
-    maskb[i] = (clipping_mask[i * 4 + 3] >= 1e-3f);
-  }
-  dt_image_distance_transform(NULL, depth, width, height, 0.f, DT_DISTANCE_TRANSFORM_NONE);
-
-  const dt_iop_highlights_data_t *const data = (const dt_iop_highlights_data_t *)piece->data;
-  _hl_region_t *regions = NULL;
-  const int nreg = _segment_clipped_regions(maskb, depth, width, height, 1.25f, 8, 256, &regions);
-
-  // FLOW steps 3-8 (per region): CPU per-region reconstruction, same call as the CPU drivers.
-  for(int region_index = 0; region_index < nreg; region_index++)
-    _region_guided_filter(interpolated, clipping_mask, depth, width, &regions[region_index], pipe,
-                          data->solid_color, data->iterations, data->noise_level, _hl_floor_gate(clips),
-                          dt_dev_get_module_scale(pipe, roi_in));
-
-
-  free(regions);
-  dt_pixelpipe_cache_free_align(maskb);
-  dt_pixelpipe_cache_free_align(depth);
+  // FLOW steps 1b and 3-8, the CPU driver's own code
+  if(_harmonic_reconstruct_regions(interpolated, clipping_mask, pipe, piece, roi_in, clips)) return 1;
 
   if(knee_on)
   {
@@ -575,6 +571,14 @@ static cl_int _harmonic_reconstruct_cl(struct dt_iop_module_t *self, const dt_de
     if(override_env) cpu_px = (size_t)strtoull(override_env, NULL, 10);
     for(int region_index = 0; region_index < nreg && cl_err == CL_SUCCESS; region_index++)
     {
+      // The pipe abandoned this run: stop before each region, once the previous one has run on the
+      // device (the host enqueues a big region's ~1000 launches far ahead of it). The first region
+      // follows the blocking upload of the depth map, so the host is in step with the device there.
+      if((region_index == 0 || dt_opencl_finish(devid)) && dt_dev_pixelpipe_has_shutdown(pipe))
+      {
+        cl_err = DT_OPENCL_DEFAULT_ERROR;
+        break;
+      }
       // routing key = the PADDED read-window area (rx0..rx1 x ry0..ry1), the same window either path
       // reconstructs -- not the bare clipped bbox
       const size_t region_px = (size_t)(regions[region_index].rx1 - regions[region_index].rx0 + 1)
@@ -1004,6 +1008,12 @@ cl_int process_harmonic_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_
     dt_opencl_release_mem_object(mask_buf);
     dt_opencl_release_mem_object(corr_buf);
     if(gpu_err == CL_SUCCESS) goto remosaic; // device middle succeeded -> straight to the GPU remosaic
+    if(dt_dev_pixelpipe_has_shutdown(pipe))
+    {
+      // the device middle stopped on the killswitch: the host middle would redo it for nobody
+      cl_err = gpu_err;
+      goto fallback;
+    }
     // GPU middle unavailable (fp64 device, grain requested, oversized hole...): host middle below
     HL_CL_RELEASE(corr_cl);
     dt_print(DT_DEBUG_OPENCL, "[opencl_highlights] harmonic GPU middle failed (%i), using the host middle\n",
@@ -1165,6 +1175,8 @@ fallback:
   dt_pixelpipe_cache_free_align(h_mask);
   dt_pixelpipe_cache_free_align(h_raw);
   dt_pixelpipe_cache_free_align(input_corr);
+  // a run the pipe abandoned fails here, without being redone on the host
+  if(dt_dev_pixelpipe_has_shutdown(pipe)) return DT_OPENCL_DEFAULT_ERROR;
   // preference 3 (last resort): a GPU gather/remosaic step failed -> the bit-identical host roundtrip.
   return _harmonic_cl_roundtrip(self, pipe, piece, dev_in, dev_out, roi_in, roi_out, clips);
 }
