@@ -92,6 +92,9 @@ Self-builds and distribution packages never check: whoever built them updates th
 
 ## The Intel mac build cannot afford its own dependencies
 
+*Measured on the nightlies of 2026-09-10 to 2026-10-15; the keg cache hand-off checked against
+`22b2e62997` on 2026-10-15.*
+
 Homebrew publishes no bottles for Intel macOS any more — `brew` says so outright, `You are
 using macOS on Intel x86_64` — so `macos-15-intel` builds a large part of the tree from
 source. Two formulae dominate it, measured on the nightlies of 2026-09-10 to 09-14 against
@@ -122,9 +125,10 @@ Two measures, and only together do they fit:
   `rust`. Without the cache, those two plus the ~50 min of everything else still come to about
   6 h 23 — over the ceiling on their own. This is the load-bearing half.
 
-So the Intel job caches those kegs. `tools/brew_cache_key.sh` owns the keys, and both
-`mac-nightly.yml` and `mac-brew-cache.yml` call it — an entry saved by one must be the entry
-the other looks for. Three things about that cache are not obvious:
+So the Intel job restores those kegs from a cache. **`mac-brew-cache.yml` is the only workflow
+that writes it; the nightly only reads it.** `tools/brew_cache_key.sh` owns the keys, and both
+workflows call it — the entry one saves must be the entry the other looks for. Three things
+about that cache are not obvious:
 
 - **A keg is cacheable without relocation** because a given architecture's prefix is identical
   on every runner (`/usr/local` on Intel, `/opt/homebrew` on arm64), so a restored keg sits at
@@ -140,36 +144,73 @@ the other looks for. Three things about that cache are not obvious:
   `link` refuses on a keg-only formula, which is the right answer there. `--force` would put
   `llvm`'s clang in the prefix's `bin` ahead of Xcode's, and the nightly compiles with `CC=cc`.
 
-**The kegs are banked as soon as they exist, not at the end of the job.** `actions/cache`'s own
+**A keg is banked as soon as it exists, not at the end of the job.** `actions/cache`'s own
 save is a post-step, and a job cancelled at the 6-hour ceiling never reaches it — visible in a
 killed run's step list as `Post Restore the rust keg`, still pending. On 2026-09-10 the
 dependency step *succeeded* at 5 h 52 and the budget then ran out during the build, so the four
-hours just spent on llvm went with the job. `actions/cache/restore` and an explicit
-`actions/cache/save` placed right after the dependency step mean a run that gets that far warms
-the cache for the next one even when it dies afterwards.
+hours just spent on llvm went with the job. `mac-brew-cache.yml` therefore uses
+`actions/cache/restore` and an explicit `actions/cache/save` placed right after the build step,
+so a run that gets that far keeps its keg even when it dies afterwards.
 
 **llvm@22's build time is not a constant, and that is the margin the warm-up lives on.** The
 nightly of 2026-09-15 — the first with our own llvm dropped, so llvm@22 had the step almost to
 itself — sat **4 h 54 inside a single `cmake --build .`** and was still there when the run was
 cancelled, having completed only `openssl@3`, `xz`, `libssh2` and `pkgconf` (about 14 min) beside
-it. `mac-brew-cache.yml` therefore runs at `timeout-minutes: 355`, nearly the whole ceiling, and
+it. llvm 23.1.3 did no better on the nightly of 2026-10-15 (run 38713852826): its
+`cmake --build` ran from 11:18 until the ceiling killed the job at 15:34, 4 h 16, unfinished.
+`mac-brew-cache.yml` therefore runs at `timeout-minutes: 355`, nearly the whole ceiling, and
 a dispatch that still runs out is retried rather than reasoned about.
 
-**A cold cache still cannot warm itself from the nightly**, because the dependency step is what
-does not fit: llvm@22 + rust + the rest come to about 6 h 31 against the 5 h 55 the job has left
-after checkout, so the save is never reached either. That is what
-`mac-brew-cache.yml` is for — it builds nothing but the formulae it is given, so each gets the
-whole 6 hours. Warm in two dispatches, `llvm@22` then `rust`: their 5 h 41 together does not fit
-under one timeout, and the second dispatch restores `llvm@22` from the cache instead of building
-it again. Asking for both at once is the situation the workflow exists to escape.
+**A cold keg is handed off, never built by the nightly**, because it does not fit beside the
+rest. With both kegs restored, the dependency step alone took **1 h 48, 2 h 09, 2 h 28 and
+3 h 36** on 2026-10-03, 04, 05 and 07; rust adds 1 h 05 – 1 h 29 to that, llvm over 4 h. So when
+either key misses, the nightly's Intel job dispatches `mac-brew-cache.yml` with the cold
+formulae, in dependency order (`llvm rust`, or one of them), and fails within minutes with an
+error naming them. The next nightly finds the kegs warm and builds Intel, because the Intel DMG
+is still missing for the commit (see below). An llvm bump costs one night of Intel package and
+nobody's attention.
+
+`mac-brew-cache.yml` builds **one formula per run**: the first one requested whose key missed.
+It saves that keg, then dispatches itself for the formulae after it on the same branch — llvm
+and rust together do not fit under one timeout, and the rust run restores llvm from the cache
+instead of building it again. A formula it has no restore and save steps for is refused rather
+than built and never saved. The rest of what makes it work:
+
+- **It runs on the default branch.** The nightly calls `gh workflow run` without `--ref`, which
+  targets the default branch, and a cache saved there is visible to every branch; one saved on
+  another branch is visible to that branch alone.
+- **One run at a time**, through a concurrency group: two runs asked for the same cold llvm
+  would each spend four hours on it, for one save. A request arriving meanwhile waits, then
+  finds the keg saved and has nothing to build. GitHub keeps one pending run per group and
+  cancels an older pending one, which the newer request covers.
+- **The nightly's token can dispatch it** because the repository's default workflow permissions
+  are `write` (`default_workflow_permissions`, read 2026-10-15) and `mac-nightly.yml` sets no
+  `permissions:` of its own. `mac-brew-cache.yml` does set them, so it asks for
+  `actions: write` explicitly. A `workflow_dispatch` sent with `GITHUB_TOKEN` is one of the two
+  events GitHub lets that token start a run with.
+
+**OPEN — what grows now is everything else.** The ~50 min of "everything else" measured in
+September is no longer true: with both kegs restored, the Intel job still built **46 formulae
+from source on 2026-10-03 and 50 on 10-07**, every night, since nothing but llvm and rust is
+cached. Summing brew's own `built in …` lines (rounded by brew) gives about **100 min on 10-03
+and 199 min on 10-07** for nearly the same set: the same formulae took twice as long on the
+second runner (x265 10 → 19 min, openssl@3 5 → 12 min), and cmake, rebuilt only on 10-07 as an
+upgrade of the runner image's copy, added 28 min. The whole job ran about 4 h 05 on 10-07 against
+the 6-hour ceiling. Each homebrew-core bump drops that formula's Intel bottle, so the share
+built from source only moves one way, and a slow runner on a heavy night has under two hours of
+margin left. Caching more kegs the same way would not do it — `brew install` upgrades every
+outdated dependency, so only a keg at exactly the current version helps — and nothing has been
+measured beyond this.
 
 **The cached llvm is now `llvm`, not `llvm@22`** (2026-10-02, against `a4eac9fe11`). homebrew-core
 bumped `rust` to 1.99.0 on 2026-10-01, three days after "rust: do not hardcode LLVM version": it
 now `depends_on "llvm"` (23.1.2). The nightly of 10-02 restored `llvm@22` from the cache and then
 scheduled `llvm` beside it — `Installing librsvg dependency: llvm`, then `rust`, which died on
-`/usr/local/opt/llvm not present or broken`. `llvm@22` left the tree; the keys, the cache steps
-and `mac-brew-cache.yml`'s default now name `llvm`, and the skip in `install-deps-macos.sh` saves
-nothing while rust shares it. **The cache needs warming again: `llvm`, then `rust`.**
+`/usr/local/opt/llvm not present or broken`. `llvm@22` left the tree; the keys and the cache
+steps name `llvm`, and the skip in `install-deps-macos.sh` saves nothing while rust shares it.
+An llvm bump now usually moves rust's revision with it: on 2026-10-15 homebrew-core wanted
+llvm `23.1.3_1` and rust `1.99.0_1` against the cached `23.1.2_0` and `1.99.0_0`, so both keys
+missed at once.
 
 **Homebrew builds with network access denied, so a download that failed the prefetch is lost.**
 `brew install` fetches everything first (`Fetching downloads for: …`), then builds each formula
@@ -314,8 +355,10 @@ whenever there is at least one: a package that arrived is announced even when th
 while the job still fails for the missing one.
 
 **One cost:** the Intel job is also what keeps its Homebrew kegs warm, and GitHub evicts a cache
-entry not read for 7 days. A week without a commit would leave the next Intel build cold, which
-does not fit in six hours (see above); `mac-brew-cache.yml` is the way back.
+entry not read for 7 days. A week without a commit leaves the next Intel build cold: that night
+hands the kegs to `mac-brew-cache.yml` (see above) and the next one builds Intel. A week without
+a run does not even need a quiet master: from 2026-10-09 to 10-14 GitHub started none of the
+scheduled nightlies — Windows, Linux, Docker and macOS alike have no run on those days.
 
 ## Secrets and settings to create
 

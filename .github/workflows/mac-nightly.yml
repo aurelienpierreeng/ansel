@@ -155,6 +155,9 @@ jobs:
       #
       # Each formula gets its own entry, keyed on its own version, so a bump in one does not
       # discard the other.
+      #
+      # This job only READS that cache. mac-brew-cache.yml is the one writer: a cold keg is
+      # handed to it below and this job stops, rather than building it here.
       - name: Resolve the Homebrew keg cache keys
         id: brewcache
         if: ${{ runner.arch == 'X64' }}
@@ -183,6 +186,33 @@ jobs:
             ${{ steps.brewcache.outputs.cellar }}/rust
             ${{ steps.brewcache.outputs.opt }}/rust
           key: ${{ steps.brewcache.outputs.rust_key }}
+      # A cold keg does not fit in this job, and building it here only burns the job. On
+      # 2026-10-15 homebrew-core had moved to llvm 23.1.3_1 and rust 1.99.0_1, both keys missed,
+      # and llvm's `cmake --build' ran from 11:18 until the 6-hour ceiling killed the job at 15:34
+      # without finishing -- after 1h41 of other formulae. Even with both kegs warm the dependency
+      # step took 1h48 to 3h36 on 2026-10-03 to 07, so neither fits beside the rest.
+      #
+      # So a miss dispatches mac-brew-cache.yml for the cold kegs, in dependency order -- it
+      # builds one per run and chains to the next -- and this job fails within minutes, saying
+      # so. The next nightly finds the kegs warm and builds Intel, since its DMG is still
+      # missing for the commit. That workflow runs on the default branch, which `gh workflow
+      # run' targets when no ref is given: only a cache saved there is visible to every branch.
+      - name: Hand the cold kegs to the keg cache workflow
+        if: ${{ runner.arch == 'X64' && (steps.keg-llvm.outputs.cache-hit != 'true' || steps.keg-rust.outputs.cache-hit != 'true') }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          LLVM_HIT: ${{ steps.keg-llvm.outputs.cache-hit }}
+          RUST_HIT: ${{ steps.keg-rust.outputs.cache-hit }}
+          LLVM_KEY: ${{ steps.brewcache.outputs.llvm_key }}
+          RUST_KEY: ${{ steps.brewcache.outputs.rust_key }}
+        run: |
+          cold=""
+          [ "${LLVM_HIT}" = "true" ] || { cold="llvm"; echo "not cached: ${LLVM_KEY}"; }
+          [ "${RUST_HIT}" = "true" ] || { cold="${cold:+${cold} }rust"; echo "not cached: ${RUST_KEY}"; }
+          gh workflow run mac-brew-cache.yml -f formulae="${cold}"
+          echo "::error title=Homebrew kegs not cached::${cold} not in the keg cache; mac-brew-cache.yml was dispatched to build them, and the next nightly builds the Intel package."
+          exit 1
       # Two different situations used to collapse into one tolerated `brew link' failure, and
       # both printed `Error:' lines that read like a broken step: a keg that was never restored
       # (a cache miss, the ordinary cold case) and a keg-only formula, which needs no link at
@@ -213,28 +243,6 @@ jobs:
       - name: Install Base Dependencies
         run: |
           "${SRC_DIR}/packaging/install-deps-macos.sh"
-      # The kegs are banked here, as soon as they exist, and not by actions/cache's own save --
-      # that is a post-step at the end of the job, and a job cancelled at the 6-hour ceiling
-      # never reaches it. On the nightly of 2026-09-10 the dependency step SUCCEEDED at 5h52
-      # and the budget then ran out during the build, so the four hours it had just spent on
-      # llvm were thrown away with the job. Saving at this point means a run that gets this far
-      # warms the cache for the next one even when it dies afterwards.
-      - name: Save the llvm keg
-        if: ${{ runner.arch == 'X64' && steps.keg-llvm.outputs.cache-hit != 'true' }}
-        uses: actions/cache/save@v4
-        with:
-          path: |
-            ${{ steps.brewcache.outputs.cellar }}/llvm
-            ${{ steps.brewcache.outputs.opt }}/llvm
-          key: ${{ steps.brewcache.outputs.llvm_key }}
-      - name: Save the rust keg
-        if: ${{ runner.arch == 'X64' && steps.keg-rust.outputs.cache-hit != 'true' }}
-        uses: actions/cache/save@v4
-        with:
-          path: |
-            ${{ steps.brewcache.outputs.cellar }}/rust
-            ${{ steps.brewcache.outputs.opt }}/rust
-          key: ${{ steps.brewcache.outputs.rust_key }}
       - name: Update lensfun data
         if: ${{ success() }}
         run: |

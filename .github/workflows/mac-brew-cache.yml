@@ -8,32 +8,42 @@
 #
 # Measured on the nightlies of 2026-09-10 to 09-15: llvm@22 3h43 to over 4h54, rust 1h05 to 1h29,
 # everything else about 50 minutes. Both are librsvg's dependencies -- it is written in Rust --
-# so neither can simply be dropped. Their 5h41 together does not fit under one timeout, so warm
-# in two dispatches: `llvm' first, then `rust', which then restores llvm from the cache instead
-# of building it again. Asking for both at once is the situation this workflow exists to escape.
+# so neither can simply be dropped. Their 5h41 together does not fit under one timeout, so each
+# run builds ONE formula: the first of those requested whose keg the cache does not hold. It
+# saves that keg, then dispatches this workflow again for the rest, so `llvm rust' warms llvm,
+# then rust, which restores llvm from the cache instead of building it again.
 #
 # Since rust 1.99.0 (homebrew-core, 2026-10-01) rust depends on the unversioned `llvm' (23.1.2)
 # instead of llvm@22, so llvm@22 left the dependency tree and the cached formula is `llvm'.
 #
-# Nothing is scheduled: a warm cache is re-saved under a new key only when a formula's version
-# moves, and the nightly itself does that save once it stops being killed. Dispatch this again
-# after a version bump the nightly could not absorb.
+# Nothing is scheduled: a key changes only when a formula's version moves, and mac-nightly.yml
+# dispatches this workflow itself when it finds a key missing, then stops rather than build the
+# keg -- it only reads the cache, and this workflow is the only one that writes it. Dispatching
+# it by hand is the same request.
 
 name: Mac Homebrew keg cache
 
-# Reading the repository is all this needs: it checks the tree out for the two scripts it
-# calls, installs Homebrew formulae, and writes nothing back. The caches it fills are not
-# governed by this token.
+# Reading the repository, to check out the scripts it calls, and dispatching this workflow
+# again for the formulae left after this run. The caches it fills are not governed by this token.
 permissions:
   contents: read
+  actions: write
+
+# One warm-up at a time: two runs asked for the same cold llvm would each spend four hours on it
+# and only one save can win. A request arriving meanwhile waits, then finds the kegs the run
+# before it saved and has nothing left to build. GitHub keeps one pending run per group and
+# cancels an older pending one, which the newer request covers.
+concurrency:
+  group: mac-brew-cache
+  cancel-in-progress: false
 
 on:
   workflow_dispatch:
     inputs:
       formulae:
-        description: "Formulae to build and cache (space-separated). Start with: llvm"
+        description: "Formulae to build and cache, in dependency order, one per run (llvm and/or rust)"
         required: true
-        default: "llvm"
+        default: "llvm rust"
 
 jobs:
   warm:
@@ -112,36 +122,63 @@ jobs:
       # before any shell reads it, so a value carrying a `;' would run as a command of its own.
       # $FORMULAE is deliberately unquoted -- the whole point is several formulae -- so the
       # word splitting is the shell's, on data.
+      #
+      # This run's formula is the first one requested that the cache did not hold; those after
+      # it are the next run's. Only llvm and rust have a keg cache -- the restore and save steps
+      # name them -- so anything else is refused here rather than built and never saved.
+      - name: Pick the formula this run builds
+        id: pick
+        env:
+          FORMULAE: ${{ inputs.formulae }}
+          HIT_llvm: ${{ steps.keg-llvm.outputs.cache-hit }}
+          HIT_rust: ${{ steps.keg-rust.outputs.cache-hit }}
+        run: |
+          this=""
+          rest=""
+          # shellcheck disable=SC2086
+          for f in ${FORMULAE}; do
+            case "${f}" in
+              llvm|rust) ;;
+              *) echo "::error::${f} has no keg cache: only llvm and rust are cached."; exit 1 ;;
+            esac
+            hit="HIT_${f}"
+            if [ -n "${this}" ]; then
+              rest="${rest:+${rest} }${f}"
+            elif [ "${!hit}" = "true" ]; then
+              echo "${f}: already cached"
+            else
+              this="${f}"
+            fi
+          done
+          echo "this run builds: ${this:-nothing}${rest:+, the next one: ${rest}}"
+          {
+            echo "this=${this}"
+            echo "rest=${rest}"
+          } >> "$GITHUB_OUTPUT"
       # Same as install-deps-macos.sh does before the nightly's install: llvm 23.1.2 patches
       # itself from a GitHub compare diff whose checksum GitHub no longer serves, and the build
       # sandbox cannot fetch it again. tools/brew_seed_patches.sh has the measurement.
       - name: Seed the patches GitHub now serves differently
+        if: ${{ steps.pick.outputs.this == 'llvm' }}
         run: |
           "${SRC_DIR}/tools/brew_seed_patches.sh" llvm
-      - name: Build the requested formulae
+      - name: Build the formula
+        if: ${{ steps.pick.outputs.this != '' }}
         env:
-          FORMULAE: ${{ inputs.formulae }}
+          FORMULA: ${{ steps.pick.outputs.this }}
         run: |
-          # Already-installed formulae are reported and skipped, so re-dispatching after a
-          # partial warm-up costs a minute rather than another build.
           # brew's status is not the verdict, the Cellar is -- as in install-deps-macos.sh. Run
           # 37028120640 (2026-10-02) built llvm 23.1.2 in 3h31, then exited 1 because a
           # dependency, openssl@3, could not link over the runner image's openssl@1.1; the
           # save steps were skipped and the four hours were lost.
           status=0
-          # shellcheck disable=SC2086
-          brew install ${FORMULAE} || status=$?
-          missing=""
-          # shellcheck disable=SC2086
-          for f in ${FORMULAE}; do
-            brew list --formula "${f}" >/dev/null 2>&1 || missing="${missing} ${f}"
-          done
-          if [ -n "${missing}" ]; then
-            echo "Missing after brew install:${missing}" >&2
+          brew install "${FORMULA}" || status=$?
+          if ! brew list --formula "${FORMULA}" >/dev/null 2>&1; then
+            echo "Missing after brew install: ${FORMULA}" >&2
             exit "$(( status ? status : 1 ))"
           fi
           if [ "${status}" -ne 0 ]; then
-            echo "brew install exited ${status}, but every requested formula is installed." >&2
+            echo "brew install exited ${status}, but ${FORMULA} is installed." >&2
           fi
       # The kegs are banked here, as soon as they exist, and not by actions/cache's own save --
       # that is a post-step at the end of the job, and a job cancelled at the 6-hour ceiling
@@ -150,7 +187,7 @@ jobs:
       # llvm were thrown away with the job. Saving at this point means a run that gets this far
       # warms the cache for the next one even when it dies afterwards.
       - name: Save the llvm keg
-        if: ${{ steps.keg-llvm.outputs.cache-hit != 'true' }}
+        if: ${{ steps.pick.outputs.this == 'llvm' }}
         uses: actions/cache/save@v4
         with:
           path: |
@@ -158,13 +195,26 @@ jobs:
             ${{ steps.brewcache.outputs.opt }}/llvm
           key: ${{ steps.brewcache.outputs.llvm_key }}
       - name: Save the rust keg
-        if: ${{ steps.keg-rust.outputs.cache-hit != 'true' }}
+        if: ${{ steps.pick.outputs.this == 'rust' }}
         uses: actions/cache/save@v4
         with:
           path: |
             ${{ steps.brewcache.outputs.cellar }}/rust
             ${{ steps.brewcache.outputs.opt }}/rust
           key: ${{ steps.brewcache.outputs.rust_key }}
+      # The next formula gets a run of its own, and the whole 6 hours with it. Reached only when
+      # this one was built and saved: rust cannot build without the llvm it would restore. The
+      # new run waits in the concurrency group until this one ends. It runs on this run's branch:
+      # a cache saved on a branch other than the default one is visible to that branch alone.
+      - name: Dispatch the next formula
+        if: ${{ steps.pick.outputs.rest != '' }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          REST: ${{ steps.pick.outputs.rest }}
+        run: |
+          gh workflow run mac-brew-cache.yml --ref "${GITHUB_REF_NAME}" -f formulae="${REST}"
+          echo "dispatched: ${REST}"
       - name: Report what the cache now holds
         if: ${{ always() }}
         run: |

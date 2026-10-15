@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 #   This file is part of the Ansel project.
 #   Copyright (C) 2026 Aurélien PIERRE.
+#   Copyright (C) 2026 Guillaume Stutin.
 #   
 #   Ansel is free software: you can redistribute it and/or modify
 #   it under the terms of the GNU General Public License as published by
@@ -77,7 +78,24 @@ MINGW_PACKAGES=(
   zlib
 )
 
-pacman -Suy --noconfirm
+# pacman fetches a package's .sig from the mirror that served the package, with no other server
+# to fall back on (lib/libalpm/dload.c, pacman 6.1): one stalled mirror fails the whole
+# transaction. mirror.msys2.org picks a mirror per request, so asking again lands elsewhere, and
+# what already arrived stays in the cache; a package cached without its .sig is fetched again.
+pacman_retry() {
+  local attempt=1
+  until pacman "$@"; do
+    if [ "${attempt}" -ge 3 ]; then
+      echo "pacman failed ${attempt} times, giving up." >&2
+      return 1
+    fi
+    echo "pacman failed (attempt ${attempt} of 3), retrying in 10 s." >&2
+    attempt=$((attempt + 1))
+    sleep 10
+  done
+}
+
+pacman_retry -Suy --noconfirm
 
 # libsoup package name differs across MSYS2 repositories.
 LIBSOUP_PKG=""
@@ -92,11 +110,11 @@ if [ -n "${LIBSOUP_PKG}" ]; then
 else
   echo "Warning: no libsoup package found for ${MINGW_PREFIX} (tried libsoup, libsoup2)." >&2
 fi
-pacman -S --needed --noconfirm "${MSYS_PACKAGES[@]}"
+pacman_retry -S --needed --noconfirm "${MSYS_PACKAGES[@]}"
 
 MINGW_FULL_PACKAGES=()
 for pkg in "${MINGW_PACKAGES[@]}"; do
   MINGW_FULL_PACKAGES+=("${MINGW_PREFIX}-${pkg}")
 done
 
-pacman -S --needed --noconfirm "${MINGW_FULL_PACKAGES[@]}"
+pacman_retry -S --needed --noconfirm "${MINGW_FULL_PACKAGES[@]}"

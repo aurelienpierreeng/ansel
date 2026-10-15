@@ -68,6 +68,27 @@ The second half is true of every gate that runs. The first half is not, measured
 Both exceptions are defensible: they gate a *diff*, and a diff needs a base ref. Knowing which
 is which is not, though — a push to master is checked by three gates, not five.
 
+## MSYS2: one stalled mirror fails the Windows dependency step
+
+Measured 2026-10-15 against `22b2e62997`. Of the last 40 failed `win-nightly.yml` runs, three
+failed in "Install Base Dependencies" (2026-09-19, 2026-09-24, 2026-10-15), all with the same
+line: `failed retrieving file '<package>.pkg.tar.zst.sig' from ftp2.osuosl.org : Operation too
+slow`. Always a `.sig`, always one mirror, and pacman never tried another.
+
+That is pacman 6.1 (`lib/libalpm/dload.c`, read at tag `v6.1.0`): once a package arrives, its
+`.sig` is queued as a new download of the package's *effective* URL plus `.sig`, with no server
+list, so `curl_retry_next_server()` has nothing to retry with. MSYS2's mirrorlist starts with
+`mirror.msys2.org`, a redirector that picks a mirror per request (six `HEAD` requests from
+France got four different mirrors). The package came from whichever mirror the redirect chose;
+when that mirror stalls on the signature, the transaction is lost.
+
+Running the same `pacman -S` again recovers: the redirector is asked again, what already arrived
+stays in the cache, and `find_dl_candidates()` (`sync.c`) fetches a package again together with
+its `.sig` when the cache holds the one without the other. `packaging/install-deps-windows-msys2.sh`
+therefore runs each `pacman` call through `pacman_retry`, three attempts ten seconds apart.
+`ci.yml`, `win-nightly.yml` and `manualrun.yml` all go through that script. The `pacman -Syuu`
+that `msys2/setup-msys2` runs itself has no such retry; none of those 40 runs stopped there.
+
 ## Known holes (open)
 
 Found by audit on 2026-09-29 and **not fixed**. Each is the same shape: a check that reports
