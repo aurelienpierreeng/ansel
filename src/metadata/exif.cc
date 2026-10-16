@@ -423,6 +423,7 @@ static bool dt_exif_read_xmp_tag(Exiv2::XmpData &xmpData, Exiv2::XmpData::iterat
 }
 #define FIND_XMP_TAG(key) dt_exif_read_xmp_tag(xmpData, &pos, key)
 
+static bool _exif_decode_xmp_scratch(dt_image_t *img, Exiv2::XmpData &xmpData, const bool clear_labels);
 
 // FIXME: according to http://www.exiv2.org/doc/classExiv2_1_1Metadatum.html#63c2b87249ba96679c29e01218169124
 // there is no need to pass xmpData
@@ -474,6 +475,7 @@ bool dt_exif_apply_xmp_persistence(dt_image_t *img, Exiv2::XmpData &xmpData, con
         g_list_free(imgs);
         return false;
       }
+      if(replace_existing) *tags_changed = true;
       for(unsigned int i = 0; i < DT_METADATA_NUMBER; i++)
       {
         const gchar *key = dt_metadata_get_key(i);
@@ -492,92 +494,14 @@ bool dt_exif_apply_xmp_persistence(dt_image_t *img, Exiv2::XmpData &xmpData, con
           g_list_free(imgs);
           return false;
         }
+        *tags_changed = true;
       }
     }
 
-    if(FIND_XMP_TAG("Xmp.xmp.Rating"))
+    if(!_exif_decode_xmp_scratch(img, xmpData, replace_existing))
     {
-      const int stars = pos->toLong();
-      dt_image_set_xmp_rating(img, stars);
-    }
-    else
-      dt_image_set_xmp_rating(img, -2);
-
-    if(replace_existing) img->color_labels = 0;
-    if(FIND_XMP_TAG("Xmp.xmp.Label"))
-    {
-      std::string label = pos->toString();
-      if(label == "Red") // Is it really called like that in XMP files?
-        img->color_labels |= 1 << DT_COLORLABELS_RED;
-      else if(label == "Yellow") // Is it really called like that in XMP files?
-        img->color_labels |= 1 << DT_COLORLABELS_YELLOW;
-      else if(label == "Green")
-        img->color_labels |= 1 << DT_COLORLABELS_GREEN;
-      else if(label == "Blue") // Is it really called like that in XMP files?
-        img->color_labels |= 1 << DT_COLORLABELS_BLUE;
-      else if(label == "Purple") // Is it really called like that in XMP files?
-        img->color_labels |= 1 << DT_COLORLABELS_PURPLE;
-    }
-    // if Xmp.xmp.Label not managed from an external app use dt colors
-    else if(FIND_XMP_TAG("Xmp.darktable.colorlabels"))
-    {
-      // color labels
-      const int cnt = pos->count();
-      for(int i = 0; i < cnt; i++)
-      {
-        const int color = pos->toLong(i);
-        if(color >= 0 && color < DT_COLORLABELS_LAST)
-          img->color_labels |= 1 << color;
-      }
-    }
-
-    /* read gps location */
-    if(FIND_XMP_TAG("Xmp.exif.GPSLatitude"))
-    {
-      img->geoloc.latitude = dt_util_gps_string_to_number(pos->toString().c_str());
-    }
-
-    if(FIND_XMP_TAG("Xmp.exif.GPSLongitude"))
-    {
-      img->geoloc.longitude = dt_util_gps_string_to_number(pos->toString().c_str());
-    }
-
-    if(FIND_XMP_TAG("Xmp.exif.GPSAltitude"))
-    {
-      Exiv2::XmpData::const_iterator ref = xmpData.findKey(Exiv2::XmpKey("Xmp.exif.GPSAltitudeRef"));
-      if(ref != xmpData.end() && ref->size())
-      {
-        std::string sign_str = ref->toString();
-        const char *sign = sign_str.c_str();
-        double elevation = 0.0;
-        if(dt_util_gps_elevation_to_number(pos->toRational(0).first, pos->toRational(0).second, sign[0], &elevation))
-          img->geoloc.elevation = elevation;
-      }
-    }
-
-    /* read lens type from Xmp.exifEX.LensModel */
-    if(FIND_XMP_TAG("Xmp.exifEX.LensModel"))
-    {
-      // lens model
-      char *lens = strdup(pos->toString().c_str());
-      char *adr =  lens;
-      if(strncmp(lens, "lang=", 5) == 0)
-      {
-        lens = strchr(lens, ' ');
-        if(!IS_NULL_PTR(lens)) lens++;
-      }
-      // no need to do any Unicode<->locale conversion, the field is specified as ASCII
-      g_strlcpy(img->exif_lens, lens, sizeof(img->exif_lens));
-      dt_free(adr);
-    }
-
-    /* read timestamp from Xmp.exif.DateTimeOriginal */
-    if(FIND_XMP_TAG("Xmp.exif.DateTimeOriginal")
-       || FIND_XMP_TAG("Xmp.photoshop.DateCreated"))
-    {
-      char *datetime = strdup(pos->toString().c_str());
-      if(datetime[0] != '\0') dt_datetime_exif_to_img(img, datetime);
-      dt_free(datetime);
+      g_list_free(imgs);
+      return false;
     }
 
     if(imgs)
@@ -588,7 +512,7 @@ bool dt_exif_apply_xmp_persistence(dt_image_t *img, Exiv2::XmpData &xmpData, con
     imgs = NULL;
     return true;
   }
-  catch(const std::exception &e)
+  catch(const std::exception &)
   {
     if(imgs)
     {
@@ -596,17 +520,82 @@ bool dt_exif_apply_xmp_persistence(dt_image_t *img, Exiv2::XmpData &xmpData, con
       imgs = NULL;
     }
     imgs = NULL;
-    std::string s(e.what());
-    std::cerr << "[exiv2 dt_exif_decode_xmp_data] " << img->filename << ": " << s << std::endl;
     return false;
   }
 }
 
 bool dt_exif_decode_xmp_data(dt_image_t *img, Exiv2::XmpData &xmpData, const int version,
-                             const bool exif_read)
+                              const bool exif_read)
 {
   bool tags_changed = false;
   return dt_exif_apply_xmp_persistence(img, xmpData, version, !exif_read, &tags_changed);
+}
+
+static bool _exif_decode_xmp_scratch(dt_image_t *img, Exiv2::XmpData &xmpData, const bool clear_labels)
+{
+  try
+  {
+    Exiv2::XmpData::iterator pos;
+    if(FIND_XMP_TAG("Xmp.xmp.Rating"))
+      dt_image_set_xmp_rating(img, pos->toLong());
+    else
+      dt_image_set_xmp_rating(img, -2);
+
+    if(clear_labels) img->color_labels = 0;
+    if(FIND_XMP_TAG("Xmp.xmp.Label"))
+    {
+      const std::string label = pos->toString();
+      if(label == "Red") img->color_labels |= 1 << DT_COLORLABELS_RED;
+      else if(label == "Yellow") img->color_labels |= 1 << DT_COLORLABELS_YELLOW;
+      else if(label == "Green") img->color_labels |= 1 << DT_COLORLABELS_GREEN;
+      else if(label == "Blue") img->color_labels |= 1 << DT_COLORLABELS_BLUE;
+      else if(label == "Purple") img->color_labels |= 1 << DT_COLORLABELS_PURPLE;
+    }
+    else if(FIND_XMP_TAG("Xmp.darktable.colorlabels"))
+    {
+      const int count = pos->count();
+      for(int i = 0; i < count; i++)
+      {
+        const int color = pos->toLong(i);
+        if(color >= 0 && color < DT_COLORLABELS_LAST) img->color_labels |= 1 << color;
+      }
+    }
+
+    if(FIND_XMP_TAG("Xmp.exif.GPSLatitude"))
+      img->geoloc.latitude = dt_util_gps_string_to_number(pos->toString().c_str());
+    if(FIND_XMP_TAG("Xmp.exif.GPSLongitude"))
+      img->geoloc.longitude = dt_util_gps_string_to_number(pos->toString().c_str());
+    if(FIND_XMP_TAG("Xmp.exif.GPSAltitude"))
+    {
+      const Exiv2::XmpData::const_iterator ref = xmpData.findKey(Exiv2::XmpKey("Xmp.exif.GPSAltitudeRef"));
+      if(ref != xmpData.end() && ref->size())
+      {
+        double elevation = 0.0;
+        const std::string sign = ref->toString();
+        if(dt_util_gps_elevation_to_number(pos->toRational(0).first, pos->toRational(0).second,
+                                           sign[0], &elevation))
+          img->geoloc.elevation = elevation;
+      }
+    }
+    if(FIND_XMP_TAG("Xmp.exifEX.LensModel"))
+    {
+      const std::string value = pos->toString();
+      const char *lens = value.c_str();
+      if(g_str_has_prefix(lens, "lang="))
+      {
+        const char *separator = strchr(lens, ' ');
+        if(!IS_NULL_PTR(separator)) lens = separator + 1;
+      }
+      g_strlcpy(img->exif_lens, lens, sizeof(img->exif_lens));
+    }
+    if(FIND_XMP_TAG("Xmp.exif.DateTimeOriginal") || FIND_XMP_TAG("Xmp.photoshop.DateCreated"))
+      dt_datetime_exif_to_img(img, pos->toString().c_str());
+    return true;
+  }
+  catch(const std::exception &e)
+  {
+    return false;
+  }
 }
 
 static bool dt_exif_read_iptc_tag(Exiv2::IptcData &iptcData, Exiv2::IptcData::const_iterator *pos, string key)
@@ -624,11 +613,33 @@ static bool dt_exif_read_iptc_tag(Exiv2::IptcData &iptcData, Exiv2::IptcData::co
 }
 #define FIND_IPTC_TAG(key) dt_exif_read_iptc_tag(iptcData, &pos, key)
 
+static bool _exif_decode_iptc_datetime(dt_image_t *img, Exiv2::IptcData &iptcData)
+{
+  try
+  {
+    Exiv2::IptcData::const_iterator pos;
+    if(!FIND_IPTC_TAG("Iptc.Application2.DateCreated")) return true;
+    GString *datetime = g_string_new(pos->toString().c_str());
+    datetime = g_string_append(datetime, "T");
+    if(FIND_IPTC_TAG("Iptc.Application2.TimeCreated"))
+      datetime = g_string_append(datetime, pos->toString().c_str());
+    else
+      datetime = g_string_append(datetime, "00:00:00");
+    if(datetime->str[0] != '\0') dt_datetime_exif_to_img(img, datetime->str);
+    g_string_free(datetime, TRUE);
+    return true;
+  }
+  catch(const std::exception &e)
+  {
+    return false;
+  }
+}
 
 // FIXME: according to http://www.exiv2.org/doc/classExiv2_1_1Metadatum.html#63c2b87249ba96679c29e01218169124
 // there is no need to pass iptcData
-static bool _exif_decode_iptc_data(dt_image_t *img, Exiv2::IptcData &iptcData)
+static bool _exif_decode_iptc_data(dt_image_t *img, Exiv2::IptcData &iptcData, bool *metadata_changed)
 {
+  *metadata_changed = false;
   try
   {
     Exiv2::IptcData::const_iterator pos;
@@ -654,38 +665,22 @@ static bool _exif_decode_iptc_data(dt_image_t *img, Exiv2::IptcData &iptcData)
     {
       std::string str = pos->print(/*&iptcData*/);
       if(!dt_metadata_set_import(img->id, "Xmp.dc.description", str.c_str())) return false;
+      *metadata_changed = true;
     }
     if(FIND_IPTC_TAG("Iptc.Application2.Copyright"))
     {
       std::string str = pos->print(/*&iptcData*/);
       if(!dt_metadata_set_import(img->id, "Xmp.dc.rights", str.c_str())) return false;
+      *metadata_changed = true;
     }
     if(FIND_IPTC_TAG("Iptc.Application2.Byline") || FIND_IPTC_TAG("Iptc.Application2.Writer")
        || FIND_IPTC_TAG("Iptc.Application2.Contact"))
     {
       std::string str = pos->print(/*&iptcData*/);
       if(!dt_metadata_set_import(img->id, "Xmp.dc.creator", str.c_str())) return false;
+      *metadata_changed = true;
     }
-    if(FIND_IPTC_TAG("Iptc.Application2.DateCreated"))
-    {
-      // exiv2 already converts IPTC date and time into ISO 8601 format
-      GString *datetime = g_string_new(pos->toString().c_str());
-
-      datetime = g_string_append(datetime, "T");
-      if(FIND_IPTC_TAG("Iptc.Application2.TimeCreated"))
-      {
-        gchar *time = g_strdup(pos->toString().c_str());
-        datetime = g_string_append(datetime, time);
-        dt_free(time);
-      }
-      else
-        datetime = g_string_append(datetime, "00:00:00");
-
-      if(datetime->str[0] != '\0') dt_datetime_exif_to_img(img, datetime->str);
-      g_string_free(datetime, TRUE);
-    }
-
-    return true;
+    return _exif_decode_iptc_datetime(img, iptcData);
   }
   catch(const std::exception &e)
   {
@@ -1174,6 +1169,46 @@ static void _find_exif_model(Exiv2::ExifData &exifData,
       }
 }
 
+static bool _exif_apply_exif_metadata(dt_image_t *img, Exiv2::ExifData &exifData)
+{
+  try
+  {
+    Exiv2::ExifData::const_iterator pos;
+    if(FIND_EXIF_TAG("Exif.Image.Artist"))
+    {
+      const std::string value = pos->print(&exifData);
+      if(!dt_metadata_set_import(img->id, "Xmp.dc.creator", value.c_str())) return false;
+    }
+    else if(FIND_EXIF_TAG("Exif.Canon.OwnerName"))
+    {
+      const std::string value = pos->print(&exifData);
+      if(!dt_metadata_set_import(img->id, "Xmp.dc.creator", value.c_str())) return false;
+    }
+    if(FIND_EXIF_TAG("Exif.Photo.UserComment"))
+    {
+      const Exiv2::CommentValue value(pos->print(&exifData));
+      if(value.comment() != "binary comment"
+         && !dt_metadata_set_import(img->id, "Xmp.dc.description", value.comment().c_str()))
+        return false;
+    }
+    else if(FIND_EXIF_TAG("Exif.Image.ImageDescription"))
+    {
+      const std::string value = pos->print(&exifData);
+      if(!dt_metadata_set_import(img->id, "Xmp.dc.description", value.c_str())) return false;
+    }
+    if(FIND_EXIF_TAG("Exif.Image.Copyright"))
+    {
+      const std::string value = pos->print(&exifData);
+      if(!dt_metadata_set_import(img->id, "Xmp.dc.rights", value.c_str())) return false;
+    }
+    return true;
+  }
+  catch(const std::exception &e)
+  {
+    return false;
+  }
+}
+
 static bool _exif_decode_exif_data(dt_image_t *img, Exiv2::ExifData &exifData, const bool persist_tags)
 {
   try
@@ -1613,37 +1648,7 @@ static bool _exif_decode_exif_data(dt_image_t *img, Exiv2::ExifData &exifData, c
     _find_datetime_taken(exifData, pos, datetime);
     if(datetime[0] != '\0') dt_datetime_exif_to_img(img, datetime);
 
-    if(FIND_EXIF_TAG("Exif.Image.Artist"))
-    {
-      std::string str = pos->print(&exifData);
-      if(!dt_metadata_set_import(img->id, "Xmp.dc.creator", str.c_str())) return false;
-    }
-    else if(FIND_EXIF_TAG("Exif.Canon.OwnerName"))
-    {
-      std::string str = pos->print(&exifData);
-      if(!dt_metadata_set_import(img->id, "Xmp.dc.creator", str.c_str())) return false;
-    }
-
-    // FIXME: Should the UserComment go into the description? Or do we need an extra field for this?
-    if(FIND_EXIF_TAG("Exif.Photo.UserComment"))
-    {
-      std::string str = pos->print(&exifData);
-      Exiv2::CommentValue value(str);
-      std::string str2 = value.comment();
-      if(str2 != "binary comment" && !dt_metadata_set_import(img->id, "Xmp.dc.description", str2.c_str()))
-        return false;
-    }
-    else if(FIND_EXIF_TAG("Exif.Image.ImageDescription"))
-    {
-      std::string str = pos->print(&exifData);
-      if(!dt_metadata_set_import(img->id, "Xmp.dc.description", str.c_str())) return false;
-    }
-
-    if(FIND_EXIF_TAG("Exif.Image.Copyright"))
-    {
-      std::string str = pos->print(&exifData);
-      if(!dt_metadata_set_import(img->id, "Xmp.dc.rights", str.c_str())) return false;
-    }
+    if(persist_tags && !_exif_apply_exif_metadata(img, exifData)) return false;
 
     if(FIND_EXIF_TAG("Exif.Image.Rating"))
     {
@@ -2016,76 +2021,54 @@ int dt_exif_get_thumbnail(const char *path, uint8_t **buffer, size_t *size, char
 /** read the metadata of an image.
  * XMP data trumps IPTC data trumps EXIF data
  */
-int dt_exif_read(dt_image_t *img, const char *path)
+static void _exif_seed_fallbacks(dt_image_t *img, const char *path)
 {
-  const dt_image_t original = *img;
-  gboolean transaction_started = FALSE;
-  gboolean tags_present = FALSE;
-  gboolean dng_opcodes_read = FALSE;
-  gboolean success = TRUE;
-
-  // Seed the provisional image-type flag (LDR / HDR / RAW, from the file extension) before we probe
-  // dt_image_is_ldr() / dt_image_is_hdr() while decoding the EXIF below. This function can run on a
-  // freshly dt_image_init()'d object (import preview, path-pattern expansion) long before the buffer
-  // is decoded and dt_image_buffer_resolve_flags() sets the authoritative datatype-derived flags.
-  // Only seed when nothing is classified yet, so a DB-loaded / already-resolved image is untouched.
   const char *ext = g_strrstr(path, ".");
   if(!(img->flags & (DT_IMAGE_LDR | DT_IMAGE_HDR | DT_IMAGE_RAW | DT_IMAGE_S_RAW)) && !IS_NULL_PTR(ext))
     img->flags |= dt_image_flags_from_extension(ext + 1);
 
-  // at least set datetime taken to something useful in case there is no exif data in this file (pfm, png,
-  // ...)
   struct stat statbuf;
+  if(!stat(path, &statbuf)) dt_datetime_unix_to_img(img, &statbuf.st_mtime);
+}
 
-  if(!stat(path, &statbuf))
-  {
-    dt_datetime_unix_to_img(img, &statbuf.st_mtime);
-  }
+int dt_exif_read(dt_image_t *img, const char *path)
+{
+  _exif_seed_fallbacks(img, path);
+  const dt_image_t fallback = *img;
+  gboolean dng_opcodes_read = FALSE;
+  gboolean success = TRUE;
 
   try
   {
     std::unique_ptr<Exiv2::Image> image(Exiv2::ImageFactory::open(WIDEN(path)));
     if(!image.get())
     {
-      *img = original;
+      *img = fallback;
       return 1;
     }
     image->readMetadata();
 
-    transaction_started = dt_database_start_transaction();
-    success = transaction_started;
-
-    // EXIF metadata
     Exiv2::ExifData &exifData = image->exifData();
-    if(success && !exifData.empty())
+    if(!exifData.empty())
     {
       dng_opcodes_read = exifData.findKey(Exiv2::ExifKey("Exif.SubImage1.OpcodeList2")) != exifData.end();
       if(!dng_opcodes_read)
         dng_opcodes_read = exifData.findKey(Exiv2::ExifKey("Exif.Image.OpcodeList2")) != exifData.end();
-      success = _exif_decode_exif_data(img, exifData, true);
+      success = _exif_decode_exif_data(img, exifData, false);
     }
     else
       img->exif_inited = 1;
 
-    // IPTC metadata.
     Exiv2::IptcData &iptcData = image->iptcData();
-    // XMP metadata
-    Exiv2::XmpData &xmpData = image->xmpData();
-    tags_present = iptcData.findKey(Exiv2::IptcKey("Iptc.Application2.Keywords")) != iptcData.end()
-                   || xmpData.findKey(Exiv2::XmpKey("Xmp.lr.hierarchicalSubject")) != xmpData.end()
-                   || xmpData.findKey(Exiv2::XmpKey("Xmp.dc.subject")) != xmpData.end();
-    if(success && !iptcData.empty()) success = _exif_decode_iptc_data(img, iptcData);
-    if(success && !xmpData.empty()) success = dt_exif_decode_xmp_data(img, xmpData, -1, true);
+    if(success && !iptcData.empty()) success = _exif_decode_iptc_datetime(img, iptcData);
 
-    // Initialize size - don't wait for full raw to be loaded to get this
-    // information. If use_embedded_thumbnail is set, it will take a
-    // change in development history to have this information
+    Exiv2::XmpData &xmpData = image->xmpData();
+    if(success && !xmpData.empty()) success = _exif_decode_xmp_scratch(img, xmpData, false);
+
     if(success)
     {
       img->height = image->pixelHeight();
       img->width = image->pixelWidth();
-      success = dt_database_release_transaction();
-      transaction_started = FALSE;
     }
   }
   catch(const std::exception &e)
@@ -2097,17 +2080,14 @@ int dt_exif_read(dt_image_t *img, const char *path)
 
   if(!success)
   {
-    if(transaction_started) dt_database_rollback_transaction();
-    if(dng_opcodes_read && img->dng_gain_maps != original.dng_gain_maps)
+    if(dng_opcodes_read && img->dng_gain_maps != fallback.dng_gain_maps)
       g_list_free_full(img->dng_gain_maps, dt_free_gpointer);
-    *img = original;
+    *img = fallback;
     return 1;
   }
 
-  if(dng_opcodes_read && img->dng_gain_maps != original.dng_gain_maps)
-    g_list_free_full(original.dng_gain_maps, dt_free_gpointer);
-
-  if(tags_present) dt_metadata_tags_changed();
+  if(dng_opcodes_read && img->dng_gain_maps != fallback.dng_gain_maps)
+    g_list_free_full(fallback.dng_gain_maps, dt_free_gpointer);
   return 0;
 }
 
@@ -2123,6 +2103,8 @@ int dt_exif_read_persisted(dt_image_t *img, const char *path)
   gboolean dng_opcodes_read = FALSE;
   gboolean usercrop_tag = FALSE;
   gboolean success = TRUE;
+
+  _exif_seed_fallbacks(img, path);
 
   try
   {
@@ -2145,6 +2127,11 @@ int dt_exif_read_persisted(dt_image_t *img, const char *path)
 
       Exiv2::IptcData &iptcData = image->iptcData();
       Exiv2::XmpData &xmpData = image->xmpData();
+      const gboolean exif_metadata = exifData.findKey(Exiv2::ExifKey("Exif.Image.Artist")) != exifData.end()
+                                      || exifData.findKey(Exiv2::ExifKey("Exif.Canon.OwnerName")) != exifData.end()
+                                      || exifData.findKey(Exiv2::ExifKey("Exif.Photo.UserComment")) != exifData.end()
+                                      || exifData.findKey(Exiv2::ExifKey("Exif.Image.ImageDescription")) != exifData.end()
+                                      || exifData.findKey(Exiv2::ExifKey("Exif.Image.Copyright")) != exifData.end();
       const gboolean iptc_keywords = iptcData.findKey(Exiv2::IptcKey("Iptc.Application2.Keywords")) != iptcData.end();
       const gboolean xmp_keywords = xmpData.findKey(Exiv2::XmpKey("Xmp.lr.hierarchicalSubject")) != xmpData.end()
                                     || xmpData.findKey(Exiv2::XmpKey("Xmp.dc.subject")) != xmpData.end();
@@ -2163,12 +2150,22 @@ int dt_exif_read_persisted(dt_image_t *img, const char *path)
                   && dt_tag_attach(tagid, img->id, FALSE, FALSE);
         tags_changed = success;
       }
-      if(success && !iptcData.empty()) success = _exif_decode_iptc_data(img, iptcData);
+      if(success && exif_metadata)
+      {
+        success = _exif_apply_exif_metadata(img, exifData);
+        tags_changed = tags_changed || success;
+      }
+      if(success && !iptcData.empty())
+      {
+        bool iptc_metadata_changed = false;
+        success = _exif_decode_iptc_data(img, iptcData, &iptc_metadata_changed);
+        tags_changed = tags_changed || iptc_metadata_changed;
+      }
       if(success && !xmpData.empty())
       {
         bool xmp_tags_changed = false;
         success = dt_exif_apply_xmp_persistence(img, xmpData, -1, false, &xmp_tags_changed);
-        tags_changed = xmp_tags_changed;
+        tags_changed = tags_changed || xmp_tags_changed;
       }
       if(success) tags_changed = tags_changed || iptc_keywords || xmp_keywords;
       if(success)

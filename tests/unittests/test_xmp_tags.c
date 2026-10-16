@@ -187,7 +187,7 @@ static void test_embedded_read_overlays_without_wipe(void **state)
   seed_tag("keepme2", image.id);
   dt_test_xmp_fixture_write_packet(&fixture, "<dc:subject><rdf:Bag><rdf:li>fromembed</rdf:li></rdf:Bag></dc:subject>");
 
-  assert_int_equal(dt_exif_read(&image, fixture.xmp_path), 0);
+  assert_int_equal(dt_exif_read_persisted(&image, fixture.xmp_path), 0);
   assert_tag_attached("fromembed", image.id, TRUE);
   assert_tag_attached("keepme2", image.id, TRUE);
 }

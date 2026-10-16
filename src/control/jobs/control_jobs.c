@@ -1301,10 +1301,11 @@ static int32_t dt_control_refresh_exif_run(dt_job_t *job)
       dt_image_t *img = dt_image_cache_get(imgid, 'w');
       if(!IS_NULL_PTR(img))
       {
+        const dt_image_t original = *img;
         // Re-sync the file-derived classification flags (LDR/HDR/RAW/sRAW, mosaic, monochrome,
         // 4bayer, additional-DNG-tags, buffer-resolved) with the actual file, repairing entries
         // that were persisted with stale/corrupted flags in the DB. We must *clear* these bits
-        // before dt_exif_read(), because it only re-seeds the LDR/HDR/RAW class when none is set
+        // before dt_exif_read_persisted(), because it only re-seeds the LDR/HDR/RAW class when none is set
         // yet (see exif.cc): leaving a stale DT_IMAGE_HDR in place would suppress the re-read.
         // Everything else in img->flags is DB-only / user state that the file knows nothing about
         // (star rating & reject, local copy, audio/txt sidecar, preset bookkeeping, monochrome
@@ -1314,7 +1315,11 @@ static int32_t dt_control_refresh_exif_run(dt_job_t *job)
             | DT_IMAGE_MONOCHROME | DT_IMAGE_MONOCHROME_BAYER | DT_IMAGE_MOSAIC
             | DT_IMAGE_BUFFER_RESOLVED | DT_IMAGE_HAS_ADDITIONAL_DNG_TAGS;
         img->flags &= ~file_class_flags;
-        dt_exif_read(img, sourcefile);
+        if(dt_exif_read_persisted(img, sourcefile))
+        {
+          *img = original;
+          dt_control_log(_("failed to refresh embedded metadata for image %d"), imgid);
+        }
         dt_image_cache_write_release(img, DT_IMAGE_CACHE_SAFE);
       }
       else
