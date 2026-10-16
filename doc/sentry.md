@@ -324,6 +324,32 @@ A build without #1493 has neither fix: for those, the log is under
 `%LOCALAPPDATA%\Microsoft\Windows\INetCache\ansel\`, if Windows has not removed it yet, and a
 `-d` run has no output anywhere.
 
+## Reading a Windows crash report {#windows-crash-report}
+
+> **Established 2026-10-16 against `0baeb88ed8`.**
+
+A crash on Windows writes an `ansel_bt_*.txt` report through DrMingw (`exchndl.dll`): the version,
+the faulting address, one line per frame as `module!symbol+offset`, then every loaded module with
+its address range. `libansel.dll` carries its symbol table, so the frames are named, but there are
+no line numbers. To find the instruction:
+
+1. Download the Windows installer of the reported version from the nightly releases. Its name spells
+   the report's `~g` as `.g`:
+   `gh release download nightly-YYYY-MM -R aurelienpierreeng/ansel -p 'ansel-0.0.0+5261.g0baeb88ed8-win64.exe'`.
+   `7z x` extracts it as is; take `bin/libansel.dll`. It is the same build when the module's
+   address range in the report spans exactly its `SizeOfImage` (`llvm-objdump -p`).
+2. The faulting address minus the module's start address is the RVA, and the instruction sits at
+   `ImageBase + RVA` (`ImageBase` is `0x180000000` for `libansel.dll`). `llvm-nm` prints symbols
+   at those same addresses; `llvm-objdump -t` prints them relative to `.text`, 0x1000 lower.
+3. `llvm-objdump -d --no-show-raw-insn --disassemble-symbols=<symbol>` and find the address. The
+   arguments arrive in `rcx`, `rdx`, `r8`, `r9` (Windows x64); a struct field is identified by its
+   displacement, checked against the struct with `offsetof`.
+
+**`Reading from location FFFFFFFFFFFFFFFF` is not a read at -1.** The processor raised a
+general-protection fault, which carries no address, and Windows prints -1 for it. A misaligned
+`movaps`/`movapd` causes one — the case measured on `0baeb88ed8`, in
+[`iop-notes.md`](iop-notes.md) under colorbalancergb — and so does a pointer that is not canonical.
+
 ## Fetching and fixing an issue
 
 To turn a Sentry issue into a fix without clicking through the web UI, use
