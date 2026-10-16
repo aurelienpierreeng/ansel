@@ -239,8 +239,9 @@ static void test_malformed_v2_history_preserves_development(void **state)
   (void)state;
   dt_image_t image = make_image("malformed-history.raw");
   seed_development(image.id);
-  write_xmp(2, "<darktable:history><rdf:Seq><rdf:li darktable:operation=\"exposure\"/>"
-               "</rdf:Seq></darktable:history>");
+  write_xmp(2, "<darktable:history><rdf:Seq><rdf:li darktable:operation=\"exposure\" "
+               "darktable:enabled=\"1\" darktable:modversion=\"1\"/>"
+                "</rdf:Seq></darktable:history>");
 
   assert_int_equal(dt_exif_xmp_read(&image, xmp_path, FALSE, NULL), 1);
   assert_development_preserved(image.id);
@@ -583,6 +584,143 @@ static void test_malformed_nonempty_history_blendop_blob_preserves_development(v
   assert_development_preserved(image.id);
 }
 
+static void assert_history_numbers(const int32_t imgid, const int *numbers, const size_t count)
+{
+  sqlite3_stmt *statement = NULL;
+  assert_int_equal(sqlite3_prepare_v2(dt_database_get_sqlite3_global(),
+                                      "SELECT num FROM main.history WHERE imgid = ?1 ORDER BY num", -1,
+                                      &statement, NULL), SQLITE_OK);
+  assert_int_equal(sqlite3_bind_int(statement, 1, imgid), SQLITE_OK);
+  for(size_t index = 0; index < count; index++)
+  {
+    assert_int_equal(sqlite3_step(statement), SQLITE_ROW);
+    assert_int_equal(sqlite3_column_int(statement, 0), numbers[index]);
+  }
+  assert_int_equal(sqlite3_step(statement), SQLITE_DONE);
+  assert_int_equal(sqlite3_finalize(statement), SQLITE_OK);
+}
+
+static void test_v2_optional_history_numbers_use_sequence_order(void **state)
+{
+  (void)state;
+  static const struct
+  {
+    const char *name;
+    const char *first_number;
+    const char *second_number;
+  } cases[] = {
+    { "absent", "", "" },
+    { "duplicate", "darktable:num=\"0\"", "darktable:num=\"0\"" },
+    { "negative", "darktable:num=\"-1\"", "darktable:num=\"-2\"" },
+    { "overflow", "darktable:num=\"2147483648\"", "darktable:num=\"2147483649\"" },
+    { "nonnumeric", "darktable:num=\"first\"", "darktable:num=\"second\"" },
+  };
+  static const int expected_numbers[] = { 0, 1 };
+
+  for(size_t index = 0; index < G_N_ELEMENTS(cases); index++)
+  {
+    char *filename = g_strdup_printf("v2-%s-history-numbers.raw", cases[index].name);
+    dt_image_t image = make_image(filename);
+    seed_development(image.id);
+    char *history = g_strdup_printf(
+        "<darktable:history><rdf:Seq>"
+        "<rdf:li %s darktable:operation=\"exposure\" darktable:enabled=\"1\" "
+        "darktable:modversion=\"1\" darktable:params=\"0000\"/>"
+        "<rdf:li %s darktable:operation=\"exposure\" darktable:enabled=\"1\" "
+        "darktable:modversion=\"1\" darktable:params=\"0100\"/>"
+        "</rdf:Seq></darktable:history>",
+        cases[index].first_number, cases[index].second_number);
+    write_xmp(2, history);
+
+    assert_int_equal(dt_exif_xmp_read(&image, xmp_path, FALSE, NULL), 0);
+    assert_history_numbers(image.id, expected_numbers, G_N_ELEMENTS(expected_numbers));
+
+    dt_free(history);
+    dt_free(filename);
+  }
+}
+
+static void assert_invalid_v3_history_number(const char *filename, const char *first_number,
+                                             const char *second_number)
+{
+  dt_image_t image = make_image(filename);
+  seed_development(image.id);
+  char *history = g_strdup_printf(
+      "<darktable:history><rdf:Seq>"
+      "<rdf:li %s darktable:operation=\"exposure\" darktable:enabled=\"1\" "
+      "darktable:modversion=\"1\" darktable:params=\"0000\"/>"
+      "<rdf:li %s darktable:operation=\"exposure\" darktable:enabled=\"1\" "
+      "darktable:modversion=\"1\" darktable:params=\"0100\"/>"
+      "</rdf:Seq></darktable:history>",
+      first_number, second_number);
+  write_xmp(3, history);
+
+  assert_int_equal(dt_exif_xmp_read(&image, xmp_path, FALSE, NULL), 1);
+  assert_development_preserved(image.id);
+  dt_free(history);
+}
+
+static void test_invalid_v3_history_numbers_preserve_development(void **state)
+{
+  (void)state;
+  assert_invalid_v3_history_number("v3-missing-num.raw", "", "darktable:num=\"1\"");
+  assert_invalid_v3_history_number("v3-duplicate-num.raw", "darktable:num=\"0\"", "darktable:num=\"0\"");
+  assert_invalid_v3_history_number("v3-negative-num.raw", "darktable:num=\"-1\"", "darktable:num=\"1\"");
+  assert_invalid_v3_history_number("v3-overflow-num.raw", "darktable:num=\"2147483648\"", "darktable:num=\"1\"");
+  assert_invalid_v3_history_number("v3-nonnumeric-num.raw", "darktable:num=\"invalid\"", "darktable:num=\"1\"");
+}
+
+static void test_valid_v3_history_numbers_are_persisted(void **state)
+{
+  (void)state;
+  static const int expected_numbers[] = { 0, 1 };
+  dt_image_t image = make_image("v3-valid-history-numbers.raw");
+  write_xmp(3, "<darktable:history><rdf:Seq>"
+               "<rdf:li darktable:num=\"0\" darktable:operation=\"exposure\" darktable:enabled=\"1\" "
+               "darktable:modversion=\"1\" darktable:params=\"0000\"/>"
+               "<rdf:li darktable:num=\"1\" darktable:operation=\"exposure\" darktable:enabled=\"1\" "
+               "darktable:modversion=\"1\" darktable:params=\"0100\"/>"
+               "</rdf:Seq></darktable:history>");
+
+  assert_int_equal(dt_exif_xmp_read(&image, xmp_path, FALSE, NULL), 0);
+  assert_history_numbers(image.id, expected_numbers, G_N_ELEMENTS(expected_numbers));
+}
+
+static void assert_v3_near_prefix_history_rejected(const char *filename, const char *history)
+{
+  dt_image_t image = make_image(filename);
+  seed_development(image.id);
+  write_xmp(3, history);
+
+  assert_int_equal(dt_exif_xmp_read(&image, xmp_path, FALSE, NULL), 1);
+  assert_development_preserved(image.id);
+}
+
+static void test_v3_near_prefix_history_properties_preserve_development(void **state)
+{
+  (void)state;
+  assert_v3_near_prefix_history_rejected(
+      "v3-near-num.raw", "<darktable:history><rdf:Seq>"
+                         "<rdf:li darktable:number=\"0\" darktable:operation=\"exposure\" darktable:enabled=\"1\" "
+                         "darktable:modversion=\"1\" darktable:params=\"0000\"/>"
+                         "</rdf:Seq></darktable:history>");
+  assert_v3_near_prefix_history_rejected(
+      "v3-near-operation.raw", "<darktable:history><rdf:Seq>"
+                               "<rdf:li darktable:num=\"0\" darktable:operation_suffix=\"exposure\" darktable:enabled=\"1\" "
+                               "darktable:modversion=\"1\" darktable:params=\"0000\"/>"
+                               "</rdf:Seq></darktable:history>");
+  assert_v3_near_prefix_history_rejected(
+      "v3-near-params.raw", "<darktable:history><rdf:Seq>"
+                            "<rdf:li darktable:num=\"0\" darktable:operation=\"exposure\" darktable:enabled=\"1\" "
+                            "darktable:modversion=\"1\" darktable:params_suffix=\"0000\"/>"
+                            "</rdf:Seq></darktable:history>");
+  assert_v3_near_prefix_history_rejected(
+      "v3-near-modversion.raw", "<darktable:history><rdf:Seq>"
+                                "<rdf:li darktable:num=\"0\" darktable:operation=\"exposure\" darktable:enabled=\"1\" "
+                                "darktable:modversion_suffix=\"1\" darktable:params=\"0000\"/>"
+                                "</rdf:Seq></darktable:history>");
+}
+
 static void assert_invalid_v2_history(const char *filename, const char *history)
 {
   dt_image_t image = make_image(filename);
@@ -591,36 +729,6 @@ static void assert_invalid_v2_history(const char *filename, const char *history)
 
   assert_int_equal(dt_exif_xmp_read(&image, xmp_path, FALSE, NULL), 1);
   assert_development_preserved(image.id);
-}
-
-static void test_missing_v2_history_num_preserves_development(void **state)
-{
-  (void)state;
-  assert_invalid_v2_history("missing-num.raw",
-                            "<darktable:history><rdf:Seq><rdf:li darktable:operation=\"exposure\" "
-                            "darktable:enabled=\"1\" darktable:modversion=\"1\" darktable:params=\"0000\"/>"
-                            "</rdf:Seq></darktable:history>");
-}
-
-static void test_duplicate_v2_history_num_preserves_development(void **state)
-{
-  (void)state;
-  assert_invalid_v2_history("duplicate-num.raw",
-                            "<darktable:history><rdf:Seq>"
-                            "<rdf:li darktable:num=\"0\" darktable:operation=\"exposure\" darktable:enabled=\"1\" "
-                            "darktable:modversion=\"1\" darktable:params=\"0000\"/>"
-                            "<rdf:li darktable:num=\"0\" darktable:operation=\"exposure\" darktable:enabled=\"1\" "
-                            "darktable:modversion=\"1\" darktable:params=\"0000\"/>"
-                            "</rdf:Seq></darktable:history>");
-}
-
-static void test_negative_v2_history_num_preserves_development(void **state)
-{
-  (void)state;
-  assert_invalid_v2_history("negative-num.raw",
-                            "<darktable:history><rdf:Seq><rdf:li darktable:num=\"-1\" darktable:operation=\"exposure\" "
-                            "darktable:enabled=\"1\" darktable:modversion=\"1\" darktable:params=\"0000\"/>"
-                            "</rdf:Seq></darktable:history>");
 }
 
 static void test_short_v2_history_blendop_blob_preserves_development(void **state)
@@ -905,9 +1013,10 @@ int main(void)
     cmocka_unit_test(test_out_of_range_rating_preserves_existing_rating),
     cmocka_unit_test(test_valid_rating_import_updates_rating),
     cmocka_unit_test(test_malformed_nonempty_history_blendop_blob_preserves_development),
-    cmocka_unit_test(test_missing_v2_history_num_preserves_development),
-    cmocka_unit_test(test_duplicate_v2_history_num_preserves_development),
-    cmocka_unit_test(test_negative_v2_history_num_preserves_development),
+    cmocka_unit_test(test_v2_optional_history_numbers_use_sequence_order),
+    cmocka_unit_test(test_invalid_v3_history_numbers_preserve_development),
+    cmocka_unit_test(test_valid_v3_history_numbers_are_persisted),
+    cmocka_unit_test(test_v3_near_prefix_history_properties_preserve_development),
     cmocka_unit_test(test_short_v2_history_blendop_blob_preserves_development),
     cmocka_unit_test(test_v1_history_blendop_blob_is_accepted),
     cmocka_unit_test(test_v7_history_blendop_blob_is_accepted),
