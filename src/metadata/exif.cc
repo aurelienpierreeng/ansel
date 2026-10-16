@@ -2093,6 +2093,7 @@ int dt_exif_read(dt_image_t *img, const char *path)
 
 int dt_exif_read_persisted(dt_image_t *img, const char *path)
 {
+  if(dt_database_transaction_is_owned_by_current_thread()) return 1;
   if(img->id <= UNKNOWN_IMAGE) return 1;
   dt_image_timestamps_t timestamps;
   if(!dt_image_repository_get_timestamps(img->id, &timestamps)) return 1;

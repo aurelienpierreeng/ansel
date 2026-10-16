@@ -351,6 +351,53 @@ static void test_persisted_read_rejects_stale_image_before_transaction(void **st
   assert_int_equal(notification_calls, 0);
 }
 
+static void test_persisted_read_rejects_outer_transaction(void **state)
+{
+  for(int invalid_keyword = 0; invalid_keyword < 2; invalid_keyword++)
+  {
+    std::unique_ptr<Exiv2::Image> source(Exiv2::ImageFactory::open(fixture.path));
+    source->readMetadata();
+    source->xmpData()["Xmp.dc.subject"] = invalid_keyword ? std::string(1024, 'x') : "contract-keyword";
+    source->writeMetadata();
+    dt_image_t image = persisted_image();
+    const dt_image_t original = image;
+    start_calls = release_calls = rollback_calls = notification_calls = 0;
+
+    assert_true(dt_database_start_transaction_debug());
+    assert_true(dt_database_start_transaction_debug());
+    assert_true(dt_metadata_set_import(image.id, "Xmp.dc.description", "outer-sentinel"));
+    const int result = dt_test_exif_read_persisted(&image, fixture.path);
+    const gboolean owned_after_read = dt_database_transaction_is_owned_by_current_thread();
+    gboolean nested_release = FALSE;
+    gboolean owned_after_release = FALSE;
+    gboolean committed = FALSE;
+    if(owned_after_read)
+    {
+      nested_release = dt_database_release_transaction_debug();
+      owned_after_release = dt_database_transaction_is_owned_by_current_thread();
+      if(owned_after_release) committed = dt_database_release_transaction_debug();
+    }
+    if(dt_database_transaction_is_owned_by_current_thread()) dt_database_rollback_transaction();
+
+    GList *description = dt_metadata_get(image.id, "Xmp.dc.description", NULL);
+    const gboolean sentinel_preserved = !IS_NULL_PTR(description)
+                                       && !g_strcmp0((const char *)description->data, "outer-sentinel");
+    g_list_free_full(description, dt_free_gpointer);
+    assert_int_equal(result, 1);
+    assert_memory_equal(&image, &original, sizeof(image));
+    assert_true(owned_after_read);
+    assert_true(nested_release);
+    assert_true(owned_after_release);
+    assert_true(committed);
+    assert_true(sentinel_preserved);
+    assert_int_equal(start_calls, 0);
+    assert_int_equal(release_calls, 0);
+    assert_int_equal(rollback_calls, 0);
+    assert_int_equal(notification_calls, 0);
+    assert_int_equal(dt_tag_repository_find_by_name("contract-keyword"), 0);
+  }
+}
+
 static void test_persisted_read_rolls_back_commit_failure(void **state)
 {
   (void)state;
@@ -668,6 +715,7 @@ int main(void)
   const struct CMUnitTest tests[] = {
     cmocka_unit_test_setup_teardown(test_persisted_read_rolls_back_begin_failure, setup, teardown),
     cmocka_unit_test_setup_teardown(test_persisted_read_rejects_stale_image_before_transaction, setup, teardown),
+    cmocka_unit_test_setup_teardown(test_persisted_read_rejects_outer_transaction, setup, teardown),
     cmocka_unit_test_setup_teardown(test_persisted_read_rolls_back_commit_failure, setup, teardown),
     cmocka_unit_test_setup_teardown(test_persisted_read_rolls_back_tag_persistence_failure, setup, teardown),
     cmocka_unit_test_setup_teardown(test_persisted_read_commits_keyword, setup, teardown),
