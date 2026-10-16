@@ -171,6 +171,83 @@ reference):
   continuation there — the MAC magenta fix therefore CANNOT come from this stage; it belongs to the
   joint-floor family and its clip-asymmetry gate (now implemented, see the previous section).
 
+## Highlights: Apple's OpenCL defines `cl_khr_fp64` without having it — never guard on that macro
+
+*Found against `e83ba5865d`, 2026-09-26, measured on an Apple M1 (macOS OpenCL 1.2).*
+
+`double` had three uses in this module's kernels, and only one is double precision: the sparse
+Cholesky factor and solves of `highlights_sparse.cl` (`sparse_chol_*`) and the second-member
+vector they consume (`hl_pde_*`, `hl_aniso_*`). The nine reduction kernels — the four stage-2
+finalizers of `highlights_harmonic.cl` and the CG dot products of `highlights_sparse.cl` —
+accumulated in double and narrowed every result to float on the way out, so the double only
+ever bought the accuracy of the SUMMATION. They now sum in compensated single precision
+(`data/kernels/compensated.h`: a `float2` of value + running error, Knuth two-sum, no multiply
+so `-cl-mad-enable` cannot contract it) and sit outside any fp64 guard: available on every
+device, the host twins agreeing to a float ulp rather than bit for bit. A new kernel header
+must be listed in BOTH `clincludes[]` (`common/opencl.c`, the kernel-cache checksum) and
+`DT_OPENCL_EXTRA` (`data/kernels/CMakeLists.txt`, the install); an omission in the first keeps
+serving yesterday's binaries, in the second the kernel does not build at all in a package.
+
+Measured on Apple M1 (macOS OpenCL 1.2, no `cl_khr_fp64` in `CL_DEVICE_EXTENSIONS`,
+`CL_DEVICE_DOUBLE_FP_CONFIG` = 0): the runtime DEFINES the `cl_khr_fp64` preprocessor macro
+anyway. A `#if defined(cl_khr_fp64)` block therefore compiles, `clBuildProgram` succeeds, and
+every kernel that loads, stores or computes a `double` fails at `clCreateKernel` with -48
+(`CL_INVALID_KERNEL_NAME`) — per kernel, not per program — the runtime logging `UNSUPPORTED
+(log once): createKernel: newComputePipelineState failed` once, for the first. A `double` that
+appears only in a signature is fine. The guard thus does not do on Apple what its comment said
+it does elsewhere, and the tell in a `-d opencl` log is a kernel INSIDE the guard that does not
+fail: `hl_cg_beta_step` named no double and was the one survivor of its block. When fp64 has to
+be selected, select it host-side from `CL_DEVICE_DOUBLE_FP_CONFIG` and pass a define the way
+`-DNVIDIA_SM_20=1` is passed (`opencl.c`, into `options` AND `options_md5`) — never from the
+macro. `ansel-cli` takes `-d` through `--core` (`ansel-cli in out --core -d opencl -d perf`).
+
+### The eight solver kernels compute in a real type the host picks per device
+
+*Found against `e83ba5865d`, 2026-09-26; the per-operation figures were measured on an Apple M1.*
+
+That is now how the eight solver kernels work. `data/kernels/hl_real.h` defines `hl_real_t`
+and `hl_add/sub/mul/div/sqrt`: native `double` when the host passed `-DDT_DEVICE_FP64=1`
+(`cl->dev[dev].fp64`, from `CL_DEVICE_DOUBLE_FP_CONFIG != 0`, `dt_opencl_device_has_fp64()`),
+a `float2` (hi, lo) double-float otherwise — Knuth two-sum, fma two-product, Newton division
+and square root, measured on the M1 at 5e-15..1.2e-14 relative per operation, i.e. ~46 bits.
+Both are 8 bytes (`DT_HL_REAL_BYTES`), so no device buffer changes size; a host `double`
+vector crosses through `_sp_cl_upload_real()` / `_sp_cl_read_real()`
+(`math/sparse_cholesky_cl.h`), which split and rejoin only where the device lacks fp64. A
+device with fp64 therefore runs the exact code it always ran. The precision budget that makes
+df32 acceptable is thin: the biharmonic systems are conditioned like h⁻⁴, about 3e8 at
+`DT_HL_SPARSE_MAX` (16384 unknowns), so ~45 bits are needed and df32 has ~46-47 — raising that
+cap without redoing the arithmetic silently loses digits on fp64-less devices only.
+`HL_SPCL_TEST=1` is the parity check (GPU solver vs the CPU `double` twin on a 13-point
+biharmonic disc); it now also runs from the CPU `process_harmonic()` when a device exists,
+because on an 8 GB Apple M1 the module's 20× `factor_cl` never fits the 512 MiB device budget
+and `process_harmonic_cl()` is never entered — which, not fp64, is what keeps this module on
+the CPU there. Do not write a new `.cl` reduction in `double` for accuracy: `compensated.h`
+already covers that case in fp32.
+
+### On Apple the device budget is no longer `max_mem_alloc / 2` — the 512 MiB above is superseded
+
+*Measured 2026-09-26 to 2026-10-02 on six Apple Silicon Macs (8 to 36 GB), on the branch that
+carries this change (base `e83ba5865d`).*
+
+The paragraph above says the module "never fits the 512 MiB device budget" on an 8 GB M1 and so
+stays on the CPU. That described the tree before `dt_opencl_get_device_available()`
+(`common/opencl.c`) stopped applying its `max_mem_alloc / 2` clamp to the Apple runtime; it is
+kept as written because it is what was true when the solvers were ported.
+
+Apple's OpenCL reports `CL_DEVICE_MAX_MEM_ALLOC_SIZE` as 3/16 of its global memory: 1024 of
+5461 MB (8 GB M1), 2048 of 10923 (16 GB), 2557 of 13640 (18 GB), 3410 of 18186 (24 GB), 5391 of
+28754 (36 GB). The clamp therefore made the budget about a sixteenth of the RAM, 512 MiB on the
+8 GB machine only. **An earlier version of the code comment and of the commit message said "a
+fixed 1 GiB, hence 512 MiB on every Mac whatever its RAM". That was wrong**: it generalised from
+the one machine measured at the time, and the first log from a 24 GB Mac (`vRAM has 1704 MiB
+left`, on a build without the change) disproved it.
+
+With the clamp skipped for Apple the budget is the declared memory less the headroom, bounded by
+the RAM actually free. On the 8 GB M1 it read 1.2 to 2.1 GiB, and the harmonic reconstruction of
+a 24 Mpx raw (1734 MiB asked) ran on the GPU in most exports and on the CPU when free RAM was
+short. On the 16 to 36 GB machines it ran on the GPU in every export. The self-tests are still
+called from the CPU entry point as well, for the runs that do not reach `process_harmonic_cl()`.
+
 ## The article bench (guided-laplacian-highlights-research) — traps and extensions
 
 *Found `e4195dec51`, 2026-08-05.*

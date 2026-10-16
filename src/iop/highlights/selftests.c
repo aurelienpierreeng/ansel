@@ -41,7 +41,7 @@
 void _sp_chol_cl_selftest(const int devid, void *gd_void, const dt_dev_pixelpipe_t *pipe)
 {
   static int done = 0;
-  if(done || !getenv("HL_SPCL_TEST")) return;
+  if(done || !getenv("HL_SPCL_TEST") || devid < 0) return;
   done = 1;
 
   const int grid = 96;
@@ -108,12 +108,11 @@ void _sp_chol_cl_selftest(const int devid, void *gd_void, const dt_dev_pixelpipe
   double max_rel_diff = -1.0;
   if(factor_cpu && factor_gpu)
   {
-    cl_mem rhs_device = _sp_cl_upload(devid, rhs, sizeof(double) * dimension);
+    cl_mem rhs_device = _sp_cl_upload_real(devid, rhs, dimension);
     if(rhs_device && !_sp_chol_solve_cl(factor_gpu, _hl_sp_chol_kernels(gd_void), rhs_device))
     {
       double *solution_gpu = malloc(sizeof(double) * dimension);
-      if(dt_opencl_read_buffer_from_device(devid, solution_gpu, rhs_device, 0, sizeof(double) * dimension, CL_TRUE)
-         == CL_SUCCESS)
+      if(_sp_cl_read_real(devid, solution_gpu, rhs_device, dimension))
       {
         max_rel_diff = 0.0;
         for(int i = 0; i < dimension; i++)
