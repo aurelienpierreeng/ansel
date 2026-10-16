@@ -41,6 +41,29 @@ pipe.
 are post-flip portrait. The guard must also accept the swapped match
 (`width==preview_height && height==preview_width`).
 
+## colorbalancergb: an alignment promised to the compiler must be one the struct guarantees
+
+*Found `0baeb88ed8`, 2026-10-16.*
+
+`process()` tells the compiler that seven 4-float vectors of `dt_iop_colorbalancergb_data_t` are
+16-byte aligned (`__builtin_assume_aligned(d->…, 16)`), and `scalar_product()` repeats it for its
+second argument (`aligned(v_2:16)`). Those fields are therefore declared `dt_aligned_pixel_t`, at
+the head of the struct, so the type carries the promise and no padding lands in the hashed prefix.
+Declared as plain `float[4]` among scalars, `chroma`, `saturation` and `brilliance` sat at offsets
+0x48, 0x64 and 0x78 while `global` at 0 was also assumed aligned: two contradictory promises,
+undefined behaviour the compiler resolves as it likes.
+
+Measured on the Windows nightly DLLs: Clang 23.1.3 (nightly `0baeb88ed8`) derived from `chroma`
+that offset 0xa8 (`checker_color_1`) was aligned and loaded it with `movaps`, unconditionally at the
+top of `process()`; Clang 22.1.8 (nightlies `a4eac9fe11`, `7230d1b355`, same source for those
+files) and a local clang-19 build used `movups`. `piece->data` comes from `dt_calloc_align()`, so
+0xa8 is 8 mod 16 and every call of `process()` faulted — it surfaced as a crash at startup, on a
+thumbnail rendered on the CPU. Nothing in the source changed: a compiler upgrade is enough to turn
+such a promise into a crash, on one platform only.
+
+The report read `Reading from location FFFFFFFFFFFFFFFF`; how to go from such a report to the
+instruction is in [`sentry.md`](sentry.md#windows-crash-report).
+
 ## drawlayer: realtime stroke correctness
 
 *Found `22f623c0be`, 2026-06-25.*

@@ -17,6 +17,7 @@
     Copyright (C) 2022 Philipp Lutz.
     Copyright (C) 2023 Jehan Singh.
     Copyright (C) 2023 Luca Zulberti.
+    Copyright (C) 2026 Guillaume Stutin.
     
     Ansel is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -163,19 +164,31 @@ typedef struct dt_iop_colorbalancergb_gui_data_t
 
 typedef struct dt_iop_colorbalancergb_data_t
 {
-  float global[4];
-  float shadows[4];
-  float highlights[4];
-  float midtones[4];
+  // process() loads these as 16-byte aligned vectors: the type guarantees it, and keeping
+  // them first leaves no padding inside the hashed prefix.
+  dt_aligned_pixel_t global;
+  dt_aligned_pixel_t shadows;
+  dt_aligned_pixel_t highlights;
+  dt_aligned_pixel_t midtones;
+  dt_aligned_pixel_t chroma;
+  dt_aligned_pixel_t saturation;
+  dt_aligned_pixel_t brilliance;
+  dt_aligned_pixel_t checker_color_1;
+  dt_aligned_pixel_t checker_color_2;
   float midtones_Y;
-  float chroma_global, chroma[4], vibrance, contrast;
-  float saturation_global, saturation[4];
-  float brilliance_global, brilliance[4];
+  float chroma_global;
+  float vibrance;
+  float contrast;
+  float saturation_global;
+  float brilliance_global;
   float hue_angle;
-  float shadows_weight, highlights_weight, midtones_weight, mask_grey_fulcrum;
-  float white_fulcrum, grey_fulcrum;
+  float shadows_weight;
+  float highlights_weight;
+  float midtones_weight;
+  float mask_grey_fulcrum;
+  float white_fulcrum;
+  float grey_fulcrum;
   float max_chroma;
-  float checker_color_1[4], checker_color_2[4];
   dt_iop_colorbalancrgb_saturation_t saturation_formula;
   size_t checker_size;
   gboolean mask_preview_black_and_white;

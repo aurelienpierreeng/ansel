@@ -88,6 +88,7 @@ After non-trivial code changes, run the narrowest relevant build or test target 
 - Comparing large number of variables for equality should be achieved through `memcmp` over data structures when possible.
 - All loops should be parallelized using OpenMP 4.5 when loop iterations write on different addresses and the overhead is worse it. Avoid false sharing on variables. Mind the fact that we also maintain builds without OpenMP.
 - Pixels loops on RGBA should use `dt_aligned_pixel_simd_t` vector type when possible.
+- A vector loaded or passed as aligned (`dt_load_simd_aligned()`, `__builtin_assume_aligned()`, an OpenMP `aligned()` clause, a `dt_aligned_pixel_t` parameter) must be aligned by its type: a struct field is `dt_aligned_pixel_t`, never a `float[4]` that happens to sit at a multiple of 16. A false promise is undefined behaviour, which a compiler upgrade can turn into a crash on one platform only.
 - Prefer linear branching when possible, over deeply nested cumulative conditions.
 - Functions should contain at most 2 to 3 `if` as much as possible.
 - Nesting `if` and `switch` on more than 3 levels is forbidden. Find a way to refactor your code.
