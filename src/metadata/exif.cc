@@ -107,6 +107,7 @@
 #include "common/logging.h"
 #include "common/utility.h"
 #include "database/tag_repository.h"
+#include "database/image_repository.h"
 #include "database/database.h"
 #include "math/math.h"
 #include "metadata/colorlabels.h"
@@ -426,9 +427,10 @@ static bool dt_exif_read_xmp_tag(Exiv2::XmpData &xmpData, Exiv2::XmpData::iterat
 // FIXME: according to http://www.exiv2.org/doc/classExiv2_1_1Metadatum.html#63c2b87249ba96679c29e01218169124
 // there is no need to pass xmpData
 // version = -1 -> version ignored
-bool dt_exif_decode_xmp_data(dt_image_t *img, Exiv2::XmpData &xmpData, int version,
-                                  bool exif_read)
+bool dt_exif_apply_xmp_persistence(dt_image_t *img, Exiv2::XmpData &xmpData, const int version,
+                                   const bool replace_existing, bool *tags_changed)
 {
+  *tags_changed = false;
   // as this can be called several times during the image lifetime, clean up first
   GList *imgs = NULL;
   imgs = g_list_prepend(imgs, GINT_TO_POINTER(img->id));
@@ -451,13 +453,14 @@ bool dt_exif_decode_xmp_data(dt_image_t *img, Exiv2::XmpData &xmpData, int versi
     if(pos != xmpData.end())
     {
       gboolean tags_ok = TRUE;
-      if(!exif_read) tags_ok = dt_tag_set_tags(NULL, imgs, TRUE, TRUE, FALSE);
+      if(replace_existing) tags_ok = dt_tag_set_tags(NULL, imgs, TRUE, TRUE, FALSE);
       if(tags_ok) tags_ok = _exif_import_tags(img, pos);
       if(!tags_ok)
       {
         g_list_free(imgs);
         return false;
       }
+      *tags_changed = true;
     }
 
     // older darktable version did not write this data correctly:
@@ -466,7 +469,7 @@ bool dt_exif_decode_xmp_data(dt_image_t *img, Exiv2::XmpData &xmpData, int versi
     // why for they don't get passed to that function.
     if(version == -1 || version > 0)
     {
-      if(!exif_read && !dt_metadata_clear(imgs, FALSE))
+      if(replace_existing && !dt_metadata_clear(imgs, FALSE))
       {
         g_list_free(imgs);
         return false;
@@ -500,7 +503,7 @@ bool dt_exif_decode_xmp_data(dt_image_t *img, Exiv2::XmpData &xmpData, int versi
     else
       dt_image_set_xmp_rating(img, -2);
 
-    if(!exif_read) img->color_labels = 0;
+    if(replace_existing) img->color_labels = 0;
     if(FIND_XMP_TAG("Xmp.xmp.Label"))
     {
       std::string label = pos->toString();
@@ -597,6 +600,13 @@ bool dt_exif_decode_xmp_data(dt_image_t *img, Exiv2::XmpData &xmpData, int versi
     std::cerr << "[exiv2 dt_exif_decode_xmp_data] " << img->filename << ": " << s << std::endl;
     return false;
   }
+}
+
+bool dt_exif_decode_xmp_data(dt_image_t *img, Exiv2::XmpData &xmpData, const int version,
+                             const bool exif_read)
+{
+  bool tags_changed = false;
+  return dt_exif_apply_xmp_persistence(img, xmpData, version, !exif_read, &tags_changed);
 }
 
 static bool dt_exif_read_iptc_tag(Exiv2::IptcData &iptcData, Exiv2::IptcData::const_iterator *pos, string key)
@@ -1164,7 +1174,7 @@ static void _find_exif_model(Exiv2::ExifData &exifData,
       }
 }
 
-static bool _exif_decode_exif_data(dt_image_t *img, Exiv2::ExifData &exifData)
+static bool _exif_decode_exif_data(dt_image_t *img, Exiv2::ExifData &exifData, const bool persist_tags)
 {
   try
   {
@@ -1328,7 +1338,7 @@ static bool _exif_decode_exif_data(dt_image_t *img, Exiv2::ExifData &exifData)
         img->exif_crop = 0.0f; // Will be shown as "no data" in the image information module
     }
 
-    if(_check_usercrop(exifData, img))
+    if(_check_usercrop(exifData, img) && persist_tags)
     {
       img->flags |= DT_IMAGE_HAS_ADDITIONAL_DNG_TAGS;
         guint tagid = 0;
@@ -1927,7 +1937,7 @@ int dt_exif_read_from_blob(dt_image_t *img, uint8_t *blob, const int size)
   {
     Exiv2::ExifData exifData;
     Exiv2::ExifParser::decode(exifData, blob, size);
-    bool res = _exif_decode_exif_data(img, exifData);
+    bool res = _exif_decode_exif_data(img, exifData, true);
     return res ? 0 : 1;
   }
   catch(const std::exception &e)
@@ -2052,7 +2062,7 @@ int dt_exif_read(dt_image_t *img, const char *path)
       dng_opcodes_read = exifData.findKey(Exiv2::ExifKey("Exif.SubImage1.OpcodeList2")) != exifData.end();
       if(!dng_opcodes_read)
         dng_opcodes_read = exifData.findKey(Exiv2::ExifKey("Exif.Image.OpcodeList2")) != exifData.end();
-      success = _exif_decode_exif_data(img, exifData);
+      success = _exif_decode_exif_data(img, exifData, true);
     }
     else
       img->exif_inited = 1;
@@ -2098,6 +2108,96 @@ int dt_exif_read(dt_image_t *img, const char *path)
     g_list_free_full(original.dng_gain_maps, dt_free_gpointer);
 
   if(tags_present) dt_metadata_tags_changed();
+  return 0;
+}
+
+int dt_exif_read_persisted(dt_image_t *img, const char *path)
+{
+  if(img->id <= UNKNOWN_IMAGE) return 1;
+  dt_image_timestamps_t timestamps;
+  if(!dt_image_repository_get_timestamps(img->id, &timestamps)) return 1;
+
+  const dt_image_t original = *img;
+  gboolean transaction_started = FALSE;
+  gboolean tags_changed = FALSE;
+  gboolean dng_opcodes_read = FALSE;
+  gboolean usercrop_tag = FALSE;
+  gboolean success = TRUE;
+
+  try
+  {
+    std::unique_ptr<Exiv2::Image> image(Exiv2::ImageFactory::open(WIDEN(path)));
+    if(!image.get()) success = FALSE;
+    if(success)
+    {
+      image->readMetadata();
+      Exiv2::ExifData &exifData = image->exifData();
+      if(!exifData.empty())
+      {
+        dng_opcodes_read = exifData.findKey(Exiv2::ExifKey("Exif.SubImage1.OpcodeList2")) != exifData.end();
+        if(!dng_opcodes_read)
+          dng_opcodes_read = exifData.findKey(Exiv2::ExifKey("Exif.Image.OpcodeList2")) != exifData.end();
+        success = _exif_decode_exif_data(img, exifData, false);
+        usercrop_tag = img->usercrop_status == DT_IMAGE_USERCROP_VALID;
+      }
+      else
+        img->exif_inited = 1;
+
+      Exiv2::IptcData &iptcData = image->iptcData();
+      Exiv2::XmpData &xmpData = image->xmpData();
+      const gboolean iptc_keywords = iptcData.findKey(Exiv2::IptcKey("Iptc.Application2.Keywords")) != iptcData.end();
+      const gboolean xmp_keywords = xmpData.findKey(Exiv2::XmpKey("Xmp.lr.hierarchicalSubject")) != xmpData.end()
+                                    || xmpData.findKey(Exiv2::XmpKey("Xmp.dc.subject")) != xmpData.end();
+
+      if(success)
+      {
+        img->height = image->pixelHeight();
+        img->width = image->pixelWidth();
+        transaction_started = dt_database_start_transaction();
+        success = transaction_started;
+      }
+      if(success && usercrop_tag)
+      {
+        guint tagid = 0;
+        success = dt_tag_new("darktable|mode|exif-crop", &tagid)
+                  && dt_tag_attach(tagid, img->id, FALSE, FALSE);
+        tags_changed = success;
+      }
+      if(success && !iptcData.empty()) success = _exif_decode_iptc_data(img, iptcData);
+      if(success && !xmpData.empty())
+      {
+        bool xmp_tags_changed = false;
+        success = dt_exif_apply_xmp_persistence(img, xmpData, -1, false, &xmp_tags_changed);
+        tags_changed = xmp_tags_changed;
+      }
+      if(success) tags_changed = tags_changed || iptc_keywords || xmp_keywords;
+      if(success)
+      {
+        success = dt_database_release_transaction();
+        if(success) transaction_started = FALSE;
+      }
+    }
+  }
+  catch(const std::exception &e)
+  {
+    std::string s(e.what());
+    std::cerr << "[exiv2 dt_exif_read_persisted] " << path << ": " << s << std::endl;
+    success = FALSE;
+  }
+
+  if(!success)
+  {
+    if(transaction_started && dt_database_transaction_is_owned_by_current_thread())
+      dt_database_rollback_transaction();
+    if(dng_opcodes_read && img->dng_gain_maps != original.dng_gain_maps)
+      g_list_free_full(img->dng_gain_maps, dt_free_gpointer);
+    *img = original;
+    return 1;
+  }
+
+  if(dng_opcodes_read && img->dng_gain_maps != original.dng_gain_maps)
+    g_list_free_full(original.dng_gain_maps, dt_free_gpointer);
+  if(tags_changed) dt_metadata_tags_changed();
   return 0;
 }
 
