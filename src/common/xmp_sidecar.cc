@@ -912,13 +912,19 @@ enum class xmp_history_error_t
   XMP_HISTORY_ERROR_BLEND_PAYLOAD
 };
 
+constexpr auto XMP_HISTORY_ERROR_NONE = xmp_history_error_t::XMP_HISTORY_ERROR_NONE;
+constexpr auto XMP_HISTORY_ERROR_STRUCTURE = xmp_history_error_t::XMP_HISTORY_ERROR_STRUCTURE;
+constexpr auto XMP_HISTORY_ERROR_NUMBER = xmp_history_error_t::XMP_HISTORY_ERROR_NUMBER;
+constexpr auto XMP_HISTORY_ERROR_PAYLOAD = xmp_history_error_t::XMP_HISTORY_ERROR_PAYLOAD;
+constexpr auto XMP_HISTORY_ERROR_BLEND_PAYLOAD = xmp_history_error_t::XMP_HISTORY_ERROR_BLEND_PAYLOAD;
+
 /** Parse indexed history properties, rejecting malformed array structure before payload validation. */
 GList *read_history_v2_entries(Exiv2::XmpData &xmpData, gboolean *valid, xmp_history_error_t *error)
 {
   GList *history_entries = NULL;
   history_entry_t *current_entry = NULL;
   *valid = TRUE;
-  *error = xmp_history_error_t::XMP_HISTORY_ERROR_NONE;
+  *error = XMP_HISTORY_ERROR_NONE;
 
   for(auto history = xmpData.findKey(Exiv2::XmpKey("Xmp.darktable.history")); history != xmpData.end(); history++)
   {
@@ -938,7 +944,7 @@ GList *read_history_v2_entries(Exiv2::XmpData &xmpData, gboolean *valid, xmp_his
     {
       g_list_free_full(history_entries, free_history_entry);
       *valid = FALSE;
-      *error = xmp_history_error_t::XMP_HISTORY_ERROR_STRUCTURE;
+      *error = XMP_HISTORY_ERROR_STRUCTURE;
       return nullptr;
     }
 
@@ -950,7 +956,7 @@ GList *read_history_v2_entries(Exiv2::XmpData &xmpData, gboolean *valid, xmp_his
     {
       g_list_free_full(history_entries, free_history_entry);
       *valid = FALSE;
-      *error = xmp_history_error_t::XMP_HISTORY_ERROR_STRUCTURE;
+      *error = XMP_HISTORY_ERROR_STRUCTURE;
       return nullptr;
     }
     if(n == length + 1)
@@ -960,7 +966,7 @@ GList *read_history_v2_entries(Exiv2::XmpData &xmpData, gboolean *valid, xmp_his
       {
         g_list_free_full(history_entries, free_history_entry);
         *valid = FALSE;
-        *error = xmp_history_error_t::XMP_HISTORY_ERROR_STRUCTURE;
+        *error = XMP_HISTORY_ERROR_STRUCTURE;
         return nullptr;
       }
       current_entry->blendop_version = 1; // default version in case it's not specified
@@ -979,8 +985,8 @@ GList *read_history_v2_entries(Exiv2::XmpData &xmpData, gboolean *valid, xmp_his
     {
       g_list_free_full(history_entries, free_history_entry);
       *valid = FALSE;
-      *error = !strcmp(property, "darktable:blendop_params") ? xmp_history_error_t::XMP_HISTORY_ERROR_BLEND_PAYLOAD
-                                                             : xmp_history_error_t::XMP_HISTORY_ERROR_PAYLOAD;
+      *error = !strcmp(property, "darktable:blendop_params") ? XMP_HISTORY_ERROR_BLEND_PAYLOAD
+                                                              : XMP_HISTORY_ERROR_PAYLOAD;
       return nullptr;
     }
   }
@@ -999,28 +1005,28 @@ GList *read_history_v2(Exiv2::XmpData &xmpData, const int xmp_version, gboolean 
   {
     g_list_free_full(history_entries, free_history_entry);
     *valid = FALSE;
-    *error = xmp_history_error_t::XMP_HISTORY_ERROR_STRUCTURE;
+    *error = XMP_HISTORY_ERROR_STRUCTURE;
     return nullptr;
   }
   for(GList *iter = history_entries; iter; iter = g_list_next(iter))
   {
-    history_entry_t *entry = (history_entry_t *)iter->data;
+    const auto *entry = (const history_entry_t *)iter->data;
     if(!(entry->have_operation && entry->operation && entry->operation[0] && entry->have_params && entry->params
          && entry->have_modversion))
     {
-      *error = xmp_history_error_t::XMP_HISTORY_ERROR_PAYLOAD;
+      *error = XMP_HISTORY_ERROR_PAYLOAD;
     }
     else if(xmp_version >= 3
             && (entry->num_count != 1 || !entry->valid_num
                 || g_hash_table_contains(numbers, GINT_TO_POINTER(entry->num))))
     {
-      *error = xmp_history_error_t::XMP_HISTORY_ERROR_NUMBER;
+      *error = XMP_HISTORY_ERROR_NUMBER;
     }
-    if(*error != xmp_history_error_t::XMP_HISTORY_ERROR_NONE) break;
+    if(*error != XMP_HISTORY_ERROR_NONE) break;
     if(xmp_version >= 3) g_hash_table_add(numbers, GINT_TO_POINTER(entry->num));
   }
   if(!IS_NULL_PTR(numbers)) g_hash_table_destroy(numbers);
-  if(*error != xmp_history_error_t::XMP_HISTORY_ERROR_NONE)
+  if(*error != XMP_HISTORY_ERROR_NONE)
   {
     g_list_free_full(history_entries, free_history_entry);
     *valid = FALSE;
@@ -1379,8 +1385,9 @@ gboolean add_mask_entries_to_db(int32_t imgid, GHashTable *mask_entries, int mas
 
 /**
  * Parsed development and legacy conversion state for one sidecar import.
- * The caller owns the lists, transaction and image-cache write lock throughout;
- * methods neither commit database writes nor publish staged image properties.
+ * The caller owns the transaction and image-cache write lock throughout. The
+ * destructor releases parsed containers, and publish() copies staged properties only
+ * after the caller has committed the database transaction.
  */
 struct xmp_development_t
 {
@@ -1398,8 +1405,9 @@ struct xmp_development_t
   GList *mask_entries_v3 = NULL;
   GHashTable *omitted_mask_nums = nullptr;
   GList *history_entries = NULL;
-  xmp_history_error_t history_error = xmp_history_error_t::XMP_HISTORY_ERROR_NONE;
+  xmp_history_error_t history_error = XMP_HISTORY_ERROR_NONE;
 
+  ~xmp_development_t();
   int read_properties(Exiv2::XmpData &xmpData);
   GList *read_order(Exiv2::XmpData &xmpData);
   int validate_mask_history();
@@ -1411,7 +1419,18 @@ struct xmp_development_t
   int restore_legacy_order();
   int write_history_end(Exiv2::XmpData &xmpData);
   int write(Exiv2::Image &image, dt_image_t *img, int history_only);
+  void publish(dt_image_t *img, int history_only, const char *filename) const;
 };
+
+/** Release all parsed containers owned by one sidecar import. */
+xmp_development_t::~xmp_development_t()
+{
+  g_list_free_full(iop_order_list, dt_free_gpointer);
+  g_list_free_full(history_entries, free_history_entry);
+  g_list_free_full(mask_entries_v3, free_mask_entry);
+  g_clear_pointer(&mask_entries, g_hash_table_destroy);
+  g_clear_pointer(&omitted_mask_nums, g_hash_table_destroy);
+}
 
 /** Stage image properties without modifying the live cache entry. */
 int xmp_development_t::read_properties(Exiv2::XmpData &xmpData)
@@ -1611,9 +1630,9 @@ int xmp_development_t::read(Exiv2::Image &image)
   {
     switch(history_error)
     {
-      case xmp_history_error_t::XMP_HISTORY_ERROR_NUMBER: rejection_reason = "history-number"; break;
-      case xmp_history_error_t::XMP_HISTORY_ERROR_BLEND_PAYLOAD: rejection_reason = "blend-payload"; break;
-      case xmp_history_error_t::XMP_HISTORY_ERROR_PAYLOAD: rejection_reason = "history-payload"; break;
+      case XMP_HISTORY_ERROR_NUMBER: rejection_reason = "history-number"; break;
+      case XMP_HISTORY_ERROR_BLEND_PAYLOAD: rejection_reason = "blend-payload"; break;
+      case XMP_HISTORY_ERROR_PAYLOAD: rejection_reason = "history-payload"; break;
       default: rejection_reason = "history-structure"; break;
     }
     return 1;
@@ -1628,7 +1647,7 @@ int xmp_development_t::validate_legacy_history()
   if(xmp_version >= 3) return 0;
   for(GList *iter = history_entries; !IS_NULL_PTR(iter); iter = g_list_next(iter))
   {
-    history_entry_t *entry = (history_entry_t *)iter->data;
+    const auto *entry = (const history_entry_t *)iter->data;
     uint32_t mask_id = 0;
     if(IS_NULL_PTR(dt_ioppr_get_iop_order_link(iop_order_list, entry->operation, -1))
        && !dt_deprecated(entry->operation))
@@ -1695,7 +1714,7 @@ int xmp_development_t::restore_legacy_order()
   if(xmp_version >= 4) return 0;
   for(GList *iter = history_entries; !IS_NULL_PTR(iter); iter = g_list_next(iter))
   {
-    history_entry_t *entry = (history_entry_t *)iter->data;
+    const auto *entry = (const history_entry_t *)iter->data;
     GList *base_order = nullptr;
     if(xmp_version < 3)
       base_order = dt_ioppr_get_iop_order_link(iop_order_list, entry->operation, -1);
@@ -1779,6 +1798,34 @@ int xmp_development_t::write(Exiv2::Image &image, dt_image_t *img, const int his
   return 0;
 }
 
+/** Publish committed sidecar properties to the caller's image-cache entry. */
+void xmp_development_t::publish(dt_image_t *img, const int history_only, const char *filename) const
+{
+  img->legacy_flip = staged_image.legacy_flip;
+  const uint32_t imported_flag_mask = DT_IMAGE_REMOVE | DT_IMAGE_NO_LEGACY_PRESETS
+                                      | DT_IMAGE_AUTO_PRESETS_APPLIED;
+  img->flags = (img->flags & ~imported_flag_mask) | (staged_image.flags & imported_flag_mask);
+  img->change_timestamp = staged_image.change_timestamp;
+  img->export_timestamp = staged_image.export_timestamp;
+  img->print_timestamp = staged_image.print_timestamp;
+  if(has_staged_history_hash) img->history_hash = staged_image.history_hash;
+  if(!history_only && tags_changed) dt_metadata_tags_changed();
+  if(!masks_recovered) return;
+
+  char *basename = g_path_get_basename(filename);
+  std::cerr << "[xmp] recovered '" << basename << "': mask-snapshot" << std::endl;
+  dt_free(basename);
+}
+
+}
+
+/** Emit one stable sidecar rejection diagnostic and return the failure status. */
+static int _xmp_reject(const char *filename, const char *reason)
+{
+  char *basename = g_path_get_basename(filename);
+  std::cerr << "[xmp] rejected '" << basename << "': " << reason << std::endl;
+  dt_free(basename);
+  return 1;
 }
 
 /**
@@ -1792,19 +1839,9 @@ int dt_exif_xmp_read(dt_image_t *img, const char *filename, const int history_on
   if(IS_NULL_PTR(img) || IS_NULL_PTR(filename)) return 1;
   const size_t filename_len = strlen(filename);
   if(filename_len >= 4 && !strcmp(filename + filename_len - 4, ".pfm"))
-  {
-    char *basename = g_path_get_basename(filename);
-    std::cerr << "[xmp] rejected '" << basename << "': unsupported-version" << std::endl;
-    dt_free(basename);
-    return 1;
-  }
+    return _xmp_reject(filename, "unsupported-version");
   if(dt_database_transaction_is_owned_by_current_thread())
-  {
-    char *basename = g_path_get_basename(filename);
-    std::cerr << "[xmp] rejected '" << basename << "': transaction-start" << std::endl;
-    dt_free(basename);
-    return 1;
-  }
+    return _xmp_reject(filename, "transaction-start");
 
   const dt_image_t original = *img;
   xmp_development_t development = {};
@@ -1834,13 +1871,9 @@ int dt_exif_xmp_read(dt_image_t *img, const char *filename, const int history_on
       rejection_reason = "write-failure";
       goto cleanup;
     }
-    if(dt_database_release_transaction())
-    {
-      result = 0;
-      transaction_started = FALSE;
-    }
-    else
-      rejection_reason = "commit-failure";
+    result = dt_database_release_transaction() ? 0 : 1;
+    transaction_started = result != 0;
+    if(result) rejection_reason = "commit-failure";
   }
   catch(const std::exception &)
   {
@@ -1853,36 +1886,11 @@ cleanup:
     dt_database_rollback_transaction();
   }
   if(result)
+  {
     *img = original;
-  else
-  {
-    img->legacy_flip = development.staged_image.legacy_flip;
-    const uint32_t imported_flag_mask = DT_IMAGE_REMOVE | DT_IMAGE_NO_LEGACY_PRESETS
-                                       | DT_IMAGE_AUTO_PRESETS_APPLIED;
-    img->flags = (img->flags & ~imported_flag_mask) | (development.staged_image.flags & imported_flag_mask);
-    img->change_timestamp = development.staged_image.change_timestamp;
-    img->export_timestamp = development.staged_image.export_timestamp;
-    img->print_timestamp = development.staged_image.print_timestamp;
-    if(development.has_staged_history_hash) img->history_hash = development.staged_image.history_hash;
-    if(!history_only && development.tags_changed) dt_metadata_tags_changed();
-    if(development.masks_recovered)
-    {
-      char *basename = g_path_get_basename(filename);
-      std::cerr << "[xmp] recovered '" << basename << "': mask-snapshot" << std::endl;
-      dt_free(basename);
-    }
+    _xmp_reject(filename, rejection_reason);
   }
-  g_list_free_full(development.iop_order_list, dt_free_gpointer);
-  g_list_free_full(development.history_entries, free_history_entry);
-  g_list_free_full(development.mask_entries_v3, free_mask_entry);
-  if(!IS_NULL_PTR(development.mask_entries)) g_hash_table_destroy(development.mask_entries);
-  if(!IS_NULL_PTR(development.omitted_mask_nums)) g_hash_table_destroy(development.omitted_mask_nums);
-  if(result)
-  {
-    char *basename = g_path_get_basename(filename);
-    std::cerr << "[xmp] rejected '" << basename << "': " << rejection_reason << std::endl;
-    dt_free(basename);
-  }
+  else development.publish(img, history_only, filename);
   return result;
 }
 
@@ -1941,7 +1949,7 @@ static void _xmp_append_history(void *user_data, const dt_history_repository_row
 
   if(IS_NULL_PTR(row->operation)) return; // no op is fatal.
 
-  char *params = dt_exif_xmp_encode((const unsigned char *)row->op_params, row->op_params_len, NULL);
+  char *params = dt_exif_xmp_encode((const unsigned char *)row->op_params, row->op_params_len, nullptr);
 
   snprintf(key, sizeof(key), "Xmp.darktable.history[%d]/darktable:num", num);
   xmpData[key] = row->num;
@@ -1963,7 +1971,7 @@ static void _xmp_append_history(void *user_data, const dt_history_repository_row
     // this shouldn't fail in general, but reading is robust enough to allow it,
     // and flipping images from LT will result in this being left out
     char *blendop_params
-        = dt_exif_xmp_encode((const unsigned char *)row->blendop_params, row->blendop_params_len, NULL);
+        = dt_exif_xmp_encode((const unsigned char *)row->blendop_params, row->blendop_params_len, nullptr);
     snprintf(key, sizeof(key), "Xmp.darktable.history[%d]/darktable:blendop_version", num);
     xmpData[key] = row->blendop_version;
     snprintf(key, sizeof(key), "Xmp.darktable.history[%d]/darktable:blendop_params", num);
