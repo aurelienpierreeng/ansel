@@ -74,6 +74,44 @@ set(CMAKE_BUILD_TYPE ${RAWSPEED_BUILD_TYPE} CACHE STRING "" FORCE)
 add_subdirectory(rawspeed)
 set(CMAKE_BUILD_TYPE ${_PARENT_BUILD_TYPE} CACHE STRING "" FORCE)
 
+# RawSpeed's cmake/compiler-flags.cmake sets CMAKE_VISIBILITY_INLINES_HIDDEN, i.e.
+# -fvisibility-inlines-hidden. That is the flag that broke the GCC 16 link of libansel.so
+# through the bundled Exiv2, and the mechanism is not specific to Exiv2: libstdc++ declares
+# `extern template class basic_string<char>` for __cplusplus <= 202002L, which covers
+# RawSpeed's -std=c++20, so the member is never emitted locally and the only definition is
+# the one libstdc++.so exports with default visibility. Marking the reference hidden makes it
+# unresolvable. The long version is at the Exiv2 call below and in doc/exiv2.md.
+#
+# Measured on 2026-10-17 against 398ed398ea: RawSpeed does NOT fail today -- librawspeed.a
+# alone under --whole-archive links clean, because LTO inlined every one of its own uses of
+# the move constructor. That is an inlining accident, not a property of the code: in Exiv2
+# the same flag left exactly eight un-inlined call sites out of thousands, and which sites
+# survive inlining changes with the compiler, the optimisation level and the partitioning.
+#
+# Clearing it here costs nothing measurable, for the same reason it costs nothing for Exiv2:
+# RawSpeed is a static archive inside libansel.so, CMAKE_CXX_VISIBILITY_PRESET=hidden still
+# covers everything that is not an inline, and LTO internalises the rest.
+#
+# RawSpeed builds the bulk of its code as OBJECT libraries -- one per source directory, and
+# each carries its own compile flags -- so naming targets would be a list that goes stale the
+# next time the submodule moves. Walking the directory tree it created reaches all of them.
+function(_ansel_clear_inlines_hidden dir)
+  get_property(_targets DIRECTORY "${dir}" PROPERTY BUILDSYSTEM_TARGETS)
+  foreach(_target IN LISTS _targets)
+    get_target_property(_type ${_target} TYPE)
+    if(NOT _type STREQUAL "INTERFACE_LIBRARY" AND NOT _type STREQUAL "UTILITY")
+      set_target_properties(${_target} PROPERTIES VISIBILITY_INLINES_HIDDEN OFF)
+    endif()
+  endforeach()
+
+  get_property(_subdirs DIRECTORY "${dir}" PROPERTY SUBDIRECTORIES)
+  foreach(_subdir IN LISTS _subdirs)
+    _ansel_clear_inlines_hidden("${_subdir}")
+  endforeach()
+endfunction()
+
+_ansel_clear_inlines_hidden("${CMAKE_CURRENT_SOURCE_DIR}/rawspeed")
+
 if(TARGET rstest)
   target_compile_definitions(rstest PRIVATE -DRAWSPEED_SOURCE_DIR="${RAWSPEED_PATH}")
 endif()
