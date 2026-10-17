@@ -1778,6 +1778,10 @@ void dt_thumbtable_move_in_grid(dt_thumbtable_t *table, GdkEventKey *event, dt_t
 
   dt_thumbtable_dispatch_over(table, event->type, new_imgid);
 
+  // Keyboard-moved-to image becomes the selection too, mirroring mouse click behaviour
+  // (grid only: filmstrip's pre_activate is NULL, see issue #954).
+  if(table->ops->pre_activate) table->ops->pre_activate(table, new_imgid);
+
   if(!_is_rowid_visible(table, new_rowid))
   {
     // GUI update will be handled through the value-changed event of the GtkAdjustment
