@@ -319,6 +319,41 @@ if(USE_BUNDLED_EXIV2)
 
   set(ANSEL_SUPPRESS_INSTALL FALSE)
 
+  # Exiv2's own cmake/mainSetup.cmake sets CMAKE_VISIBILITY_INLINES_HIDDEN, i.e.
+  # -fvisibility-inlines-hidden, and with GCC 16 that breaks the link of libansel.so:
+  #
+  #   /usr/bin/ld: error: hidden symbol `_ZNSt7__cxx1112basic_string...C1EOS4_'
+  #                       isn't defined locally
+  #
+  # That symbol is std::string's move constructor. libstdc++ declares
+  # `extern template class basic_string<char>` (bits/basic_string.tcc, guarded on
+  # __cplusplus <= 202002L, so it is live for Exiv2's -std=gnu++17), which suppresses
+  # emission of the member in every translation unit that uses it -- the definition is
+  # meant to come from libstdc++.so, which does export it with default visibility.
+  # -fvisibility-inlines-hidden then marks the *reference* hidden, and a hidden
+  # reference cannot bind to a shared library. Nothing defines it locally, so ld stops.
+  #
+  # Measured on 2026-10-17 against 96a9bd1299, GCC 16.2.1, Fedora 44: the eight errors
+  # are eight call sites, all of them Exiv2's -- Converter::cnvXmpFlash (five),
+  # Converter::cnvXmpGPSCoord (two) and readWriteEpsMetadata (one), landing in LTO
+  # partitions 158 and 159. They are the sites where LTO happened not to inline the
+  # move constructor; everywhere else it did, which is why this surfaces as a handful
+  # of calls out of thousands rather than as a wall. RawSpeed carries the identical
+  # pattern (its cmake/compiler-flags.cmake sets the same flag) and was checked at the
+  # same commit: it links clean today, purely because LTO inlined every one of its own
+  # uses. Nothing about that is guaranteed to hold.
+  #
+  # Turning the flag off for these three targets costs nothing measurable. Exiv2 is a
+  # static archive linked into libansel.so, CMAKE_CXX_VISIBILITY_PRESET=hidden still
+  # applies to everything that is not an inline, and LTO internalises the rest: the
+  # resulting libansel.so exports 6738 dynamic symbols, of which three are Exiv2's and
+  # one is std::'s. The flag was buying four symbols' worth of table.
+  foreach(_exiv2_target exiv2lib exiv2lib_int exiv2-xmp)
+    if(TARGET ${_exiv2_target})
+      set_target_properties(${_exiv2_target} PROPERTIES VISIBILITY_INLINES_HIDDEN OFF)
+    endif()
+  endforeach()
+
   # Exiv2 writes exv_conf.h and exiv2lib_export.h to ${CMAKE_BINARY_DIR} -- which is the
   # top of OUR build tree, since it is a subdirectory here and not the top-level project.
   # Copy them somewhere named, so what we hand consumers is a directory that holds those
