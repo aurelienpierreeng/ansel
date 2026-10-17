@@ -90,7 +90,6 @@
 #include <time.h>
 #include <zlib.h>
 
-#include <algorithm>
 #include <cmath>
 #include <cstdlib>
 #include <cstring>
@@ -1856,9 +1855,14 @@ static void _exif_decode_sony_lens_name(dt_image_t *img, Exiv2::ExifData &exifDa
   const bool sony_lens_found = FIND_EXIF_TAG("Exif.Sony2.LensID");
   const long sony_lens_id = sony_lens_found ? pos->toLong() : 65535;
   const std::string sony_lens_name = sony_lens_found ? pos->print() : std::string();
-  if(const bool sony_lens_id_supported = sony_lens_id != 65535,
-                sony_lens_name_unambiguous = std::none_of(sony_lens_name.cbegin(), sony_lens_name.cend(),
-                                                          [](const char character) { return character == '|'; });
+  bool sony_lens_name_unambiguous = true;
+  for(const char character : sony_lens_name)
+  {
+    if(character != '|') continue;
+    sony_lens_name_unambiguous = false;
+    break;
+  }
+  if(const bool sony_lens_id_supported = sony_lens_id != 65535;
      sony_lens_found && sony_lens_id_supported && sony_lens_name_unambiguous)
   {
     dt_strlcpy_to_utf8(img->exif_lens, sizeof(img->exif_lens), pos, exifData);
