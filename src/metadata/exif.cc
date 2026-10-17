@@ -90,6 +90,7 @@
 #include <time.h>
 #include <zlib.h>
 
+#include <algorithm>
 #include <cmath>
 #include <cstdlib>
 #include <cstring>
@@ -1574,9 +1575,9 @@ static void _exif_normalize_lens_name(dt_image_t *img, Exiv2::ExifData &exifData
   }
 
   /* Capitalize Nikon Z-mount lenses properly for UI presentation */
-  const gboolean nikkor = g_str_has_prefix(img->exif_lens, "NIKKOR");
-  const gboolean tamron = g_str_has_prefix(img->exif_lens, "TAMRON");
-  if(nikkor || tamron)
+  if(const gboolean nikkor = g_str_has_prefix(img->exif_lens, "NIKKOR"),
+                    tamron = g_str_has_prefix(img->exif_lens, "TAMRON");
+     nikkor || tamron)
   {
     for(size_t i = 1; i <= 5; ++i) img->exif_lens[i] = g_ascii_tolower(img->exif_lens[i]);
   }
@@ -1855,9 +1856,10 @@ static void _exif_decode_sony_lens_name(dt_image_t *img, Exiv2::ExifData &exifDa
   const bool sony_lens_found = FIND_EXIF_TAG("Exif.Sony2.LensID");
   const long sony_lens_id = sony_lens_found ? pos->toLong() : 65535;
   const std::string sony_lens_name = sony_lens_found ? pos->print() : std::string();
-  const bool sony_lens_id_supported = sony_lens_id != 65535;
-  const bool sony_lens_name_unambiguous = std::strchr(sony_lens_name.c_str(), '|') == nullptr;
-  if(sony_lens_found && sony_lens_id_supported && sony_lens_name_unambiguous)
+  if(const bool sony_lens_id_supported = sony_lens_id != 65535,
+                sony_lens_name_unambiguous = std::none_of(sony_lens_name.cbegin(), sony_lens_name.cend(),
+                                                          [](const char character) { return character == '|'; });
+     sony_lens_found && sony_lens_id_supported && sony_lens_name_unambiguous)
   {
     dt_strlcpy_to_utf8(img->exif_lens, sizeof(img->exif_lens), pos, exifData);
   }
