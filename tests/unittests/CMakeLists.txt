@@ -56,9 +56,13 @@ set(LIB_ANSEL_UNIT_TESTS
   test_backbuf_publish
   test_conf_value_lifetime
   test_loc_cache_dir
+  test_xmp_colorlabels
+  test_xmp_import_safety
+  test_xmp_tags
   test_dtpthread_recursive
   test_history_snapshot
   test_masks_raster_contract
+  test_blend_mask_payload
   test_stroke_raster
   test_drawlayer_batch_raster
   test_import_jobs
@@ -85,6 +89,24 @@ foreach(test ${LIB_ANSEL_UNIT_TESTS})
   endif()
 endforeach()
 
+add_cmocka_test(test_exif_read_contract
+                SOURCES test_exif_read_contract.cc
+                COMPILE_OPTIONS -Wno-error=deprecated-declarations
+                LINK_LIBRARIES ${CMOCKA_LINK_TARGET} lib_ansel)
+target_include_directories(test_exif_read_contract PRIVATE
+  ${CMAKE_SOURCE_DIR}/src
+  ${CMAKE_BINARY_DIR}/src
+  ${CMAKE_BINARY_DIR})
+target_compile_definitions(test_exif_read_contract PRIVATE
+  ANSEL_TEST_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
+set_target_properties(test_exif_read_contract PROPERTIES
+  SKIP_BUILD_RPATH FALSE
+  BUILD_WITH_INSTALL_RPATH FALSE
+  BUILD_RPATH "$<TARGET_FILE_DIR:lib_ansel>")
+if(WIN32)
+  _copy_required_library(test_exif_read_contract lib_ansel)
+endif()
+
 # brush.c and paint.c live in the drawlayer IOP plugin, not in lib_ansel. Both are written to
 # be independent of the module internals, so the test compiles them directly rather than
 # reaching into the plugin.
@@ -99,4 +121,6 @@ target_sources(test_tagging_completion PRIVATE
   ${CMAKE_SOURCE_DIR}/src/libs/tagging_completion.c)
 target_sources(test_tagging_completion_model PRIVATE
   ${CMAKE_SOURCE_DIR}/src/libs/tagging_completion.c)
+target_sources(test_xmp_colorlabels PRIVATE test_xmp_fixture.c)
+target_sources(test_xmp_tags PRIVATE test_xmp_fixture.c)
 set_tests_properties(test_tagging_completion PROPERTIES SKIP_RETURN_CODE 77)

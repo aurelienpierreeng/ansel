@@ -31,6 +31,7 @@
 #include "develop/dev_history.h"
 #include "develop/develop.h"
 #include "develop/imageop.h"
+#include "database/history_snapshot_repository.h"
 
 #ifdef GDK_WINDOWING_QUARTZ
 #include "osx/osx.h"
@@ -334,6 +335,7 @@ typedef struct dt_history_load_params_t
 {
   gchar *filename;
   int history_only;
+  const int64_t *write_timestamp;
 } dt_history_load_params_t;
 
 static gboolean _history_load_and_apply_apply(const int32_t imgid, void *user_data)
@@ -346,11 +348,13 @@ static gboolean _history_load_and_apply_apply(const int32_t imgid, void *user_da
   hist->imgid = imgid;
   dt_history_snapshot_undo_create(hist->imgid, &hist->before, &hist->before_history_end);
 
-  if(dt_exif_xmp_read(img, params->filename, params->history_only))
+  if(dt_exif_xmp_read(img, params->filename, params->history_only, params->write_timestamp))
   {
     dt_image_cache_write_release(img,
                                  // ugly but if not history_only => called from crawler - do not write the xmp
-                                 params->history_only ? DT_IMAGE_CACHE_SAFE : DT_IMAGE_CACHE_RELAXED);
+                                  params->history_only ? DT_IMAGE_CACHE_SAFE : DT_IMAGE_CACHE_RELAXED);
+    dt_history_snapshot_repository_clear(hist->before, hist->imgid);
+    dt_free(hist);
     return FALSE;
   }
 
@@ -375,18 +379,21 @@ static gboolean _history_load_and_apply_apply(const int32_t imgid, void *user_da
 
 int dt_history_load_and_apply(const int32_t imgid, gchar *filename, int history_only)
 {
-  dt_history_load_params_t params = { .filename = filename, .history_only = history_only };
+  dt_history_load_params_t params = { .filename = filename, .history_only = history_only, .write_timestamp = NULL };
   return _history_load_and_apply_apply(imgid, &params) ? 0 : 1;
 }
 
-int dt_history_load_and_apply_on_image(int32_t imgid, gchar *filename, int history_only)
+int dt_history_load_and_apply_on_image(int32_t imgid, gchar *filename, int history_only,
+                                       const int64_t *write_timestamp)
 {
-  return dt_history_load_and_apply(imgid, filename, history_only);
+  dt_history_load_params_t params = { .filename = filename, .history_only = history_only,
+                                      .write_timestamp = write_timestamp };
+  return _history_load_and_apply_apply(imgid, &params) ? 0 : 1;
 }
 
 int dt_history_load_and_apply_on_list(gchar *filename, const GList *list)
 {
-  dt_history_load_params_t params = { .filename = filename, .history_only = 1 };
+  dt_history_load_params_t params = { .filename = filename, .history_only = 1, .write_timestamp = NULL };
   const gboolean changed = _history_action_on_list(list, _history_load_and_apply_apply, &params);
   return changed ? 0 : 1;
 }
