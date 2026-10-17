@@ -160,9 +160,20 @@ static char *capture_xmp_diagnostic(dt_image_t *image, const int expected_result
 {
   char *diagnostic_path = NULL;
   const int diagnostic_fd = g_file_open_tmp("ansel-test-xmp-diagnostic-XXXXXX", &diagnostic_path, NULL);
-  assert_true(diagnostic_fd >= 0);
+  if(diagnostic_fd < 0)
+  {
+    fail();
+    return NULL;
+  }
   const int stderr_fd = test_dup(fileno(stderr));
-  assert_true(stderr_fd >= 0);
+  if(stderr_fd < 0)
+  {
+    test_close(diagnostic_fd);
+    g_remove(diagnostic_path);
+    dt_free(diagnostic_path);
+    fail();
+    return NULL;
+  }
   fflush(stderr);
   assert_int_equal(test_dup2(diagnostic_fd, fileno(stderr)), fileno(stderr));
 
@@ -305,20 +316,18 @@ typedef struct history_blend_row_t
   unsigned char bytes[3][sizeof(dt_develop_blend_params_t)];
 } history_blend_row_t;
 
-static void collect_history_blend_row(void *user_data, const int32_t imgid, const int num,
-                                      const int module_version, const char *operation,
-                                      const void *op_params, const int op_params_len,
-                                      const gboolean enabled, const void *blendop_params,
-                                      const int blendop_params_len, const int blendop_version,
-                                      const int multi_priority, const char *multi_name,
-                                      const char *preset_name)
+static void collect_history_blend_row(void *user_data, const dt_history_repository_row_t *history)
 {
   history_blend_row_t *row = (history_blend_row_t *)user_data;
-  assert_true(row->count < (int)G_N_ELEMENTS(row->bytes));
-  assert_true(blendop_params_len <= (int)sizeof(row->bytes[0]));
-  row->versions[row->count] = blendop_version;
-  row->lengths[row->count] = blendop_params_len;
-  memcpy(row->bytes[row->count], blendop_params, blendop_params_len);
+  if(row->count < 0 || row->count >= (int)G_N_ELEMENTS(row->bytes) || history->blendop_params_len < 0
+     || history->blendop_params_len > (int)sizeof(row->bytes[0]))
+  {
+    fail();
+    return;
+  }
+  row->versions[row->count] = history->blendop_version;
+  row->lengths[row->count] = history->blendop_params_len;
+  memcpy(row->bytes[row->count], history->blendop_params, history->blendop_params_len);
   row->count++;
 }
 
@@ -906,16 +915,6 @@ static void test_v3_near_prefix_history_properties_preserve_development(void **s
                                 "<rdf:li darktable:num=\"0\" darktable:operation=\"exposure\" darktable:enabled=\"1\" "
                                 "darktable:modversion_suffix=\"1\" darktable:params=\"0000\"/>"
                                 "</rdf:Seq></darktable:history>");
-}
-
-static void assert_invalid_v2_history(const char *filename, const char *history)
-{
-  dt_image_t image = make_image(filename);
-  seed_development(image.id);
-  write_xmp(2, history);
-
-  assert_int_equal(dt_exif_xmp_read(&image, xmp_path, FALSE, NULL), 1);
-  assert_development_preserved(image.id);
 }
 
 static void test_short_v2_history_blendop_blob_is_preserved(void **state)

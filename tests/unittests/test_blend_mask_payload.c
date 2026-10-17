@@ -60,7 +60,11 @@ static void _read_and_clear_only_the_serialized_mask_id(void **state)
     const uint32_t original_mask_id = 913;
     uint32_t mask_id = 0;
 
-    assert_true(layout->length <= sizeof(payload));
+    if(layout->length > sizeof(payload))
+    {
+      fail();
+      return;
+    }
     memset(payload, 0xa5, layout->length);
     memcpy(payload + layout->mask_id_offset, &original_mask_id, sizeof(original_mask_id));
     memcpy(expected, payload, layout->length);

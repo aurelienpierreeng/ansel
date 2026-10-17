@@ -97,6 +97,8 @@ target_include_directories(test_exif_read_contract PRIVATE
   ${CMAKE_SOURCE_DIR}/src
   ${CMAKE_BINARY_DIR}/src
   ${CMAKE_BINARY_DIR})
+target_compile_definitions(test_exif_read_contract PRIVATE
+  ANSEL_TEST_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
 set_target_properties(test_exif_read_contract PROPERTIES
   SKIP_BUILD_RPATH FALSE
   BUILD_WITH_INSTALL_RPATH FALSE

@@ -903,7 +903,7 @@ int history_entry_t::read_property(const char *property, const Exiv2::Xmpdatum &
   return 0;
 }
 
-enum xmp_history_error_t
+enum class xmp_history_error_t
 {
   XMP_HISTORY_ERROR_NONE,
   XMP_HISTORY_ERROR_STRUCTURE,
@@ -912,13 +912,13 @@ enum xmp_history_error_t
   XMP_HISTORY_ERROR_BLEND_PAYLOAD
 };
 
-GList *read_history_v2(Exiv2::XmpData &xmpData, const int xmp_version, gboolean *valid,
-                        xmp_history_error_t *error)
+/** Parse indexed history properties, rejecting malformed array structure before payload validation. */
+GList *read_history_v2_entries(Exiv2::XmpData &xmpData, gboolean *valid, xmp_history_error_t *error)
 {
   GList *history_entries = NULL;
   history_entry_t *current_entry = NULL;
   *valid = TRUE;
-  *error = XMP_HISTORY_ERROR_NONE;
+  *error = xmp_history_error_t::XMP_HISTORY_ERROR_NONE;
 
   for(auto history = xmpData.findKey(Exiv2::XmpKey("Xmp.darktable.history")); history != xmpData.end(); history++)
   {
@@ -926,111 +926,106 @@ GList *read_history_v2(Exiv2::XmpData &xmpData, const int xmp_version, gboolean 
     // XmpText: Xmp.darktable.history[1]/darktable:settings[1]/darktable:name = width
     // XmpText: Xmp.darktable.history[1]/darktable:settings[1]/darktable:value = 23
 
-    std::string key_item = history->key();
-    char *key = g_strdup(key_item.c_str());
-    const char *key_iter = key;
+    const std::string key_item = history->key();
+    const char *key = key_item.c_str();
     if(!g_str_has_prefix(key, "Xmp.darktable.history["))
     {
-      dt_free(key);
       continue;
     }
+    unsigned int n = 0;
+    const char *property = nullptr;
+    if(read_array_property(key + strlen("Xmp.darktable.history["), &n, &property))
     {
-      unsigned int n = 0;
-      const char *property = nullptr;
-      if(read_array_property(key + strlen("Xmp.darktable.history["), &n, &property))
-      {
-        g_list_free_full(history_entries, free_history_entry);
-        history_entries = NULL;
-        *valid = FALSE;
-        *error = XMP_HISTORY_ERROR_STRUCTURE;
-        dt_free(key);
-        return NULL;
-      }
-
-      if(IS_NULL_PTR(property)) goto skip;
-      key_iter = property;
-
-      // make sure we are filling in the details of the correct entry
-      unsigned int length = g_list_length(history_entries);
-      if(n > length + 1)
-      {
-        g_list_free_full(history_entries, free_history_entry);
-        *valid = FALSE;
-        *error = XMP_HISTORY_ERROR_STRUCTURE;
-        dt_free(key);
-        return NULL;
-      }
-      if(n == length + 1)
-      {
-        current_entry = (history_entry_t *)calloc(1, sizeof(history_entry_t));
-        if(IS_NULL_PTR(current_entry))
-        {
-          g_list_free_full(history_entries, free_history_entry);
-          *valid = FALSE;
-          *error = XMP_HISTORY_ERROR_STRUCTURE;
-          dt_free(key);
-          return NULL;
-        }
-        current_entry->blendop_version = 1; // default version in case it's not specified
-        current_entry->iop_order = -1.0;
-        history_entries = g_list_append(history_entries, current_entry);
-      }
-      else if(n <= length)
-      {
-        // AFAICT this can't happen with regular exiv2 parsed XMP data, but better safe than sorry.
-        // it can happen though when constructing things in a unusual order and then passing it to us without
-        // serializing it in between
-        current_entry = (history_entry_t *)g_list_nth_data(history_entries, n - 1); // XMP starts counting at 1!
-      }
-
-      if(current_entry->read_property(key_iter, *history))
-      {
-        g_list_free_full(history_entries, free_history_entry);
-        *valid = FALSE;
-        *error = !strcmp(key_iter, "darktable:blendop_params")
-                   ? XMP_HISTORY_ERROR_BLEND_PAYLOAD : XMP_HISTORY_ERROR_PAYLOAD;
-        dt_free(key);
-        return NULL;
-      }
+      g_list_free_full(history_entries, free_history_entry);
+      *valid = FALSE;
+      *error = xmp_history_error_t::XMP_HISTORY_ERROR_STRUCTURE;
+      return nullptr;
     }
-skip:
-    dt_free(key);
+
+    if(IS_NULL_PTR(property)) continue;
+
+    // make sure we are filling in the details of the correct entry
+    unsigned int length = g_list_length(history_entries);
+    if(n > length + 1)
+    {
+      g_list_free_full(history_entries, free_history_entry);
+      *valid = FALSE;
+      *error = xmp_history_error_t::XMP_HISTORY_ERROR_STRUCTURE;
+      return nullptr;
+    }
+    if(n == length + 1)
+    {
+      current_entry = (history_entry_t *)calloc(1, sizeof(history_entry_t));
+      if(IS_NULL_PTR(current_entry))
+      {
+        g_list_free_full(history_entries, free_history_entry);
+        *valid = FALSE;
+        *error = xmp_history_error_t::XMP_HISTORY_ERROR_STRUCTURE;
+        return nullptr;
+      }
+      current_entry->blendop_version = 1; // default version in case it's not specified
+      current_entry->iop_order = -1.0;
+      history_entries = g_list_append(history_entries, current_entry);
+    }
+    else if(n <= length)
+    {
+      // AFAICT this can't happen with regular exiv2 parsed XMP data, but better safe than sorry.
+      // it can happen though when constructing things in a unusual order and then passing it to us without
+      // serializing it in between
+      current_entry = (history_entry_t *)g_list_nth_data(history_entries, n - 1); // XMP starts counting at 1!
+    }
+
+    if(current_entry->read_property(property, *history))
+    {
+      g_list_free_full(history_entries, free_history_entry);
+      *valid = FALSE;
+      *error = !strcmp(property, "darktable:blendop_params") ? xmp_history_error_t::XMP_HISTORY_ERROR_BLEND_PAYLOAD
+                                                             : xmp_history_error_t::XMP_HISTORY_ERROR_PAYLOAD;
+      return nullptr;
+    }
   }
 
-  GHashTable *numbers = NULL;
+  return history_entries;
+}
+
+/** Validate parsed payloads and version-specific history numbers; return caller-owned entries. */
+GList *read_history_v2(Exiv2::XmpData &xmpData, const int xmp_version, gboolean *valid, xmp_history_error_t *error)
+{
+  GList *history_entries = read_history_v2_entries(xmpData, valid, error);
+  if(!*valid) return nullptr;
+  GHashTable *numbers = nullptr;
   if(xmp_version >= 3) numbers = g_hash_table_new(g_direct_hash, g_direct_equal);
   if(xmp_version >= 3 && IS_NULL_PTR(numbers))
   {
     g_list_free_full(history_entries, free_history_entry);
     *valid = FALSE;
-    *error = XMP_HISTORY_ERROR_STRUCTURE;
-    return NULL;
+    *error = xmp_history_error_t::XMP_HISTORY_ERROR_STRUCTURE;
+    return nullptr;
   }
   for(GList *iter = history_entries; iter; iter = g_list_next(iter))
   {
     history_entry_t *entry = (history_entry_t *)iter->data;
-    if(!(entry->have_operation && entry->operation && entry->operation[0] && entry->have_params
-          && entry->params && entry->have_modversion))
+    if(!(entry->have_operation && entry->operation && entry->operation[0] && entry->have_params && entry->params
+         && entry->have_modversion))
     {
-      g_list_free_full(history_entries, free_history_entry);
-      history_entries = NULL;
-      *valid = FALSE;
-      *error = XMP_HISTORY_ERROR_PAYLOAD;
-      break;
+      *error = xmp_history_error_t::XMP_HISTORY_ERROR_PAYLOAD;
     }
-    if(xmp_version >= 3
-       && (entry->num_count != 1 || !entry->valid_num
-           || g_hash_table_contains(numbers, GINT_TO_POINTER(entry->num))))
+    else if(xmp_version >= 3
+            && (entry->num_count != 1 || !entry->valid_num
+                || g_hash_table_contains(numbers, GINT_TO_POINTER(entry->num))))
     {
-      g_list_free_full(history_entries, free_history_entry);
-      history_entries = NULL;
-      *valid = FALSE;
-      *error = XMP_HISTORY_ERROR_NUMBER;
-      break;
+      *error = xmp_history_error_t::XMP_HISTORY_ERROR_NUMBER;
     }
+    if(*error != xmp_history_error_t::XMP_HISTORY_ERROR_NONE) break;
     if(xmp_version >= 3) g_hash_table_add(numbers, GINT_TO_POINTER(entry->num));
   }
   if(!IS_NULL_PTR(numbers)) g_hash_table_destroy(numbers);
+  if(*error != xmp_history_error_t::XMP_HISTORY_ERROR_NONE)
+  {
+    g_list_free_full(history_entries, free_history_entry);
+    *valid = FALSE;
+    return nullptr;
+  }
 
   return history_entries;
 }
@@ -1401,9 +1396,9 @@ struct xmp_development_t
   GList *iop_order_list = NULL;
   GHashTable *mask_entries = NULL;
   GList *mask_entries_v3 = NULL;
-  GHashTable *omitted_mask_nums = NULL;
+  GHashTable *omitted_mask_nums = nullptr;
   GList *history_entries = NULL;
-  xmp_history_error_t history_error = XMP_HISTORY_ERROR_NONE;
+  xmp_history_error_t history_error = xmp_history_error_t::XMP_HISTORY_ERROR_NONE;
 
   int read_properties(Exiv2::XmpData &xmpData);
   GList *read_order(Exiv2::XmpData &xmpData);
@@ -1500,13 +1495,6 @@ int xmp_development_t::validate_mask_history()
 {
   GHashTable *entries_by_num = g_hash_table_new(g_direct_hash, g_direct_equal);
   omitted_mask_nums = g_hash_table_new(g_direct_hash, g_direct_equal);
-  if(IS_NULL_PTR(entries_by_num) || IS_NULL_PTR(omitted_mask_nums))
-  {
-    if(!IS_NULL_PTR(entries_by_num)) g_hash_table_destroy(entries_by_num);
-    if(!IS_NULL_PTR(omitted_mask_nums)) g_hash_table_destroy(omitted_mask_nums);
-    omitted_mask_nums = NULL;
-    return 1;
-  }
   for(GList *iter = mask_entries_v3; !IS_NULL_PTR(iter); iter = g_list_next(iter))
   {
     auto *entry = (mask_entry_t *)iter->data;
@@ -1521,13 +1509,6 @@ int xmp_development_t::validate_mask_history()
     if(IS_NULL_PTR(entries))
     {
       entries = g_hash_table_new(g_int_hash, g_int_equal);
-      if(IS_NULL_PTR(entries))
-      {
-        g_hash_table_destroy(entries_by_num);
-        g_hash_table_destroy(omitted_mask_nums);
-        omitted_mask_nums = NULL;
-        return 1;
-      }
       g_hash_table_insert(entries_by_num, GINT_TO_POINTER(entry->mask_num), entries);
     }
     if(g_hash_table_contains(entries, &entry->mask_id))
@@ -1538,18 +1519,18 @@ int xmp_development_t::validate_mask_history()
     g_hash_table_insert(entries, &entry->mask_id, entry);
   }
   GHashTableIter iter;
-  gpointer num;
+  gpointer snapshot_num;
   gpointer entries;
   g_hash_table_iter_init(&iter, entries_by_num);
-  while(g_hash_table_iter_next(&iter, &num, &entries))
+  while(g_hash_table_iter_next(&iter, &snapshot_num, &entries))
   {
-    if(g_hash_table_contains(omitted_mask_nums, num)) continue;
+    if(g_hash_table_contains(omitted_mask_nums, snapshot_num)) continue;
     mask_validation_context_t context = { .entries = (GHashTable *)entries, .valid = TRUE };
     g_hash_table_foreach(context.entries, validate_mask_entries, &context);
     if(!context.valid)
     {
       masks_recovered = true;
-      g_hash_table_add(omitted_mask_nums, num);
+      g_hash_table_add(omitted_mask_nums, snapshot_num);
     }
   }
   g_hash_table_iter_init(&iter, entries_by_num);
@@ -1630,9 +1611,9 @@ int xmp_development_t::read(Exiv2::Image &image)
   {
     switch(history_error)
     {
-      case XMP_HISTORY_ERROR_NUMBER: rejection_reason = "history-number"; break;
-      case XMP_HISTORY_ERROR_BLEND_PAYLOAD: rejection_reason = "blend-payload"; break;
-      case XMP_HISTORY_ERROR_PAYLOAD: rejection_reason = "history-payload"; break;
+      case xmp_history_error_t::XMP_HISTORY_ERROR_NUMBER: rejection_reason = "history-number"; break;
+      case xmp_history_error_t::XMP_HISTORY_ERROR_BLEND_PAYLOAD: rejection_reason = "blend-payload"; break;
+      case xmp_history_error_t::XMP_HISTORY_ERROR_PAYLOAD: rejection_reason = "history-payload"; break;
       default: rejection_reason = "history-structure"; break;
     }
     return 1;
@@ -1657,7 +1638,7 @@ int xmp_development_t::validate_legacy_history()
                                      entry->blendop_version, &mask_id)
        != DT_DEVELOP_BLEND_MASK_ID_READABLE || mask_id == 0)
       continue;
-    g_hash_table_foreach(mask_entries, reset_mask_validation, NULL);
+    g_hash_table_foreach(mask_entries, reset_mask_validation, nullptr);
     auto *root = (mask_entry_t *)g_hash_table_lookup(mask_entries, &mask_id);
     if(IS_NULL_PTR(root) || !validate_mask_entry(mask_entries, root, 0))
       dt_develop_blend_clear_mask_id(entry->blendop_params, entry->blendop_params_len,
@@ -1843,20 +1824,23 @@ int dt_exif_xmp_read(dt_image_t *img, const char *filename, const int history_on
     }
     transaction_started = dt_database_start_transaction();
     if(!transaction_started)
-      rejection_reason = "transaction-start";
-    else if(!development.write(*image, img, history_only)
-            && (IS_NULL_PTR(write_timestamp) || dt_image_repository_set_write_timestamp(img->id, *write_timestamp)))
     {
-      if(dt_database_release_transaction())
-      {
-        result = 0;
-        transaction_started = FALSE;
-      }
-      else
-        rejection_reason = "commit-failure";
+      rejection_reason = "transaction-start";
+      goto cleanup;
+    }
+    if(development.write(*image, img, history_only)
+       || (!IS_NULL_PTR(write_timestamp) && !dt_image_repository_set_write_timestamp(img->id, *write_timestamp)))
+    {
+      rejection_reason = "write-failure";
+      goto cleanup;
+    }
+    if(dt_database_release_transaction())
+    {
+      result = 0;
+      transaction_started = FALSE;
     }
     else
-      rejection_reason = "write-failure";
+      rejection_reason = "commit-failure";
   }
   catch(const std::exception &)
   {
@@ -1948,45 +1932,40 @@ typedef struct _xmp_history_ctx_t
   int num;
 } _xmp_history_ctx_t;
 
-static void _xmp_append_history(void *user_data, const int32_t row_imgid, const int hist_num,
-                                const int modversion, const char *operation,
-                                const void *op_params, const int params_len,
-                                const gboolean enabled, const void *blendop_params_blob,
-                                const int blendop_params_len, const int blendop_version,
-                                const int multi_priority, const char *multi_name,
-                                const char *preset_name)
+static void _xmp_append_history(void *user_data, const dt_history_repository_row_t *row)
 {
   _xmp_history_ctx_t *ctx = (_xmp_history_ctx_t *)user_data;
   Exiv2::XmpData &xmpData = *ctx->xmpData;
   char key[1024];
   const int num = ctx->num;
 
-  if(IS_NULL_PTR(operation)) return; // no op is fatal.
+  if(IS_NULL_PTR(row->operation)) return; // no op is fatal.
 
-  char *params = dt_exif_xmp_encode((const unsigned char *)op_params, params_len, NULL);
+  char *params = dt_exif_xmp_encode((const unsigned char *)row->op_params, row->op_params_len, NULL);
 
   snprintf(key, sizeof(key), "Xmp.darktable.history[%d]/darktable:num", num);
-  xmpData[key] = hist_num;
+  xmpData[key] = row->num;
   snprintf(key, sizeof(key), "Xmp.darktable.history[%d]/darktable:operation", num);
-  xmpData[key] = operation;
+  xmpData[key] = row->operation;
   snprintf(key, sizeof(key), "Xmp.darktable.history[%d]/darktable:enabled", num);
-  xmpData[key] = enabled;
+  xmpData[key] = row->enabled;
   snprintf(key, sizeof(key), "Xmp.darktable.history[%d]/darktable:modversion", num);
-  xmpData[key] = modversion;
+  xmpData[key] = row->module_version;
   snprintf(key, sizeof(key), "Xmp.darktable.history[%d]/darktable:params", num);
   xmpData[key] = params;
   snprintf(key, sizeof(key), "Xmp.darktable.history[%d]/darktable:multi_name", num);
-  xmpData[key] = multi_name ? multi_name : "";
+  xmpData[key] = row->multi_name ? row->multi_name : "";
   snprintf(key, sizeof(key), "Xmp.darktable.history[%d]/darktable:multi_priority", num);
-  xmpData[key] = multi_priority;
+  xmpData[key] = row->multi_priority;
 
-  if(blendop_params_blob)
+  if(row->blendop_params)
   {
     // this shouldn't fail in general, but reading is robust enough to allow it,
     // and flipping images from LT will result in this being left out
-    char *blendop_params = dt_exif_xmp_encode((const unsigned char *)blendop_params_blob, blendop_params_len, NULL);
+    char *blendop_params
+        = dt_exif_xmp_encode((const unsigned char *)row->blendop_params, row->blendop_params_len, NULL);
     snprintf(key, sizeof(key), "Xmp.darktable.history[%d]/darktable:blendop_version", num);
-    xmpData[key] = blendop_version;
+    xmpData[key] = row->blendop_version;
     snprintf(key, sizeof(key), "Xmp.darktable.history[%d]/darktable:blendop_params", num);
     xmpData[key] = blendop_params;
     dt_free(blendop_params);
