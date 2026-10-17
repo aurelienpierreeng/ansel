@@ -107,6 +107,18 @@ static dt_test_exif_fixture_t &test_context()
   return fixture;
 }
 
+template<void (*test)(), typename State>
+static void run_cmocka_test(State)
+{
+  test();
+}
+
+template<int (*fixture)(), typename State>
+static int run_cmocka_fixture(State)
+{
+  return fixture();
+}
+
 static const char *const jpeg_base64 =
     "/9j/4AAQSkZJRgABAQEAYABgAAD/2wBDAP//////////////////////////////////////////"
     "//////////////////////////////////////2wBDAf//////////////////////////////////////////"
@@ -211,7 +223,7 @@ static gpointer read_scratch_image(gpointer user_data)
   return nullptr;
 }
 
-static int setup(void **state)
+static int setup_fixture()
 {
   auto &fixture = test_context();
   int fd = -1;
@@ -236,7 +248,7 @@ static int setup(void **state)
   fixture.user_cache_dir = g_dir_make_tmp("ansel-test-exif-cache-XXXXXX", nullptr);
   if(IS_NULL_PTR(fixture.user_cache_dir)) goto cleanup_location;
   dt_loc_init_user_cache_dir(fixture.user_cache_dir);
-  if(testdb_setup(state)) goto cleanup_location;
+  if(testdb_setup(nullptr)) goto cleanup_location;
 
   fixture.config_path = nullptr;
   fd = g_file_open_tmp("ansel-test-exif-contract-XXXXXX.rc", &fixture.config_path, nullptr);
@@ -291,7 +303,7 @@ cleanup_config:
   dt_free(fixture.config_path);
   fixture.config_path = nullptr;
 cleanup_database:
-  testdb_teardown(state);
+  testdb_teardown(nullptr);
 cleanup_location:
   if(!IS_NULL_PTR(fixture.user_cache_dir)) g_rmdir(fixture.user_cache_dir);
   dt_free(fixture.user_cache_dir);
@@ -302,7 +314,7 @@ cleanup_location:
   return -1;
 }
 
-static int teardown(void **state)
+static int teardown_fixture()
 {
   auto &fixture = test_context();
   dt_metadata_set_tags_changed_handler(nullptr);
@@ -318,7 +330,7 @@ static int teardown(void **state)
   g_remove(fixture.path);
   dt_free(fixture.path);
   fixture.path = nullptr;
-  const int result = testdb_teardown(state);
+  const int result = testdb_teardown(nullptr);
   g_rmdir(fixture.user_cache_dir);
   dt_free(fixture.user_cache_dir);
   fixture.user_cache_dir = nullptr;
@@ -336,7 +348,7 @@ static dt_image_t persisted_image(void)
   return image;
 }
 
-static void test_persisted_read_rolls_back_begin_failure(void **)
+static void test_persisted_read_rolls_back_begin_failure()
 {
   auto &fixture = test_context();
   dt_image_t image = persisted_image();
@@ -350,7 +362,7 @@ static void test_persisted_read_rolls_back_begin_failure(void **)
   assert_int_equal(fixture.rollback_calls, 0);
 }
 
-static void test_persisted_read_rejects_stale_image_before_transaction(void **)
+static void test_persisted_read_rejects_stale_image_before_transaction()
 {
   auto &fixture = test_context();
   dt_image_t image = persisted_image();
@@ -365,7 +377,7 @@ static void test_persisted_read_rejects_stale_image_before_transaction(void **)
   assert_int_equal(fixture.notification_calls, 0);
 }
 
-static void test_persisted_read_rejects_outer_transaction(void **)
+static void test_persisted_read_rejects_outer_transaction()
 {
   auto &fixture = test_context();
   for(int invalid_keyword = 0; invalid_keyword < 2; invalid_keyword++)
@@ -416,7 +428,7 @@ static void test_persisted_read_rejects_outer_transaction(void **)
   }
 }
 
-static void test_persisted_read_rolls_back_commit_failure(void **)
+static void test_persisted_read_rolls_back_commit_failure()
 {
   auto &fixture = test_context();
   dt_image_t image = persisted_image();
@@ -431,7 +443,7 @@ static void test_persisted_read_rolls_back_commit_failure(void **)
   assert_false(dt_database_transaction_is_owned_by_current_thread());
 }
 
-static void test_persisted_read_rolls_back_tag_persistence_failure(void **)
+static void test_persisted_read_rolls_back_tag_persistence_failure()
 {
   auto &fixture = test_context();
   std::unique_ptr<Exiv2::Image> fixture_image(Exiv2::ImageFactory::open(fixture.path));
@@ -451,7 +463,7 @@ static void test_persisted_read_rolls_back_tag_persistence_failure(void **)
   assert_false(dt_database_transaction_is_owned_by_current_thread());
 }
 
-static void test_persisted_read_commits_keyword(void **)
+static void test_persisted_read_commits_keyword()
 {
   auto &fixture = test_context();
   dt_image_t image = persisted_image();
@@ -463,7 +475,7 @@ static void test_persisted_read_commits_keyword(void **)
   assert_int_equal(fixture.notification_calls, 1);
 }
 
-static void test_persisted_read_imports_exif_only_metadata(void **)
+static void test_persisted_read_imports_exif_only_metadata()
 {
   auto &fixture = test_context();
   std::unique_ptr<Exiv2::Image> fixture_image(Exiv2::ImageFactory::open(fixture.path));
@@ -492,7 +504,7 @@ static void test_persisted_read_imports_exif_only_metadata(void **)
   g_list_free_full(creator, dt_free_gpointer);
 }
 
-static void test_persisted_read_rolls_back_exif_only_metadata(void **)
+static void test_persisted_read_rolls_back_exif_only_metadata()
 {
   auto &fixture = test_context();
   std::unique_ptr<Exiv2::Image> fixture_image(Exiv2::ImageFactory::open(fixture.path));
@@ -511,7 +523,7 @@ static void test_persisted_read_rolls_back_exif_only_metadata(void **)
   assert_int_equal(fixture.notification_calls, 0);
 }
 
-static void test_persisted_read_notifies_for_metadata_only_xmp(void **)
+static void test_persisted_read_notifies_for_metadata_only_xmp()
 {
   auto &fixture = test_context();
   std::unique_ptr<Exiv2::Image> fixture_image(Exiv2::ImageFactory::open(fixture.path));
@@ -530,7 +542,7 @@ static void test_persisted_read_notifies_for_metadata_only_xmp(void **)
   g_list_free_full(description, dt_free_gpointer);
 }
 
-static void test_persisted_read_notifies_for_iptc_caption_only(void **)
+static void test_persisted_read_notifies_for_iptc_caption_only()
 {
   auto &fixture = test_context();
   std::unique_ptr<Exiv2::Image> fixture_image(Exiv2::ImageFactory::open(fixture.path));
@@ -550,7 +562,7 @@ static void test_persisted_read_notifies_for_iptc_caption_only(void **)
   g_list_free_full(description, dt_free_gpointer);
 }
 
-static void test_xmp_persistence_marks_metadata_replacement(void **)
+static void test_xmp_persistence_marks_metadata_replacement()
 {
   auto &fixture = test_context();
   dt_image_t image = persisted_image();
@@ -567,7 +579,7 @@ static void test_xmp_persistence_marks_metadata_replacement(void **)
   assert_int_equal(fixture.notification_calls, 0);
 }
 
-static void test_generic_read_keeps_scratch_fields_without_persistence(void **)
+static void test_generic_read_keeps_scratch_fields_without_persistence()
 {
   auto &fixture = test_context();
   dt_image_t image;
@@ -594,7 +606,7 @@ static void test_generic_read_keeps_scratch_fields_without_persistence(void **)
   assert_int_equal(fixture.notification_calls, 0);
 }
 
-static void test_generic_read_keeps_persisted_image_database_free(void **)
+static void test_generic_read_keeps_persisted_image_database_free()
 {
   auto &fixture = test_context();
   dt_image_t image = persisted_image();
@@ -608,7 +620,7 @@ static void test_generic_read_keeps_persisted_image_database_free(void **)
   assert_int_equal(fixture.notification_calls, 0);
 }
 
-static void test_generic_read_keeps_iptc_and_xmp_image_fields(void **)
+static void test_generic_read_keeps_iptc_and_xmp_image_fields()
 {
   auto &fixture = test_context();
   std::unique_ptr<Exiv2::Image> fixture_image(Exiv2::ImageFactory::open(fixture.path));
@@ -635,7 +647,7 @@ static void test_generic_read_keeps_iptc_and_xmp_image_fields(void **)
   assert_int_equal(fixture.notification_calls, 0);
 }
 
-static void test_generic_read_does_not_rollback_unrelated_write(void **)
+static void test_generic_read_does_not_rollback_unrelated_write()
 {
   auto &fixture = test_context();
   fixture.coordinate_transaction = TRUE;
@@ -672,7 +684,7 @@ static void test_generic_read_does_not_rollback_unrelated_write(void **)
   fixture.coordinate_transaction = FALSE;
 }
 
-static void test_generic_read_retains_pfm_fallbacks(void **)
+static void test_generic_read_retains_pfm_fallbacks()
 {
   auto &fixture = test_context();
   char *path = nullptr;
@@ -699,7 +711,7 @@ static void test_generic_read_retains_pfm_fallbacks(void **)
   dt_free(path);
 }
 
-static void test_generic_read_retains_fallbacks_when_file_disappears_after_stat(void **)
+static void test_generic_read_retains_fallbacks_when_file_disappears_after_stat()
 {
   auto &fixture = test_context();
   char *path = nullptr;
@@ -728,7 +740,7 @@ static void test_generic_read_retains_fallbacks_when_file_disappears_after_stat(
   dt_free(path);
 }
 
-static void test_scratch_exif_preserves_camera_fields(void **)
+static void test_scratch_exif_preserves_camera_fields()
 {
   dt_image_t image;
   dt_image_init(&image);
@@ -792,25 +804,43 @@ int main(int argc, char *argv[])
   dt_free(cameras);
   if(copied) dt_loc_init_datadir(nullptr, fixture.rawspeed_datadir);
   const std::array<CMUnitTest, 18> tests = { {
-      cmocka_unit_test_setup_teardown(test_scratch_exif_preserves_camera_fields, setup, teardown),
-      cmocka_unit_test_setup_teardown(test_persisted_read_rolls_back_begin_failure, setup, teardown),
-      cmocka_unit_test_setup_teardown(test_persisted_read_rejects_stale_image_before_transaction, setup, teardown),
-      cmocka_unit_test_setup_teardown(test_persisted_read_rejects_outer_transaction, setup, teardown),
-      cmocka_unit_test_setup_teardown(test_persisted_read_rolls_back_commit_failure, setup, teardown),
-      cmocka_unit_test_setup_teardown(test_persisted_read_rolls_back_tag_persistence_failure, setup, teardown),
-      cmocka_unit_test_setup_teardown(test_persisted_read_commits_keyword, setup, teardown),
-      cmocka_unit_test_setup_teardown(test_persisted_read_imports_exif_only_metadata, setup, teardown),
-      cmocka_unit_test_setup_teardown(test_persisted_read_rolls_back_exif_only_metadata, setup, teardown),
-      cmocka_unit_test_setup_teardown(test_persisted_read_notifies_for_metadata_only_xmp, setup, teardown),
-      cmocka_unit_test_setup_teardown(test_persisted_read_notifies_for_iptc_caption_only, setup, teardown),
-      cmocka_unit_test_setup_teardown(test_xmp_persistence_marks_metadata_replacement, setup, teardown),
-      cmocka_unit_test_setup_teardown(test_generic_read_keeps_scratch_fields_without_persistence, setup, teardown),
-      cmocka_unit_test_setup_teardown(test_generic_read_keeps_persisted_image_database_free, setup, teardown),
-      cmocka_unit_test_setup_teardown(test_generic_read_keeps_iptc_and_xmp_image_fields, setup, teardown),
-      cmocka_unit_test_setup_teardown(test_generic_read_does_not_rollback_unrelated_write, setup, teardown),
-      cmocka_unit_test_setup_teardown(test_generic_read_retains_pfm_fallbacks, setup, teardown),
-      cmocka_unit_test_setup_teardown(test_generic_read_retains_fallbacks_when_file_disappears_after_stat, setup,
-                                      teardown),
+      cmocka_unit_test_setup_teardown(run_cmocka_test<test_scratch_exif_preserves_camera_fields>,
+                                      run_cmocka_fixture<setup_fixture>, run_cmocka_fixture<teardown_fixture>),
+      cmocka_unit_test_setup_teardown(run_cmocka_test<test_persisted_read_rolls_back_begin_failure>,
+                                      run_cmocka_fixture<setup_fixture>, run_cmocka_fixture<teardown_fixture>),
+      cmocka_unit_test_setup_teardown(run_cmocka_test<test_persisted_read_rejects_stale_image_before_transaction>,
+                                      run_cmocka_fixture<setup_fixture>, run_cmocka_fixture<teardown_fixture>),
+      cmocka_unit_test_setup_teardown(run_cmocka_test<test_persisted_read_rejects_outer_transaction>,
+                                      run_cmocka_fixture<setup_fixture>, run_cmocka_fixture<teardown_fixture>),
+      cmocka_unit_test_setup_teardown(run_cmocka_test<test_persisted_read_rolls_back_commit_failure>,
+                                      run_cmocka_fixture<setup_fixture>, run_cmocka_fixture<teardown_fixture>),
+      cmocka_unit_test_setup_teardown(run_cmocka_test<test_persisted_read_rolls_back_tag_persistence_failure>,
+                                      run_cmocka_fixture<setup_fixture>, run_cmocka_fixture<teardown_fixture>),
+      cmocka_unit_test_setup_teardown(run_cmocka_test<test_persisted_read_commits_keyword>,
+                                      run_cmocka_fixture<setup_fixture>, run_cmocka_fixture<teardown_fixture>),
+      cmocka_unit_test_setup_teardown(run_cmocka_test<test_persisted_read_imports_exif_only_metadata>,
+                                      run_cmocka_fixture<setup_fixture>, run_cmocka_fixture<teardown_fixture>),
+      cmocka_unit_test_setup_teardown(run_cmocka_test<test_persisted_read_rolls_back_exif_only_metadata>,
+                                      run_cmocka_fixture<setup_fixture>, run_cmocka_fixture<teardown_fixture>),
+      cmocka_unit_test_setup_teardown(run_cmocka_test<test_persisted_read_notifies_for_metadata_only_xmp>,
+                                      run_cmocka_fixture<setup_fixture>, run_cmocka_fixture<teardown_fixture>),
+      cmocka_unit_test_setup_teardown(run_cmocka_test<test_persisted_read_notifies_for_iptc_caption_only>,
+                                      run_cmocka_fixture<setup_fixture>, run_cmocka_fixture<teardown_fixture>),
+      cmocka_unit_test_setup_teardown(run_cmocka_test<test_xmp_persistence_marks_metadata_replacement>,
+                                      run_cmocka_fixture<setup_fixture>, run_cmocka_fixture<teardown_fixture>),
+      cmocka_unit_test_setup_teardown(run_cmocka_test<test_generic_read_keeps_scratch_fields_without_persistence>,
+                                      run_cmocka_fixture<setup_fixture>, run_cmocka_fixture<teardown_fixture>),
+      cmocka_unit_test_setup_teardown(run_cmocka_test<test_generic_read_keeps_persisted_image_database_free>,
+                                      run_cmocka_fixture<setup_fixture>, run_cmocka_fixture<teardown_fixture>),
+      cmocka_unit_test_setup_teardown(run_cmocka_test<test_generic_read_keeps_iptc_and_xmp_image_fields>,
+                                      run_cmocka_fixture<setup_fixture>, run_cmocka_fixture<teardown_fixture>),
+      cmocka_unit_test_setup_teardown(run_cmocka_test<test_generic_read_does_not_rollback_unrelated_write>,
+                                      run_cmocka_fixture<setup_fixture>, run_cmocka_fixture<teardown_fixture>),
+      cmocka_unit_test_setup_teardown(run_cmocka_test<test_generic_read_retains_pfm_fallbacks>,
+                                      run_cmocka_fixture<setup_fixture>, run_cmocka_fixture<teardown_fixture>),
+      cmocka_unit_test_setup_teardown(
+          run_cmocka_test<test_generic_read_retains_fallbacks_when_file_disappears_after_stat>,
+          run_cmocka_fixture<setup_fixture>, run_cmocka_fixture<teardown_fixture>),
   } };
 
   const int result

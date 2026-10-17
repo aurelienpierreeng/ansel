@@ -424,6 +424,55 @@ static bool dt_exif_read_xmp_tag(Exiv2::XmpData &xmpData, Exiv2::XmpData::iterat
 
 static bool _exif_decode_xmp_scratch(dt_image_t *img, Exiv2::XmpData &xmpData, const bool clear_labels);
 
+/** Reject ratings outside the range accepted by the image model. */
+static bool _exif_xmp_rating_is_valid(Exiv2::XmpData &xmpData)
+{
+  const auto pos = xmpData.findKey(Exiv2::XmpKey("Xmp.xmp.Rating"));
+  if(pos == xmpData.end() || !pos->size()) return true;
+  const int stars = pos->toLong();
+  return stars >= -1 && stars <= 5;
+}
+
+/** Import the preferred XMP keyword collection and report whether tags changed. */
+static bool _exif_import_xmp_keywords(const dt_image_t *img, Exiv2::XmpData &xmpData,
+                                      const bool replace_existing, GList *imgs, bool *tags_changed)
+{
+  auto pos = xmpData.findKey(Exiv2::XmpKey("Xmp.lr.hierarchicalSubject"));
+  if(pos == xmpData.end()) pos = xmpData.findKey(Exiv2::XmpKey("Xmp.dc.subject"));
+  if(pos == xmpData.end()) return true;
+  if(replace_existing && !dt_tag_set_tags(nullptr, imgs, TRUE, TRUE, FALSE)) return false;
+  if(!_exif_import_tags(img, pos)) return false;
+  *tags_changed = true;
+  return true;
+}
+
+/** Import configured metadata fields while preserving the legacy language-prefix handling. */
+static bool _exif_import_xmp_metadata(const dt_image_t *img, Exiv2::XmpData &xmpData,
+                                      const bool replace_existing, GList *imgs, bool *tags_changed)
+{
+  Exiv2::XmpData::iterator pos;
+  if(replace_existing && !dt_metadata_clear(imgs, FALSE)) return false;
+  if(replace_existing) *tags_changed = true;
+
+  for(unsigned int i = 0; i < DT_METADATA_NUMBER; i++)
+  {
+    const gchar *key = dt_metadata_get_key(i);
+    if(!FIND_XMP_TAG(key)) continue;
+    char *value = strdup(pos->toString().c_str());
+    char *allocation = value;
+    while(!strncmp(value, "lang=", 5) || !strncmp(value, "charset=", 8))
+    {
+      value += strcspn(value, " ");
+      value += strspn(value, " ");
+    }
+    const gboolean metadata_set = dt_metadata_set_import(img->id, key, value);
+    dt_free(allocation);
+    if(!metadata_set) return false;
+    *tags_changed = true;
+  }
+  return true;
+}
+
 // FIXME: according to http://www.exiv2.org/doc/classExiv2_1_1Metadatum.html#63c2b87249ba96679c29e01218169124
 // there is no need to pass xmpData
 // version = -1 -> version ignored
@@ -434,62 +483,15 @@ bool dt_exif_apply_xmp_persistence(dt_image_t *img, Exiv2::XmpData &xmpData, con
   GList imgs = { GINT_TO_POINTER(img->id), nullptr, nullptr };
   try
   {
-    Exiv2::XmpData::iterator pos;
-
-    if(FIND_XMP_TAG("Xmp.xmp.Rating"))
-    {
-      const int stars = pos->toLong();
-      if(stars < -1 || stars > 5)
-      {
-        return false;
-      }
-    }
-
-    pos = xmpData.findKey(Exiv2::XmpKey("Xmp.lr.hierarchicalSubject"));
-    if(pos == xmpData.end()) pos = xmpData.findKey(Exiv2::XmpKey("Xmp.dc.subject"));
-    if(pos != xmpData.end())
-    {
-      gboolean tags_ok = TRUE;
-      if(replace_existing) tags_ok = dt_tag_set_tags(nullptr, &imgs, TRUE, TRUE, FALSE);
-      if(tags_ok) tags_ok = _exif_import_tags(img, pos);
-      if(!tags_ok)
-      {
-        return false;
-      }
-      *tags_changed = true;
-    }
+    if(!_exif_xmp_rating_is_valid(xmpData)) return false;
+    if(!_exif_import_xmp_keywords(img, xmpData, replace_existing, &imgs, tags_changed)) return false;
 
     // older darktable version did not write this data correctly:
     // the reasoning behind strdup'ing all the strings before passing it to sqlite3 is, that
     // they are somehow corrupt after the call to sqlite3_prepare_v2() -- don't ask me
     // why for they don't get passed to that function.
     if(version == -1 || version > 0)
-    {
-      if(replace_existing && !dt_metadata_clear(&imgs, FALSE))
-      {
-        return false;
-      }
-      if(replace_existing) *tags_changed = true;
-      for(unsigned int i = 0; i < DT_METADATA_NUMBER; i++)
-      {
-        const gchar *key = dt_metadata_get_key(i);
-        if(!FIND_XMP_TAG(key)) continue;
-        char *value = strdup(pos->toString().c_str());
-        char *adr = value;
-        while(!strncmp(value, "lang=", 5) || !strncmp(value, "charset=", 8))
-        {
-          value += strcspn(value, " ");
-          value += strspn(value, " ");
-        }
-        const gboolean metadata_set = dt_metadata_set_import(img->id, key, value);
-        dt_free(adr);
-        if(!metadata_set)
-        {
-          return false;
-        }
-        *tags_changed = true;
-      }
-    }
+      if(!_exif_import_xmp_metadata(img, xmpData, replace_existing, &imgs, tags_changed)) return false;
 
     return _exif_decode_xmp_scratch(img, xmpData, replace_existing);
   }
@@ -576,7 +578,8 @@ static bool _exif_decode_xmp_scratch(dt_image_t *img, Exiv2::XmpData &xmpData, c
   }
 }
 
-static bool dt_exif_read_iptc_tag(Exiv2::IptcData &iptcData, Exiv2::IptcData::const_iterator *pos, std::string key)
+static bool dt_exif_read_iptc_tag(Exiv2::IptcData &iptcData, Exiv2::IptcData::const_iterator *pos,
+                                  const std::string &key)
 {
   try
   {
@@ -1115,12 +1118,8 @@ static void _find_exif_maker(Exiv2::ExifData &exifData,
     dt_strlcpy_to_utf8(maker, m_size, pos, exifData);
     }
 
-  for(char *c = maker + m_size - 1; c > maker; c--)
-      if(*c != ' ' && *c != '\0')
-      {
-        *(c + 1) = '\0';
-        break;
-      }
+  size_t length = strnlen(maker, m_size);
+  while(length > 0 && maker[length - 1] == ' ') maker[--length] = '\0';
 }
 
 static void _find_exif_model(Exiv2::ExifData &exifData,
@@ -1137,12 +1136,8 @@ static void _find_exif_model(Exiv2::ExifData &exifData,
     dt_strlcpy_to_utf8(model, m_size, pos, exifData);
     }
 
-  for(char *c = model + m_size - 1; c > model; c--)
-      if(*c != ' ' && *c != '\0')
-      {
-        *(c + 1) = '\0';
-        break;
-      }
+  size_t length = strnlen(model, m_size);
+  while(length > 0 && model[length - 1] == ' ') model[--length] = '\0';
 }
 
 static bool _exif_apply_exif_metadata(const dt_image_t *img, Exiv2::ExifData &exifData)
@@ -1338,8 +1333,8 @@ static void _exif_decode_sensor_crop(dt_image_t *img, Exiv2::ExifData &exifData)
 /** Decode Nikon focus distances, including the second Z-mount distance field on older Exiv2. */
 static bool _exif_decode_nikon_focus_distance(dt_image_t *img, Exiv2::ExifData &exifData)
 {
-  Exiv2::ExifData::const_iterator pos;
-  if(Exiv2::testVersion(0, 27, 4) && FIND_EXIF_TAG("Exif.NikonLd4.LensID") && pos->toLong() != 0)
+  if(Exiv2::ExifData::const_iterator pos;
+     Exiv2::testVersion(0, 27, 4) && FIND_EXIF_TAG("Exif.NikonLd4.LensID") && pos->toLong() != 0)
   {
     // Z lens, need to specifically look for the second instance of Exif.NikonLd4.FocusDistance
     // unless using Exiv2 0.28.x and later (also expanded to 2 bytes of precision since 0.28.1).
@@ -1577,9 +1572,8 @@ static void _exif_normalize_lens_name(dt_image_t *img, Exiv2::ExifData &exifData
   }
 
   /* Capitalize Nikon Z-mount lenses properly for UI presentation */
-  const gboolean nikkor = g_str_has_prefix(img->exif_lens, "NIKKOR");
-  const gboolean tamron = g_str_has_prefix(img->exif_lens, "TAMRON");
-  if(nikkor || tamron)
+  if(const gboolean nikkor = g_str_has_prefix(img->exif_lens, "NIKKOR");
+     nikkor || g_str_has_prefix(img->exif_lens, "TAMRON"))
   {
     for(size_t i = 1; i <= 5; ++i) img->exif_lens[i] = g_ascii_tolower(img->exif_lens[i]);
   }
@@ -1703,10 +1697,11 @@ static void _exif_decode_color_matrix(dt_image_t *img, Exiv2::ExifData &exifData
 
     if((sel_illu > -1) && (dt_get_debug_flags() & DT_DEBUG_IMAGEIO))
     {
-      fprintf(stderr, "[exif] `%s` dng illuminant %i (%iK) selected from ", img->filename, illu[sel_illu],
-              sel_temp);
-      for(int i = 0; i < 3; i++) fprintf(stderr, " -- [%i] %i (%iK)", i + 1, illu[i], _illu_to_temp(illu[i]));
-      fprintf(stderr, "\n");
+      std::cerr << "[exif] `" << img->filename << "` dng illuminant " << illu[sel_illu]
+                << " (" << sel_temp << "K) selected from ";
+      for(int i = 0; i < 3; i++)
+        std::cerr << " -- [" << i + 1 << "] " << illu[i] << " (" << _illu_to_temp(illu[i]) << "K)";
+      std::cerr << std::endl;
     }
 
     // Take the found CalibrationIlluminant / ColorMatrix pair.
@@ -1852,9 +1847,9 @@ static void _exif_decode_colorspace(dt_image_t *img, Exiv2::ExifData &exifData)
 /** Override ambiguous Sony lens names after the generic EXIF readers. */
 static void _exif_decode_sony_lens_name(dt_image_t *img, Exiv2::ExifData &exifData)
 {
-  Exiv2::ExifData::const_iterator pos;
   // Improve lens detection for Sony SAL lenses.
-  if(FIND_EXIF_TAG("Exif.Sony2.LensID") && pos->toLong() != 65535 && pos->print().find('|') == std::string::npos)
+  if(Exiv2::ExifData::const_iterator pos;
+     FIND_EXIF_TAG("Exif.Sony2.LensID") && pos->toLong() != 65535 && pos->print().find('|') == std::string::npos)
   {
     dt_strlcpy_to_utf8(img->exif_lens, sizeof(img->exif_lens), pos, exifData);
   }
@@ -2079,6 +2074,69 @@ int dt_exif_read(dt_image_t *img, const char *path)
   return 0;
 }
 
+/** Decode file-backed image fields before opening the metadata transaction. */
+static bool _exif_stage_persisted_image(dt_image_t *img, Exiv2::Image &image,
+                                        gboolean *dng_opcodes_read, gboolean *usercrop_tag)
+{
+  Exiv2::ExifData &exifData = image.exifData();
+  if(exifData.empty())
+    img->exif_inited = 1;
+  else
+  {
+    *dng_opcodes_read = exifData.findKey(Exiv2::ExifKey("Exif.SubImage1.OpcodeList2")) != exifData.end();
+    if(!*dng_opcodes_read)
+      *dng_opcodes_read = exifData.findKey(Exiv2::ExifKey("Exif.Image.OpcodeList2")) != exifData.end();
+    if(!_exif_decode_exif_data(img, exifData, false)) return false;
+    *usercrop_tag = img->usercrop_status == DT_IMAGE_USERCROP_VALID;
+  }
+  img->height = image.pixelHeight();
+  img->width = image.pixelWidth();
+  return true;
+}
+
+/** Persist staged EXIF, IPTC, and XMP metadata inside the caller-owned transaction. */
+static bool _exif_persist_staged_metadata(dt_image_t *img, Exiv2::Image &image,
+                                          const gboolean usercrop_tag, gboolean *tags_changed)
+{
+  Exiv2::ExifData &exifData = image.exifData();
+  Exiv2::IptcData &iptcData = image.iptcData();
+  Exiv2::XmpData &xmpData = image.xmpData();
+  const gboolean exif_metadata
+      = exifData.findKey(Exiv2::ExifKey("Exif.Image.Artist")) != exifData.end()
+        || exifData.findKey(Exiv2::ExifKey("Exif.Canon.OwnerName")) != exifData.end()
+        || exifData.findKey(Exiv2::ExifKey("Exif.Photo.UserComment")) != exifData.end()
+        || exifData.findKey(Exiv2::ExifKey("Exif.Image.ImageDescription")) != exifData.end()
+        || exifData.findKey(Exiv2::ExifKey("Exif.Image.Copyright")) != exifData.end();
+  const gboolean iptc_keywords
+      = iptcData.findKey(Exiv2::IptcKey("Iptc.Application2.Keywords")) != iptcData.end();
+  const gboolean xmp_keywords = xmpData.findKey(Exiv2::XmpKey("Xmp.lr.hierarchicalSubject")) != xmpData.end()
+                                || xmpData.findKey(Exiv2::XmpKey("Xmp.dc.subject")) != xmpData.end();
+
+  if(usercrop_tag)
+  {
+    guint tagid = 0;
+    if(!dt_tag_new("darktable|mode|exif-crop", &tagid) || !dt_tag_attach(tagid, img->id, FALSE, FALSE))
+      return false;
+    *tags_changed = TRUE;
+  }
+  if(exif_metadata && !_exif_apply_exif_metadata(img, exifData)) return false;
+  if(exif_metadata) *tags_changed = TRUE;
+  if(!iptcData.empty())
+  {
+    bool iptc_metadata_changed = false;
+    if(!_exif_decode_iptc_data(img, iptcData, &iptc_metadata_changed)) return false;
+    *tags_changed = *tags_changed || iptc_metadata_changed;
+  }
+  if(!xmpData.empty())
+  {
+    bool xmp_tags_changed = false;
+    if(!dt_exif_apply_xmp_persistence(img, xmpData, -1, false, &xmp_tags_changed)) return false;
+    *tags_changed = *tags_changed || xmp_tags_changed;
+  }
+  *tags_changed = *tags_changed || iptc_keywords || xmp_keywords;
+  return true;
+}
+
 int dt_exif_read_persisted(dt_image_t *img, const char *path)
 {
   if(dt_database_transaction_is_owned_by_current_thread()) return 1;
@@ -2101,65 +2159,14 @@ int dt_exif_read_persisted(dt_image_t *img, const char *path)
     success = !IS_NULL_PTR(image.get());
     if(!success) goto cleanup;
     image->readMetadata();
-    Exiv2::ExifData &exifData = image->exifData();
-    if(!exifData.empty())
-    {
-      dng_opcodes_read = exifData.findKey(Exiv2::ExifKey("Exif.SubImage1.OpcodeList2")) != exifData.end();
-      if(!dng_opcodes_read)
-        dng_opcodes_read = exifData.findKey(Exiv2::ExifKey("Exif.Image.OpcodeList2")) != exifData.end();
-      success = _exif_decode_exif_data(img, exifData, false);
-      usercrop_tag = img->usercrop_status == DT_IMAGE_USERCROP_VALID;
-    }
-    else
-      img->exif_inited = 1;
+    success = _exif_stage_persisted_image(img, *image, &dng_opcodes_read, &usercrop_tag);
     if(!success) goto cleanup;
 
-    Exiv2::IptcData &iptcData = image->iptcData();
-    Exiv2::XmpData &xmpData = image->xmpData();
-    const gboolean exif_metadata
-        = exifData.findKey(Exiv2::ExifKey("Exif.Image.Artist")) != exifData.end()
-          || exifData.findKey(Exiv2::ExifKey("Exif.Canon.OwnerName")) != exifData.end()
-          || exifData.findKey(Exiv2::ExifKey("Exif.Photo.UserComment")) != exifData.end()
-          || exifData.findKey(Exiv2::ExifKey("Exif.Image.ImageDescription")) != exifData.end()
-          || exifData.findKey(Exiv2::ExifKey("Exif.Image.Copyright")) != exifData.end();
-    const gboolean iptc_keywords
-        = iptcData.findKey(Exiv2::IptcKey("Iptc.Application2.Keywords")) != iptcData.end();
-    const gboolean xmp_keywords = xmpData.findKey(Exiv2::XmpKey("Xmp.lr.hierarchicalSubject")) != xmpData.end()
-                                  || xmpData.findKey(Exiv2::XmpKey("Xmp.dc.subject")) != xmpData.end();
-
-    img->height = image->pixelHeight();
-    img->width = image->pixelWidth();
     transaction_started = dt_database_start_transaction();
     success = transaction_started;
     if(!success) goto cleanup;
-    if(usercrop_tag)
-    {
-      guint tagid = 0;
-      success = dt_tag_new("darktable|mode|exif-crop", &tagid) && dt_tag_attach(tagid, img->id, FALSE, FALSE);
-      tags_changed = success;
-    }
+    success = _exif_persist_staged_metadata(img, *image, usercrop_tag, &tags_changed);
     if(!success) goto cleanup;
-    if(exif_metadata)
-    {
-      success = _exif_apply_exif_metadata(img, exifData);
-      tags_changed = tags_changed || success;
-    }
-    if(!success) goto cleanup;
-    if(!iptcData.empty())
-    {
-      bool iptc_metadata_changed = false;
-      success = _exif_decode_iptc_data(img, iptcData, &iptc_metadata_changed);
-      tags_changed = tags_changed || iptc_metadata_changed;
-    }
-    if(!success) goto cleanup;
-    if(!xmpData.empty())
-    {
-      bool xmp_tags_changed = false;
-      success = dt_exif_apply_xmp_persistence(img, xmpData, -1, false, &xmp_tags_changed);
-      tags_changed = tags_changed || xmp_tags_changed;
-    }
-    if(!success) goto cleanup;
-    tags_changed = tags_changed || iptc_keywords || xmp_keywords;
     success = dt_database_release_transaction();
     if(success) transaction_started = FALSE;
   }
