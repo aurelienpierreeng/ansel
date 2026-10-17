@@ -62,6 +62,12 @@ set(LIB_ANSEL_UNIT_TESTS
   test_stroke_raster
   test_drawlayer_batch_raster
   test_import_jobs
+  test_auto_group
+  test_group_badge
+  test_thumbtable_expansion
+  test_lighttable_group_expansion
+  test_display_group_expansion
+  test_image_auto_group_action
 )
 
 foreach(test ${LIB_ANSEL_UNIT_TESTS})
@@ -94,6 +100,22 @@ target_sources(test_drawlayer_batch_raster PRIVATE
 target_compile_definitions(test_import_jobs PRIVATE
   ANSEL_TEST_SOURCE_DIR="${CMAKE_SOURCE_DIR}"
   ANSEL_TEST_BINARY_DIR="${CMAKE_BINARY_DIR}")
+target_compile_definitions(test_thumbtable_expansion PRIVATE
+  ANSEL_TEST_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
+
+# Both grouping fixtures only read the camera database. Stage it once in the datadir
+# layout RawSpeed expects, instead of copying and deleting it in each test process.
+configure_file("${CMAKE_SOURCE_DIR}/src/external/rawspeed/data/cameras.xml"
+               "${CMAKE_CURRENT_BINARY_DIR}/data/rawspeed/cameras.xml" COPYONLY)
+foreach(test test_auto_group test_thumbtable_expansion)
+  target_compile_definitions(${test} PRIVATE
+    ANSEL_TEST_DATADIR="${CMAKE_CURRENT_BINARY_DIR}/data")
+endforeach()
+
+foreach(test test_auto_group test_group_badge test_thumbtable_expansion)
+  set_target_properties(${test} PROPERTIES C_EXTENSIONS OFF)
+  target_compile_definitions(${test} PRIVATE _DEFAULT_SOURCE _POSIX_C_SOURCE=200809L)
+endforeach()
 
 target_sources(test_tagging_completion PRIVATE
   ${CMAKE_SOURCE_DIR}/src/libs/tagging_completion.c)

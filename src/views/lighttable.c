@@ -187,6 +187,7 @@ void leave(dt_view_t *self)
   // ensure we have no active image remaining
   dt_view_active_images_reset(FALSE);
 
+  dt_thumbtable_clear_expanded_group(dt_gui_get_ui()->thumbtable_lighttable);
   dt_thumbtable_stop(dt_gui_get_ui()->thumbtable_lighttable);
   dt_thumbtable_hide(dt_gui_get_ui()->thumbtable_lighttable);
   gtk_widget_show(dt_gui_center_widget());
