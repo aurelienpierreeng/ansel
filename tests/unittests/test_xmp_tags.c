@@ -35,6 +35,10 @@
 #include "metadata/tags.h"
 #include "test_xmp_fixture.h"
 
+#ifdef _WIN32
+#include "win/main_wrapper.h"
+#endif
+
 static dt_test_xmp_fixture_t fixture = { 0 };
 
 static int setup(void **state)
@@ -208,7 +212,7 @@ static void test_overlong_keyword_rolls_back_tag_replacement(void **state)
   dt_free(keyword);
 }
 
-int main(void)
+int main(int argc, char *argv[])
 {
   const struct CMUnitTest tests[] = {
     cmocka_unit_test(test_full_sidecar_read_imports_tags_without_sidecar_writing),

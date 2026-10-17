@@ -18,6 +18,10 @@
 
 #include <cmocka.h>
 
+#ifdef _WIN32
+#include "win/main_wrapper.h"
+#endif
+
 typedef struct { uint32_t mode; float opacity; uint32_t mask_id; } _blend_params1_t;
 typedef struct { uint32_t mode; float opacity; uint32_t mask_id; uint32_t blendif; float blendif_parameters[32]; } _blend_params2_t;
 typedef struct { uint32_t mode; float opacity; uint32_t mask_id; uint32_t blendif; float blendif_parameters[64]; } _blend_params3_t;
@@ -111,7 +115,7 @@ static void _undecodable_payloads_remain_unchanged(void **state)
   assert_memory_equal(payload, expected, sizeof(payload));
 }
 
-int main(void)
+int main(int argc, char *argv[])
 {
   const struct CMUnitTest tests[] = {
     cmocka_unit_test(_read_and_clear_only_the_serialized_mask_id),

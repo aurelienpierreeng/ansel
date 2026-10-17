@@ -25,6 +25,10 @@
 #include "metadata/exif.h"
 #include "test_xmp_fixture.h"
 
+#ifdef _WIN32
+#include "win/main_wrapper.h"
+#endif
+
 static dt_test_xmp_fixture_t fixture = { 0 };
 
 static int setup(void **state)
@@ -98,7 +102,7 @@ static void test_embedded_xmp_labels_extend_existing_labels(void **state)
   assert_int_equal(image.color_labels, (1 << DT_COLORLABELS_RED) | (1 << DT_COLORLABELS_GREEN));
 }
 
-int main(void)
+int main(int argc, char *argv[])
 {
   const struct CMUnitTest tests[] = {
     cmocka_unit_test(test_full_xmp_read_replaces_persisted_color_labels),

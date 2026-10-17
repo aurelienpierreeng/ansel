@@ -34,6 +34,7 @@
 
 #ifdef _WIN32
 #include <io.h>
+#include "win/main_wrapper.h"
 #define test_dup _dup
 #define test_dup2 _dup2
 #define test_close _close
@@ -1501,7 +1502,7 @@ static void test_legacy_readable_blends_clear_omitted_root(void **state)
   dt_free(group_points);
 }
 
-int main(void)
+int main(int argc, char *argv[])
 {
   const struct CMUnitTest tests[] = {
     cmocka_unit_test(test_excluded_descriptive_metadata_survives_full_xmp_read),

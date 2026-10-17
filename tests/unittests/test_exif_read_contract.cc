@@ -29,6 +29,10 @@ extern "C"
 #include "metadata/metadata.h"
 #include "metadata/notify.h"
 
+#ifdef _WIN32
+#include "win/main_wrapper.h"
+#endif
+
 extern "C" gboolean dt_test_exif_start_transaction(void);
 extern "C" gboolean dt_test_exif_release_transaction(void);
 extern "C" void dt_test_exif_rollback_transaction(void);
@@ -769,7 +773,7 @@ static void test_scratch_exif_preserves_camera_fields(void **)
   assert_int_equal(test_context().start_calls, 0);
 }
 
-int main(void)
+int main(int argc, char *argv[])
 {
   auto &fixture = test_context();
   fixture.rawspeed_datadir = g_dir_make_tmp("ansel-test-exif-data-XXXXXX", nullptr);
