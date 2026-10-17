@@ -448,7 +448,7 @@ static bool _exif_import_xmp_keywords(const dt_image_t *img, Exiv2::XmpData &xmp
 
 /** Import configured metadata fields while preserving the legacy language-prefix handling. */
 static bool _exif_import_xmp_metadata(const dt_image_t *img, Exiv2::XmpData &xmpData,
-                                      const bool replace_existing, GList *imgs, bool *tags_changed)
+                                       const bool replace_existing, const GList *imgs, bool *tags_changed)
 {
   Exiv2::XmpData::iterator pos;
   if(replace_existing && !dt_metadata_clear(imgs, FALSE)) return false;
@@ -490,8 +490,10 @@ bool dt_exif_apply_xmp_persistence(dt_image_t *img, Exiv2::XmpData &xmpData, con
     // the reasoning behind strdup'ing all the strings before passing it to sqlite3 is, that
     // they are somehow corrupt after the call to sqlite3_prepare_v2() -- don't ask me
     // why for they don't get passed to that function.
+    bool metadata_imported = true;
     if(version == -1 || version > 0)
-      if(!_exif_import_xmp_metadata(img, xmpData, replace_existing, &imgs, tags_changed)) return false;
+      metadata_imported = _exif_import_xmp_metadata(img, xmpData, replace_existing, &imgs, tags_changed);
+    if(!metadata_imported) return false;
 
     return _exif_decode_xmp_scratch(img, xmpData, replace_existing);
   }
@@ -1572,8 +1574,9 @@ static void _exif_normalize_lens_name(dt_image_t *img, Exiv2::ExifData &exifData
   }
 
   /* Capitalize Nikon Z-mount lenses properly for UI presentation */
-  if(const gboolean nikkor = g_str_has_prefix(img->exif_lens, "NIKKOR");
-     nikkor || g_str_has_prefix(img->exif_lens, "TAMRON"))
+  const gboolean nikkor = g_str_has_prefix(img->exif_lens, "NIKKOR");
+  const gboolean tamron = g_str_has_prefix(img->exif_lens, "TAMRON");
+  if(nikkor || tamron)
   {
     for(size_t i = 1; i <= 5; ++i) img->exif_lens[i] = g_ascii_tolower(img->exif_lens[i]);
   }
@@ -1848,8 +1851,13 @@ static void _exif_decode_colorspace(dt_image_t *img, Exiv2::ExifData &exifData)
 static void _exif_decode_sony_lens_name(dt_image_t *img, Exiv2::ExifData &exifData)
 {
   // Improve lens detection for Sony SAL lenses.
-  if(Exiv2::ExifData::const_iterator pos;
-     FIND_EXIF_TAG("Exif.Sony2.LensID") && pos->toLong() != 65535 && pos->print().find('|') == std::string::npos)
+  Exiv2::ExifData::const_iterator pos;
+  const bool sony_lens_found = FIND_EXIF_TAG("Exif.Sony2.LensID");
+  const long sony_lens_id = sony_lens_found ? pos->toLong() : 65535;
+  const std::string sony_lens_name = sony_lens_found ? pos->print() : std::string();
+  const bool sony_lens_id_supported = sony_lens_id != 65535;
+  const bool sony_lens_name_unambiguous = std::strchr(sony_lens_name.c_str(), '|') == nullptr;
+  if(sony_lens_found && sony_lens_id_supported && sony_lens_name_unambiguous)
   {
     dt_strlcpy_to_utf8(img->exif_lens, sizeof(img->exif_lens), pos, exifData);
   }
