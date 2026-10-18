@@ -37,7 +37,8 @@
     Copyright (C) 2022-2023, 2025-2026 Aurélien PIERRE.
     Copyright (C) 2022 Martin Bařinka.
     Copyright (C) 2023 Ricky Moon.
-    
+    Copyright (C) 2026 Guillaume Stutin.
+
     darktable is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
     the Free Software Foundation, either version 3 of the License, or
@@ -318,6 +319,19 @@ static void _metadata_update_markup(const gint32 i, const char *const format, dt
   dt_free(markup);
 }
 
+/**
+ * @brief Show @p value in @p label on one line, line breaks turned into spaces.
+ *
+ * The box is fitted to its rows, so a value broken onto several would resize it under the
+ * pointer. The tooltip keeps the full text.
+ */
+static void _value_label_set_text(GtkWidget *label, const char *value)
+{
+  gchar *line = g_strdelimit(g_strdup(value), "\r\n", ' ');
+  gtk_label_set_text(GTK_LABEL(label), line);
+  dt_free(line);
+}
+
 /* helper function for updating a metadata value */
 static void _metadata_update_value(const int i, const char *value, dt_lib_module_t *self)
 {
@@ -333,7 +347,7 @@ static void _metadata_update_value(const int i, const char *value, dt_lib_module
     }
     m->value = g_strdup(str);
     GtkWidget *w_value = gtk_grid_get_child_at(GTK_GRID(d->grid), 1, m->order);
-    gtk_label_set_text(GTK_LABEL(w_value), str);
+    _value_label_set_text(w_value, str);
     const char *tooltip = m->tooltip ? m->tooltip : m->value;
     gtk_widget_set_tooltip_text(GTK_WIDGET(w_value), tooltip);
   }
@@ -854,21 +868,13 @@ static void _metadata_view_update_values(dt_lib_module_t *self)
         char *categoriesstring = NULL;
         if(dt_tag_get_attached(img_id, &tags, TRUE))
         {
-          uint64_t length = 0u;
           for(GList *taglist = tags; taglist; taglist = g_list_next(taglist))
           {
             const char *tagname = ((dt_tag_t *)taglist->data)->leave;
             if(!(((dt_tag_t *)taglist->data)->flags & DT_TF_CATEGORY))
             {
               // tags - just keywords
-              length = length + strlen(tagname) + 2u;
-              if(length < 45u)
-                tagstring = dt_util_dstrcat(tagstring, "%s, ", tagname);
-              else
-              {
-                tagstring = dt_util_dstrcat(tagstring, "\n%s, ", tagname);
-                length = strlen(tagname) + 2u;
-              }
+              tagstring = dt_util_dstrcat(tagstring, !IS_NULL_PTR(tagstring) ? ", %s" : "%s", tagname);
             }
             else
             {
@@ -880,16 +886,17 @@ static void _metadata_view_update_values(dt_lib_module_t *self)
                 catend[0] = '\0';
                 char *catstart = g_strrstr(category, "|");
                 catstart = catstart ? catstart + 1 : category;
-                categoriesstring = dt_util_dstrcat(categoriesstring, categoriesstring ? "\n%s: %s " : "%s: %s ",
+                categoriesstring = dt_util_dstrcat(categoriesstring,
+                                                   !IS_NULL_PTR(categoriesstring) ? ", %s: %s" : "%s: %s",
                                                    catstart, ((dt_tag_t *)taglist->data)->leave);
               }
               else
-                categoriesstring = dt_util_dstrcat(categoriesstring, categoriesstring ? "\n%s" : "%s",
+                categoriesstring = dt_util_dstrcat(categoriesstring,
+                                                   !IS_NULL_PTR(categoriesstring) ? ", %s" : "%s",
                                                    ((dt_tag_t *)taglist->data)->leave);
               dt_free(category);
             }
           }
-          if(tagstring) tagstring[strlen(tagstring)-2] = '\0';
         }
 
         if (md == md_tag_names)
@@ -1002,7 +1009,7 @@ static void _lib_metadata_refill_grid(dt_lib_module_t *self)
     gtk_label_set_text(GTK_LABEL(w_name), _(m->name));
     gtk_widget_set_tooltip_text(w_name, _(m->name));
     GtkWidget *w_value = gtk_grid_get_child_at(GTK_GRID(d->grid), 1, j);
-    gtk_label_set_text(GTK_LABEL(w_value), m->value);
+    _value_label_set_text(w_value, m->value);
     const char *tooltip = m->tooltip ? m->tooltip : m->value;
     gtk_widget_set_tooltip_text(w_value, tooltip);
 
@@ -1285,9 +1292,9 @@ void gui_init(dt_lib_module_t *self)
   d->grid = child_grid_window;
   gtk_grid_set_column_spacing(GTK_GRID(child_grid_window), DT_GUI_BOX_SPACING);
 
-  // Static: the metadata grid refreshes for the hovered/selected image, so keep a fixed height.
-  self->widget = dt_ui_scroll_wrap(child_grid_window, 200, "plugins/lighttable/metadata_view/windowheight",
-                                   DT_UI_RESIZE_STATIC);
+  // Fitted to the visible rows: every value is one line, so hovering another image never resizes it.
+  self->widget = dt_ui_scroll_wrap(child_grid_window, 1, "plugins/lighttable/metadata_view/windowheight",
+                                   DT_UI_RESIZE_DYNAMIC);
 
   gtk_widget_show_all(d->grid);
   gtk_widget_set_no_show_all(d->grid, TRUE);

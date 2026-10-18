@@ -1,6 +1,7 @@
 /*
  *    This file is part of Ansel,
  *    Copyright (C) 2026 Aurélien PIERRE.
+ *    Copyright (C) 2026 Guillaume Stutin.
  *
  *    Ansel is free software: you can redistribute it and/or modify
  *    it under the terms of the GNU General Public License as published by
@@ -42,7 +43,7 @@ typedef enum dt_ui_resize_mode_t
   DT_UI_RESIZE_DYNAMIC = 0,
   // Fixed: the area keeps the user-set (or default) height regardless of content, so it never
   // shifts the surrounding layout when its content changes. Best for widgets that refresh on
-  // hover/selection (tags, notes, metadata) and the collection/library list.
+  // hover/selection (tags, notes) and the collection/library list.
   DT_UI_RESIZE_STATIC
 } dt_ui_resize_mode_t;
 
@@ -74,8 +75,10 @@ typedef struct dt_gui_widget_auto_height_t
  *
  * @param w content widget.
  * @param min_size minimum height floor, in device-independent pixels (rescaled by
- *                 DT_PIXEL_APPLY_DPI). In DT_UI_RESIZE_STATIC mode it also serves as the
- *                 default height before the user drags.
+ *                 DT_PIXEL_APPLY_DPI). In DT_UI_RESIZE_STATIC mode it is the default height
+ *                 before the user drags only when @p config_str has no default in
+ *                 anselconfig.xml.in: a key that has one is never unset, and that default is
+ *                 the height.
  * @param config_str conf key persisting the user-chosen height (copied internally).
  * @param mode DT_UI_RESIZE_DYNAMIC to auto-fit content, or DT_UI_RESIZE_STATIC to keep a fixed
  *             height regardless of content (avoids layout shifts for hover-/selection-driven

@@ -194,6 +194,29 @@ pump the main loop, then compare the scrolled window's vadjustment `page_size` a
 A scrollbar that appears for a couple of pixels looks like a content-height miscount and is
 usually a frame the request forgot.
 
+## A conf key with a default is never unset, so a STATIC area's default is its height
+
+*Found `96a9bd1299`, 2026-10-18.*
+
+`dt_ui_scroll_wrap()` reads its persisted height through `dt_widget_stored_int()`, which answers
+with `dt_conf_key_exists()` — TRUE for any key `data/anselconfig.xml.in` gives a default, and a
+first run writes every default to `anselrc` anyway. The area cannot tell "dragged by the user" from
+"never touched". In `DT_UI_RESIZE_DYNAMIC` that is harmless: the stored height is a ceiling. In
+`DT_UI_RESIZE_STATIC` it is the height itself, and `min_size` is the default only for a key that
+has none. A default written as a ceiling ("maximum height … before scrolling") turns into a fixed
+height: the image information panel, STATIC under a 1000 px default, was measured at ≈ 1000
+physical px on a 4K screenshot holding 18 rows of ≈ 15 px. Changing such a default does not reach
+existing users, whose `anselrc` already holds it.
+
+That panel is DYNAMIC, which holds only because a row's height does not depend on the image — the
+reason it had been made STATIC. Measured offscreen (GTK 3 default theme, ellipsized label): one
+line 19 px, a `\n` in the text 38 px, two 57 px; `gtk_label_set_single_line_mode()` does not pin it
+(21 px with a `\n`, 20 px for Japanese). So `libs/metadata_view.c` shows every value on one line,
+line breaks turned into spaces, the full text in the tooltip, and joins tags and categories with
+commas. Measured in the app with a probe in `_resizable_scroll_apply()`: 39 rows → 624 px under a
+673 px ceiling, 6 rows hidden → 528 px, no change while hovering images. Left over: a value drawn
+with a fallback font of taller metrics can make its row a pixel taller (20 against 19 px above).
+
 ## A UTILITY window must ask for its position, transient-for is not enough
 
 *Found `7032b624e8`, 2026-09-01.*
