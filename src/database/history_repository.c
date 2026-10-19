@@ -559,49 +559,79 @@ gboolean dt_history_repository_delete_all_for_image(const int32_t imgid)
 
   // Not cached: this runs once per "discard history", never in a loop, and five more permanent
   // statements would cost more than the preparation does.
-  gboolean ok = TRUE;
+  const gboolean owns_transaction = !dt_database_transaction_is_owned_by_current_thread();
+  if(owns_transaction && !dt_database_start_transaction()) return FALSE;
+  if(!owns_transaction
+     && sqlite3_exec(dt_database_get_sqlite3_global(), "SAVEPOINT history_delete_all", NULL, NULL, NULL) != SQLITE_OK)
+    return FALSE;
+
   sqlite3_stmt *stmt;
 
   DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
                               "DELETE FROM main.history WHERE imgid = ?1",
                               -1, &stmt, NULL);
   DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, imgid);
-  ok &= (sqlite3_step(stmt) == SQLITE_DONE);
+  gboolean ok = sqlite3_step(stmt) == SQLITE_DONE;
   sqlite3_finalize(stmt);
 
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
-                              "DELETE FROM main.module_order WHERE imgid = ?1",
-                              -1, &stmt, NULL);
-  DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, imgid);
-  ok &= (sqlite3_step(stmt) == SQLITE_DONE);
-  sqlite3_finalize(stmt);
+  if(ok)
+  {
+    DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
+                                "DELETE FROM main.module_order WHERE imgid = ?1",
+                                -1, &stmt, NULL);
+    DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, imgid);
+    ok = sqlite3_step(stmt) == SQLITE_DONE;
+    sqlite3_finalize(stmt);
+  }
 
-  // clang-format off
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
-                              "UPDATE main.images"
-                              " SET history_end = 0, aspect_ratio = 0.0"
-                              " WHERE id = ?1",
-                              -1, &stmt, NULL);
-  // clang-format on
-  DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, imgid);
-  ok &= (sqlite3_step(stmt) == SQLITE_DONE);
-  sqlite3_finalize(stmt);
+  if(ok)
+  {
+    // clang-format off
+    DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
+                                "UPDATE main.images"
+                                " SET history_end = 0, aspect_ratio = 0.0"
+                                " WHERE id = ?1",
+                                -1, &stmt, NULL);
+    // clang-format on
+    DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, imgid);
+    ok = sqlite3_step(stmt) == SQLITE_DONE;
+    sqlite3_finalize(stmt);
+  }
 
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
-                              "DELETE FROM main.masks_history WHERE imgid = ?1",
-                              -1, &stmt, NULL);
-  DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, imgid);
-  ok &= (sqlite3_step(stmt) == SQLITE_DONE);
-  sqlite3_finalize(stmt);
+  if(ok)
+  {
+    DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
+                                "DELETE FROM main.masks_history WHERE imgid = ?1",
+                                -1, &stmt, NULL);
+    DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, imgid);
+    ok = sqlite3_step(stmt) == SQLITE_DONE;
+    sqlite3_finalize(stmt);
+  }
 
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
-                              "DELETE FROM main.history_hash WHERE imgid = ?1",
-                              -1, &stmt, NULL);
-  DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, imgid);
-  ok &= (sqlite3_step(stmt) == SQLITE_DONE);
-  sqlite3_finalize(stmt);
+  if(ok)
+  {
+    DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
+                                "DELETE FROM main.history_hash WHERE imgid = ?1",
+                                -1, &stmt, NULL);
+    DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, imgid);
+    ok = sqlite3_step(stmt) == SQLITE_DONE;
+    sqlite3_finalize(stmt);
+  }
 
-  return ok;
+  if(ok && owns_transaction) return dt_database_release_transaction();
+  if(ok && sqlite3_exec(dt_database_get_sqlite3_global(), "RELEASE SAVEPOINT history_delete_all",
+                        NULL, NULL, NULL) == SQLITE_OK)
+    return TRUE;
+
+  if(owns_transaction)
+    dt_database_rollback_transaction();
+  else
+  {
+    sqlite3_exec(dt_database_get_sqlite3_global(), "ROLLBACK TO SAVEPOINT history_delete_all", NULL, NULL, NULL);
+    sqlite3_exec(dt_database_get_sqlite3_global(), "RELEASE SAVEPOINT history_delete_all", NULL, NULL, NULL);
+  }
+
+  return FALSE;
 }
 
 
