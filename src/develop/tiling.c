@@ -34,7 +34,7 @@
 
 
 #include "control/user_message.h"
-#include "system/sys_resources.h"
+#include "caches/pixelpipe_cache.h"
 #include "caches/pixelpipe_cache_alloc.h"
 #include "develop/develop.h"
 #include "develop/tiling.h"
@@ -277,9 +277,9 @@ static int _default_process_tiling_ptp(struct dt_iop_module_t *self, const struc
   }
 
   /* calculate optimal size of tiles */
-  float available = dt_get_available_mem();
+  float available = dt_dev_pixelpipe_cache_get_available();
   // Less than 500 MB of planning room is a legitimate runtime state now that
-  // dt_get_available_mem() is capped by live system availability (issue #1083):
+  // dt_dev_pixelpipe_cache_get_available() is capped by live system availability (issue #1083):
   // tiles just get small. Not an invariant, so no assert.
   if(available < 500.0f * 1024.0f * 1024.0f)
     dt_print(DT_DEBUG_TILING | DT_DEBUG_MEMORY,
@@ -539,9 +539,9 @@ static int _default_process_tiling_roi(struct dt_iop_module_t *self, const struc
   }
 
   /* calculate optimal size of tiles */
-  float available = dt_get_available_mem();
+  float available = dt_dev_pixelpipe_cache_get_available();
   // Less than 500 MB of planning room is a legitimate runtime state now that
-  // dt_get_available_mem() is capped by live system availability (issue #1083):
+  // dt_dev_pixelpipe_cache_get_available() is capped by live system availability (issue #1083):
   // tiles just get small. Not an invariant, so no assert.
   if(available < 500.0f * 1024.0f * 1024.0f)
     dt_print(DT_DEBUG_TILING | DT_DEBUG_MEMORY,
@@ -1493,32 +1493,20 @@ int dt_tiling_piece_fits_host_memory(const size_t width, const size_t height, co
 {
   const size_t total = factor * width * height * bpp + overhead;
 
-  /* The working set lives in the arena and packs into a CONTIGUOUS free run
-   * (see the cap in the tile planners): measure both the byte headroom and
-   * the largest run, evicting to make room — eviction merges adjacent free
-   * runs, but cannot merge across entries pinned by the pipe recursion. */
-  size_t available = dt_get_available_mem();
+  /* The available room already counts what eviction can take back, so evicting cannot change
+   * whether the bytes fit, and the allocations evict for them themselves. */
+  if(total > dt_dev_pixelpipe_cache_get_available()) return FALSE;
+
+  /* The working set lives in the arena and packs into a CONTIGUOUS free run (see the cap in the
+   * tile planners): evicting merges adjacent free runs, but cannot merge across entries pinned by
+   * the pipe recursion. */
   size_t largest_run = dt_pixelpipe_cache_get_largest_free_run();
-
-  int error = 0;
-  while(!error && (available < total || (size_t)(0.9f * largest_run) < total))
+  while((size_t)(0.9f * largest_run) < total)
   {
-    /* Stop evicting once the internal budget headroom already fits: past that
-     * point the blocker is the system-availability cap inside
-     * dt_get_available_mem() (issue #1083), which eviction cannot reliably
-     * raise — freed pages reach the OS asynchronously. Draining the whole
-     * cache would not change the answer; the caller tiles instead. */
-    size_t cache_current = 0;
-    size_t cache_max = 0;
-    dt_dev_pixelpipe_cache_get_usage(&cache_current, &cache_max);
-    if(cache_max - cache_current >= total && (size_t)(0.9f * largest_run) >= total) break;
-
-    error = dt_dev_pixel_pipe_cache_remove_lru();
-    available = dt_get_available_mem();
+    if(dt_dev_pixel_pipe_cache_remove_lru()) return FALSE;
     largest_run = dt_pixelpipe_cache_get_largest_free_run();
   }
-
-  return total <= available && total <= (size_t)(0.9f * largest_run);
+  return TRUE;
 }
 
 // clang-format off

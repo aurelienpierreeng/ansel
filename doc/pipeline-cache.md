@@ -771,11 +771,49 @@ The defense has five layers, from planning to last resort:
    minutes of calm and never past 7/8 of the footprint the stall struck at. See `CLAUDE.md` for
    the measurements each of those numbers came from.
 
-5. **Pressure-aware tiling** (`dt_get_available_mem()`, `darktable.c`). The planning value
-   tiled modules size their working set from is capped by the live system availability (plus half
-   our own cache, which is LRU-evictable on demand — our own hoard must never force tiling), so
-   under pressure modules split into smaller tiles instead of planning allocations the valve
-   would refuse mid-pipe.
+5. **Pressure-aware tiling** (`dt_dev_pixelpipe_cache_get_available()`, `pixelpipe_cache.c`).
+   The room tiled modules size their working set from — the tile planners and
+   `dt_tiling_piece_fits_host_memory()`, which chooses between `process()` and tiling — is what
+   an allocation made now would be granted, by the rules that grant or refuse it:
+   `MIN(plan − held, (system available − floor) + evictable host RAM)`. *Evictable* is what the
+   LRU may take (`_entry_evictable()`: `refcount == 0` and the entry's lock free), the same test
+   for both, so the planners are never promised memory eviction cannot give back; of the
+   system's share, only lines with a host buffer count, since evicting a line kept on a device
+   gives the OS nothing. The budget is the plan, not the one lowered under kernel pressure: that
+   one is only what allocations evict down to (`_free_space_to_alloc()`), never a reason to
+   refuse.
+
+   **Found wrong on 2026-10-19, against `fa2dba3dc3`.** Until then the room was
+   `dt_get_available_mem()` (`darktable.c`, still there with no caller):
+   `MIN(lowered budget − used, (system available − floor) + used / 2)`. It was wrong both ways,
+   and each way failed raw denoise in a reproduction — 4 copies of a 24 Mpx NEF with raw denoise
+   and drawlayer in their history, thumbnails of a lighttable on a fresh profile,
+   `--disable-opencl`, in `systemd-run --user --scope -p MemoryMax=8G -p MemorySwapMax=0` with
+   a 4650 MiB process in the same scope. Kernel pressure lowered the budget to 1495 MiB under
+   1630 MiB held — the four drawlayer sidecars are 4 × 373 MiB of it — so the planner had
+   0 MiB, cut 1 px tiles, gave up at 5121 × 3453 of them, and `_default_process_tiling_ptp()`
+   fell back to an untiled `process()`: a 1939 MiB region the valve refused with 1617 MiB
+   available, 1417 over the floor. Planning by the allocator's rules gave 2 tiles of
+   3072 × 3453 under the same pressure; with the valve's re-read below, all four images went
+   through. The other way, `used / 2` credited held lines and the module's own allocations as
+   evictable: without the 4650 MiB process, an instrumented run measured that credit at 628 to
+   815 MiB (half of 1257 to 1631 MiB used) at each of raw denoise's four decisions.
+
+   A tiling that gives up — too many tiles, or a tile buffer refused — still says "Module
+   failed" and falls back to the untiled `process()`, the form of the module that needs the
+   most memory. It is left so: `_default_process_tiling_roi()` takes the same path when the
+   geometry cannot be tiled, and the planners cap by the largest free run as it stands, without
+   the runs eviction would merge. With the room measured as above, reaching it means the memory
+   really is missing.
+
+The valve itself decides on what the OS says, never on its running estimate: when the estimate
+is short of a non-negligible request it re-reads the system even if nothing could be evicted.
+Between probes (100 ms) the estimate is debited by every allocation and credited by no free, so
+it misses what other pipes gave back since. In the reproduction above with the room fixed
+but no re-read, the third image's first tile (4608 px, 1724 MiB) was refused on an estimate of
+1625 MiB with nothing left to evict, right after the second image's raw denoise had ended. In
+the next run, with the re-read, the third image's first tile (1508.6 MiB) met an estimate of
+1462 MiB, the fresh read said 2123 MiB, and all four images went through.
 
 Verified by running the same export with and without these layers inside
 `systemd-run --user --scope -p MemoryMax=1536M -p MemorySwapMax=0`: before, SIGKILL by the
