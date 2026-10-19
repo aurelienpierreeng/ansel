@@ -79,6 +79,8 @@ static gboolean reader_reached_datetime = FALSE;
 static gboolean writer_may_write = FALSE;
 static gboolean writer_finished = FALSE;
 static gboolean coordinate_transaction = FALSE;
+static const char *unlink_after_datetime_path = NULL;
+static char *rawspeed_datadir = NULL;
 
 typedef struct dt_test_exif_fixture_t
 {
@@ -263,6 +265,11 @@ extern "C" void dt_test_exif_rollback_transaction(void)
 extern "C" void dt_test_exif_unix_to_img(dt_image_t *img, const time_t *datetime)
 {
   dt_datetime_unix_to_img(img, datetime);
+  if(!IS_NULL_PTR(unlink_after_datetime_path))
+  {
+    g_remove(unlink_after_datetime_path);
+    unlink_after_datetime_path = NULL;
+  }
   g_mutex_lock(&coordination_mutex);
   reader_reached_datetime = TRUE;
   g_cond_broadcast(&coordination_condition);
@@ -332,6 +339,29 @@ static int setup(void **state)
   int32_t film_id = -1;
 
   if(IS_NULL_PTR(dt_datetime_origin())) dt_datetime_init();
+  if(IS_NULL_PTR(rawspeed_datadir))
+  {
+    rawspeed_datadir = g_dir_make_tmp("ansel-test-exif-data-XXXXXX", NULL);
+    if(IS_NULL_PTR(rawspeed_datadir)) return -1;
+    char *rawspeed_dir = g_build_filename(rawspeed_datadir, "rawspeed", NULL);
+    char *unittest_dir = g_path_get_dirname(__FILE__);
+    char *source_dir = g_canonicalize_filename("../..", unittest_dir);
+    char *cameras = g_build_filename(source_dir, "src", "external", "rawspeed", "data", "cameras.xml", NULL);
+    const gboolean prepared = g_mkdir(rawspeed_dir, 0700) == 0 && g_file_test(cameras, G_FILE_TEST_IS_REGULAR);
+    GFile *source = prepared ? g_file_new_for_path(cameras) : NULL;
+    char *destination_path = g_build_filename(rawspeed_dir, "cameras.xml", NULL);
+    GFile *destination = prepared ? g_file_new_for_path(destination_path) : NULL;
+    const gboolean copied = prepared && g_file_copy(source, destination, G_FILE_COPY_OVERWRITE, NULL, NULL, NULL, NULL);
+    if(!IS_NULL_PTR(destination)) g_object_unref(destination);
+    if(!IS_NULL_PTR(source)) g_object_unref(source);
+    dt_free(destination_path);
+    dt_free(cameras);
+    dt_free(source_dir);
+    dt_free(unittest_dir);
+    dt_free(rawspeed_dir);
+    if(!copied) return -1;
+    dt_loc_init_datadir(NULL, rawspeed_datadir);
+  }
 
   start_outcome = DT_TEST_EXIF_TRANSACTION_DELEGATE;
   release_outcome = DT_TEST_EXIF_TRANSACTION_DELEGATE;
@@ -347,6 +377,7 @@ static int setup(void **state)
   fixture.persisted_writer_may_write = FALSE;
   fixture.persisted_writer_repository_call_started = FALSE;
   fixture.persisted_writer_finished = FALSE;
+  unlink_after_datetime_path = NULL;
   g_mutex_init(&coordination_mutex);
   g_cond_init(&coordination_condition);
   g_mutex_init(&fixture.persisted_coordination_mutex);
@@ -911,6 +942,35 @@ static void test_generic_read_retains_pfm_fallbacks(void **state)
   dt_free(path);
 }
 
+static void test_generic_read_retains_fallbacks_when_file_disappears_after_stat(void **state)
+{
+  (void)state;
+  char *path = NULL;
+  const int fd = g_file_open_tmp("ansel-test-exif-unlink-XXXXXX.pfm", &path, NULL);
+  assert_true(fd >= 0);
+  g_close(fd, NULL);
+  assert_true(g_file_set_contents(path, "PF\n1 1\n-1.0\n\0\0\0\0", 16, NULL));
+  const time_t timestamp = 981173106;
+  const struct utimbuf times = { .actime = timestamp, .modtime = timestamp };
+  assert_int_equal(g_utime(path, &times), 0);
+
+  dt_image_t image;
+  dt_image_t expected;
+  dt_image_init(&image);
+  dt_image_init(&expected);
+  dt_datetime_unix_to_img(&expected, &timestamp);
+  unlink_after_datetime_path = path;
+  assert_int_equal(dt_test_exif_read(&image, path), 1);
+  assert_null(unlink_after_datetime_path);
+  assert_false(g_file_test(path, G_FILE_TEST_EXISTS));
+  assert_true(image.flags & DT_IMAGE_HDR);
+  assert_int_equal(image.exif_datetime_taken, expected.exif_datetime_taken);
+  assert_int_equal(start_calls, 0);
+  assert_int_equal(release_calls, 0);
+  assert_int_equal(rollback_calls, 0);
+  dt_free(path);
+}
+
 int main(void)
 {
   const struct CMUnitTest tests[] = {
@@ -933,6 +993,7 @@ int main(void)
     cmocka_unit_test_setup_teardown(test_generic_read_keeps_iptc_and_xmp_image_fields, setup, teardown),
     cmocka_unit_test_setup_teardown(test_generic_read_does_not_rollback_unrelated_write, setup, teardown),
     cmocka_unit_test_setup_teardown(test_generic_read_retains_pfm_fallbacks, setup, teardown),
+    cmocka_unit_test_setup_teardown(test_generic_read_retains_fallbacks_when_file_disappears_after_stat, setup, teardown),
   };
 
   return cmocka_run_group_tests(tests, NULL, NULL);
