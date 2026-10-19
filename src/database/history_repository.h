@@ -97,26 +97,32 @@ gboolean dt_history_repository_delete_all_for_image(const int32_t imgid);
  * reading history rows
  * ------------------------------------------------------------------------------------------ */
 
-/** one stored history item, or one auto-apply preset presented as if it were one.
- *  `preset_name` is "" for a real history row and the preset's name for an auto-apply row. */
-typedef void (*dt_history_repository_row_cb)(void *user_data,
-                                             const int32_t imgid,
-                                             const int num,
-                                             const int module_version,
-                                             const char *operation,
-                                             const void *op_params,
-                                             const int op_params_len,
-                                             const gboolean enabled,
-                                             const void *blendop_params,
-                                             const int blendop_params_len,
-                                             const int blendop_version,
-                                             const int multi_priority,
-                                             const char *multi_name,
-                                             const char *preset_name);
+/** A borrowed stored history item, or an auto-apply preset presented as one.
+ *
+ * String and blob storage remains valid only for the duration of the repository callback.
+ * `preset_name` is "" for a stored history row and the preset's name for an auto-apply row.
+ */
+typedef struct dt_history_repository_row_t
+{
+  int32_t imgid;
+  int num;
+  int module_version;
+  const char *operation;
+  const void *op_params;
+  int op_params_len;
+  gboolean enabled;
+  const void *blendop_params;
+  int blendop_params_len;
+  int blendop_version;
+  int multi_priority;
+  const char *multi_name;
+  const char *preset_name;
+} dt_history_repository_row_t;
+
+typedef void (*dt_history_repository_row_cb)(void *user_data, const dt_history_repository_row_t *row);
 
 /** every row of an image's history, in num order */
-void dt_history_repository_foreach_row(const int32_t imgid, dt_history_repository_row_cb cb,
-                                       void *user_data);
+void dt_history_repository_foreach_row(const int32_t imgid, dt_history_repository_row_cb cb, void *user_data);
 
 /** every auto-apply preset matching this image, plus the named workflow preset, in the order
  *  they must be applied. Reads `data.presets`, or `main.legacy_presets` when the image predates
@@ -185,12 +191,23 @@ gboolean dt_history_repository_write_mask_item(const int32_t imgid, const int nu
 /** how many mask rows an image has */
 int dt_history_repository_count_mask_items(const int32_t imgid);
 
-/** one main.masks_history row. The two blobs point INTO the statement -- copy them here. */
-typedef void (*dt_history_repository_mask_cb)(void *user_data, const int num, const int formid,
-                                              const int form, const char *name, const int version,
-                                              const void *points, const int points_len,
-                                              const int points_count, const void *source,
-                                              const int source_len);
+/** A borrowed mask-history row. String and blob storage is valid only during the callback. */
+typedef struct dt_history_repository_mask_row_t
+{
+  int num;
+  int mask_id;
+  int form;
+  const char *name;
+  int version;
+  const void *points;
+  int points_len;
+  int points_count;
+  const void *source;
+  int source_len;
+} dt_history_repository_mask_row_t;
+
+/** Consume a borrowed row without retaining its string or blob pointers. */
+typedef void (*dt_history_repository_mask_cb)(void *user_data, const dt_history_repository_mask_row_t *row);
 
 /** every mask row of an image, in num order */
 void dt_history_repository_foreach_mask_item(const int32_t imgid,

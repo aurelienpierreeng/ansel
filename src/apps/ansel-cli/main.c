@@ -665,7 +665,7 @@ int main(int argc, char *arg[])
       dt_image_t *image = dt_image_cache_get(id, 'w');
       if(IS_NULL_PTR(image))
         fprintf(stderr, "%s", _("Could not read image information from the database."));
-      else if(dt_exif_xmp_read(image, xmp_filename, 1) != 0)
+      else if(dt_exif_xmp_read(image, xmp_filename, 1, NULL) != 0)
         fprintf(stderr, _("error: can't open xmp file %s"), xmp_filename);
       else
       {

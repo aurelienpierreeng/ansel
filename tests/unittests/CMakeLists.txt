@@ -63,6 +63,7 @@ set(LIB_ANSEL_UNIT_TESTS
   test_conf_save
   test_loc_cache_dir
   test_xmp_colorlabels
+  test_xmp_import_safety
   test_xmp_tags
   test_dtpthread_recursive
   test_history_snapshot
@@ -70,7 +71,13 @@ set(LIB_ANSEL_UNIT_TESTS
   test_stroke_raster
   test_drawlayer_batch_raster
   test_import_jobs
+  test_debug_trace_contract
+  test_database_transaction_coordinator
 )
+
+if(APPLE OR WIN32)
+  list(REMOVE_ITEM LIB_ANSEL_UNIT_TESTS test_database_transaction_coordinator)
+endif()
 
 foreach(test ${LIB_ANSEL_UNIT_TESTS})
   add_cmocka_test(${test}
@@ -93,6 +100,43 @@ foreach(test ${LIB_ANSEL_UNIT_TESTS})
   endif()
 endforeach()
 
+set_property(TARGET test_debug_trace_contract PROPERTY C_STANDARD 17)
+if(UNIX AND NOT APPLE)
+  set_property(TARGET test_xmp_import_safety PROPERTY C_STANDARD 17)
+  target_link_libraries(test_xmp_import_safety PRIVATE ${CMAKE_DL_LIBS})
+  target_link_options(test_xmp_import_safety PRIVATE -Wl,--export-dynamic)
+endif()
+if(TARGET test_database_transaction_coordinator)
+  set_property(TARGET test_database_transaction_coordinator PROPERTY C_STANDARD 17)
+  target_link_libraries(test_database_transaction_coordinator PRIVATE ${CMAKE_DL_LIBS})
+  target_link_options(test_database_transaction_coordinator PRIVATE -Wl,--export-dynamic)
+endif()
+
+set(DEBUG_TRACE_CONTRACT_NEGATIVE_SOURCE_DIR "${CMAKE_CURRENT_BINARY_DIR}/debug_trace_contract_negative")
+set(DEBUG_TRACE_CONTRACT_NEGATIVE_BUILD_DIR "${CMAKE_CURRENT_BINARY_DIR}/debug_trace_contract_negative_build")
+string(CONCAT DEBUG_TRACE_LEGACY_RESULT_MACRO DT_DEBUG_TRACE_WRAPPER_RESULT_ VOID)
+file(MAKE_DIRECTORY "${DEBUG_TRACE_CONTRACT_NEGATIVE_SOURCE_DIR}")
+file(GENERATE
+  OUTPUT "${DEBUG_TRACE_CONTRACT_NEGATIVE_SOURCE_DIR}/CMakeLists.txt"
+  CONTENT "cmake_minimum_required(VERSION 3.14)\nproject(debug_trace_contract_negative LANGUAGES C CXX)\nset(CMAKE_C_STANDARD 17)\nset(CMAKE_C_STANDARD_REQUIRED ON)\nset(CMAKE_C_EXTENSIONS OFF)\nset(CMAKE_CXX_STANDARD 17)\nset(CMAKE_CXX_STANDARD_REQUIRED ON)\nset(CMAKE_CXX_EXTENSIONS OFF)\ninclude_directories(\"${CMAKE_SOURCE_DIR}/src\")\nadd_library(debug_trace_argument_c OBJECT invalid_argument.c)\nadd_library(debug_trace_legacy_c OBJECT invalid_legacy.c)\nadd_library(debug_trace_argument_cxx OBJECT invalid_argument.cc)\nadd_library(debug_trace_legacy_cxx OBJECT invalid_legacy.cc)\nif(CMAKE_C_COMPILER_ID MATCHES \"GNU|Clang|AppleClang\")\n  target_compile_options(debug_trace_legacy_c PRIVATE -Werror=implicit-function-declaration)\nendif()\n")
+file(GENERATE
+  OUTPUT "${DEBUG_TRACE_CONTRACT_NEGATIVE_SOURCE_DIR}/invalid_argument.c"
+  CONTENT "#include \"common/debug.h\"\nstatic int trace_with_argument(const int argument) { return argument; }\nint main(void) { return DT_DEBUG_TRACE_WRAPPER_RESULT_NO_ARGS(DT_DEBUG_SQL, trace_with_argument); }\n")
+file(GENERATE
+  OUTPUT "${DEBUG_TRACE_CONTRACT_NEGATIVE_SOURCE_DIR}/invalid_argument.cc"
+  CONTENT "#include \"common/debug.h\"\nstatic int trace_with_argument(const int argument) { return argument; }\nint main() { return DT_DEBUG_TRACE_WRAPPER_RESULT_NO_ARGS(DT_DEBUG_SQL, trace_with_argument); }\n")
+file(GENERATE
+  OUTPUT "${DEBUG_TRACE_CONTRACT_NEGATIVE_SOURCE_DIR}/invalid_legacy.c"
+  CONTENT "#include \"common/debug.h\"\nstatic int trace_without_arguments(void) { return 0; }\nint main(void) { return ${DEBUG_TRACE_LEGACY_RESULT_MACRO}(DT_DEBUG_SQL, trace_without_arguments); }\n")
+file(GENERATE
+  OUTPUT "${DEBUG_TRACE_CONTRACT_NEGATIVE_SOURCE_DIR}/invalid_legacy.cc"
+  CONTENT "#include \"common/debug.h\"\nstatic int trace_without_arguments() { return 0; }\nint main() { return ${DEBUG_TRACE_LEGACY_RESULT_MACRO}(DT_DEBUG_SQL, trace_without_arguments); }\n")
+file(GENERATE
+  OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/test_debug_trace_contract_negative.cmake"
+  CONTENT "execute_process(COMMAND \"${CMAKE_COMMAND}\" -S \"${DEBUG_TRACE_CONTRACT_NEGATIVE_SOURCE_DIR}\" -B \"${DEBUG_TRACE_CONTRACT_NEGATIVE_BUILD_DIR}\" RESULT_VARIABLE configure_result)\nif(NOT \${configure_result} EQUAL 0)\n  message(FATAL_ERROR \"Could not configure debug trace contract negatives\")\nendif()\nforeach(target debug_trace_argument_c debug_trace_legacy_c debug_trace_argument_cxx debug_trace_legacy_cxx)\n  execute_process(COMMAND \"${CMAKE_COMMAND}\" --build \"${DEBUG_TRACE_CONTRACT_NEGATIVE_BUILD_DIR}\" --target \"\${target}\" RESULT_VARIABLE build_result)\n  if(\${build_result} EQUAL 0)\n    message(FATAL_ERROR \"\${target} unexpectedly compiled\")\n  endif()\nendforeach()\n")
+add_test(NAME test_debug_trace_contract_negative
+         COMMAND ${CMAKE_COMMAND} -P ${CMAKE_CURRENT_BINARY_DIR}/test_debug_trace_contract_negative.cmake)
+
 # brush.c and paint.c live in the drawlayer IOP plugin, not in lib_ansel. Both are written to
 # be independent of the module internals, so the test compiles them directly rather than
 # reaching into the plugin.
@@ -107,4 +151,6 @@ target_sources(test_tagging_completion PRIVATE
   ${CMAKE_SOURCE_DIR}/src/libs/tagging_completion.c)
 target_sources(test_tagging_completion_model PRIVATE
   ${CMAKE_SOURCE_DIR}/src/libs/tagging_completion.c)
+target_sources(test_xmp_colorlabels PRIVATE test_xmp_fixture.c)
+target_sources(test_xmp_tags PRIVATE test_xmp_fixture.c)
 set_tests_properties(test_tagging_completion PROPERTIES SKIP_RETURN_CODE 77)
