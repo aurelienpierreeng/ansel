@@ -97,7 +97,6 @@ static void record_xmp_transaction_event(xmp_transaction_barrier_t *barrier, con
 
 int sqlite3_exec(sqlite3 *database, const char *sql, sqlite3_callback callback, void *data, char **error)
 {
-  if(IS_NULL_PTR(real_sqlite3_exec)) real_sqlite3_exec = (sqlite3_exec_t)dlsym(RTLD_NEXT, "sqlite3_exec");
   xmp_transaction_barrier_t *barrier = xmp_transaction_barrier;
   if(IS_NULL_PTR(barrier)) return real_sqlite3_exec(database, sql, callback, data, error);
 
@@ -128,7 +127,6 @@ int sqlite3_exec(sqlite3 *database, const char *sql, sqlite3_callback callback, 
 
 int sqlite3_step(sqlite3_stmt *statement)
 {
-  if(IS_NULL_PTR(real_sqlite3_step)) real_sqlite3_step = (sqlite3_step_t)dlsym(RTLD_NEXT, "sqlite3_step");
   xmp_transaction_barrier_t *barrier = xmp_transaction_barrier;
   if(IS_NULL_PTR(barrier)
      || strcmp(sqlite3_sql(statement), "UPDATE main.images SET write_timestamp = ?2 WHERE id = ?1"))
@@ -159,6 +157,11 @@ typedef struct { uint32_t mask_mode; int32_t blend_cst; uint32_t blend_mode; flo
 
 static int setup(void **state)
 {
+#ifdef __linux__
+  real_sqlite3_exec = (sqlite3_exec_t)dlsym(RTLD_NEXT, "sqlite3_exec");
+  real_sqlite3_step = (sqlite3_step_t)dlsym(RTLD_NEXT, "sqlite3_step");
+  if(IS_NULL_PTR(real_sqlite3_exec) || IS_NULL_PTR(real_sqlite3_step)) return -1;
+#endif
   darktable.configdir = (char *)g_get_tmp_dir();
   darktable.cachedir = (char *)g_get_tmp_dir();
   darktable.tmpdir = (char *)g_get_tmp_dir();
@@ -1253,10 +1256,19 @@ static void run_xmp_isolation_case(const xmp_isolation_outcome_t outcome)
     assert_int_equal(test_dup2(diagnostic_fd, fileno(stderr)), fileno(stderr));
   }
   xmp_transaction_barrier = &barrier;
-  assert_int_equal(dt_pthread_create(&reader_thread, run_xmp_reader, &reader, FALSE), 0);
-  assert_int_equal(dt_pthread_create(&writer_thread, run_xmp_writer, &writer, FALSE), 0);
-  assert_int_equal(pthread_join(reader_thread, NULL), 0);
-  assert_int_equal(pthread_join(writer_thread, NULL), 0);
+  const int reader_create_result = dt_pthread_create(&reader_thread, run_xmp_reader, &reader, FALSE);
+  int writer_create_result = reader_create_result;
+  if(reader_create_result == 0)
+    writer_create_result = dt_pthread_create(&writer_thread, run_xmp_writer, &writer, FALSE);
+  if(reader_create_result == 0 && writer_create_result != 0)
+  {
+    pthread_mutex_lock(&barrier.mutex);
+    barrier.writer_ready = TRUE;
+    pthread_cond_broadcast(&barrier.condition);
+    pthread_mutex_unlock(&barrier.mutex);
+  }
+  if(reader_create_result == 0) assert_int_equal(pthread_join(reader_thread, NULL), 0);
+  if(writer_create_result == 0) assert_int_equal(pthread_join(writer_thread, NULL), 0);
   xmp_transaction_barrier = NULL;
   if(outcome != XMP_ISOLATION_SUCCESS)
   {
@@ -1264,6 +1276,23 @@ static void run_xmp_isolation_case(const xmp_isolation_outcome_t outcome)
     assert_int_equal(test_dup2(stderr_fd, fileno(stderr)), fileno(stderr));
     assert_int_equal(test_close(stderr_fd), 0);
     assert_int_equal(test_close(diagnostic_fd), 0);
+  }
+
+  if(reader_create_result != 0 || writer_create_result != 0)
+  {
+    if(!IS_NULL_PTR(diagnostic_path))
+    {
+      g_remove(diagnostic_path);
+      dt_free(diagnostic_path);
+    }
+    pthread_cond_destroy(&barrier.condition);
+    pthread_mutex_destroy(&barrier.mutex);
+    dt_free(writer_filename);
+    dt_free(filename);
+    dt_free(properties);
+    dt_free(setting);
+    fail_msg("could not create XMP isolation worker threads");
+    return;
   }
 
   assert_true(writer.result);
