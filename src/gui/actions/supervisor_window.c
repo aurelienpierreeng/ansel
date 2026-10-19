@@ -1,6 +1,7 @@
 /*
     This file is part of Ansel.
     Copyright (C) 2026 Aurélien Pierre.
+    Copyright (C) 2026 Guillaume Stutin.
 
     Ansel is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -30,6 +31,11 @@
 // Cap on how many timeline rows we keep live (older ones are trimmed). The full
 // log lives in the supervisor; this only bounds GTK widget pressure.
 #define TIMELINE_MAX_ROWS 4000
+// How far past the cap the list may grow before it is trimmed back to it. Removing the top
+// rows shifts every other one, and GTK 3 then restyles them all: about 0.45 s at 4000 rows on a
+// mock with the theme, however few go. Trimmed at every poll, 24 polls of 50 events took 14.8 s;
+// trimmed past this slack, 5.8 s, a 1.8 s trim once every 1000 events.
+#define TIMELINE_TRIM_SLACK (TIMELINE_MAX_ROWS / 4)
 #define POLL_INTERVAL_MS 300
 #define MEMORY_MAX_ROWS 500   // cap items shown per cache in the memory view
 #define MEMORY_REFRESH_TICKS 4 // refresh the memory view every Nth poll tick when visible
@@ -376,10 +382,13 @@ static void _timeline_append(const dt_sv_logged_event_t *ev)
   }
 }
 
-static void _timeline_trim(void)
+// Make room for `incoming` rows: once they would take the list past the cap and its slack, drop
+// the oldest rows down to the cap.
+static void _timeline_trim(const guint incoming)
 {
   GList *children = gtk_container_get_children(GTK_CONTAINER(_g.timeline_list));
-  int excess = (int)g_list_length(children) - TIMELINE_MAX_ROWS;
+  const int rows = (int)g_list_length(children) + (int)incoming;
+  int excess = rows > TIMELINE_MAX_ROWS + TIMELINE_TRIM_SLACK ? rows - TIMELINE_MAX_ROWS : 0;
   for(GList *l = children; l && excess > 0; l = l->next, excess--)
   {
     GtkWidget *row = GTK_WIDGET(l->data);
@@ -724,9 +733,29 @@ static gboolean _poll(gpointer u)
         || gtk_adjustment_get_value(adj)
                >= gtk_adjustment_get_upper(adj) - gtk_adjustment_get_page_size(adj) - 4.0;
 
-    for(guint i = 0; i < evs->len; i++) _timeline_append(g_ptr_array_index(evs, i));
+    /* Appending a row to a list box in the window costs GTK 3 time in proportion to the rows
+     * already there, so a batch never takes the list past its cap and slack, even for a moment:
+     * older events would be trimmed right away. A large batch -- the whole log, when the window
+     * opens -- is built with the list out of the window, where every row costs the same; below
+     * half the cap, appending in place is cheaper. Measured on a mock with the theme: 4000 rows
+     * appended in place 4.2 s, built out of the window 2.9 s; a 12500-row batch in place hung
+     * the GUI thread. */
+    const guint first = evs->len > TIMELINE_MAX_ROWS ? evs->len - TIMELINE_MAX_ROWS : 0;
+    const guint incoming = evs->len - first;
+    GtkWidget *viewport = incoming > TIMELINE_MAX_ROWS / 2 ? gtk_widget_get_parent(_g.timeline_list) : NULL;
+    if(viewport)
+    {
+      g_object_ref(_g.timeline_list);
+      gtk_container_remove(GTK_CONTAINER(viewport), _g.timeline_list);
+    }
+    _timeline_trim(incoming);
+    for(guint i = first; i < evs->len; i++) _timeline_append(g_ptr_array_index(evs, i));
+    if(viewport)
+    {
+      gtk_container_add(GTK_CONTAINER(viewport), _g.timeline_list);
+      g_object_unref(_g.timeline_list);
+    }
     _g.last_seq = newlast;
-    _timeline_trim();
     _update_count();
     if(at_bottom) g_idle_add(_scroll_bottom_idle, NULL);
   }

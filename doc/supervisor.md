@@ -99,8 +99,20 @@ darkroom to see history/node/cacheline/backbuf/widget events stream in).
   widget, pipe for backbuf, `owner→target` for cache-wait — own hash, thread);
   expanding reveals the linked-object hashes
   and the full pretty-printed record (built lazily on first expand). The timeline
-  keeps the most recent rows (older ones are trimmed; the full log stays in the
-  supervisor).
+  keeps the most recent 4000 rows (`TIMELINE_MAX_ROWS`; the full log, up to 20000
+  events, stays in the supervisor). In GTK 3 a row appended to a list box in the
+  window costs time in proportion to the rows already there, and removing the top
+  rows restyles every other one (about 0.45 s at 4000 rows, however few go;
+  measured on a mock with the theme, 2026-10-19). So the work of one poll is
+  bounded: a batch never adds more than the cap, older events being trimmed
+  right away; a batch over half the cap -- the backlog of a poll that fell
+  behind -- is built with the list out of the window, where every row costs the
+  same (4000 rows: 2.9 s, against 4.2 s in place); and the list grows up to a
+  quarter past the cap before it is trimmed back to it in one go. A batch
+  appended whole before trimming hangs the GUI thread in GTK's style recursion:
+  seen 2026-10-19 on a hung session, whose backtrace (taken through the SIGSEGV
+  handler's gdb) showed the recursion about 12500 rows deep under
+  `_timeline_append()`.
 - **Grouped** — the same rows bucketed and **collapsible** by group, keyed by a
   selectable field (*domain / thread / op*). **Live**: new events are appended
   into their bucket incrementally (preserving folds), like the timeline. A full
