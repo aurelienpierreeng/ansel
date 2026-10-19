@@ -575,16 +575,7 @@ void dt_dev_pixelpipe_cleanup(dt_dev_pixelpipe_t *pipe)
 
   pipe->output_imgid = UNKNOWN_IMAGE;
 
-  dt_dev_clear_rawdetail_mask(pipe);
-
-  // Every hash in this array corresponds to one cache reference acquired
-  // either while reopening current provider masks or while publishing a new
-  // one. Release the exact same number of references before destroying it.
-  for(guint k = 0; k < pipe->raster_mask_hashes->len; k++)
-  {
-    const uint64_t hash = g_array_index(pipe->raster_mask_hashes, uint64_t, k);
-    dt_dev_pixelpipe_cache_unref_hash(hash);
-  }
+  // dt_dev_pixelpipe_cleanup_nodes() above released the references the array held.
   g_array_free(pipe->raster_mask_hashes, TRUE);
   pipe->raster_mask_hashes = NULL;
 
@@ -633,6 +624,19 @@ void dt_dev_pixelpipe_reset_reentry(dt_dev_pixelpipe_t *pipe)
 
 void dt_dev_pixelpipe_cleanup_nodes(dt_dev_pixelpipe_t *pipe)
 {
+  /* The side-band masks the graph referenced go with it: left to the next render, they outlive
+   * the image on a pipe that does not render again, like the darkroom's after leave(). */
+  dt_dev_clear_rawdetail_mask(pipe);
+  // Every hash in this array corresponds to one cache reference acquired
+  // either while reopening current provider masks or while publishing a new
+  // one. Release the exact same number of references.
+  for(guint k = 0; k < pipe->raster_mask_hashes->len; k++)
+  {
+    const uint64_t hash = g_array_index(pipe->raster_mask_hashes, uint64_t, k);
+    dt_dev_pixelpipe_cache_unref_hash(hash);
+  }
+  g_array_set_size(pipe->raster_mask_hashes, 0);
+
   // destroy all nodes
   for(GList *nodes = g_list_first(pipe->nodes); nodes; nodes = g_list_next(nodes))
   {

@@ -423,7 +423,9 @@ typedef struct dt_dev_pixelpipe_t
 
   // References held on the dedicated global raster-mask cachelines required by
   // the current graph. Keeping them at pipe level prevents LRU eviction between
-  // provider publication and downstream consumption or mask export.
+  // provider publication and downstream consumption or mask export. They go with
+  // the graph: dt_dev_pixelpipe_cleanup_nodes() releases them, as it releases
+  // rawdetail_mask_hash.
   GArray *raster_mask_hashes;
 
   int output_imgid;
@@ -703,7 +705,7 @@ void dt_dev_pixelpipe_set_icc(dt_dev_pixelpipe_t *pipe, dt_colorspaces_color_pro
                               const gchar *icc_filename, dt_iop_color_intent_t icc_intent);
 // destroys all allocated data.
 void dt_dev_pixelpipe_cleanup(dt_dev_pixelpipe_t *pipe);
-// cleanup all nodes except clean input/output
+// cleanup all nodes except clean input/output, and release the side-band masks they referenced
 void dt_dev_pixelpipe_cleanup_nodes(dt_dev_pixelpipe_t *pipe);
 // sync with develop_t history stack from scratch (new node added, have to pop old ones)
 // this should be called with dev->history_mutex locked in read mode
