@@ -96,6 +96,7 @@ static dt_atomic_int _trxid;
 static dt_atomic_int _trx_batch_level;
 static gpointer _trx_owner = NULL;
 static gpointer _trx_batch_owner = NULL;
+static gboolean _trx_batch_is_nested = FALSE;
 
 typedef struct dt_database_t
 {
@@ -3194,7 +3195,9 @@ start:
 
   dt_atomic_set_int(&_trxid, 0);
   dt_atomic_set_int(&_trx_batch_level, 0);
+  g_atomic_pointer_set(&_trx_owner, NULL);
   g_atomic_pointer_set(&_trx_batch_owner, NULL);
+  _trx_batch_is_nested = FALSE;
 
   /* make sure the folder exists. this might not be the case for new databases */
   /* also check if a database backup is needed */
@@ -4810,9 +4813,8 @@ gchar *dt_database_get_most_recent_snap(const char* db_filename)
 //       transaction routines. And it has been done to help further implementation for
 //       proper threading and nested transaction support.
 //
-void dt_database_start_transaction_debug(void)
+gboolean dt_database_start_transaction_debug(void)
 {
-  /* was a parameter; the module owns the one connection now */
   const dt_database_t *const db = _db;
   gpointer const owner = g_thread_self();
   const int batch_level = dt_atomic_get_int(&_trx_batch_level);
@@ -4823,48 +4825,45 @@ void dt_database_start_transaction_debug(void)
     if(g_atomic_pointer_get(&_trx_batch_owner) == owner)
     {
       dt_atomic_add_int(&_trxid, 1);
-      return;
+      return TRUE;
     }
   }
 
   if(g_atomic_pointer_get(&_trx_owner) == owner)
   {
     dt_atomic_add_int(&_trxid, 1);
-    return;
+    return TRUE;
   }
 
   dt_pthread_rwlock_wrlock(&_db_lock);
+  sqlite3_mutex *const mutex = sqlite3_db_mutex(db->handle);
+  if(IS_NULL_PTR(mutex))
+  {
+    dt_pthread_rwlock_unlock(&_db_lock);
+    return FALSE;
+  }
+  sqlite3_mutex_enter(mutex);
+  if(sqlite3_exec(db->handle, "BEGIN TRANSACTION", NULL, NULL, NULL) != SQLITE_OK)
+  {
+    fprintf(stderr, "sqlite3 error: %s\n", sqlite3_errmsg(db->handle));
+    sqlite3_mutex_leave(mutex);
+    dt_pthread_rwlock_unlock(&_db_lock);
+    return FALSE;
+  }
+
+  dt_atomic_set_int(&_trxid, 1);
   g_atomic_pointer_set(&_trx_owner, owner);
-
-  const int trxid = dt_atomic_add_int(&_trxid, 1);
-
-  // if top level a simple unamed transaction is used BEGIN / COMMIT / ROLLBACK
-  // otherwise we use a savepoint (named transaction).
-
-  if(trxid == 0)
-  {
-    // In theads application it may be safer to use an IMMEDIATE transaction:
-    // "BEGIN IMMEDIATE TRANSACTION"
-    // This implies "BEGIN DEFERRED TRANSACTION", which means
-    // no write event is dispatched to DB until the first "COMMIT"
-    DT_DEBUG_SQLITE3_EXEC(db->handle, "BEGIN TRANSACTION", NULL, NULL, NULL);
-  }
-#ifdef USE_NESTED_TRANSACTIONS
-  else
-  {
-    char SQLTRX[32] = { 0 };
-    g_snprintf(SQLTRX, sizeof(SQLTRX), "SAVEPOINT trx%d", trxid);
-    DT_DEBUG_SQLITE3_EXEC(db->handle, SQLTRX, NULL, NULL, NULL);
-  }
-#endif
-
-  if(trxid > MAX_NESTED_TRANSACTIONS)
-    fprintf(stderr, "[dt_database_start_transaction] more than %d nested transaction\n", MAX_NESTED_TRANSACTIONS);
+  return TRUE;
 }
 
-void dt_database_release_transaction_debug(void)
+gboolean dt_database_transaction_is_owned_by_current_thread(void)
 {
-  /* was a parameter; the module owns the one connection now */
+  const gpointer owner = g_thread_self();
+  return g_atomic_pointer_get(&_trx_owner) == owner || g_atomic_pointer_get(&_trx_batch_owner) == owner;
+}
+
+gboolean dt_database_release_transaction_debug(void)
+{
   const dt_database_t *const db = _db;
   gpointer const owner = g_thread_self();
   const int batch_level = dt_atomic_get_int(&_trx_batch_level);
@@ -4872,41 +4871,58 @@ void dt_database_release_transaction_debug(void)
   {
     if(g_atomic_pointer_get(&_trx_batch_owner) == owner)
     {
+      if(dt_atomic_get_int(&_trxid) <= 0)
+      {
+        fprintf(stderr, "[dt_database_release_transaction] COMMIT outside a transaction\n");
+        return FALSE;
+      }
       dt_atomic_sub_int(&_trxid, 1);
-      return;
+      return TRUE;
     }
   }
 
   if(g_atomic_pointer_get(&_trx_owner) != owner)
   {
     fprintf(stderr, "[dt_database_release_transaction] COMMIT from non-owner thread\n");
-    return;
+    return FALSE;
   }
 
-  const int trxid = dt_atomic_sub_int(&_trxid, 1);
-
+  const int trxid = dt_atomic_get_int(&_trxid);
   if(trxid <= 0)
+  {
     fprintf(stderr, "[dt_database_release_transaction] COMMIT outside a transaction\n");
+    return FALSE;
+  }
+  dt_atomic_sub_int(&_trxid, 1);
 
   if(trxid == 1)
   {
-    DT_DEBUG_SQLITE3_EXEC(db->handle, "COMMIT TRANSACTION", NULL, NULL, NULL);
+    const gboolean committed = sqlite3_exec(db->handle, "COMMIT TRANSACTION", NULL, NULL, NULL) == SQLITE_OK;
+    if(!committed)
+    {
+      fprintf(stderr, "sqlite3 error: %s\n", sqlite3_errmsg(db->handle));
+      sqlite3_exec(db->handle, "ROLLBACK TRANSACTION", NULL, NULL, NULL);
+    }
+    dt_atomic_set_int(&_trxid, 0);
     g_atomic_pointer_set(&_trx_owner, NULL);
+    sqlite3_mutex_leave(sqlite3_db_mutex(db->handle));
     dt_pthread_rwlock_unlock(&_db_lock);
+    return committed;
   }
 #ifdef USE_NESTED_TRANSACTIONS
   else
   {
     char SQLTRX[64] = { 0 };
     g_snprintf(SQLTRX, sizeof(SQLTRX), "RELEASE SAVEPOINT trx%d", trxid - 1);
-    DT_DEBUG_SQLITE3_EXEC(db->handle, SQLTRX, NULL, NULL, NULL);
+    return sqlite3_exec(db->handle, SQLTRX, NULL, NULL, NULL) == SQLITE_OK;
   }
 #endif
+
+  return TRUE;
 }
 
 void dt_database_rollback_transaction(void)
 {
-  /* was a parameter; the module owns the one connection now */
   const dt_database_t *const db = _db;
   gpointer const owner = g_thread_self();
   if(g_atomic_pointer_get(&_trx_owner) != owner && g_atomic_pointer_get(&_trx_batch_owner) != owner)
@@ -4915,33 +4931,18 @@ void dt_database_rollback_transaction(void)
     return;
   }
 
-  const int trxid = dt_atomic_sub_int(&_trxid, 1);
-
-  if(trxid <= 0)
-    fprintf(stderr, "[dt_database_rollback_transaction] ROLLBACK outside a transaction\n");
-
-  if(trxid >= 1)
-  {
-    DT_DEBUG_SQLITE3_EXEC(db->handle, "ROLLBACK TRANSACTION", NULL, NULL, NULL);
-    dt_atomic_set_int(&_trxid, 0);
-    dt_atomic_set_int(&_trx_batch_level, 0);
-    g_atomic_pointer_set(&_trx_owner, NULL);
-    g_atomic_pointer_set(&_trx_batch_owner, NULL);
-    dt_pthread_rwlock_unlock(&_db_lock);
-  }
-#ifdef USE_NESTED_TRANSACTIONS
-  else
-  {
-    char SQLTRX[64] = { 0 };
-    g_snprintf(SQLTRX, sizeof(SQLTRX), "ROLLBACK TRANSACTION TO SAVEPOINT trx%d", trxid - 1);
-    DT_DEBUG_SQLITE3_EXEC(db->handle, SQLTRX, NULL, NULL, NULL);
-  }
-#endif
+  DT_DEBUG_SQLITE3_EXEC(db->handle, "ROLLBACK TRANSACTION", NULL, NULL, NULL);
+  dt_atomic_set_int(&_trxid, 0);
+  dt_atomic_set_int(&_trx_batch_level, 0);
+  g_atomic_pointer_set(&_trx_owner, NULL);
+  g_atomic_pointer_set(&_trx_batch_owner, NULL);
+  _trx_batch_is_nested = FALSE;
+  sqlite3_mutex_leave(sqlite3_db_mutex(db->handle));
+  dt_pthread_rwlock_unlock(&_db_lock);
 }
 
 void dt_database_begin_transaction_batch(void)
 {
-  /* was a parameter; the module owns the one connection now */
   const dt_database_t *const db = _db;
   gpointer const owner = g_thread_self();
   if(g_atomic_pointer_get(&_trx_batch_owner) == owner)
@@ -4949,21 +4950,37 @@ void dt_database_begin_transaction_batch(void)
     dt_atomic_add_int(&_trx_batch_level, 1);
     return;
   }
+  if(g_atomic_pointer_get(&_trx_owner) == owner)
+  {
+    dt_atomic_set_int(&_trx_batch_level, 1);
+    g_atomic_pointer_set(&_trx_batch_owner, owner);
+    _trx_batch_is_nested = TRUE;
+    return;
+  }
 
   dt_pthread_rwlock_wrlock(&_db_lock);
+  sqlite3_mutex *const mutex = sqlite3_db_mutex(db->handle);
+  if(IS_NULL_PTR(mutex))
+  {
+    dt_pthread_rwlock_unlock(&_db_lock);
+    return;
+  }
+  sqlite3_mutex_enter(mutex);
+  if(sqlite3_exec(db->handle, "BEGIN TRANSACTION", NULL, NULL, NULL) != SQLITE_OK)
+  {
+    fprintf(stderr, "sqlite3 error: %s\n", sqlite3_errmsg(db->handle));
+    sqlite3_mutex_leave(mutex);
+    dt_pthread_rwlock_unlock(&_db_lock);
+    return;
+  }
+  dt_atomic_set_int(&_trx_batch_level, 1);
   g_atomic_pointer_set(&_trx_owner, owner);
   g_atomic_pointer_set(&_trx_batch_owner, owner);
-
-  const int level = dt_atomic_add_int(&_trx_batch_level, 1);
-  if(level == 0)
-  {
-    DT_DEBUG_SQLITE3_EXEC(db->handle, "BEGIN TRANSACTION", NULL, NULL, NULL);
-  }
+  _trx_batch_is_nested = FALSE;
 }
 
 void dt_database_end_transaction_batch(void)
 {
-  /* was a parameter; the module owns the one connection now */
   const dt_database_t *const db = _db;
   gpointer const owner = g_thread_self();
   if(g_atomic_pointer_get(&_trx_batch_owner) != owner)
@@ -4976,18 +4993,26 @@ void dt_database_end_transaction_batch(void)
   if(level <= 0)
   {
     _db_print("[dt_database_end_transaction_batch] COMMIT outside a batch transaction\n");
-    dt_atomic_set_int(&_trx_batch_level, 0);
-    g_atomic_pointer_set(&_trx_owner, NULL);
-    g_atomic_pointer_set(&_trx_batch_owner, NULL);
-    dt_pthread_rwlock_unlock(&_db_lock);
     return;
   }
 
   if(level == 1)
   {
-    DT_DEBUG_SQLITE3_EXEC(db->handle, "COMMIT TRANSACTION", NULL, NULL, NULL);
+    if(_trx_batch_is_nested)
+    {
+      g_atomic_pointer_set(&_trx_batch_owner, NULL);
+      _trx_batch_is_nested = FALSE;
+      return;
+    }
+    if(sqlite3_exec(db->handle, "COMMIT TRANSACTION", NULL, NULL, NULL) != SQLITE_OK)
+    {
+      fprintf(stderr, "sqlite3 error: %s\n", sqlite3_errmsg(db->handle));
+      sqlite3_exec(db->handle, "ROLLBACK TRANSACTION", NULL, NULL, NULL);
+    }
+    dt_atomic_set_int(&_trxid, 0);
     g_atomic_pointer_set(&_trx_owner, NULL);
     g_atomic_pointer_set(&_trx_batch_owner, NULL);
+    sqlite3_mutex_leave(sqlite3_db_mutex(db->handle));
     dt_pthread_rwlock_unlock(&_db_lock);
   }
 }

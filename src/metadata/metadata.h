@@ -121,8 +121,8 @@ void dt_metadata_init();
 /** Set metadata for a specific image, or all selected for id == -1. */
 void dt_metadata_set(int id, const char *key, const char *value, const gboolean undo_on); // duplicate.c, lua/image.c
 
-/** Set imported metadata for a specific image */
-void dt_metadata_set_import(int id, const char *key, const char *value); // exif.cc, ligthroom.c
+/** Set imported metadata for a specific image. Returns FALSE when its database mutation fails. */
+gboolean dt_metadata_set_import(int id, const char *key, const char *value); // exif.cc, ligthroom.c
 
 /** Set metadata (named keys) for a specific image, or all selected for id == -1. */
 /** list is a set of key, value */
@@ -141,8 +141,8 @@ GList *dt_metadata_get(int id, const char *key, uint32_t *count); // exif.cc, va
 /** Get metadata (id keys) for a specific image. The caller has to free the list after usage. */
 GList *dt_metadata_get_list_id(int id); // libs/image.c
 
-/** Remove metadata from specific images, or all selected for id == -1. */
-void dt_metadata_clear(const GList *imgs, const gboolean undo_on); // libs/metadata.c
+/** Remove metadata from specific images, or all selected for id == -1. Returns FALSE on database failure. */
+gboolean dt_metadata_clear(const GList *imgs, const gboolean undo_on); // libs/metadata.c
 
 /** Return the first imgid of the filename-datetime "Xmp.darktable.image_id" if it already exists */
 int dt_metadata_already_imported(const char *filename, const char *datetime);
