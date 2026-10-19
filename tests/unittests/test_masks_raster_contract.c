@@ -308,6 +308,68 @@ static void _copy_members_refuses_anything_that_is_not_a_group(void **state)
   g_list_free(shape.points);
 }
 
+static void _serialized_group_members_copy_child_ids_by_value(void **state)
+{
+  (void)state;
+  const dt_masks_form_group_t rows[2] = {
+    { .formid = 11, .parentid = 7, .state = DT_MASKS_STATE_USE, .opacity = 0.5f },
+    { .formid = 22, .parentid = 7, .state = DT_MASKS_STATE_USE, .opacity = 1.0f },
+  };
+  uint8_t serialized[sizeof(rows) + 1] = { 0 };
+  for(size_t index = 0; index < G_N_ELEMENTS(rows); index++)
+    memcpy(serialized + 1 + index * sizeof(dt_masks_form_group_t)
+               + offsetof(dt_masks_form_group_t, formid),
+           &rows[index].formid, sizeof(rows[index].formid));
+  int *child_ids = NULL;
+
+  assert_true(dt_masks_group_deserialize_child_ids(serialized + 1, sizeof(rows), G_N_ELEMENTS(rows), &child_ids));
+  assert_int_equal(child_ids[0], 11);
+  assert_int_equal(child_ids[1], 22);
+  dt_free_align(child_ids);
+
+  child_ids = (int *)(intptr_t)-1;
+  assert_false(dt_masks_group_deserialize_child_ids(serialized + 1, sizeof(rows) - 1, G_N_ELEMENTS(rows), &child_ids));
+  assert_null(child_ids);
+  assert_false(dt_masks_group_deserialize_child_ids(serialized + 1, -1, G_N_ELEMENTS(rows), &child_ids));
+  assert_null(child_ids);
+  assert_false(dt_masks_group_deserialize_child_ids(serialized + 1, sizeof(rows), -1, &child_ids));
+  assert_null(child_ids);
+  assert_false(dt_masks_group_deserialize_child_ids(NULL, sizeof(rows), G_N_ELEMENTS(rows), &child_ids));
+  assert_null(child_ids);
+  assert_false(dt_masks_group_deserialize_child_ids(serialized + 1, sizeof(rows), G_N_ELEMENTS(rows), NULL));
+  assert_true(dt_masks_group_deserialize_child_ids(NULL, 0, 0, &child_ids));
+  assert_null(child_ids);
+}
+
+static void _serialized_group_members_read_formid_at_its_declared_offset(void **state)
+{
+  (void)state;
+  gchar *unit_tests_directory = g_path_get_dirname(__FILE__);
+  gchar *tests_directory = g_path_get_dirname(unit_tests_directory);
+  gchar *source_directory = g_path_get_dirname(tests_directory);
+  gchar *masks_source_path
+      = g_build_filename(source_directory, "src", "develop", "masks", "masks.c", NULL);
+  gchar *masks_source = NULL;
+  gsize masks_source_size = 0;
+
+  assert_true(g_file_get_contents(masks_source_path, &masks_source, &masks_source_size, NULL));
+  const gchar *deserialize = g_strstr_len(masks_source, masks_source_size,
+                                          "gboolean dt_masks_group_deserialize_child_ids");
+  assert_non_null(deserialize);
+  const gchar *copy = g_strstr_len(deserialize, masks_source + masks_source_size - deserialize,
+                                   "memcpy(&ids[index]");
+  assert_non_null(copy);
+  const gchar *copy_end = g_strstr_len(copy, masks_source + masks_source_size - copy, ";\n");
+  assert_non_null(copy_end);
+  assert_non_null(g_strstr_len(copy, copy_end - copy, "offsetof(dt_masks_form_group_t, formid)"));
+
+  g_free(masks_source);
+  g_free(masks_source_path);
+  g_free(source_directory);
+  g_free(tests_directory);
+  g_free(unit_tests_directory);
+}
+
 static void _type_tokens_are_the_persisted_conf_key_spellings(void **state)
 {
   (void)state;
@@ -584,6 +646,8 @@ int main(int argc, char *argv[])
     cmocka_unit_test(_form_info_leaves_out_untouched_on_failure),
     cmocka_unit_test(_copy_members_preserves_order_and_reports_the_total),
     cmocka_unit_test(_copy_members_refuses_anything_that_is_not_a_group),
+    cmocka_unit_test(_serialized_group_members_copy_child_ids_by_value),
+    cmocka_unit_test(_serialized_group_members_read_formid_at_its_declared_offset),
     cmocka_unit_test(_type_tokens_are_the_persisted_conf_key_spellings),
     cmocka_unit_test(_set_operation_replaces_the_combine_op),
     cmocka_unit_test(_setting_the_state_it_already_has_is_unchanged),
