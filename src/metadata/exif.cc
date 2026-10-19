@@ -469,20 +469,20 @@ bool dt_exif_decode_xmp_data(dt_image_t *img, Exiv2::XmpData &xmpData, int versi
     else
       dt_image_set_xmp_rating(img, -2);
 
-    if(!exif_read) dt_colorlabels_remove_labels(img->id);
+    if(!exif_read) img->color_labels = 0;
     if(FIND_XMP_TAG("Xmp.xmp.Label"))
     {
       std::string label = pos->toString();
       if(label == "Red") // Is it really called like that in XMP files?
-        dt_colorlabels_set_label(img->id, 0);
+        img->color_labels |= 1 << DT_COLORLABELS_RED;
       else if(label == "Yellow") // Is it really called like that in XMP files?
-        dt_colorlabels_set_label(img->id, 1);
+        img->color_labels |= 1 << DT_COLORLABELS_YELLOW;
       else if(label == "Green")
-        dt_colorlabels_set_label(img->id, 2);
+        img->color_labels |= 1 << DT_COLORLABELS_GREEN;
       else if(label == "Blue") // Is it really called like that in XMP files?
-        dt_colorlabels_set_label(img->id, 3);
+        img->color_labels |= 1 << DT_COLORLABELS_BLUE;
       else if(label == "Purple") // Is it really called like that in XMP files?
-        dt_colorlabels_set_label(img->id, 4);
+        img->color_labels |= 1 << DT_COLORLABELS_PURPLE;
     }
     // if Xmp.xmp.Label not managed from an external app use dt colors
     else if(FIND_XMP_TAG("Xmp.darktable.colorlabels"))
@@ -491,7 +491,9 @@ bool dt_exif_decode_xmp_data(dt_image_t *img, Exiv2::XmpData &xmpData, int versi
       const int cnt = pos->count();
       for(int i = 0; i < cnt; i++)
       {
-        dt_colorlabels_set_label(img->id, pos->toLong(i));
+        const int color = pos->toLong(i);
+        if(color >= 0 && color < DT_COLORLABELS_LAST)
+          img->color_labels |= 1 << color;
       }
     }
 
