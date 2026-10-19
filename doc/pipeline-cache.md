@@ -1362,12 +1362,12 @@ in between costs one recompute of the provider (the `DT_DEV_PIPE_REENTRY` pass o
 dedicated side-band cachelines"), never a wrong mask: a consumer reads a mask through its own
 retained lookup. The detail mask has no such pass; the next section is what covers it.
 
-That statistics call, and the memory view built on it, lists `entries` only. The working buffers
-of `dt_pixelpipe_cache_alloc_align_*()` live in `external_entries`: they count in `current_memory`
-and in the usage bar, but appear in no list. Seen that day: 6.0 GiB of usage against 0.2 GiB of
-listed entries, the rest being the working buffers of a thumbnail pipe reconstructing highlights at
-full resolution. To see them, walk `external_entries` under `lock`: the name of each is the
-`file:line` of its allocation, and its age gives away one that outlives its run.
+That statistics call, and the memory view built on it, listed `entries` only then. The working
+buffers of `dt_pixelpipe_cache_alloc_align_*()` live in `external_entries`: they counted in
+`current_memory` and in the usage bar, but appeared in no list. Seen that day: 6.0 GiB of usage
+against 0.2 GiB of listed entries, the rest being the working buffers of a thumbnail pipe
+reconstructing highlights at full resolution. The call returns them now: see "The cache's usage
+counts its allocations as well as its lines".
 
 ### A cached output of `detailmask` stands for it only with its mask
 
@@ -1393,3 +1393,23 @@ the stage's output without it -- a thumbnail pipe, or a darkroom pipe back on a 
 mask it had released. The release widened it to darkroom re-entry and to the topology rebuild.
 Read from the code, not reproduced: the eviction has to take the mask and spare the output.
 `tests/unittests/test_pipe_cleanup_nodes_masks.c` pins the rule.
+
+### The cache's usage counts its allocations as well as its lines
+
+*Found `948fbf7c90`, 2026-10-19.*
+
+What `dt_pixelpipe_cache_alloc_align_*()` allocates lives in `external_entries`, not in `entries`,
+and counts in `current_memory` all the same: an entry of either table adds its size when it is
+created (`dt_pixel_cache_new_entry()`) and takes it back when it is freed, so the usage is the sizes
+of both tables summed. `dt_dev_pixelpipe_cache_get_entries_stats()` returns both, under one hold of
+`lock`: the allocations flagged `allocation`, named after the `file:line` that made them (from
+`src/` on: the absolute root of `__FILE__` would push the line number out of the 64-byte name) and
+aged since then (`age_us`; `_pixel_cache_touch()` stamps an allocation when it is made, and the one
+lookup that would touch it again, `dt_dev_pixelpipe_cache_get_entry_by_data()`, has no caller). The
+supervisor's memory view lists them with the lines in RAM (`supervisor.md`).
+
+Not every allocation is a working buffer of one run. Some are kept for the session, and seen at
+rest the same day: demosaic's two LMMSE gamma tables (`iop/demosaic.c:1193-1194`, 0.25 MiB each,
+made on the first LMMSE run and freed in `cleanup_global()`), and the histogram's state struct
+(`libs/histogram.c:3075`, made in `gui_init()`, freed in `gui_cleanup()`). They are held, so neither
+the LRU nor the pressure valve can free them, and they count against the budget for the session.

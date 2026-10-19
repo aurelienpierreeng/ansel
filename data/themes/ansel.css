@@ -29,7 +29,8 @@
     Copyright (C) 2021 Marco Carrarini.
     Copyright (C) 2022 Emin Cavalic.
     Copyright (C) 2023 Alynx Zhou.
-    
+    Copyright (C) 2026 Guillaume Stutin.
+
     darktable is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
     the Free Software Foundation, either version 3 of the License, or
@@ -410,7 +411,8 @@ treeview separator,
 }
 
 *:disabled,
-#module-header .dt_iop_enable_button.dt_iop_enable_forced_off {
+#module-header .dt_iop_enable_button.dt_iop_enable_forced_off,
+.dt_supervisor_evictable {
   opacity: 0.5;
 }
 

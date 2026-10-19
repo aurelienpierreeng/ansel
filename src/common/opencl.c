@@ -2073,6 +2073,23 @@ size_t dt_opencl_get_device_max_global_mem(const int devid)
   return (size_t)cl->dev[devid].max_global_mem;
 }
 
+size_t dt_opencl_get_device_memory_in_use(const int devid)
+{
+  dt_opencl_t *cl = _opencl;
+  if(!cl || !cl->inited || IS_NULL_PTR(cl->dev)) return 0;
+  if(devid < 0 || devid >= cl->num_devs) return 0;
+  return cl->dev[devid].memory_in_use;
+}
+
+size_t dt_opencl_get_device_headroom(const int devid)
+{
+  dt_opencl_t *cl = _opencl;
+  if(!cl || !cl->inited || IS_NULL_PTR(cl->dev)) return 0;
+  if(devid < 0 || devid >= cl->num_devs) return 0;
+  // In MiB, as dt_opencl_check_tuning() reads it.
+  return cl->dev[devid].forced_headroom * 1024 * 1024;
+}
+
 int dt_opencl_report_pipe_error(void)
 {
   dt_opencl_t *cl = _opencl;
@@ -3149,6 +3166,21 @@ void dt_opencl_memory_statistics(int devid, cl_mem mem, size_t size, dt_opencl_m
     dt_print(DT_DEBUG_OPENCL,
               "[opencl memory] device %d: %" G_GSIZE_FORMAT " bytes (%.1f MB) in use\n", devid, _opencl->dev[devid].memory_in_use,
                                       (float)_opencl->dev[devid].memory_in_use/(1024*1024));
+}
+
+gboolean dt_opencl_get_mem_record(cl_mem mem, int *devid, size_t *size)
+{
+  if(IS_NULL_PTR(mem) || !(_opencl && _opencl->inited)) return FALSE;
+  dt_pthread_mutex_lock(&_opencl->mem_sizes_lock);
+  const dt_opencl_mem_record_t *rec = (const dt_opencl_mem_record_t *)g_hash_table_lookup(_opencl->mem_sizes, mem);
+  const gboolean found = !IS_NULL_PTR(rec);
+  if(found)
+  {
+    *devid = rec->devid;
+    *size = rec->size;
+  }
+  dt_pthread_mutex_unlock(&_opencl->mem_sizes_lock);
+  return found;
 }
 
 void dt_opencl_check_tuning(const int devid)

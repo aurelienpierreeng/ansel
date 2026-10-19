@@ -105,32 +105,47 @@ gboolean dt_dev_pixelpipe_cache_is_ready(void);
  * Only after a successful init; dt_dev_pixelpipe_cache_is_ready() answers FALSE afterwards. */
 void dt_dev_pixelpipe_cache_cleanup(void);
 
+// What one pipeline-cache entry holds on one OpenCL device, for the GUI memory view.
+typedef struct dt_pixel_cache_stats_device_t
+{
+  int cl_count;    // OpenCL buffers of the entry on the device
+  size_t cl_bytes; // their vRAM bytes
+} dt_pixel_cache_stats_device_t;
+
 // One pipeline-cache entry, for the GUI memory view.
 typedef struct dt_pixel_cache_stats_entry_t
 {
-  uint64_t hash;
-  size_t size;       // host (RAM) bytes
+  uint64_t hash;     // an allocation's is its address: no event names it
+  size_t size;       // bytes counted against the cache budget, whether a host buffer holds them or not
+  /* Not a line but a buffer of dt_pixelpipe_cache_alloc_align_*(): a module's working buffer for one
+   * run, or what something keeps there for longer (a lookup table, a state struct). */
+  gboolean allocation;
+  int64_t age_us;    // since the cache last touched it: a line's last use, an allocation's allocation
+  size_t host_bytes; // bytes of the host (RAM) buffer: 0 for a line kept on the device only
+  int host_stale;    // the host buffer still holds the pixels of a hash the line no longer answers to
   int refcount;
   int hits;
   int cl_count;      // number of OpenCL device buffers attached to this entry
   size_t cl_bytes;   // their total vRAM bytes (0 without OpenCL)
+  // The same, device by device: dt_opencl_get_num_devices() of them, or NULL without any.
+  dt_pixel_cache_stats_device_t *devices;
   char name[64];
 } dt_pixel_cache_stats_entry_t;
 
 // Current/max bytes used by the pipeline cache (host RAM).
 void dt_dev_pixelpipe_cache_get_usage(size_t *current, size_t *max);
 
+// The budget the cache was created with. Kernel memory pressure lowers the budget allocations
+// evict down to, which dt_dev_pixelpipe_cache_get_usage() reports; this one never moves.
+size_t dt_dev_pixelpipe_cache_get_max_memory(void);
+
 /* Largest contiguous free run in the arena (bytes): the real upper bound on
  * what an allocation — and, transitively, a tiled module's working set — can
  * get, as opposed to the byte headroom max - current. */
 size_t dt_pixelpipe_cache_get_largest_free_run(void);
 
-// Total device memory across enabled OpenCL devices (0 if OpenCL is off/absent),
-// for the vRAM usage bar's denominator.
-size_t dt_dev_pixelpipe_cache_get_vram_total(void);
-
-// Snapshot of all live entries (newly-allocated GArray of
-// dt_pixel_cache_stats_entry_t; free with g_array_free()).
+// Snapshot of all live entries, the lines then the allocations (newly-allocated GArray of
+// dt_pixel_cache_stats_entry_t; free with g_array_free(), which frees each entry's `devices` too).
 GArray *dt_dev_pixelpipe_cache_get_entries_stats(void);
 
 /* Public for by-value snapshots in pipeline pieces (for example realtime

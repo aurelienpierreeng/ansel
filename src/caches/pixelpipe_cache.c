@@ -3394,16 +3394,26 @@ void dt_dev_pixelpipe_cache_get_usage(size_t *current, size_t *max)
   dt_pthread_mutex_unlock(&cache->lock);
 }
 
-GArray *dt_dev_pixelpipe_cache_get_entries_stats(void)
+size_t dt_dev_pixelpipe_cache_get_max_memory(void)
 {
+  // Written once, by dt_dev_pixelpipe_cache_init().
   dt_dev_pixelpipe_cache_t *cache = _pixelpipe_cache;
-  GArray *out = g_array_new(FALSE, FALSE, sizeof(dt_pixel_cache_stats_entry_t));
-  if(IS_NULL_PTR(cache)) return out;
+  return IS_NULL_PTR(cache) ? 0 : cache->max_memory;
+}
 
-  dt_pthread_mutex_lock(&cache->lock);
+static void _stats_entry_clear(gpointer data)
+{
+  dt_pixel_cache_stats_entry_t *s = (dt_pixel_cache_stats_entry_t *)data;
+  g_free(s->devices);
+}
+
+// WARNING: not thread-safe, protect its calls with mutex lock
+static void _non_threadsafe_stats_append(GArray *out, GHashTable *table, const gboolean allocations,
+                                         const int64_t now, const int num_devices)
+{
   GHashTableIter it;
   gpointer key, value;
-  g_hash_table_iter_init(&it, cache->entries);
+  g_hash_table_iter_init(&it, table);
   while(g_hash_table_iter_next(&it, &key, &value))
   {
     dt_pixel_cache_entry_t *e = (dt_pixel_cache_entry_t *)value;
@@ -3411,21 +3421,47 @@ GArray *dt_dev_pixelpipe_cache_get_entries_stats(void)
     dt_pixel_cache_stats_entry_t s = { 0 };
     s.hash = e->hash;
     s.size = e->size;
+    s.allocation = allocations;
+    // Touched from paths holding no cache lock: it may be newer than `now`.
+    s.age_us = MAX(now - _pixel_cache_get_age(e), 0);
+    // A line an OpenCL module keeps on the device is created without a host buffer: its size is
+    // only reserved against the budget.
+    s.host_bytes = IS_NULL_PTR(e->data) ? 0 : e->size;
+    s.host_stale = dt_atomic_get_int(&e->host_stale);
     s.refcount = dt_atomic_get_int((dt_atomic_int *)&e->refcount);
     s.hits = e->hits;
-    if(e->name) g_strlcpy(s.name, e->name, sizeof(s.name));
+    /* An allocation is named after the `__FILE__:__LINE__` that made it: an absolute path, whose
+     * root says nothing and would cut the line number off a name this short. */
+    const char *src = (allocations && e->name) ? g_strrstr(e->name, "/src/") : NULL;
+    if(e->name) g_strlcpy(s.name, src ? src + 5 : e->name, sizeof(s.name));
 
 #ifdef HAVE_OPENCL
     // Account the OpenCL device buffers attached to this entry. trylock avoids
     // both deadlock and racing the list against concurrent clmem mutation.
+    if(num_devices > 0) s.devices = g_new0(dt_pixel_cache_stats_device_t, num_devices);
     if(dt_pthread_mutex_trylock(&e->cl_mem_lock) == 0)
     {
       for(GList *l = e->cl_mem_list; l; l = g_list_next(l))
       {
         const dt_cache_clmem_t *c = (const dt_cache_clmem_t *)l->data;
         if(IS_NULL_PTR(c) || IS_NULL_PTR(c->mem)) continue;
+        /* The device and size recorded at allocation, as the release path reads them: some
+         * drivers fault in clGetMemObjectInfo under vRAM pressure. The driver is asked only about
+         * an object nothing recorded. */
+        int devid = -1;
+        size_t bytes = 0;
+        if(!dt_opencl_get_mem_record((cl_mem)c->mem, &devid, &bytes))
+        {
+          devid = dt_opencl_get_mem_context_id((cl_mem)c->mem);
+          bytes = dt_opencl_get_mem_object_size((cl_mem)c->mem);
+        }
         s.cl_count++;
-        s.cl_bytes += dt_opencl_get_mem_object_size((cl_mem)c->mem);
+        s.cl_bytes += bytes;
+        if(devid >= 0 && devid < num_devices)
+        {
+          s.devices[devid].cl_count++;
+          s.devices[devid].cl_bytes += bytes;
+        }
       }
       dt_pthread_mutex_unlock(&e->cl_mem_lock);
     }
@@ -3433,22 +3469,24 @@ GArray *dt_dev_pixelpipe_cache_get_entries_stats(void)
 
     g_array_append_val(out, s);
   }
+}
+
+GArray *dt_dev_pixelpipe_cache_get_entries_stats(void)
+{
+  dt_dev_pixelpipe_cache_t *cache = _pixelpipe_cache;
+  GArray *out = g_array_new(FALSE, FALSE, sizeof(dt_pixel_cache_stats_entry_t));
+  g_array_set_clear_func(out, _stats_entry_clear);
+  if(IS_NULL_PTR(cache)) return out;
+  const int num_devices = dt_opencl_get_num_devices();
+
+  const int64_t now = g_get_monotonic_time();
+  dt_pthread_mutex_lock(&cache->lock);
+  _non_threadsafe_stats_append(out, cache->entries, FALSE, now, num_devices);
+  _non_threadsafe_stats_append(out, cache->external_entries, TRUE, now, num_devices);
   dt_pthread_mutex_unlock(&cache->lock);
   return out;
 }
 
-size_t dt_dev_pixelpipe_cache_get_vram_total(void)
-{
-#ifdef HAVE_OPENCL
-  if(!dt_opencl_is_enabled()) return 0;
-  size_t total = 0;
-  for(int i = 0; i < dt_opencl_get_num_devices(); i++)
-    total += dt_opencl_get_device_max_global_mem(i);
-  return total;
-#else
-  return 0;
-#endif
-}
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

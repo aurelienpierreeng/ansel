@@ -19,7 +19,7 @@
     Copyright (C) 2022 Hanno Schwalm.
     Copyright (C) 2022 Martin Bařinka.
     Copyright (C) 2025 Alynx Zhou.
-    Copyright (C) 2025 Guillaume Stutin.
+    Copyright (C) 2025-2026 Guillaume Stutin.
     
     darktable is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -435,6 +435,15 @@ gboolean dt_opencl_get_device_max_image_size(const int devid, int *width, int *h
 /** @brief Total device memory in bytes, or 0 for an out-of-range id. */
 size_t dt_opencl_get_device_max_global_mem(const int devid);
 
+/** @brief Bytes Ansel holds on the device by its own accounting (dt_opencl_memory_statistics()),
+ *         or 0 for an out-of-range id. What other applications hold there is not in it. */
+size_t dt_opencl_get_device_memory_in_use(const int devid);
+
+/** @brief Bytes of the device left to other applications (its forced_headroom, from its own
+ *         config key or memory_opencl_headroom), or 0 for an out-of-range id. Ansel plans
+ *         against the device's total memory less this. */
+size_t dt_opencl_get_device_headroom(const int devid);
+
 /**
  * @brief Record that a pipe run failed on OpenCL, and decide whether to give up on it.
  *
@@ -601,6 +610,10 @@ cl_mem_flags dt_opencl_get_mem_flags(cl_mem mem);
 // On OPENCL_MEMORY_SUB, `devid` and `size` are ignored -- the recorded values win.
 void dt_opencl_memory_statistics(int devid, cl_mem mem, size_t size, dt_opencl_memory_t action);
 
+// The device and size dt_opencl_memory_statistics() recorded when `mem` was allocated, without
+// asking the driver. FALSE, and nothing written, for an object it never recorded.
+gboolean dt_opencl_get_mem_record(cl_mem mem, int *devid, size_t *size);
+
 /** check if image size fit into limits given by OpenCL runtime */
 gboolean dt_opencl_image_fits_device(const int devid, const size_t width, const size_t height, const unsigned bpp,
                                 const float factor, const size_t overhead);
@@ -761,6 +774,14 @@ static inline gboolean dt_opencl_get_device_max_image_size(const int devid, int 
   return FALSE;
 }
 static inline size_t dt_opencl_get_device_max_global_mem(const int devid)
+{
+  return 0;
+}
+static inline size_t dt_opencl_get_device_memory_in_use(const int devid)
+{
+  return 0;
+}
+static inline size_t dt_opencl_get_device_headroom(const int devid)
 {
   return 0;
 }
