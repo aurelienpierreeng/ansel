@@ -63,6 +63,7 @@ set(LIB_ANSEL_UNIT_TESTS
   test_dtpthread_recursive
   test_history_snapshot
   test_masks_raster_contract
+  test_blend_mask_payload
   test_stroke_raster
   test_drawlayer_batch_raster
   test_import_jobs
