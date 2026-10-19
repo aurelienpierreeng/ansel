@@ -89,8 +89,12 @@ gboolean dt_history_repository_delete_masks_history(const int32_t imgid);
 /** history + masks_history, the pair a development is made of */
 gboolean dt_history_repository_delete_dev_history(const int32_t imgid);
 
-/** everything an image's development is stored in: history, module_order, masks_history,
- *  history_hash, and the history_end / aspect_ratio reset on the image row itself. */
+/**
+ * @brief Atomically delete everything storing an image's development.
+ *
+ * This includes history, module_order, masks_history, history_hash, and the history_end /
+ * aspect_ratio reset on the image row itself.
+ */
 gboolean dt_history_repository_delete_all_for_image(const int32_t imgid);
 
 /* ---------------------------------------------------------------------------------------------
