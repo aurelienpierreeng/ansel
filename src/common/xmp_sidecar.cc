@@ -892,43 +892,43 @@ int read_array_property(const char *text, unsigned int *index, const char **prop
 /** Decode history fields independently of array indexing and whole-history validation. */
 int history_entry_t::read_property(const char *property, const Exiv2::Xmpdatum &value)
 {
-  if(g_str_has_prefix(property, "darktable:operation"))
+  if(!strcmp(property, "darktable:operation"))
   {
     have_operation = TRUE;
     operation = g_strdup(value.toString().c_str());
   }
-  else if(g_str_has_prefix(property, "darktable:num"))
+  else if(!strcmp(property, "darktable:num"))
   {
     num_count++;
     gint64 parsed_num = 0;
     valid_num = g_ascii_string_to_signed(value.toString().c_str(), 10, 0, G_MAXINT, &parsed_num, nullptr);
     if(valid_num) num = parsed_num;
   }
-  else if(g_str_has_prefix(property, "darktable:enabled"))
+  else if(!strcmp(property, "darktable:enabled"))
     enabled = value.toLong() == 1;
-  else if(g_str_has_prefix(property, "darktable:modversion"))
+  else if(!strcmp(property, "darktable:modversion"))
   {
     have_modversion = TRUE;
     modversion = value.toLong();
   }
-  else if(g_str_has_prefix(property, "darktable:params"))
+  else if(!strcmp(property, "darktable:params"))
   {
     have_params = TRUE;
     params = dt_exif_xmp_decode(value.toString().c_str(), value.size(), &params_len);
   }
-  else if(g_str_has_prefix(property, "darktable:multi_name"))
+  else if(!strcmp(property, "darktable:multi_name"))
     multi_name = g_strdup(value.toString().c_str());
-  else if(g_str_has_prefix(property, "darktable:multi_priority"))
+  else if(!strcmp(property, "darktable:multi_priority"))
     multi_priority = value.toLong();
-  else if(g_str_has_prefix(property, "darktable:iop_order"))
+  else if(!strcmp(property, "darktable:iop_order"))
   {
     std::istringstream stream(value.toString());
     stream.imbue(std::locale("C"));
     stream >> iop_order;
   }
-  else if(g_str_has_prefix(property, "darktable:blendop_version"))
+  else if(!strcmp(property, "darktable:blendop_version"))
     blendop_version = value.toLong();
-  else if(g_str_has_prefix(property, "darktable:blendop_params"))
+  else if(!strcmp(property, "darktable:blendop_params"))
   {
     const std::string encoded = value.toString();
     blendop_params = dt_exif_xmp_decode(encoded.c_str(), value.size(), &blendop_params_len);
@@ -937,11 +937,21 @@ int history_entry_t::read_property(const char *property, const Exiv2::Xmpdatum &
   return 0;
 }
 
-GList *read_history_v2(Exiv2::XmpData &xmpData, const char *filename, gboolean *valid)
+enum xmp_history_error_t
+{
+  XMP_HISTORY_ERROR_NONE,
+  XMP_HISTORY_ERROR_STRUCTURE,
+  XMP_HISTORY_ERROR_NUMBER,
+  XMP_HISTORY_ERROR_PAYLOAD
+};
+
+GList *read_history_v2(Exiv2::XmpData &xmpData, const char *filename, const int xmp_version,
+                       gboolean *valid, xmp_history_error_t *error)
 {
   GList *history_entries = NULL;
   history_entry_t *current_entry = NULL;
   *valid = TRUE;
+  *error = XMP_HISTORY_ERROR_NONE;
 
   for(auto history = xmpData.findKey(Exiv2::XmpKey("Xmp.darktable.history")); history != xmpData.end(); history++)
   {
@@ -966,6 +976,7 @@ GList *read_history_v2(Exiv2::XmpData &xmpData, const char *filename, gboolean *
         g_list_free_full(history_entries, free_history_entry);
         history_entries = NULL;
         *valid = FALSE;
+        *error = XMP_HISTORY_ERROR_STRUCTURE;
         dt_free(key);
         return NULL;
       }
@@ -979,6 +990,7 @@ GList *read_history_v2(Exiv2::XmpData &xmpData, const char *filename, gboolean *
       {
         g_list_free_full(history_entries, free_history_entry);
         *valid = FALSE;
+        *error = XMP_HISTORY_ERROR_STRUCTURE;
         dt_free(key);
         return NULL;
       }
@@ -989,6 +1001,7 @@ GList *read_history_v2(Exiv2::XmpData &xmpData, const char *filename, gboolean *
         {
           g_list_free_full(history_entries, free_history_entry);
           *valid = FALSE;
+          *error = XMP_HISTORY_ERROR_STRUCTURE;
           dt_free(key);
           return NULL;
         }
@@ -1008,6 +1021,7 @@ GList *read_history_v2(Exiv2::XmpData &xmpData, const char *filename, gboolean *
       {
         g_list_free_full(history_entries, free_history_entry);
         *valid = FALSE;
+        *error = XMP_HISTORY_ERROR_PAYLOAD;
         dt_free(key);
         return NULL;
       }
@@ -1016,29 +1030,42 @@ skip:
     dt_free(key);
   }
 
-  GHashTable *numbers = g_hash_table_new(g_direct_hash, g_direct_equal);
-  if(IS_NULL_PTR(numbers))
+  GHashTable *numbers = NULL;
+  if(xmp_version >= 3) numbers = g_hash_table_new(g_direct_hash, g_direct_equal);
+  if(xmp_version >= 3 && IS_NULL_PTR(numbers))
   {
     g_list_free_full(history_entries, free_history_entry);
     *valid = FALSE;
+    *error = XMP_HISTORY_ERROR_STRUCTURE;
     return NULL;
   }
   for(GList *iter = history_entries; iter; iter = g_list_next(iter))
   {
     history_entry_t *entry = (history_entry_t *)iter->data;
     if(!(entry->have_operation && entry->operation && entry->operation[0] && entry->have_params
-          && entry->params && entry->have_modversion && entry->num_count == 1 && entry->valid_num)
-       || g_hash_table_contains(numbers, GINT_TO_POINTER(entry->num)))
+          && entry->params && entry->have_modversion))
     {
       std::cerr << "[exif] error: reading history from '" << filename << "' failed due to missing tags" << std::endl;
       g_list_free_full(history_entries, free_history_entry);
       history_entries = NULL;
       *valid = FALSE;
+      *error = XMP_HISTORY_ERROR_PAYLOAD;
       break;
     }
-    g_hash_table_add(numbers, GINT_TO_POINTER(entry->num));
+    if(xmp_version >= 3
+       && (entry->num_count != 1 || !entry->valid_num
+           || g_hash_table_contains(numbers, GINT_TO_POINTER(entry->num))))
+    {
+      std::cerr << "[exif] error: reading history from '" << filename << "' failed due to invalid numbers" << std::endl;
+      g_list_free_full(history_entries, free_history_entry);
+      history_entries = NULL;
+      *valid = FALSE;
+      *error = XMP_HISTORY_ERROR_NUMBER;
+      break;
+    }
+    if(xmp_version >= 3) g_hash_table_add(numbers, GINT_TO_POINTER(entry->num));
   }
-  g_hash_table_destroy(numbers);
+  if(!IS_NULL_PTR(numbers)) g_hash_table_destroy(numbers);
 
   return history_entries;
 }
@@ -1432,6 +1459,7 @@ struct xmp_development_t
   GHashTable *mask_entries = NULL;
   GList *mask_entries_v3 = NULL;
   GList *history_entries = NULL;
+  xmp_history_error_t history_error = XMP_HISTORY_ERROR_NONE;
 
   int read_properties(Exiv2::XmpData &xmpData, const char *filename);
   GList *read_order(Exiv2::XmpData &xmpData);
@@ -1591,7 +1619,7 @@ int xmp_development_t::read(Exiv2::Image &image, const char *filename)
       history_entries = read_history_v1(xmpPacket, filename, 1, &history_valid);
   }
   else
-    history_entries = read_history_v2(xmpData, filename, &history_valid);
+    history_entries = read_history_v2(xmpData, filename, xmp_version, &history_valid, &history_error);
   if(!history_valid) return 1;
   return validate_legacy_history();
 }
