@@ -674,6 +674,7 @@ typedef struct mask_entry_t
   gboolean validated;
   int mask_num;
   int version;
+  gboolean persist;
   gboolean have_num, have_id, have_type, have_name, have_version, have_points, have_nb, have_src;
 
   /** Decode one mask property without changing the enclosing list's ownership. */
@@ -709,37 +710,6 @@ void free_history_entry(gpointer data)
   dt_free(entry->params);
   dt_free(entry->blendop_params);
   dt_free(entry);
-}
-
-gboolean get_legacy_blend_mask_id(const history_entry_t *entry, uint32_t *mask_id)
-{
-  size_t mask_id_offset = 0;
-  switch(entry->blendop_version)
-  {
-    case 1:
-    case 2:
-    case 3:
-    case 4:
-      mask_id_offset = 8;
-      break;
-    case 5:
-    case 6:
-    case 7:
-    case 8:
-    case 9:
-      mask_id_offset = 16;
-      break;
-    case 10:
-    case 11:
-      mask_id_offset = 24;
-      break;
-    default:
-      return FALSE;
-  }
-  if(entry->blendop_params_len < (int)(mask_id_offset + sizeof(*mask_id))) return FALSE;
-
-  memcpy(mask_id, entry->blendop_params + mask_id_offset, sizeof(*mask_id));
-  return TRUE;
 }
 
 // we have to use pugixml as the old format could contain empty rdf:li elements in the multi_name array
@@ -1195,47 +1165,47 @@ GHashTable *read_masks(Exiv2::XmpData &xmpData, const char *filename, const int 
 /** Decode current mask fields while retaining presence and range validation. */
 int mask_entry_t::read_property(const char *property, const Exiv2::Xmpdatum &value)
 {
-  if(g_str_has_prefix(property, "darktable:mask_num"))
+  if(!strcmp(property, "darktable:mask_num"))
   {
     const long parsed_num = value.toLong();
-    if(parsed_num < 0 || parsed_num > G_MAXINT) return 1;
+    if(parsed_num < 0 || parsed_num > G_MAXINT) return 0;
     mask_num = parsed_num;
     have_num = TRUE;
   }
-  else if(g_str_has_prefix(property, "darktable:mask_id"))
+  else if(!strcmp(property, "darktable:mask_id"))
   {
     const long parsed_id = value.toLong();
-    if(parsed_id <= 0 || parsed_id > G_MAXINT) return 1;
+    if(parsed_id <= 0 || parsed_id > G_MAXINT) return 0;
     mask_id = parsed_id;
     have_id = TRUE;
   }
-  else if(g_str_has_prefix(property, "darktable:mask_type"))
+  else if(!strcmp(property, "darktable:mask_type"))
   {
     mask_type = value.toLong();
     have_type = TRUE;
   }
-  else if(g_str_has_prefix(property, "darktable:mask_name"))
+  else if(!strcmp(property, "darktable:mask_name"))
   {
     mask_name = g_strdup(value.toString().c_str());
     have_name = !IS_NULL_PTR(mask_name);
   }
-  else if(g_str_has_prefix(property, "darktable:mask_version"))
+  else if(!strcmp(property, "darktable:mask_version"))
   {
     mask_version = value.toLong();
     have_version = TRUE;
   }
-  else if(g_str_has_prefix(property, "darktable:mask_points"))
+  else if(!strcmp(property, "darktable:mask_points"))
   {
     const std::string encoded = value.toString();
     mask_points = dt_exif_xmp_decode(encoded.c_str(), value.size(), &mask_points_len);
     have_points = encoded.empty() || !IS_NULL_PTR(mask_points);
   }
-  else if(g_str_has_prefix(property, "darktable:mask_nb"))
+  else if(!strcmp(property, "darktable:mask_nb"))
   {
     mask_nb = value.toLong();
     have_nb = TRUE;
   }
-  else if(g_str_has_prefix(property, "darktable:mask_src"))
+  else if(!strcmp(property, "darktable:mask_src"))
   {
     const std::string encoded = value.toString();
     mask_src = dt_exif_xmp_decode(encoded.c_str(), value.size(), &mask_src_len);
@@ -1324,18 +1294,6 @@ skip:
     dt_free(key);
   }
 
-  for(GList *iter = history_entries; iter; iter = g_list_next(iter))
-  {
-    mask_entry_t *entry = (mask_entry_t *)iter->data;
-    if(!(entry->have_num && entry->have_id && entry->have_type && entry->have_name && entry->have_version
-         && entry->have_points && entry->have_nb && entry->have_src))
-    {
-      g_list_free_full(history_entries, free_mask_entry);
-      *valid = FALSE;
-      return nullptr;
-    }
-  }
-
   return history_entries;
 }
 
@@ -1400,19 +1358,11 @@ void validate_mask_entries(gpointer, gpointer value, gpointer user_data)
   if(context->valid) context->valid = validate_mask_entry(context->entries, (mask_entry_t *)value, 0);
 }
 
-typedef struct mask_insert_context_t
+void reset_mask_validation(gpointer, gpointer value, gpointer)
 {
-  int32_t imgid;
-  gboolean all_ok;
-} mask_insert_context_t;
-
-void add_non_clone_mask_entries_to_db(gpointer, gpointer value, gpointer user_data)
-{
-  mask_insert_context_t *context = (mask_insert_context_t *)user_data;
-  if(!context->all_ok) return;
-  mask_entry_t *entry = (mask_entry_t *)value;
-  if(!(entry->mask_type & (DT_MASKS_CLONE | DT_MASKS_NON_CLONE)))
-    context->all_ok = add_mask_entry_to_db(context->imgid, entry);
+  auto *entry = (mask_entry_t *)value;
+  entry->validating = FALSE;
+  entry->validated = FALSE;
 }
 
 gboolean add_mask_entries_to_db(int32_t imgid, GHashTable *mask_entries, int mask_id, const guint depth)
@@ -1464,12 +1414,14 @@ struct xmp_development_t
   GList *iop_order_list = NULL;
   GHashTable *mask_entries = NULL;
   GList *mask_entries_v3 = NULL;
+  GHashTable *omitted_mask_nums = NULL;
   GList *history_entries = NULL;
   xmp_history_error_t history_error = XMP_HISTORY_ERROR_NONE;
 
   int read_properties(Exiv2::XmpData &xmpData, const char *filename);
   GList *read_order(Exiv2::XmpData &xmpData);
   int validate_mask_history();
+  void sanitize_omitted_snapshot_blends();
   int validate_legacy_history();
   int read(Exiv2::Image &image, const char *filename);
   int write_masks();
@@ -1561,35 +1513,81 @@ GList *xmp_development_t::read_order(Exiv2::XmpData &xmpData)
 /** Resolve mask groups within each history step, never across snapshots. */
 int xmp_development_t::validate_mask_history()
 {
-  gboolean masks_valid = TRUE;
   GHashTable *entries_by_num = g_hash_table_new(g_direct_hash, g_direct_equal);
-  if(IS_NULL_PTR(entries_by_num)) return 1;
+  omitted_mask_nums = g_hash_table_new(g_direct_hash, g_direct_equal);
+  if(IS_NULL_PTR(entries_by_num) || IS_NULL_PTR(omitted_mask_nums))
+  {
+    if(!IS_NULL_PTR(entries_by_num)) g_hash_table_destroy(entries_by_num);
+    if(!IS_NULL_PTR(omitted_mask_nums)) g_hash_table_destroy(omitted_mask_nums);
+    omitted_mask_nums = NULL;
+    return 1;
+  }
   for(GList *iter = mask_entries_v3; !IS_NULL_PTR(iter); iter = g_list_next(iter))
   {
     auto *entry = (mask_entry_t *)iter->data;
-    auto *entries = (GHashTable *)g_hash_table_lookup(entries_by_num, GINT_TO_POINTER(entry->mask_num));
-    if(IS_NULL_PTR(entries)) entries = g_hash_table_new(g_int_hash, g_int_equal);
-    if(IS_NULL_PTR(entries) || g_hash_table_contains(entries, &entry->mask_id))
+    if(!(entry->have_num && entry->have_id && entry->have_type && entry->have_name && entry->have_version
+         && entry->have_points && entry->have_nb && entry->have_src))
     {
-      masks_valid = FALSE;
-      break;
+      if(entry->have_num) g_hash_table_add(omitted_mask_nums, GINT_TO_POINTER(entry->mask_num));
+      continue;
     }
-    g_hash_table_insert(entries_by_num, GINT_TO_POINTER(entry->mask_num), entries);
+    auto *entries = (GHashTable *)g_hash_table_lookup(entries_by_num, GINT_TO_POINTER(entry->mask_num));
+    if(IS_NULL_PTR(entries))
+    {
+      entries = g_hash_table_new(g_int_hash, g_int_equal);
+      if(IS_NULL_PTR(entries))
+      {
+        g_hash_table_destroy(entries_by_num);
+        g_hash_table_destroy(omitted_mask_nums);
+        omitted_mask_nums = NULL;
+        return 1;
+      }
+      g_hash_table_insert(entries_by_num, GINT_TO_POINTER(entry->mask_num), entries);
+    }
+    if(g_hash_table_contains(entries, &entry->mask_id))
+      g_hash_table_add(omitted_mask_nums, GINT_TO_POINTER(entry->mask_num));
     g_hash_table_insert(entries, &entry->mask_id, entry);
   }
   GHashTableIter iter;
+  gpointer num;
   gpointer entries;
   g_hash_table_iter_init(&iter, entries_by_num);
-  while(masks_valid && g_hash_table_iter_next(&iter, nullptr, &entries))
+  while(g_hash_table_iter_next(&iter, &num, &entries))
   {
+    if(g_hash_table_contains(omitted_mask_nums, num)) continue;
     mask_validation_context_t context = { .entries = (GHashTable *)entries, .valid = TRUE };
     g_hash_table_foreach(context.entries, validate_mask_entries, &context);
-    masks_valid = context.valid;
+    if(!context.valid) g_hash_table_add(omitted_mask_nums, num);
   }
   g_hash_table_iter_init(&iter, entries_by_num);
   while(g_hash_table_iter_next(&iter, nullptr, &entries)) g_hash_table_destroy((GHashTable *)entries);
   g_hash_table_destroy(entries_by_num);
-  return masks_valid ? 0 : 1;
+  for(GList *entry_iter = mask_entries_v3; !IS_NULL_PTR(entry_iter); entry_iter = g_list_next(entry_iter))
+  {
+    auto *entry = (mask_entry_t *)entry_iter->data;
+    entry->persist = entry->have_num && entry->have_id && entry->have_type && entry->have_name
+                     && entry->have_version && entry->have_points && entry->have_nb && entry->have_src
+                     && !g_hash_table_contains(omitted_mask_nums, GINT_TO_POINTER(entry->mask_num));
+  }
+  return 0;
+}
+
+void xmp_development_t::sanitize_omitted_snapshot_blends()
+{
+  if(IS_NULL_PTR(omitted_mask_nums) || g_hash_table_size(omitted_mask_nums) == 0) return;
+  for(GList *iter = history_entries; !IS_NULL_PTR(iter); iter = g_list_next(iter))
+  {
+    auto *entry = (history_entry_t *)iter->data;
+    if(!g_hash_table_contains(omitted_mask_nums, GINT_TO_POINTER(entry->num))
+       || IS_NULL_PTR(entry->blendop_params))
+      continue;
+    uint32_t mask_id = 0;
+    if(dt_develop_blend_read_mask_id(entry->blendop_params, entry->blendop_params_len,
+                                     entry->blendop_version, &mask_id)
+       == DT_DEVELOP_BLEND_MASK_ID_READABLE)
+      dt_develop_blend_clear_mask_id(entry->blendop_params, entry->blendop_params_len,
+                                     entry->blendop_version);
+  }
 }
 
 /** Parse and validate the development before the caller opens its transaction. */
@@ -1604,9 +1602,6 @@ int xmp_development_t::read(Exiv2::Image &image, const char *filename)
   {
     mask_entries = read_masks(xmpData, filename, xmp_version, &masks_valid);
     if(!masks_valid) return 1;
-    mask_validation_context_t context = { .entries = mask_entries, .valid = TRUE };
-    g_hash_table_foreach(mask_entries, validate_mask_entries, &context);
-    masks_valid = context.valid;
   }
   else
   {
@@ -1627,6 +1622,7 @@ int xmp_development_t::read(Exiv2::Image &image, const char *filename)
   else
     history_entries = read_history_v2(xmpData, filename, xmp_version, &history_valid, &history_error);
   if(!history_valid) return 1;
+  if(xmp_version >= 3) sanitize_omitted_snapshot_blends();
   return validate_legacy_history();
 }
 
@@ -1638,10 +1634,19 @@ int xmp_development_t::validate_legacy_history()
   {
     history_entry_t *entry = (history_entry_t *)iter->data;
     uint32_t mask_id = 0;
-    if((IS_NULL_PTR(dt_ioppr_get_iop_order_link(iop_order_list, entry->operation, -1))
-        && !dt_deprecated(entry->operation))
-       || (!IS_NULL_PTR(entry->blendop_params) && !get_legacy_blend_mask_id(entry, &mask_id)))
+    if(IS_NULL_PTR(dt_ioppr_get_iop_order_link(iop_order_list, entry->operation, -1))
+       && !dt_deprecated(entry->operation))
       return 1;
+    if(IS_NULL_PTR(entry->blendop_params)) continue;
+    if(dt_develop_blend_read_mask_id(entry->blendop_params, entry->blendop_params_len,
+                                     entry->blendop_version, &mask_id)
+       != DT_DEVELOP_BLEND_MASK_ID_READABLE || mask_id == 0)
+      continue;
+    g_hash_table_foreach(mask_entries, reset_mask_validation, NULL);
+    auto *root = (mask_entry_t *)g_hash_table_lookup(mask_entries, &mask_id);
+    if(IS_NULL_PTR(root) || !validate_mask_entry(mask_entries, root, 0))
+      dt_develop_blend_clear_mask_id(entry->blendop_params, entry->blendop_params_len,
+                                     entry->blendop_version);
   }
   return 0;
 }
@@ -1650,15 +1655,11 @@ int xmp_development_t::validate_legacy_history()
 int xmp_development_t::write_masks()
 {
   if(xmp_version < 3)
-  {
-    mask_insert_context_t context = { .imgid = staged_image.id, .all_ok = TRUE };
-    g_hash_table_foreach(mask_entries, add_non_clone_mask_entries_to_db, &context);
-    return context.all_ok ? 0 : 1;
-  }
+    return 0;
   for(GList *iter = mask_entries_v3; !IS_NULL_PTR(iter); iter = g_list_next(iter))
   {
     auto *entry = (mask_entry_t *)iter->data;
-    if(!add_mask_entry_to_db(staged_image.id, entry)) return 1;
+    if(entry->persist && !add_mask_entry_to_db(staged_image.id, entry)) return 1;
   }
   return 0;
 }
@@ -1674,8 +1675,10 @@ int xmp_development_t::write_history()
     if(!IS_NULL_PTR(entry->blendop_params) && xmp_version < 3)
     {
       uint32_t mask_id = 0;
-      if(!get_legacy_blend_mask_id(entry, &mask_id)
-         || !add_mask_entries_to_db(staged_image.id, mask_entries, mask_id, 0)) return 1;
+      if(dt_develop_blend_read_mask_id(entry->blendop_params, entry->blendop_params_len,
+                                       entry->blendop_version, &mask_id)
+         == DT_DEVELOP_BLEND_MASK_ID_READABLE
+         && !add_mask_entries_to_db(staged_image.id, mask_entries, mask_id, 0)) return 1;
     }
 
     if(!dt_history_repository_write_item(staged_image.id, db_num, entry->operation,
@@ -1870,6 +1873,7 @@ cleanup:
   g_list_free_full(development.history_entries, free_history_entry);
   g_list_free_full(development.mask_entries_v3, free_mask_entry);
   if(!IS_NULL_PTR(development.mask_entries)) g_hash_table_destroy(development.mask_entries);
+  if(!IS_NULL_PTR(development.omitted_mask_nums)) g_hash_table_destroy(development.omitted_mask_nums);
   return result;
 }
 
