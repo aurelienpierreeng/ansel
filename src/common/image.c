@@ -1809,7 +1809,7 @@ static int32_t _image_import_internal(const int32_t film_id, const char *filenam
   img->group_id = group_id;
 
   // read dttags and exif for database queries!
-  (void)dt_exif_read(img, normalized_filename);
+  (void)dt_exif_read_persisted(img, normalized_filename);
   char dtfilename[DT_PATH_MAX] = { 0 };
   g_strlcpy(dtfilename, normalized_filename, sizeof(dtfilename));
   // dt_image_path_append_version(id, dtfilename, sizeof(dtfilename));
