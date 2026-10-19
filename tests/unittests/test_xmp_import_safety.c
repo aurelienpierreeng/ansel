@@ -1,6 +1,7 @@
 /*
     This file is part of Ansel,
     Copyright (C) 2026 Paolo SANTUCCI.
+    Copyright (C) 2026 Guillaume Stutin.
 
     Ansel is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -24,6 +25,7 @@
 #include "develop/masks.h"
 #include "metadata/exif.h"
 #include "metadata/metadata.h"
+#include "metadata/notify.h"
 
 #include <glib/gstdio.h>
 #include <stddef.h>
@@ -36,8 +38,23 @@
 #include <pthread.h>
 #endif
 
+#ifdef _WIN32
+#include <io.h>
+#include "win/main_wrapper.h"
+#define test_dup _dup
+// _dup2() answers 0 on success where POSIX dup2() answers the target descriptor
+#define test_dup2(fd, fd2) (_dup2((fd), (fd2)) == 0 ? (fd2) : -1)
+#define test_close _close
+#else
+#include <unistd.h>
+#define test_dup dup
+#define test_dup2 dup2
+#define test_close close
+#endif
+
 static char *config_path = NULL;
 static char *xmp_path = NULL;
+static int tags_changed_count = 0;
 
 #ifdef __linux__
 typedef enum xmp_transaction_event_t
@@ -46,6 +63,7 @@ typedef enum xmp_transaction_event_t
   XMP_TRANSACTION_WRITER_READY,
   XMP_TRANSACTION_COORDINATOR_COMPLETE,
   XMP_TRANSACTION_WRITER_COMPLETE,
+  XMP_TRANSACTION_EVENT_COUNT,
 } xmp_transaction_event_t;
 
 typedef struct xmp_transaction_barrier_t
@@ -58,7 +76,7 @@ typedef struct xmp_transaction_barrier_t
   gboolean fail_commit;
   gboolean fail_write_timestamp;
   int rollback_count;
-  xmp_transaction_event_t events[4];
+  xmp_transaction_event_t events[XMP_TRANSACTION_EVENT_COUNT];
   int event_count;
 } xmp_transaction_barrier_t;
 
@@ -71,7 +89,11 @@ static xmp_transaction_barrier_t *xmp_transaction_barrier = NULL;
 
 static void record_xmp_transaction_event(xmp_transaction_barrier_t *barrier, const xmp_transaction_event_t event)
 {
-  assert_true(barrier->event_count < (int)G_N_ELEMENTS(barrier->events));
+  if(barrier->event_count < 0 || barrier->event_count >= XMP_TRANSACTION_EVENT_COUNT)
+  {
+    fail_msg("too many XMP transaction events");
+    return;
+  }
   barrier->events[barrier->event_count++] = event;
 }
 
@@ -120,6 +142,11 @@ int sqlite3_step(sqlite3_stmt *statement)
   return real_sqlite3_step(statement);
 }
 #endif
+
+static void record_tags_changed(void)
+{
+  tags_changed_count++;
+}
 
 typedef struct { uint32_t mode; float opacity; uint32_t mask_id; } blend_params_v1_t;
 typedef struct { uint32_t mode; float opacity; uint32_t mask_id; uint32_t blendif; float blendif_parameters[32]; } blend_params_v2_t;
@@ -170,6 +197,7 @@ static int setup(void **state)
 
 static int teardown(void **state)
 {
+  dt_metadata_set_tags_changed_handler(NULL);
   dt_exif_cleanup();
   dt_undo_cleanup(darktable.undo);
   darktable.undo = NULL;
@@ -226,6 +254,52 @@ static void write_xmp(const int version, const char *properties)
       version, properties);
   assert_true(g_file_set_contents(xmp_path, packet, -1, NULL));
   dt_free(packet);
+}
+
+static char *capture_xmp_diagnostic(dt_image_t *image, const int expected_result)
+{
+  char *diagnostic_path = NULL;
+  const int diagnostic_fd = g_file_open_tmp("ansel-test-xmp-diagnostic-XXXXXX", &diagnostic_path, NULL);
+  if(diagnostic_fd < 0)
+  {
+    fail();
+    return NULL;
+  }
+  const int stderr_fd = test_dup(fileno(stderr));
+  if(stderr_fd < 0)
+  {
+    test_close(diagnostic_fd);
+    g_remove(diagnostic_path);
+    dt_free(diagnostic_path);
+    fail();
+    return NULL;
+  }
+  fflush(stderr);
+  assert_int_equal(test_dup2(diagnostic_fd, fileno(stderr)), fileno(stderr));
+
+  assert_int_equal(dt_exif_xmp_read(image, xmp_path, FALSE, NULL), expected_result);
+
+  fflush(stderr);
+  assert_int_equal(test_dup2(stderr_fd, fileno(stderr)), fileno(stderr));
+  assert_int_equal(test_close(stderr_fd), 0);
+  assert_int_equal(test_close(diagnostic_fd), 0);
+  char *diagnostic = NULL;
+  assert_true(g_file_get_contents(diagnostic_path, &diagnostic, NULL, NULL));
+  g_remove(diagnostic_path);
+  dt_free(diagnostic_path);
+  return diagnostic;
+}
+
+static void assert_stable_xmp_rejection(dt_image_t *image, const char *category)
+{
+  char *diagnostic = capture_xmp_diagnostic(image, 1);
+  char *basename = g_path_get_basename(xmp_path);
+  assert_non_null(strstr(diagnostic, basename));
+  assert_non_null(strstr(diagnostic, category));
+  assert_null(strstr(diagnostic, "<rdf:"));
+  assert_null(strstr(strstr(diagnostic, basename) + strlen(basename), basename));
+  dt_free(basename);
+  dt_free(diagnostic);
 }
 
 static void seed_development(const int32_t imgid)
@@ -579,7 +653,10 @@ static void test_invalid_v3_mask_properties_omit_only_affected_snapshot(void **s
                                        history, mask);
     write_xmp(3, properties);
 
-    assert_int_equal(dt_exif_xmp_read(&image, xmp_path, FALSE, NULL), 0);
+    char *diagnostic = capture_xmp_diagnostic(&image, 0);
+    assert_non_null(strstr(diagnostic, "recovered"));
+    assert_null(strstr(diagnostic, "rejected"));
+    dt_free(diagnostic);
     assert_int_equal(dt_history_repository_count_items(image.id), 1);
     assert_int_equal(dt_history_repository_count_mask_items(image.id), 0);
     dt_free(properties);
@@ -673,7 +750,9 @@ static void test_empty_valid_history_is_accepted(void **state)
   seed_development(image.id);
   write_xmp(2, "<darktable:history><rdf:Seq/></darktable:history>");
 
-  assert_int_equal(dt_exif_xmp_read(&image, xmp_path, FALSE, NULL), 0);
+  char *diagnostic = capture_xmp_diagnostic(&image, 0);
+  assert_null(strstr(diagnostic, "rejected"));
+  dt_free(diagnostic);
   assert_int_equal(dt_history_repository_count_items(image.id), 0);
   assert_int_equal(dt_history_repository_count_mask_items(image.id), 0);
 }
@@ -737,6 +816,68 @@ static void test_malformed_nonempty_history_blendop_blob_preserves_development(v
 
   assert_int_equal(dt_exif_xmp_read(&image, xmp_path, FALSE, NULL), 1);
   assert_development_preserved(image.id);
+}
+
+static void test_rejected_xmp_reports_one_stable_diagnostic(void **state)
+{
+  (void)state;
+  dt_image_t history_image = make_image("diagnostic-history.raw");
+  seed_development(history_image.id);
+  write_xmp(3, "<darktable:history><rdf:Seq><rdf:li darktable:operation=\"exposure\" "
+               "darktable:enabled=\"1\" darktable:modversion=\"1\" darktable:params=\"0000\"/>"
+               "</rdf:Seq></darktable:history>");
+  assert_stable_xmp_rejection(&history_image, "history-number");
+  assert_development_preserved(history_image.id);
+
+  dt_image_t blend_image = make_image("diagnostic-blend.raw");
+  seed_development(blend_image.id);
+  write_xmp(2, "<darktable:history><rdf:Seq><rdf:li darktable:num=\"0\" darktable:operation=\"exposure\" "
+               "darktable:enabled=\"1\" darktable:modversion=\"1\" darktable:params=\"0000\" "
+               "darktable:blendop_params=\"not-hex\"/></rdf:Seq></darktable:history>");
+  assert_stable_xmp_rejection(&blend_image, "blend-payload");
+  assert_development_preserved(blend_image.id);
+
+  dt_image_t mask_image = make_image("diagnostic-mask.raw");
+  seed_development(mask_image.id);
+  write_xmp(2, "<darktable:mask><rdf:Seq><rdf:li>not-hex</rdf:li></rdf:Seq></darktable:mask>"
+               "<darktable:mask_src><rdf:Seq><rdf:li/></rdf:Seq></darktable:mask_src>"
+               "<darktable:mask_name><rdf:Seq><rdf:li>mask</rdf:li></rdf:Seq></darktable:mask_name>"
+               "<darktable:mask_type><rdf:Seq><rdf:li>0</rdf:li></rdf:Seq></darktable:mask_type>"
+               "<darktable:mask_version><rdf:Seq><rdf:li>1</rdf:li></rdf:Seq></darktable:mask_version>"
+               "<darktable:mask_id><rdf:Seq><rdf:li>42</rdf:li></rdf:Seq></darktable:mask_id>"
+               "<darktable:mask_nb><rdf:Seq><rdf:li>0</rdf:li></rdf:Seq></darktable:mask_nb>");
+  assert_stable_xmp_rejection(&mask_image, "mask-payload");
+  assert_development_preserved(mask_image.id);
+
+  dt_image_t scalar_image = make_image("diagnostic-scalar.raw");
+  seed_development(scalar_image.id);
+  write_xmp(2, "<xmp:Rating>6</xmp:Rating>");
+  assert_stable_xmp_rejection(&scalar_image, "write-failure");
+  assert_development_preserved(scalar_image.id);
+}
+
+static void test_metadata_only_import_notifies_once_after_commit(void **state)
+{
+  (void)state;
+  dt_image_t image = make_image("metadata-notification.raw");
+  const char *key = dt_metadata_get_key(DT_METADATA_XMP_DC_DESCRIPTION);
+  const char *name = dt_metadata_get_name(DT_METADATA_XMP_DC_DESCRIPTION);
+  char *setting = g_strdup_printf("plugins/lighttable/metadata/%s_flag", name);
+  dt_conf_set_int(setting, DT_METADATA_FLAG_IMPORTED);
+  dt_metadata_set(image.id, key, "before", FALSE);
+  tags_changed_count = 0;
+  dt_metadata_set_tags_changed_handler(record_tags_changed);
+  write_xmp(2, "<dc:description><rdf:Alt><rdf:li xml:lang=\"x-default\">after</rdf:li>"
+               "</rdf:Alt></dc:description>");
+
+  assert_int_equal(dt_exif_xmp_read(&image, xmp_path, FALSE, NULL), 0);
+  assert_int_equal(tags_changed_count, 1);
+  GList *values = dt_metadata_get(image.id, key, NULL);
+  assert_non_null(values);
+  assert_string_equal(values->data, "after");
+  g_list_free_full(values, dt_free_gpointer);
+  dt_metadata_set_tags_changed_handler(NULL);
+  dt_free(setting);
 }
 
 static void assert_history_numbers(const int32_t imgid, const int *numbers, const size_t count)
@@ -1103,8 +1244,16 @@ static void run_xmp_isolation_case(const xmp_isolation_outcome_t outcome)
   {
     diagnostic_fd = g_file_open_tmp("ansel-test-xmp-isolation-diagnostic-XXXXXX", &diagnostic_path, NULL);
     assert_true(diagnostic_fd >= 0);
+    if(diagnostic_fd < 0) return;
     stderr_fd = test_dup(fileno(stderr));
     assert_true(stderr_fd >= 0);
+    if(stderr_fd < 0)
+    {
+      test_close(diagnostic_fd);
+      g_remove(diagnostic_path);
+      dt_free(diagnostic_path);
+      return;
+    }
     fflush(stderr);
     assert_int_equal(test_dup2(diagnostic_fd, fileno(stderr)), fileno(stderr));
   }
@@ -1307,6 +1456,7 @@ static void test_metadata_insert_failure_restores_deleted_metadata(void **state)
   char *setting = g_strdup_printf("plugins/lighttable/metadata/%s_flag", name);
   dt_conf_set_int(setting, DT_METADATA_FLAG_IMPORTED);
   dt_metadata_set(image.id, key, "keep", FALSE);
+  const dt_image_t original_image = image;
   write_xmp(2, "<dc:description><rdf:Alt><rdf:li xml:lang=\"x-default\">replace</rdf:li></rdf:Alt></dc:description>");
 
   assert_int_equal(sqlite3_exec(dt_database_get_sqlite3_global(),
@@ -1317,6 +1467,7 @@ static void test_metadata_insert_failure_restores_deleted_metadata(void **state)
   GList *values = dt_metadata_get(image.id, key, NULL);
   assert_non_null(values);
   assert_string_equal(values->data, "keep");
+  assert_memory_equal(&image, &original_image, sizeof(image));
 
   assert_int_equal(sqlite3_exec(dt_database_get_sqlite3_global(), "DROP TRIGGER reject_metadata_insert", NULL, NULL, NULL), SQLITE_OK);
   g_list_free_full(values, dt_free_gpointer);
@@ -1675,7 +1826,7 @@ static void test_legacy_readable_blends_clear_omitted_root(void **state)
   dt_free(group_points);
 }
 
-int main(void)
+int main(int argc, char *argv[])
 {
   const struct CMUnitTest tests[] = {
     cmocka_unit_test(test_excluded_descriptive_metadata_survives_full_xmp_read),
@@ -1697,6 +1848,8 @@ int main(void)
     cmocka_unit_test(test_out_of_range_rating_preserves_existing_rating),
     cmocka_unit_test(test_valid_rating_import_updates_rating),
     cmocka_unit_test(test_malformed_nonempty_history_blendop_blob_preserves_development),
+    cmocka_unit_test(test_rejected_xmp_reports_one_stable_diagnostic),
+    cmocka_unit_test(test_metadata_only_import_notifies_once_after_commit),
     cmocka_unit_test(test_v2_optional_history_numbers_use_sequence_order),
     cmocka_unit_test(test_invalid_v3_history_numbers_preserve_development),
     cmocka_unit_test(test_valid_v3_history_numbers_are_persisted),

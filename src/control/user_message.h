@@ -91,6 +91,22 @@ void dt_control_alert(const char *title, const char *message, const char *item);
  * @p message. Without a GUI, printed on stderr each time, as dt_control_alert(). */
 void dt_control_alert_once(const char *title, const char *message, const char *item);
 
+/** @brief Start a thread-local alert batch.
+ *
+ * Nested batches share their pending groups -- one per title, message and dt_control_alert() or
+ * dt_control_alert_once() -- and flush only when the outer matching dt_control_alert_batch_end()
+ * returns. Each group retains its first item-less alert and its unique non-NULL items in first-seen
+ * order. Batches affect only calls on the thread that starts them.
+ */
+void dt_control_alert_batch_begin(void);
+
+/** @brief Finish a thread-local alert batch and deliver its pending groups.
+ *
+ * The outer matching end invokes the installed alert handler once for an item-less alert and once
+ * for every unique item, or emits one fallback log message per group.
+ */
+void dt_control_alert_batch_end(void);
+
 /** @brief What dt_control_alert() and dt_control_alert_once() hand their finished text to, with
  * @p once non-zero for the latter. Installed once by the GUI. */
 typedef void (*dt_control_alert_handler_t)(const char *title, const char *message, const char *item, int once);
