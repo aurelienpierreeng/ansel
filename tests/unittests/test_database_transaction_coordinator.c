@@ -20,29 +20,39 @@
 
 static gboolean fail_begin = FALSE;
 static gboolean fail_commit = FALSE;
+static gboolean fail_module_order_delete = FALSE;
 static gboolean unavailable_mutex = FALSE;
 static int rollback_count = 0;
 static int connection_mutex_depth = 0;
 static gboolean invalid_mutex_lifetime = FALSE;
 
 typedef int (*sqlite3_exec_t)(sqlite3 *, const char *, sqlite3_callback, void *, char **);
+typedef int (*sqlite3_step_t)(sqlite3_stmt *);
 typedef sqlite3_mutex *(*sqlite3_db_mutex_t)(sqlite3 *);
 typedef void (*sqlite3_mutex_t)(sqlite3_mutex *);
 
 static sqlite3_exec_t real_sqlite3_exec = NULL;
+static sqlite3_step_t real_sqlite3_step = NULL;
 static sqlite3_db_mutex_t real_sqlite3_db_mutex = NULL;
 static sqlite3_mutex_t real_sqlite3_mutex_enter = NULL;
 static sqlite3_mutex_t real_sqlite3_mutex_leave = NULL;
 
 int sqlite3_exec(sqlite3 *db, const char *sql, sqlite3_callback callback, void *data, char **error)
 {
-  if(IS_NULL_PTR(real_sqlite3_exec)) real_sqlite3_exec = (sqlite3_exec_t)dlsym(RTLD_NEXT, "sqlite3_exec");
   if(!strcmp(sql, "BEGIN TRANSACTION") || !strcmp(sql, "COMMIT TRANSACTION") || !strcmp(sql, "ROLLBACK TRANSACTION"))
     invalid_mutex_lifetime = invalid_mutex_lifetime || connection_mutex_depth != 1;
   if(!strcmp(sql, "BEGIN TRANSACTION") && fail_begin) return SQLITE_ERROR;
   if(!strcmp(sql, "COMMIT TRANSACTION") && fail_commit) return SQLITE_ERROR;
   if(!strcmp(sql, "ROLLBACK TRANSACTION")) rollback_count++;
   return real_sqlite3_exec(db, sql, callback, data, error);
+}
+
+int sqlite3_step(sqlite3_stmt *statement)
+{
+  if(fail_module_order_delete
+     && !strcmp(sqlite3_sql(statement), "DELETE FROM main.module_order WHERE imgid = ?1"))
+    return SQLITE_ERROR;
+  return real_sqlite3_step(statement);
 }
 
 sqlite3_mutex *sqlite3_db_mutex(sqlite3 *db)
@@ -70,6 +80,7 @@ static void reset_faults(void)
 {
   fail_begin = FALSE;
   fail_commit = FALSE;
+  fail_module_order_delete = FALSE;
   unavailable_mutex = FALSE;
   rollback_count = 0;
   connection_mutex_depth = 0;
@@ -78,6 +89,9 @@ static void reset_faults(void)
 
 static int coordinator_setup(void **state)
 {
+  real_sqlite3_exec = (sqlite3_exec_t)dlsym(RTLD_NEXT, "sqlite3_exec");
+  real_sqlite3_step = (sqlite3_step_t)dlsym(RTLD_NEXT, "sqlite3_step");
+  if(IS_NULL_PTR(real_sqlite3_exec) || IS_NULL_PTR(real_sqlite3_step)) return -1;
   reset_faults();
   return testdb_setup(state);
 }
@@ -161,6 +175,64 @@ static void test_owner_rollback_cleans_up(void **state)
   assert_int_equal(connection_mutex_depth, 0);
   assert_false(invalid_mutex_lifetime);
   assert_fresh_transaction();
+}
+
+static void test_history_delete_rolls_back_partial_failure(void **state)
+{
+  (void)state;
+  const int32_t film = testdb_make_film("/testdb/history-delete-rollback");
+  const int32_t image = testdb_make_image(film, "rollback.raw");
+  const uint8_t params[] = { 1 };
+  const uint8_t blend[] = { 2 };
+  assert_true(image > 0);
+  assert_true(dt_history_repository_write_item(image, 0, "exposure", params, sizeof(params), 1,
+                                               TRUE, blend, sizeof(blend), 1, 0, ""));
+  assert_true(dt_history_repository_set_end(image, 1));
+
+  fail_module_order_delete = TRUE;
+  assert_false(dt_history_repository_delete_all_for_image(image));
+  fail_module_order_delete = FALSE;
+
+  assert_int_equal(dt_history_repository_count_items(image), 1);
+  assert_int_equal(dt_history_repository_get_end(image), 1);
+  assert_fresh_transaction();
+
+  const int32_t sentinel = testdb_make_image(film, "sentinel.raw");
+  const int64_t original_timestamp = dt_image_repository_get_write_timestamp(sentinel);
+  assert_true(sentinel > 0);
+  assert_true(dt_database_start_transaction());
+  assert_true(dt_image_repository_set_write_timestamp(sentinel, 42));
+  fail_module_order_delete = TRUE;
+  assert_false(dt_history_repository_delete_all_for_image(image));
+  fail_module_order_delete = FALSE;
+  assert_true(dt_database_transaction_is_owned_by_current_thread());
+  assert_int_equal(dt_image_repository_get_write_timestamp(sentinel), 42);
+  assert_true(dt_database_release_transaction());
+  assert_int_equal(dt_image_repository_get_write_timestamp(sentinel), 42);
+  assert_int_equal(dt_history_repository_count_items(image), 1);
+  assert_int_equal(dt_history_repository_get_end(image), 1);
+
+  assert_true(dt_database_start_transaction());
+  assert_true(dt_image_repository_set_write_timestamp(sentinel, 84));
+  fail_module_order_delete = TRUE;
+  assert_false(dt_history_repository_delete_all_for_image(image));
+  fail_module_order_delete = FALSE;
+  dt_database_rollback_transaction();
+  assert_int_equal(dt_image_repository_get_write_timestamp(sentinel), 42);
+  assert_int_equal(dt_history_repository_count_items(image), 1);
+  assert_int_equal(dt_history_repository_get_end(image), 1);
+
+  dt_database_begin_transaction_batch();
+  assert_true(dt_image_repository_set_write_timestamp(sentinel, 126));
+  fail_module_order_delete = TRUE;
+  assert_false(dt_history_repository_delete_all_for_image(image));
+  fail_module_order_delete = FALSE;
+  assert_true(dt_database_transaction_is_owned_by_current_thread());
+  dt_database_end_transaction_batch();
+  assert_int_equal(dt_image_repository_get_write_timestamp(sentinel), 126);
+  assert_int_equal(dt_history_repository_count_items(image), 1);
+  assert_int_equal(dt_history_repository_get_end(image), 1);
+  assert_int_not_equal(original_timestamp, 126);
 }
 
 static void test_batch_commit_failure_rolls_back_once(void **state)
@@ -264,6 +336,7 @@ int main(int argc, char *argv[])
     cmocka_unit_test(test_batch_start_failures_clean_up),
     cmocka_unit_test(test_commit_failure_rolls_back_once),
     cmocka_unit_test(test_owner_rollback_cleans_up),
+    cmocka_unit_test(test_history_delete_rolls_back_partial_failure),
     cmocka_unit_test(test_batch_commit_failure_rolls_back_once),
     cmocka_unit_test(test_same_thread_nesting_and_batch),
     cmocka_unit_test(test_non_owner_transitions_preserve_owner),
