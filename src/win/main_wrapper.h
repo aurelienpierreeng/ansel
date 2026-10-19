@@ -28,9 +28,20 @@ int main(int argc, char *argv[]);
 
 int wmain(int argc, wchar_t *argv[])
 {
-  char **_argv = g_malloc0((argc + 1) * sizeof(char *));
+#ifdef __cplusplus
+  auto _argv = g_new0(char *, argc + 1);
+#else
+  char **_argv = g_new0(char *, argc + 1);
+#endif
   for(int i = 0; i < argc; i++)
-    _argv[i] = g_utf16_to_utf8(argv[i], -1, NULL, NULL, NULL);
+  {
+#ifdef __cplusplus
+    const auto utf16_argument = static_cast<const gunichar2 *>(static_cast<const void *>(argv[i]));
+#else
+    const gunichar2 *utf16_argument = (const gunichar2 *)argv[i];
+#endif
+    _argv[i] = g_utf16_to_utf8(utf16_argument, -1, NULL, NULL, NULL);
+  }
   int res = main(argc, _argv);
   g_strfreev(_argv);
   return res;
@@ -43,4 +54,3 @@ int wmain(int argc, wchar_t *argv[])
 // vim: shiftwidth=2 expandtab tabstop=2 cindent
 // kate: tab-indents: off; indent-width 2; replace-tabs on; indent-mode cstyle; remove-trailing-spaces modified;
 // clang-format on
-
