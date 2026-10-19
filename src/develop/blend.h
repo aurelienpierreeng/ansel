@@ -43,6 +43,8 @@
 #include "develop/develop.h"   // dt_develop_t, and dt_iop_module_t/_so_t through imageop.h
 #include "develop/pixelpipe.h"
 
+#include <stdbool.h>
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -339,6 +341,50 @@ dt_iop_colorspace_type_t dt_develop_blend_colorspace(const dt_dev_pixelpipe_iop_
 /** check if content of params is all zero, indicating a non-initialized set of blend parameters which needs
  * special care. */
 gboolean dt_develop_blend_params_is_all_zero(const void *params, size_t length);
+
+/**
+ * @brief Describes whether a serialized blend payload exposes a mask reference.
+ */
+typedef enum dt_develop_blend_mask_id_status_t
+{
+  DT_DEVELOP_BLEND_MASK_ID_ABSENT = 0, /**< The payload is NULL, empty, or all zero. */
+  DT_DEVELOP_BLEND_MASK_ID_READABLE,   /**< The exact version-specific layout exposes mask_id. */
+  DT_DEVELOP_BLEND_MASK_ID_UNDECODABLE /**< The version or payload length is not an exact layout. */
+} dt_develop_blend_mask_id_status_t;
+
+/**
+ * @brief Read a mask reference from one serialized blend payload without changing it.
+ *
+ * The caller retains ownership of params. A NULL params pointer, an empty payload, and an all-zero payload are
+ * ABSENT. mask_id must be non-NULL and is written only for READABLE. Versions 1 through 10 are readable only at
+ * their exact private legacy layout sizes; version 11 is readable only at sizeof(dt_develop_blend_params_t).
+ * Unknown versions and any other length are UNDECODABLE. This function neither allocates nor migrates the payload.
+ *
+ * @param params Borrowed serialized payload, optionally NULL.
+ * @param length Serialized payload size in bytes.
+ * @param version Serialized blend payload version.
+ * @param mask_id Non-NULL destination for a readable mask ID.
+ * @return The payload mask-reference status.
+ */
+dt_develop_blend_mask_id_status_t dt_develop_blend_read_mask_id(const void *params,
+                                                                 int length,
+                                                                 int version,
+                                                                 uint32_t *mask_id);
+
+/**
+ * @brief Clear exactly the serialized mask_id bytes of a readable blend payload.
+ *
+ * The caller retains ownership of params. A NULL params pointer is not readable and returns false. Versions 1
+ * through 10 require their exact private legacy layout sizes; version 11 requires sizeof(dt_develop_blend_params_t).
+ * Unknown versions, mismatched lengths, empty payloads, and all-zero payloads are not changed. No bytes other than
+ * the readable layout's mask_id are modified, and this function neither allocates nor migrates the payload.
+ *
+ * @param params Borrowed mutable serialized payload, optionally NULL.
+ * @param length Serialized payload size in bytes.
+ * @param version Serialized blend payload version.
+ * @return true only when mask_id bytes were cleared.
+ */
+bool dt_develop_blend_clear_mask_id(void *params, int length, int version);
 
 /** update blendop params from older versions */
 int dt_develop_blend_legacy_params(dt_iop_module_t *module, const void *const old_params,
