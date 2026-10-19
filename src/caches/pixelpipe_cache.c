@@ -834,6 +834,7 @@ typedef struct _cache_lru_t
   int64_t max_age;
   uint64_t hash;
   dt_pixel_cache_entry_t *cache_entry;
+  gboolean host_only; // only lines with a host buffer: the others give no RAM back
 } _cache_lru_t;
 
 
@@ -855,6 +856,7 @@ static void _cache_get_oldest(gpointer key, gpointer value, gpointer user_data)
 {
   dt_pixel_cache_entry_t *cache_entry = (dt_pixel_cache_entry_t *)value;
   _cache_lru_t *lru = (_cache_lru_t *)user_data;
+  if(lru->host_only && IS_NULL_PTR(cache_entry->data)) return;
 
   // Don't remove LRU entries that are still in use.
   // `refcount > 0` is the only thing standing between a holder and this eviction, so a release
@@ -900,16 +902,17 @@ static void _print_cache_lines(gpointer key, gpointer value, gpointer user_data)
 }
 
 
-// remove the least used cache entry
+// remove the least used cache entry -- with `host_only`, the least used one holding host RAM
 // return 0 on success, 1 on error
 // error is : we couldn't find a candidate for deletion because all entries are either locked or in use
 // or we found one but failed to remove it.
-static int _non_thread_safe_pixel_pipe_cache_remove_lru(dt_dev_pixelpipe_cache_t *cache)
+static int _non_thread_safe_pixel_pipe_cache_remove_lru(dt_dev_pixelpipe_cache_t *cache, const gboolean host_only)
 {
   _cache_lru_t *lru = (_cache_lru_t *)malloc(sizeof(_cache_lru_t));
   lru->max_age = g_get_monotonic_time();
   lru->hash = 0;
   lru->cache_entry = NULL;
+  lru->host_only = host_only;
   int error = 1;
   g_hash_table_foreach(cache->entries, _cache_get_oldest, lru);
 
@@ -937,7 +940,7 @@ int dt_dev_pixel_pipe_cache_remove_lru(void)
 {
   dt_dev_pixelpipe_cache_t *cache = _pixelpipe_cache;
   dt_pthread_mutex_lock(&cache->lock);
-  int error = _non_thread_safe_pixel_pipe_cache_remove_lru(cache);
+  int error = _non_thread_safe_pixel_pipe_cache_remove_lru(cache, FALSE);
   dt_pthread_mutex_unlock(&cache->lock);
   return error;
 }
@@ -1806,10 +1809,12 @@ static gboolean _system_memory_pressure_valve(dt_dev_pixelpipe_cache_t *cache, s
   {
     const size_t deficit = request_size + pressure_floor - cache->sys_available_est;
     size_t freed = 0;
+    /* The deficit is host RAM: a line kept on a device only would count its size as freed and
+     * give the system nothing. */
     while(freed < deficit && g_hash_table_size(cache->entries) > 0)
     {
       const size_t before = cache->current_memory;
-      if(_non_thread_safe_pixel_pipe_cache_remove_lru(cache)) break;
+      if(_non_thread_safe_pixel_pipe_cache_remove_lru(cache, TRUE)) break;
       freed += before - cache->current_memory;
     }
 
@@ -1958,7 +1963,7 @@ static inline void *_arena_alloc_with_defrag(dt_dev_pixelpipe_cache_t *cache, si
 
     while(largest_free_run_pages < pages_needed && g_hash_table_size(cache->entries) > 0)
     {
-      if(_non_thread_safe_pixel_pipe_cache_remove_lru(cache)) break;
+      if(_non_thread_safe_pixel_pipe_cache_remove_lru(cache, FALSE)) break;
       dt_cache_arena_stats(&cache->arena, &total_free_pages, &largest_free_run_pages);
     }
     dt_pthread_mutex_unlock(&cache->lock);
@@ -2147,7 +2152,7 @@ static size_t _pressure_shed(void *user, const size_t target, size_t *given_back
   dt_dev_pixelpipe_cache_t *cache = (dt_dev_pixelpipe_cache_t *)user;
 
   while(cache->current_memory > target && g_hash_table_size(cache->entries) > 0)
-    if(_non_thread_safe_pixel_pipe_cache_remove_lru(cache)) break;
+    if(_non_thread_safe_pixel_pipe_cache_remove_lru(cache, FALSE)) break;
 
   // Hand the pages over now rather than when the kernel gets to MADV_FREE, and make the
   // available-RAM valve re-read the system instead of trusting its pre-shed estimate.
@@ -2198,13 +2203,13 @@ static int _free_space_to_alloc(dt_dev_pixelpipe_cache_t *cache, const size_t si
   _pressure_react_locked(cache);
   const size_t budget = _cache_budget_locked(cache);
   while(cache->current_memory + size > budget && g_hash_table_size(cache->entries) > 0)
-    if(_non_thread_safe_pixel_pipe_cache_remove_lru(cache)) break;
+    if(_non_thread_safe_pixel_pipe_cache_remove_lru(cache, FALSE)) break;
 
   // Free up space if needed to match the max memory limit
   // If error, all entries are currently locked or in use, so we cannot free space to allocate a new entry.
   int error = 0;
   while(cache->current_memory + size > cache->max_memory && g_hash_table_size(cache->entries) > 0 && !error)
-    error = _non_thread_safe_pixel_pipe_cache_remove_lru(cache);
+    error = _non_thread_safe_pixel_pipe_cache_remove_lru(cache, FALSE);
 
   if(cache->current_memory + size > cache->max_memory)
   {
@@ -3153,10 +3158,11 @@ static int _memory_pressure_shedder(dt_dev_pixelpipe_cache_t *cache)
 
   const size_t deficit = pressure_floor - available;
   size_t freed = 0;
+  // Host RAM, as in the valve: only lines with a host buffer give any back.
   while(freed < deficit && g_hash_table_size(cache->entries) > 0)
   {
     const size_t before = cache->current_memory;
-    if(_non_thread_safe_pixel_pipe_cache_remove_lru(cache)) break;
+    if(_non_thread_safe_pixel_pipe_cache_remove_lru(cache, TRUE)) break;
     freed += before - cache->current_memory;
   }
 

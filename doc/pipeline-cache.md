@@ -685,7 +685,9 @@ The defense has five layers, from planning to last resort:
    slack including its reclaimable `inactive_file`, where our own MADV_FREE'd pages land —
    `ullAvailPhys` on Windows, free+inactive on macOS; `0` means "no information", which disables
    the valve, not the allocation). If the allocation would push available RAM under the floor,
-   LRU entries are evicted until the deficit is covered, the arena is hard-trimmed, and the probe
+   LRU entries holding a host buffer are evicted until the deficit is covered (a device-only line
+   counts its size in the cache but gives the system no RAM back, so it is skipped and cannot
+   cover the deficit on paper), the arena is hard-trimmed, and the probe
    is then **re-read from the OS** rather than credited with the bytes we think we released: how
    much of an eviction actually reaches the system is not ours to guess (the per-free `MADV_FREE`
    is a no-op on Windows, and elsewhere the kernel decides when those pages stop counting against
@@ -746,7 +748,8 @@ The defense has five layers, from planning to last resort:
    the toast was not. Written 2026-10-03 on
    top of `65e7a3adea`; the failure it describes was measured on that base with AI denoise on CPU
    (a 1182 MiB tile refused with 1255 MiB available, the preview left as it was). A 5-second GUI timer (`_memory_pressure_shedder()`) covers the case
-   where *another* application creates the pressure while we sit idle and never allocate.
+   where *another* application creates the pressure while we sit idle and never allocate; it
+   evicts host-buffer lines only, as the valve does.
 
    Two traps live in this valve. The probe costs ~61 µs (16 µs `/proc/meminfo` + 45 µs walking
    the cgroup tree) — enough that the tiling planners alone would spend ~1.8 ms of a 16 ms

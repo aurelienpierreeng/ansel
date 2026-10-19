@@ -122,6 +122,44 @@ static inline gboolean _tiling_saves_memory(const dt_develop_tiling_t *tiling, c
   return tiling->factor >= 2.2f || tiling->overhead >= 0.2f * roi_in->width * roi_in->height * max_bpp;
 }
 
+/* Size of one tile buffer of a host tiling plan: the room the pixelpipe cache would grant
+ * (dt_dev_pixelpipe_cache_get_available()), less what the module needs on top of its tiles, shared
+ * among the tiling.factor buffers of a tile. */
+static float _host_tile_buffer_size(const char *op, const dt_develop_tiling_t *tiling,
+                                    const dt_iop_roi_t *roi_in, const dt_iop_roi_t *roi_out,
+                                    const int in_bpp, const int out_bpp)
+{
+  float available = dt_dev_pixelpipe_cache_get_available();
+  // Less than 500 MB of planning room is a legitimate runtime state now that
+  // dt_dev_pixelpipe_cache_get_available() is capped by live system availability (issue #1083):
+  // tiles just get small. Not an invariant, so no assert.
+  if(available < 500.0f * 1024.0f * 1024.0f)
+    dt_print(DT_DEBUG_TILING | DT_DEBUG_MEMORY,
+             "[tiling] low memory (%.0f MiB): tiling '%s' aggressively\n",
+             available / (1024.0f * 1024.0f), op);
+  /* correct for size of ivoid and ovoid which are needed on top of tiling */
+  available = fmaxf(available - ((float)roi_out->width * roi_out->height * out_bpp)
+                   - ((float)roi_in->width * roi_in->height * in_bpp) - tiling->overhead,
+                   0);
+  /* The working set of a tiled module lives in the pixelpipe cache ARENA,
+   * which serves every allocation from one CONTIGUOUS free run; entries
+   * pinned by the pipe recursion partition its address space, so the byte
+   * headroom above routinely overstates what allocations can actually get.
+   * Cap the plan by the largest free run (with a margin for runs eroding
+   * between planning and execution): the tile working set packs into that
+   * run, so a plan that exceeds it is guaranteed to fail at runtime no
+   * matter how much total memory is nominally free. */
+  const float largest_run
+      = (float)dt_pixelpipe_cache_get_largest_free_run();
+  available = fminf(available, 0.9f * largest_run);
+
+  /* Size the tile from the memory left in the host cache.
+     Using the generic singlebuffer floor here can oversize tiles for modules whose
+     scratch buffers scale with tiling.factor, which defeats tiling and makes the
+     tile-local allocations fail later on. */
+  return available / fmaxf(tiling->factor, 1.0f);
+}
+
 static inline void _print_roi(const dt_iop_roi_t *roi, const char *label)
 {
   if((dt_get_debug_flags() & DT_DEBUG_VERBOSE) && (dt_get_debug_flags() & DT_DEBUG_TILING))
@@ -277,37 +315,8 @@ static int _default_process_tiling_ptp(struct dt_iop_module_t *self, const struc
   }
 
   /* calculate optimal size of tiles */
-  float available = dt_dev_pixelpipe_cache_get_available();
-  // Less than 500 MB of planning room is a legitimate runtime state now that
-  // dt_dev_pixelpipe_cache_get_available() is capped by live system availability (issue #1083):
-  // tiles just get small. Not an invariant, so no assert.
-  if(available < 500.0f * 1024.0f * 1024.0f)
-    dt_print(DT_DEBUG_TILING | DT_DEBUG_MEMORY,
-             "[tiling] low memory (%.0f MiB): tiling '%s' aggressively\n",
-             available / (1024.0f * 1024.0f), self->op);
-  /* correct for size of ivoid and ovoid which are needed on top of tiling */
-  available = fmaxf(available - ((float)roi_out->width * roi_out->height * out_bpp)
-                   - ((float)roi_in->width * roi_in->height * in_bpp) - tiling.overhead,
-                   0);
-  /* The working set of a tiled module lives in the pixelpipe cache ARENA,
-   * which serves every allocation from one CONTIGUOUS free run; entries
-   * pinned by the pipe recursion partition its address space, so the byte
-   * headroom above routinely overstates what allocations can actually get.
-   * Cap the plan by the largest free run (with a margin for runs eroding
-   * between planning and execution): the tile working set packs into that
-   * run, so a plan that exceeds it is guaranteed to fail at runtime no
-   * matter how much total memory is nominally free. */
-  const float largest_run
-      = (float)dt_pixelpipe_cache_get_largest_free_run();
-  available = fminf(available, 0.9f * largest_run);
-
-  /* Size the tile from the memory left in the host cache.
-     Using the generic singlebuffer floor here can oversize tiles for modules whose
-     scratch buffers scale with tiling.factor, which defeats tiling and makes the
-     tile-local allocations fail later on. */
-  const float factor = fmaxf(tiling.factor, 1.0f);
+  const float singlebuffer = _host_tile_buffer_size(self->op, &tiling, roi_in, roi_out, in_bpp, out_bpp);
   const float maxbuf = fmaxf(tiling.maxbuf, 1.0f);
-  const float singlebuffer = available / factor;
 
   int width = roi_in->width;
   int height = roi_in->height;
@@ -539,37 +548,8 @@ static int _default_process_tiling_roi(struct dt_iop_module_t *self, const struc
   }
 
   /* calculate optimal size of tiles */
-  float available = dt_dev_pixelpipe_cache_get_available();
-  // Less than 500 MB of planning room is a legitimate runtime state now that
-  // dt_dev_pixelpipe_cache_get_available() is capped by live system availability (issue #1083):
-  // tiles just get small. Not an invariant, so no assert.
-  if(available < 500.0f * 1024.0f * 1024.0f)
-    dt_print(DT_DEBUG_TILING | DT_DEBUG_MEMORY,
-             "[tiling] low memory (%.0f MiB): tiling '%s' aggressively\n",
-             available / (1024.0f * 1024.0f), self->op);
-  /* correct for size of ivoid and ovoid which are needed on top of tiling */
-  available = fmaxf(available - ((float)roi_out->width * roi_out->height * out_bpp)
-                   - ((float)roi_in->width * roi_in->height * in_bpp) - tiling.overhead,
-                   0);
-  /* The working set of a tiled module lives in the pixelpipe cache ARENA,
-   * which serves every allocation from one CONTIGUOUS free run; entries
-   * pinned by the pipe recursion partition its address space, so the byte
-   * headroom above routinely overstates what allocations can actually get.
-   * Cap the plan by the largest free run (with a margin for runs eroding
-   * between planning and execution): the tile working set packs into that
-   * run, so a plan that exceeds it is guaranteed to fail at runtime no
-   * matter how much total memory is nominally free. */
-  const float largest_run
-      = (float)dt_pixelpipe_cache_get_largest_free_run();
-  available = fminf(available, 0.9f * largest_run);
-
-  /* Size the tile from the memory left in the host cache.
-     Using the generic singlebuffer floor here can oversize tiles for modules whose
-     scratch buffers scale with tiling.factor, which defeats tiling and makes the
-     tile-local allocations fail later on. */
-  const float factor = fmaxf(tiling.factor, 1.0f);
+  const float singlebuffer = _host_tile_buffer_size(self->op, &tiling, roi_in, roi_out, in_bpp, out_bpp);
   const float maxbuf = fmaxf(tiling.maxbuf, 1.0f);
-  const float singlebuffer = available / factor;
 
   int width = _max(roi_in->width, roi_out->width);
   int height = _max(roi_in->height, roi_out->height);
