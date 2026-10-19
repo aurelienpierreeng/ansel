@@ -3115,16 +3115,18 @@ int button_pressed(dt_view_t *self, double x, double y, double pressure, int whi
   return 0;
 }
 
+/* A zoom step that lands closer to fit (1.0) than its own size lands on fit, so stepping through
+ * fit stops there. Only steps snap: a jump to an absolute level is usually farther from where it
+ * starts than from fit, and would land on fit instead -- 100% from 200%, or from below fit. */
+static float _snap_step_to_fit(const float old_scaling, const float new_scaling)
+{
+  return (fabsf(new_scaling - 1.0f) < fabsf(old_scaling - new_scaling)) ? 1.0f : new_scaling;
+}
+
 static int _change_scaling(dt_develop_t *dev, const float point[2], const float new_scaling)
 {
   const float old_scaling = dt_dev_viewport_scaling(dev);
-
-  // Round scaling to 1.0 (fit) if close enough
-  const float epsilon = fabsf(old_scaling - new_scaling);
-  if(fabsf(new_scaling - 1.0f) < epsilon)
-    dt_dev_viewport_set_scaling(dev, 1.0f);
-  else
-    dt_dev_viewport_set_scaling(dev, new_scaling);
+  dt_dev_viewport_set_scaling(dev, new_scaling);
 
   if(!dt_dev_check_zoom_scale_bounds(dev))
   { 
@@ -3172,7 +3174,8 @@ static gboolean _center_view_free_zoom(dt_view_t *self, double x, double y, int 
 
   // Commit the new scaling
   const float step = 1.02f;
-  const float new_scaling = dt_dev_viewport_scaling(dev) * powf(step, (float)-flow);
+  const float old_scaling = dt_dev_viewport_scaling(dev);
+  const float new_scaling = _snap_step_to_fit(old_scaling, old_scaling * powf(step, (float)-flow));
   const float point[2] = { x, y };
   return _change_scaling(dev, point, new_scaling);
 }
@@ -3257,15 +3260,16 @@ int key_pressed(dt_view_t *self, GdkEventKey *event)
   if(ctrl_any)
   {
     const float zoom_step = 1.1f;
+    const float old_scaling = dt_dev_viewport_scaling(dev);
     float center[2] = { 0.0f };
     dt_dev_get_widget_center(dev, center);
 
     switch(key)
     {
       case GDK_KEY_plus:
-        return _change_scaling(dev, center, dt_dev_viewport_scaling(dev) * zoom_step);
+        return _change_scaling(dev, center, _snap_step_to_fit(old_scaling, old_scaling * zoom_step));
       case GDK_KEY_minus:
-        return _change_scaling(dev, center, dt_dev_viewport_scaling(dev) / zoom_step);
+        return _change_scaling(dev, center, _snap_step_to_fit(old_scaling, old_scaling / zoom_step));
     }
   }
 
