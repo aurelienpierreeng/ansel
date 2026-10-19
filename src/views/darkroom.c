@@ -1569,8 +1569,10 @@ gboolean _switch_to_prev_picture(GtkAccelGroup *accel_group, GObject *accelerabl
   return TRUE;
 }
 
-static gboolean _zoom_to_fit(GtkAccelGroup *accel_group, GObject *accelerable, guint keyval,
-                             GdkModifierType modifier, gpointer data)
+static gboolean _zoom_to_fit(GtkAccelGroup *accel_group __attribute__((unused)),
+                             GObject *accelerable __attribute__((unused)),
+                             guint keyval __attribute__((unused)),
+                             GdkModifierType modifier __attribute__((unused)), gpointer data)
 {
   dt_develop_t *dev = (dt_develop_t *)data;
   float center[2] = { 0.0f };
@@ -1579,8 +1581,10 @@ static gboolean _zoom_to_fit(GtkAccelGroup *accel_group, GObject *accelerable, g
   return TRUE;
 }
 
-static gboolean _zoom_to_100(GtkAccelGroup *accel_group, GObject *accelerable, guint keyval,
-                             GdkModifierType modifier, gpointer data)
+static gboolean _zoom_to_100(GtkAccelGroup *accel_group __attribute__((unused)),
+                             GObject *accelerable __attribute__((unused)),
+                             guint keyval __attribute__((unused)),
+                             GdkModifierType modifier __attribute__((unused)), gpointer data)
 {
   dt_develop_t *dev = (dt_develop_t *)data;
 
