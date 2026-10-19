@@ -425,14 +425,17 @@ int32_t _import_image(const GList *img, dt_control_import_t *data, const char *f
     return UNKNOWN_IMAGE;
   }
 
+  dt_control_alert_batch_begin();
   const int32_t imgid = _import_job(data, img_path_to_db);
   if(imgid <= 0)
   {
+    dt_control_alert_batch_end();
     dt_control_alert(_("Import problem"), _("Error importing file in collection"), img_path_to_db);
     return UNKNOWN_IMAGE;
   }
 
   *xmps = dt_image_read_duplicates(imgid, img_path_to_db, FALSE);
+  dt_control_alert_batch_end();
   dt_print(DT_DEBUG_IMPORT, "[Import] Found and imported %i XMP for %s.\n", *xmps, img_path_to_db);
   dt_print(DT_DEBUG_IMPORT, "[Import] successfully imported %s in DB at imgid %i\n", img_path_to_db, imgid);
 

@@ -191,7 +191,6 @@ struct dt_control_t;
 void dt_control_hinter_message(const struct dt_control_t *s, const char *message);
 
 #define DT_CTL_LOG_SIZE 10
-#define DT_CTL_LOG_MSG_SIZE 1000
 #define DT_CTL_LOG_TIMEOUT 8000
 #define DT_CTL_TOAST_SIZE 10
 #define DT_CTL_TOAST_MSG_SIZE 300
@@ -226,7 +225,7 @@ typedef struct dt_control_t
 
   // message log
   int log_pos, log_ack;
-  char log_message[DT_CTL_LOG_SIZE][DT_CTL_LOG_MSG_SIZE];
+  char *log_message[DT_CTL_LOG_SIZE];
   guint log_message_timeout_id;
   int log_busy;
   dt_pthread_mutex_t log_mutex;
@@ -325,6 +324,7 @@ void dt_control_set_shutdown_wait_handler(dt_control_shutdown_wait_t handler);
 // join all worker threads.
 void dt_control_shutdown(dt_control_t *s);
 void dt_control_cleanup(dt_control_t *s);
+void dt_control_log_cleanup(dt_control_t *s);
 
 // call this to quit dt
 void dt_control_quit();
