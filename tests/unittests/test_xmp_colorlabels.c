@@ -98,7 +98,7 @@ static void test_embedded_xmp_labels_extend_existing_labels(void **state)
   image.color_labels = 1 << DT_COLORLABELS_RED;
   dt_test_xmp_fixture_write_packet(&fixture, "<darktable:colorlabels><rdf:Seq><rdf:li>2</rdf:li></rdf:Seq></darktable:colorlabels>");
 
-  assert_int_equal(dt_exif_read(&image, fixture.xmp_path), 0);
+  assert_int_equal(dt_exif_read_persisted(&image, fixture.xmp_path), 0);
   assert_int_equal(image.color_labels, (1 << DT_COLORLABELS_RED) | (1 << DT_COLORLABELS_GREEN));
 }
 
