@@ -133,6 +133,29 @@ file(GENERATE
 add_test(NAME test_debug_trace_contract_negative
          COMMAND ${CMAKE_COMMAND} -P ${CMAKE_CURRENT_BINARY_DIR}/test_debug_trace_contract_negative.cmake)
 
+add_cmocka_test(test_exif_read_contract
+                SOURCES test_exif_read_contract.cc
+                COMPILE_OPTIONS -Wno-error=deprecated-declarations
+                LINK_LIBRARIES ${CMOCKA_LINK_TARGET} lib_ansel)
+target_include_directories(test_exif_read_contract PRIVATE
+  ${CMAKE_SOURCE_DIR}/src
+  ${CMAKE_BINARY_DIR}/src
+  ${CMAKE_BINARY_DIR})
+set_target_properties(test_exif_read_contract PROPERTIES
+  CXX_STANDARD 17
+  CXX_STANDARD_REQUIRED ON
+  CXX_EXTENSIONS OFF
+  SKIP_BUILD_RPATH FALSE
+  BUILD_WITH_INSTALL_RPATH FALSE
+  BUILD_RPATH "$<TARGET_FILE_DIR:lib_ansel>")
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+  target_link_libraries(test_exif_read_contract PRIVATE ${CMAKE_DL_LIBS})
+  target_link_options(test_exif_read_contract PRIVATE -Wl,--export-dynamic)
+endif()
+if(WIN32)
+  _copy_required_library(test_exif_read_contract lib_ansel)
+endif()
+
 # brush.c and paint.c live in the drawlayer IOP plugin, not in lib_ansel. Both are written to
 # be independent of the module internals, so the test compiles them directly rather than
 # reaching into the plugin.
