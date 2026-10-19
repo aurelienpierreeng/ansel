@@ -1668,7 +1668,8 @@ int dt_image_read_duplicates(const uint32_t id, const char *filename, const gboo
               newid, xmpfilename);
       continue;
     }
-    (void)dt_exif_xmp_read(img, xmpfilename, 0, NULL);
+    if(dt_exif_xmp_read(img, xmpfilename, 0, NULL))
+      dt_control_alert(_("Sidecar file rejected"), _("Failed to read sidecar file"), xmpfilename);
     img->version = version;
     dt_image_cache_write_release(img, DT_IMAGE_CACHE_RELAXED);
 
