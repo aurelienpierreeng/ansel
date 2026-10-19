@@ -742,6 +742,26 @@ float *dt_dev_get_raster_mask(dt_dev_pixelpipe_t *pipe, const struct dt_iop_modu
 float *dt_dev_distort_detail_mask(const dt_dev_pixelpipe_t *pipe, float *src, const struct dt_iop_module_t *target_module);
 float *dt_dev_retrieve_rawdetail_mask(const dt_dev_pixelpipe_t *pipe, const struct dt_iop_module_t *target_module);
 
+/**
+ * @brief Whether a cached output of @p piece may stand for it, called before that output is looked up.
+ *
+ * @details
+ * The hidden `detailmask` stage publishes two cachelines: its output, a copy of its input, and the
+ * detail mask, under a hash of its own. Either can be evicted without the other, and the output
+ * alone cannot rebuild the mask: a consumer finding none skips the detail refinement, and its
+ * output is cached under the hash of a refined one. So a cached output stands for the stage only
+ * while its mask is there too. When it is, the pipe takes the mask now, as the stage's process()
+ * would; when it is not, the output is invalidated so that the stage runs and publishes the mask
+ * again. Any other piece's output stands as it is.
+ *
+ * @param pipe The pipe about to look up the output.
+ * @param piece The piece the output belongs to.
+ * @param output_hash The output's cache key.
+ * @return TRUE when the output may stand for the piece, FALSE when it was invalidated.
+ */
+gboolean dt_dev_pixelpipe_rawdetail_mask_check_hit(dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_iop_t *piece,
+                                                   const uint64_t output_hash);
+
 
 /**
  * @brief Set the re-entry pipeline flag, only if no object is already capturing it.

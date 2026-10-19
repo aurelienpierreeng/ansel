@@ -1357,9 +1357,10 @@ each, stayed at `refs=2` there; a full-resolution one, 68 MiB, was seen held the
 `tests/unittests/test_pipe_cleanup_nodes_masks.c` pins the release.
 
 On the rebuild of a changed topology (`DT_DEV_PIPE_REMOVE` in `dt_dev_pixelpipe_change()`), the
-masks are released before the following render retains them again. An eviction in between costs one
-recompute of the provider (the `DT_DEV_PIPE_REENTRY` pass of "Raster masks are dedicated side-band
-cachelines"), never a wrong mask: a consumer reads a mask through its own retained lookup.
+masks are released before the following render retains them again. For a raster mask, an eviction
+in between costs one recompute of the provider (the `DT_DEV_PIPE_REENTRY` pass of "Raster masks are
+dedicated side-band cachelines"), never a wrong mask: a consumer reads a mask through its own
+retained lookup. The detail mask has no such pass; the next section is what covers it.
 
 That statistics call, and the memory view built on it, lists `entries` only. The working buffers
 of `dt_pixelpipe_cache_alloc_align_*()` live in `external_entries`: they count in `current_memory`
@@ -1367,3 +1368,28 @@ and in the usage bar, but appear in no list. Seen that day: 6.0 GiB of usage aga
 listed entries, the rest being the working buffers of a thumbnail pipe reconstructing highlights at
 full resolution. To see them, walk `external_entries` under `lock`: the name of each is the
 `file:line` of its allocation, and its age gives away one that outlives its run.
+
+### A cached output of `detailmask` stands for it only with its mask
+
+*Found `ca319461b9`, 2026-10-19, from a review of the release above.*
+
+The hidden `detailmask` stage publishes two cachelines: its output, a copy of its input, and the
+detail mask, under `dt_dev_pixelpipe_rawdetail_mask_hash()`. Either can be evicted without the
+other, and the output alone cannot rebuild the mask. Its consumers, the detail refinement of the
+blend masks (`_refine_with_detail_mask()` and its OpenCL twin in `blend.c`), find the mask with
+`dt_dev_retrieve_rawdetail_mask()` and, on a miss, skip the refinement without an error: the
+consumer's output is then cached under the hash of a refined one. A raster mask that goes missing
+fails its consumer and gets a `DT_DEV_PIPE_REENTRY` pass; the detail mask had nothing of the kind.
+
+So `dt_dev_pixelpipe_process_rec()` calls `dt_dev_pixelpipe_rawdetail_mask_check_hit()` before it
+looks up the stage's output. When the mask is there, the pipe takes it at once, as the stage's
+`process()` would. When it is not, the output is invalidated: neither the exact hit nor the
+writable acquisition after the recursion finds it, the stage runs, and the mask is published again.
+The invalidation removes only a line nobody holds; pipes run one at a time, under
+`dt_pipeline_threadsafe_mutex()`, so no other pipe holds the stage's output then.
+
+The hazard predates the release in `cleanup_nodes()`: any pipe that did not hold the mask could hit
+the stage's output without it -- a thumbnail pipe, or a darkroom pipe back on a history state whose
+mask it had released. The release widened it to darkroom re-entry and to the topology rebuild.
+Read from the code, not reproduced: the eviction has to take the mask and spare the output.
+`tests/unittests/test_pipe_cleanup_nodes_masks.c` pins the rule.
