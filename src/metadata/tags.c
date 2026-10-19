@@ -49,6 +49,7 @@
 #include "system/mem_alloc.h"
 #include "common/image.h"
 #include "database/tag_repository.h"
+#include "database/database.h"
 #include "common/grouping.h"
 #include "common/selection.h"
 #include "common/undo.h"
@@ -66,14 +67,16 @@ typedef struct dt_undo_tags_t
   GList *after; // list of tagid after
 } dt_undo_tags_t;
 
-static gchar *_get_tb_removed_tag_string_values(GList *before, GList *after)
+static gchar *_get_tb_removed_tag_string_values(GList *before, GList *after, gboolean *has_removals)
 {
   GList *a = after;
   gchar *tag_list = NULL;
+  *has_removals = FALSE;
   for(GList *b = before; b; b = g_list_next(b))
   {
     if(!g_list_find(a, b->data))
     {
+      *has_removals = TRUE;
       tag_list = dt_util_dstrcat(tag_list, "%d,", GPOINTER_TO_INT(b->data));
     }
   }
@@ -81,14 +84,16 @@ static gchar *_get_tb_removed_tag_string_values(GList *before, GList *after)
   return tag_list;
 }
 
-static gchar *_get_tb_added_tag_string_values(const int img, GList *before, GList *after)
+static gchar *_get_tb_added_tag_string_values(const int img, GList *before, GList *after, gboolean *has_additions)
 {
   GList *b = before;
   gchar *tag_list = NULL;
+  *has_additions = FALSE;
   for(GList *a = after; a; a = g_list_next(a))
   {
     if(!g_list_find(b, a->data))
     {
+      *has_additions = TRUE;
       // clang-format off
       tag_list = dt_util_dstrcat(tag_list,
                                  "(%d,%d,"
@@ -104,43 +109,71 @@ static gchar *_get_tb_added_tag_string_values(const int img, GList *before, GLis
   return tag_list;
 }
 
-static void _bulk_remove_tags(const int img, const gchar *tag_list)
+static gboolean _bulk_remove_tags(const int img, const gchar *tag_list)
 {
-  dt_tag_repository_detach_batch(img, tag_list);
+  return dt_tag_repository_detach_batch(img, tag_list);
 }
 
-static void _bulk_add_tags(const gchar *tag_list)
+static gboolean _bulk_add_tags(const gchar *tag_list)
 {
-  dt_tag_repository_attach_batch(tag_list);
+  return dt_tag_repository_attach_batch(tag_list);
 }
 
-static void _pop_undo_execute(const int32_t imgid, GList *before, GList *after)
+static gboolean _pop_undo_execute(const int32_t imgid, GList *before, GList *after)
 {
-  gchar *tobe_removed_list = _get_tb_removed_tag_string_values(before, after);
-  gchar *tobe_added_list = _get_tb_added_tag_string_values(imgid, before, after);
+  gboolean has_removals = FALSE;
+  gboolean has_additions = FALSE;
+  gchar *tobe_removed_list = _get_tb_removed_tag_string_values(before, after, &has_removals);
+  gchar *tobe_added_list = _get_tb_added_tag_string_values(imgid, before, after, &has_additions);
+  if((has_removals && IS_NULL_PTR(tobe_removed_list)) || (has_additions && IS_NULL_PTR(tobe_added_list)))
+  {
+    dt_free(tobe_removed_list);
+    dt_free(tobe_added_list);
+    return FALSE;
+  }
 
-  _bulk_remove_tags(imgid, tobe_removed_list);
-  _bulk_add_tags(tobe_added_list);
+  if(!dt_database_start_transaction())
+  {
+    dt_free(tobe_removed_list);
+    dt_free(tobe_added_list);
+    return FALSE;
+  }
+  const gboolean removed = _bulk_remove_tags(imgid, tobe_removed_list);
+  const gboolean added = removed && _bulk_add_tags(tobe_added_list);
+  if(!added)
+  {
+    dt_database_rollback_transaction();
+    dt_free(tobe_removed_list);
+    dt_free(tobe_added_list);
+    return FALSE;
+  }
+
+  const gboolean committed = dt_database_release_transaction();
 
   dt_free(tobe_removed_list);
   dt_free(tobe_added_list);
+  return committed;
 }
 
 static void _pop_undo(gpointer user_data, dt_undo_type_t type, dt_undo_data_t data, dt_undo_action_t action, GList **imgs)
 {
   if(type == DT_UNDO_TAGS)
   {
+    gboolean changed = FALSE;
     for(GList *list = (GList *)data; list; list = g_list_next(list))
     {
       dt_undo_tags_t *undotags = (dt_undo_tags_t *)list->data;
 
       GList *before = (action == DT_ACTION_UNDO) ? undotags->after : undotags->before;
       GList *after = (action == DT_ACTION_UNDO) ? undotags->before : undotags->after;
-      _pop_undo_execute(undotags->imgid, before, after);
-      *imgs = g_list_prepend(*imgs, GINT_TO_POINTER(undotags->imgid));
+      if(_pop_undo_execute(undotags->imgid, before, after))
+      {
+        *imgs = g_list_prepend(*imgs, GINT_TO_POINTER(undotags->imgid));
+        changed = TRUE;
+      }
     }
 
-    dt_metadata_tags_changed();
+    if(changed) dt_metadata_tags_changed();
   }
 }
 
@@ -174,8 +207,13 @@ gboolean dt_tag_new(const char *name, guint *tagid)
   }
 
   id = dt_tag_repository_insert(name);
+  if(!id)
+  {
+    if(!IS_NULL_PTR(tagid)) *tagid = 0;
+    return FALSE;
+  }
 
-  if(id && g_strstr_len(name, -1, "darktable|") == name)
+  if(g_strstr_len(name, -1, "darktable|") == name)
     dt_tag_repository_mark_internal(id);
 
   if(!IS_NULL_PTR(tagid))
@@ -315,6 +353,7 @@ static gboolean _tag_execute(const GList *tags, const GList *imgs, GList **undo,
   {
     const int32_t image_id = GPOINTER_TO_INT(images->data);
     dt_undo_tags_t *undotags = (dt_undo_tags_t *)malloc(sizeof(dt_undo_tags_t));
+    if(IS_NULL_PTR(undotags)) return FALSE;
     undotags->imgid = image_id;
     undotags->before = _tag_get_tags(image_id, DT_TAG_TYPE_ALL);
     switch(action)
@@ -343,7 +382,11 @@ static gboolean _tag_execute(const GList *tags, const GList *imgs, GList **undo,
         res = FALSE;
         break;
     }
-    _pop_undo_execute(image_id, undotags->before, undotags->after);
+    if(!_pop_undo_execute(image_id, undotags->before, undotags->after))
+    {
+      _undo_tags_free(undotags);
+      return FALSE;
+    }
     if(undo_on)
       *undo = g_list_append(*undo, undotags);
     else
