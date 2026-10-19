@@ -20,11 +20,13 @@
 #include "database/database.h"
 #include "database/image_repository.h"
 #include "darktable.h"
+#include "develop/blend.h"
 #include "develop/masks.h"
 #include "metadata/exif.h"
 #include "metadata/metadata.h"
 
 #include <glib/gstdio.h>
+#include <stddef.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sqlite3.h>
@@ -121,6 +123,14 @@ int sqlite3_step(sqlite3_stmt *statement)
 }
 #endif
 
+typedef struct { uint32_t mode; float opacity; uint32_t mask_id; } blend_params_v1_t;
+typedef struct { uint32_t mode; float opacity; uint32_t mask_id; uint32_t blendif; float blendif_parameters[32]; } blend_params_v2_t;
+typedef struct { uint32_t mode; float opacity; uint32_t mask_id; uint32_t blendif; float blendif_parameters[64]; } blend_params_v3_t;
+typedef struct { uint32_t mode; float opacity; uint32_t mask_id; uint32_t blendif; float radius; float blendif_parameters[64]; } blend_params_v4_t;
+typedef struct { uint32_t mask_mode; uint32_t blend_mode; float opacity; uint32_t mask_combine; uint32_t mask_id; uint32_t blendif; float radius; uint32_t reserved[4]; float blendif_parameters[64]; } blend_params_v5_t;
+typedef struct { uint32_t mask_mode; uint32_t blend_mode; float opacity; uint32_t mask_combine; uint32_t mask_id; uint32_t blendif; float feathering_radius; uint32_t feathering_guide; float blur_radius; float contrast; float brightness; uint32_t reserved[4]; float blendif_parameters[64]; } blend_params_v8_t;
+typedef struct { uint32_t mask_mode; uint32_t blend_mode; float opacity; uint32_t mask_combine; uint32_t mask_id; uint32_t blendif; float feathering_radius; uint32_t feathering_guide; float blur_radius; float contrast; float brightness; uint32_t reserved[4]; float blendif_parameters[64]; dt_dev_operation_t raster_mask_source; int raster_mask_instance; int raster_mask_id; gboolean raster_mask_invert; } blend_params_v9_t;
+typedef struct { uint32_t mask_mode; int32_t blend_cst; uint32_t blend_mode; float blend_parameter; float opacity; uint32_t mask_combine; uint32_t mask_id; uint32_t blendif; float feathering_radius; uint32_t feathering_guide; float blur_radius; float contrast; float brightness; uint32_t reserved[4]; float blendif_parameters[64]; float blendif_boost_factors[16]; dt_dev_operation_t raster_mask_source; int raster_mask_instance; int raster_mask_id; gboolean raster_mask_invert; } blend_params_v10_t;
 
 static int setup(void **state)
 {
@@ -290,6 +300,58 @@ static char *make_v3_history_step(const int num)
                                   num, encoded_params);
   dt_free(encoded_params);
   return history;
+}
+
+static char *make_v3_history_step_with_blend(const int num, const int blend_version,
+                                              const unsigned char *blend, const int blend_len)
+{
+  static const unsigned char params[] = { 0, 0 };
+  char *encoded_params = dt_exif_xmp_encode(params, sizeof(params), NULL);
+  char *encoded_blend = dt_exif_xmp_encode(blend, blend_len, NULL);
+  char *history = g_strdup_printf("<rdf:li darktable:num=\"%d\" darktable:operation=\"exposure\" "
+                                  "darktable:enabled=\"1\" darktable:modversion=\"1\" darktable:params=\"%s\" "
+                                  "darktable:blendop_version=\"%d\" darktable:blendop_params=\"%s\"/>",
+                                  num, encoded_params, blend_version, encoded_blend);
+  dt_free(encoded_blend);
+  dt_free(encoded_params);
+  return history;
+}
+
+static char *make_v3_group_mask(const int mask_num, const int mask_id,
+                                 const dt_masks_form_group_t *members, const int member_count)
+{
+  const int points_len = member_count * (int)sizeof(*members);
+  char *points = dt_exif_xmp_encode((const unsigned char *)members, points_len, NULL);
+  char *mask = g_strdup_printf("<rdf:li darktable:mask_num=\"%d\" darktable:mask_id=\"%d\" "
+                               "darktable:mask_type=\"%d\" darktable:mask_name=\"group\" "
+                               "darktable:mask_version=\"%d\" darktable:mask_points=\"%s\" "
+                               "darktable:mask_nb=\"%d\" darktable:mask_src=\"\"/>",
+                               mask_num, mask_id, DT_MASKS_GROUP, DEVELOP_MASKS_VERSION, points, member_count);
+  dt_free(points);
+  return mask;
+}
+
+typedef struct history_blend_row_t
+{
+  int count;
+  int versions[3];
+  int lengths[3];
+  unsigned char bytes[3][sizeof(dt_develop_blend_params_t)];
+} history_blend_row_t;
+
+static void collect_history_blend_row(void *user_data, const dt_history_repository_row_t *history)
+{
+  history_blend_row_t *row = (history_blend_row_t *)user_data;
+  if(row->count < 0 || row->count >= (int)G_N_ELEMENTS(row->bytes) || history->blendop_params_len < 0
+     || history->blendop_params_len > (int)sizeof(row->bytes[0]))
+  {
+    fail();
+    return;
+  }
+  row->versions[row->count] = history->blendop_version;
+  row->lengths[row->count] = history->blendop_params_len;
+  memcpy(row->bytes[row->count], history->blendop_params, history->blendop_params_len);
+  row->count++;
 }
 
 static void test_excluded_descriptive_metadata_survives_full_xmp_read(void **state)
@@ -489,7 +551,7 @@ static void test_v3_masks_reuse_formid_across_history_steps(void **state)
   dt_free(first_history);
 }
 
-static void test_invalid_v3_mask_properties_preserve_development(void **state)
+static void test_invalid_v3_mask_properties_omit_only_affected_snapshot(void **state)
 {
   (void)state;
   const struct
@@ -507,7 +569,6 @@ static void test_invalid_v3_mask_properties_preserve_development(void **state)
   {
     char *filename = g_strdup_printf("out-of-range-v3-mask-%" G_GSIZE_FORMAT ".raw", i);
     dt_image_t image = make_image(filename);
-    seed_development(image.id);
     char *history = make_v3_history_step(0);
     char *mask = make_v3_circle_mask(cases[i].attributes, "mask", &point, source);
     char *properties = g_strdup_printf("<darktable:history><rdf:Seq>%s</rdf:Seq></darktable:history>"
@@ -515,8 +576,9 @@ static void test_invalid_v3_mask_properties_preserve_development(void **state)
                                        history, mask);
     write_xmp(3, properties);
 
-    assert_int_equal(dt_exif_xmp_read(&image, xmp_path, FALSE, NULL), 1);
-    assert_development_preserved(image.id);
+    assert_int_equal(dt_exif_xmp_read(&image, xmp_path, FALSE, NULL), 0);
+    assert_int_equal(dt_history_repository_count_items(image.id), 1);
+    assert_int_equal(dt_history_repository_count_mask_items(image.id), 0);
     dt_free(properties);
     dt_free(mask);
     dt_free(history);
@@ -524,11 +586,10 @@ static void test_invalid_v3_mask_properties_preserve_development(void **state)
   }
 }
 
-static void test_duplicate_v3_mask_ids_in_one_history_step_preserve_development(void **state)
+static void test_duplicate_v3_mask_ids_omit_only_affected_snapshot(void **state)
 {
   (void)state;
   dt_image_t image = make_image("duplicate-v3-mask-id.raw");
-  seed_development(image.id);
   const dt_masks_node_circle_t first_point = { .center = { 0.25f, 0.50f }, .radius = 0.10f, .border = 0.20f };
   const dt_masks_node_circle_t second_point = { .center = { 0.75f, 0.50f }, .radius = 0.15f, .border = 0.30f };
   const float first_source[] = { 0.10f, 0.20f };
@@ -543,8 +604,9 @@ static void test_duplicate_v3_mask_ids_in_one_history_step_preserve_development(
                                      history, first_mask, second_mask);
   write_xmp(3, properties);
 
-  assert_int_equal(dt_exif_xmp_read(&image, xmp_path, FALSE, NULL), 1);
-  assert_development_preserved(image.id);
+  assert_int_equal(dt_exif_xmp_read(&image, xmp_path, FALSE, NULL), 0);
+  assert_int_equal(dt_history_repository_count_items(image.id), 1);
+  assert_int_equal(dt_history_repository_count_mask_items(image.id), 0);
 
   dt_free(properties);
   dt_free(second_mask);
@@ -811,23 +873,20 @@ static void test_v3_near_prefix_history_properties_preserve_development(void **s
                                 "</rdf:Seq></darktable:history>");
 }
 
-static void assert_invalid_v2_history(const char *filename, const char *history)
-{
-  dt_image_t image = make_image(filename);
-  seed_development(image.id);
-  write_xmp(2, history);
-
-  assert_int_equal(dt_exif_xmp_read(&image, xmp_path, FALSE, NULL), 1);
-  assert_development_preserved(image.id);
-}
-
-static void test_short_v2_history_blendop_blob_preserves_development(void **state)
+static void test_short_v2_history_blendop_blob_is_preserved(void **state)
 {
   (void)state;
-  assert_invalid_v2_history("short-blendop.raw",
-                            "<darktable:history><rdf:Seq><rdf:li darktable:num=\"0\" darktable:operation=\"exposure\" "
-                            "darktable:enabled=\"1\" darktable:modversion=\"1\" darktable:params=\"0000\" "
-                            "darktable:blendop_params=\"0000\"/></rdf:Seq></darktable:history>");
+  dt_image_t image = make_image("short-blendop.raw");
+  write_xmp(2, "<darktable:history><rdf:Seq><rdf:li darktable:num=\"0\" darktable:operation=\"exposure\" "
+               "darktable:enabled=\"1\" darktable:modversion=\"1\" darktable:params=\"0000\" "
+               "darktable:blendop_params=\"0000\"/></rdf:Seq></darktable:history>");
+
+  assert_int_equal(dt_exif_xmp_read(&image, xmp_path, FALSE, NULL), 0);
+  history_blend_row_t rows = { 0 };
+  dt_history_repository_foreach_row(image.id, collect_history_blend_row, &rows);
+  static const unsigned char expected[] = { 0, 0 };
+  assert_int_equal(rows.count, 1);
+  assert_memory_equal(rows.bytes[0], expected, sizeof(expected));
 }
 
 static void test_v1_history_blendop_blob_is_accepted(void **state)
@@ -1272,6 +1331,321 @@ static void test_malformed_v5_timestamp_preserves_development(void **state)
   assert_int_equal(image.change_timestamp, timestamp);
 }
 
+static void test_v3_invalid_snapshots_do_not_discard_independent_history(void **state)
+{
+  (void)state;
+  const dt_masks_node_circle_t point = { .center = { 0.25f, 0.50f }, .radius = 0.10f, .border = 0.20f };
+  const float source[] = { 0.10f, 0.20f };
+  const dt_masks_form_group_t missing_child[] = { { .formid = 99, .parentid = 1, .state = 0, .opacity = 1.0f } };
+  const dt_masks_form_group_t cycle_first[] = { { .formid = 2, .parentid = 1, .state = 0, .opacity = 1.0f } };
+  const dt_masks_form_group_t cycle_second[] = { { .formid = 1, .parentid = 2, .state = 0, .opacity = 1.0f } };
+  const struct
+  {
+    const char *name;
+    char *(*build_invalid)(void);
+  } cases[] = {
+    { "malformed", NULL },
+    { "missing-child", NULL },
+    { "cycle", NULL },
+  };
+
+  for(guint index = 0; index < G_N_ELEMENTS(cases); index++)
+  {
+    dt_image_t image = make_image(cases[index].name);
+    char *history = make_v3_history_step(0);
+    char *valid = make_v3_circle_mask("darktable:mask_num=\"1\" darktable:mask_id=\"10\"", "valid", &point, source);
+    char *invalid = NULL;
+    if(index == 0)
+      invalid = g_strdup("<rdf:li darktable:mask_num=\"0\" darktable:mask_id=\"1\" darktable:mask_type=\"4\" "
+                         "darktable:mask_name=\"broken\" darktable:mask_version=\"1\" darktable:mask_points=\"00\" "
+                         "darktable:mask_nb=\"1\" darktable:mask_src=\"\"/>");
+    else if(index == 1)
+      invalid = make_v3_group_mask(0, 1, missing_child, G_N_ELEMENTS(missing_child));
+    else
+    {
+      char *first = make_v3_group_mask(0, 1, cycle_first, G_N_ELEMENTS(cycle_first));
+      char *second = make_v3_group_mask(0, 2, cycle_second, G_N_ELEMENTS(cycle_second));
+      invalid = g_strconcat(first, second, NULL);
+      dt_free(second);
+      dt_free(first);
+    }
+    char *properties = g_strdup_printf("<darktable:history><rdf:Seq>%s</rdf:Seq></darktable:history>"
+                                       "<darktable:masks_history><rdf:Seq>%s%s</rdf:Seq></darktable:masks_history>",
+                                       history, invalid, valid);
+    write_xmp(3, properties);
+
+    assert_int_equal(dt_exif_xmp_read(&image, xmp_path, FALSE, NULL), 0);
+    assert_int_equal(dt_history_repository_count_items(image.id), 1);
+    assert_int_equal(dt_history_repository_count_mask_items(image.id), 1);
+    dt_free(properties);
+    dt_free(invalid);
+    dt_free(valid);
+    dt_free(history);
+  }
+}
+
+static void test_v3_unassignable_mask_does_not_discard_valid_snapshot(void **state)
+{
+  (void)state;
+  const dt_masks_node_circle_t point = { .center = { 0.25f, 0.50f }, .radius = 0.10f, .border = 0.20f };
+  const float source[] = { 0.10f, 0.20f };
+  dt_image_t image = make_image("unassignable-mask.raw");
+  char *history = make_v3_history_step(0);
+  char *valid = make_v3_circle_mask("darktable:mask_num=\"1\" darktable:mask_id=\"10\"", "valid", &point, source);
+  char *properties = g_strdup_printf("<darktable:history><rdf:Seq>%s</rdf:Seq></darktable:history>"
+                                     "<darktable:masks_history><rdf:Seq>"
+                                     "<rdf:li darktable:mask_id=\"1\" darktable:mask_type=\"1\" darktable:mask_name=\"lost\" "
+                                     "darktable:mask_version=\"1\" darktable:mask_points=\"\" darktable:mask_nb=\"0\" darktable:mask_src=\"\"/>"
+                                     "%s</rdf:Seq></darktable:masks_history>", history, valid);
+  write_xmp(3, properties);
+
+  assert_int_equal(dt_exif_xmp_read(&image, xmp_path, FALSE, NULL), 0);
+  assert_int_equal(dt_history_repository_count_items(image.id), 1);
+  assert_int_equal(dt_history_repository_count_mask_items(image.id), 1);
+  dt_free(properties);
+  dt_free(valid);
+  dt_free(history);
+}
+
+static void test_v3_mask_property_suffix_omits_only_affected_snapshot(void **state)
+{
+  (void)state;
+  const dt_masks_node_circle_t point = { .center = { 0.25f, 0.50f }, .radius = 0.10f, .border = 0.20f };
+  const float source[] = { 0.10f, 0.20f };
+  const char *property_names[] = {
+    "darktable:mask_num", "darktable:mask_id", "darktable:mask_type", "darktable:mask_name",
+    "darktable:mask_version", "darktable:mask_points", "darktable:mask_nb", "darktable:mask_src",
+  };
+
+  for(guint index = 0; index < G_N_ELEMENTS(property_names); index++)
+  {
+    char *filename = g_strdup_printf("mask-property-suffix-%u.raw", index);
+    dt_image_t image = make_image(filename);
+    char *history = make_v3_history_step(0);
+    char *valid = make_v3_circle_mask("darktable:mask_num=\"1\" darktable:mask_id=\"10\"", "valid", &point, source);
+    char *bad = g_strdup_printf("%s%s=\"0\" %s%s=\"1\" %s%s=\"1\" %s%s=\"lost\" "
+                                "%s%s=\"1\" %s%s=\"\" %s%s=\"0\" %s%s=\"\"",
+                                property_names[0], index == 0 ? "_extra" : "",
+                                property_names[1], index == 1 ? "_extra" : "",
+                                property_names[2], index == 2 ? "_extra" : "",
+                                property_names[3], index == 3 ? "_extra" : "",
+                                property_names[4], index == 4 ? "_extra" : "",
+                                property_names[5], index == 5 ? "_extra" : "",
+                                property_names[6], index == 6 ? "_extra" : "",
+                                property_names[7], index == 7 ? "_extra" : "");
+    char *packet = g_strdup_printf(
+        "<darktable:history><rdf:Seq>%s</rdf:Seq></darktable:history>"
+        "<darktable:masks_history><rdf:Seq><rdf:li %s/>%s</rdf:Seq></darktable:masks_history>",
+        history, bad, valid);
+    write_xmp(3, packet);
+
+    assert_int_equal(dt_exif_xmp_read(&image, xmp_path, FALSE, NULL), 0);
+    assert_int_equal(dt_history_repository_count_items(image.id), 1);
+    assert_int_equal(dt_history_repository_count_mask_items(image.id), 1);
+    dt_free(packet);
+    dt_free(bad);
+    dt_free(valid);
+    dt_free(history);
+    dt_free(filename);
+  }
+}
+
+static void test_v3_overdepth_snapshot_does_not_discard_independent_snapshot(void **state)
+{
+  (void)state;
+  const dt_masks_node_circle_t point = { .center = { 0.25f, 0.50f }, .radius = 0.10f, .border = 0.20f };
+  const float source[] = { 0.10f, 0.20f };
+  GString *deep_groups = g_string_new(NULL);
+  for(int mask_id = 1; mask_id <= 65; mask_id++)
+  {
+    const dt_masks_form_group_t member = { .formid = mask_id == 65 ? 1 : mask_id + 1,
+                                           .parentid = mask_id, .state = 0, .opacity = 1.0f };
+    char *group = make_v3_group_mask(0, mask_id, &member, 1);
+    g_string_append(deep_groups, group);
+    dt_free(group);
+  }
+  dt_image_t image = make_image("overdepth-mask.raw");
+  char *history = make_v3_history_step(0);
+  char *valid = make_v3_circle_mask("darktable:mask_num=\"1\" darktable:mask_id=\"10\"", "valid", &point, source);
+  char *properties = g_strdup_printf("<darktable:history><rdf:Seq>%s</rdf:Seq></darktable:history>"
+                                     "<darktable:masks_history><rdf:Seq>%s%s</rdf:Seq></darktable:masks_history>",
+                                     history, deep_groups->str, valid);
+  write_xmp(3, properties);
+
+  assert_int_equal(dt_exif_xmp_read(&image, xmp_path, FALSE, NULL), 0);
+  assert_int_equal(dt_history_repository_count_items(image.id), 1);
+  assert_int_equal(dt_history_repository_count_mask_items(image.id), 1);
+  dt_free(properties);
+  dt_free(valid);
+  dt_free(history);
+  g_string_free(deep_groups, TRUE);
+}
+
+static void test_omitted_snapshot_clears_readable_blend_and_preserves_undecodable_bytes(void **state)
+{
+  (void)state;
+  const dt_masks_form_group_t missing_child[] = { { .formid = 99, .parentid = 1, .state = 0, .opacity = 1.0f } };
+  dt_develop_blend_params_t readable = { 0 };
+  readable.mask_id = 1;
+  unsigned char unknown[] = { 1, 2, 3, 4, 5, 6, 7, 8 };
+  unsigned char wrong_length[] = { 9, 8, 7, 6 };
+  dt_image_t image = make_image("blend-recovery.raw");
+  char *first = make_v3_history_step_with_blend(0, DEVELOP_BLEND_VERSION,
+                                                 (const unsigned char *)&readable, sizeof(readable));
+  char *second = make_v3_history_step_with_blend(1, 99, unknown, sizeof(unknown));
+  char *third = make_v3_history_step_with_blend(2, DEVELOP_BLEND_VERSION, wrong_length, sizeof(wrong_length));
+  char *invalid = make_v3_group_mask(0, 1, missing_child, G_N_ELEMENTS(missing_child));
+  char *properties = g_strdup_printf("<darktable:history><rdf:Seq>%s%s%s</rdf:Seq></darktable:history>"
+                                     "<darktable:masks_history><rdf:Seq>%s</rdf:Seq></darktable:masks_history>",
+                                     first, second, third, invalid);
+  write_xmp(3, properties);
+
+  assert_int_equal(dt_exif_xmp_read(&image, xmp_path, FALSE, NULL), 0);
+  assert_int_equal(dt_history_repository_count_items(image.id), 3);
+  assert_int_equal(dt_history_repository_count_mask_items(image.id), 0);
+  history_blend_row_t rows = { 0 };
+  dt_history_repository_foreach_row(image.id, collect_history_blend_row, &rows);
+  assert_int_equal(rows.count, 3);
+  uint32_t mask_id = 1;
+  assert_int_equal(dt_develop_blend_read_mask_id(rows.bytes[0], rows.lengths[0], rows.versions[0], &mask_id),
+                   DT_DEVELOP_BLEND_MASK_ID_ABSENT);
+  assert_memory_equal(rows.bytes[0], &((dt_develop_blend_params_t){ 0 }), sizeof(readable));
+  assert_memory_equal(rows.bytes[1], unknown, sizeof(unknown));
+  assert_int_equal(rows.versions[1], 99);
+  assert_memory_equal(rows.bytes[2], wrong_length, sizeof(wrong_length));
+  assert_int_equal(rows.versions[2], DEVELOP_BLEND_VERSION);
+
+  dt_free(properties);
+  dt_free(invalid);
+  dt_free(third);
+  dt_free(second);
+  dt_free(first);
+}
+
+static void test_legacy_bad_root_does_not_discard_independent_valid_root(void **state)
+{
+  (void)state;
+  const dt_masks_node_circle_t point = { .center = { 0.25f, 0.50f }, .radius = 0.10f, .border = 0.20f };
+  const float source[] = { 0.10f, 0.20f };
+  const dt_masks_form_group_t missing_child[] = { { .formid = 99, .parentid = 1, .state = 0, .opacity = 1.0f } };
+  dt_develop_blend_params_t invalid_root_blend = { 0 };
+  dt_develop_blend_params_t valid_root_blend = { 0 };
+  invalid_root_blend.mask_id = 1;
+  valid_root_blend.mask_id = 2;
+  static const unsigned char group_source[] = { 0 };
+  char *group_points = dt_exif_xmp_encode((const unsigned char *)missing_child, sizeof(missing_child), NULL);
+  char *encoded_group_source = dt_exif_xmp_encode(group_source, sizeof(group_source), NULL);
+  char *circle_points = dt_exif_xmp_encode((const unsigned char *)&point, sizeof(point), NULL);
+  char *circle_source = dt_exif_xmp_encode((const unsigned char *)source, sizeof(source), NULL);
+  char *first = make_v3_history_step_with_blend(0, DEVELOP_BLEND_VERSION,
+                                                 (const unsigned char *)&invalid_root_blend, sizeof(invalid_root_blend));
+  char *second = make_v3_history_step_with_blend(1, DEVELOP_BLEND_VERSION,
+                                                  (const unsigned char *)&valid_root_blend, sizeof(valid_root_blend));
+  char *properties = g_strdup_printf(
+      "<darktable:history><rdf:Seq>%s%s</rdf:Seq></darktable:history>"
+      "<darktable:mask><rdf:Seq><rdf:li>%s</rdf:li><rdf:li>%s</rdf:li></rdf:Seq></darktable:mask>"
+      "<darktable:mask_src><rdf:Seq><rdf:li>%s</rdf:li><rdf:li>%s</rdf:li></rdf:Seq></darktable:mask_src>"
+      "<darktable:mask_name><rdf:Seq><rdf:li>bad</rdf:li><rdf:li>good</rdf:li></rdf:Seq></darktable:mask_name>"
+      "<darktable:mask_type><rdf:Seq><rdf:li>%d</rdf:li><rdf:li>%d</rdf:li></rdf:Seq></darktable:mask_type>"
+      "<darktable:mask_version><rdf:Seq><rdf:li>1</rdf:li><rdf:li>1</rdf:li></rdf:Seq></darktable:mask_version>"
+      "<darktable:mask_id><rdf:Seq><rdf:li>1</rdf:li><rdf:li>2</rdf:li></rdf:Seq></darktable:mask_id>"
+      "<darktable:mask_nb><rdf:Seq><rdf:li>1</rdf:li><rdf:li>1</rdf:li></rdf:Seq></darktable:mask_nb>",
+      first, second, group_points, circle_points, encoded_group_source, circle_source, DT_MASKS_GROUP, DT_MASKS_CIRCLE);
+  dt_image_t image = make_image("legacy-independent-root.raw");
+  write_xmp(2, properties);
+
+  assert_int_equal(dt_exif_xmp_read(&image, xmp_path, FALSE, NULL), 0);
+  assert_int_equal(dt_history_repository_count_items(image.id), 3);
+  assert_int_equal(dt_history_repository_count_mask_items(image.id), 1);
+  history_blend_row_t rows = { 0 };
+  dt_history_repository_foreach_row(image.id, collect_history_blend_row, &rows);
+  assert_int_equal(rows.count, 3);
+  uint32_t mask_id = 1;
+  assert_int_equal(dt_develop_blend_read_mask_id(rows.bytes[1], rows.lengths[1], rows.versions[1], &mask_id),
+                   DT_DEVELOP_BLEND_MASK_ID_ABSENT);
+  memcpy(&mask_id, rows.bytes[1] + offsetof(dt_develop_blend_params_t, mask_id), sizeof(mask_id));
+  assert_int_equal(mask_id, 0);
+  assert_memory_equal(rows.bytes[1], &((dt_develop_blend_params_t){ 0 }), sizeof(dt_develop_blend_params_t));
+  assert_int_equal(dt_develop_blend_read_mask_id(rows.bytes[2], rows.lengths[2], rows.versions[2], &mask_id),
+                   DT_DEVELOP_BLEND_MASK_ID_READABLE);
+  assert_int_equal(mask_id, 2);
+
+  dt_free(properties);
+  dt_free(second);
+  dt_free(first);
+  dt_free(circle_source);
+  dt_free(encoded_group_source);
+  dt_free(circle_points);
+  dt_free(group_points);
+}
+
+static void test_legacy_readable_blends_clear_omitted_root(void **state)
+{
+  (void)state;
+  const dt_masks_form_group_t missing_child[] = { { .formid = 99, .parentid = 1, .state = 0, .opacity = 1.0f } };
+  const struct
+  {
+    int version;
+    int length;
+    size_t mask_id_offset;
+  } cases[] = {
+    { 1, sizeof(blend_params_v1_t), offsetof(blend_params_v1_t, mask_id) },
+    { 2, sizeof(blend_params_v2_t), offsetof(blend_params_v2_t, mask_id) },
+    { 3, sizeof(blend_params_v3_t), offsetof(blend_params_v3_t, mask_id) },
+    { 4, sizeof(blend_params_v4_t), offsetof(blend_params_v4_t, mask_id) },
+    { 5, sizeof(blend_params_v5_t), offsetof(blend_params_v5_t, mask_id) },
+    { 6, sizeof(blend_params_v5_t), offsetof(blend_params_v5_t, mask_id) },
+    { 7, sizeof(blend_params_v5_t), offsetof(blend_params_v5_t, mask_id) },
+    { 8, sizeof(blend_params_v8_t), offsetof(blend_params_v8_t, mask_id) },
+    { 9, sizeof(blend_params_v9_t), offsetof(blend_params_v9_t, mask_id) },
+    { 10, sizeof(blend_params_v10_t), offsetof(blend_params_v10_t, mask_id) },
+    { 11, sizeof(dt_develop_blend_params_t), offsetof(dt_develop_blend_params_t, mask_id) },
+  };
+  static const unsigned char group_source[] = { 0 };
+  char *group_points = dt_exif_xmp_encode((const unsigned char *)missing_child, sizeof(missing_child), NULL);
+  char *encoded_group_source = dt_exif_xmp_encode(group_source, sizeof(group_source), NULL);
+
+  for(guint index = 0; index < G_N_ELEMENTS(cases); index++)
+  {
+    unsigned char payload[sizeof(dt_develop_blend_params_t)];
+    unsigned char expected[sizeof(payload)];
+    memset(payload, 0xa5, cases[index].length);
+    const uint32_t original_mask_id = 1;
+    memcpy(payload + cases[index].mask_id_offset, &original_mask_id, sizeof(original_mask_id));
+    memcpy(expected, payload, cases[index].length);
+    memset(expected + cases[index].mask_id_offset, 0, sizeof(original_mask_id));
+    char *filename = g_strdup_printf("legacy-v%d-clear.raw", cases[index].version);
+    dt_image_t image = make_image(filename);
+    char *history = make_v3_history_step_with_blend(0, cases[index].version, payload, cases[index].length);
+    char *properties = g_strdup_printf(
+        "<darktable:history><rdf:Seq>%s</rdf:Seq></darktable:history>"
+        "<darktable:mask><rdf:Seq><rdf:li>%s</rdf:li></rdf:Seq></darktable:mask>"
+        "<darktable:mask_src><rdf:Seq><rdf:li>%s</rdf:li></rdf:Seq></darktable:mask_src>"
+        "<darktable:mask_name><rdf:Seq><rdf:li>bad</rdf:li></rdf:Seq></darktable:mask_name>"
+        "<darktable:mask_type><rdf:Seq><rdf:li>%d</rdf:li></rdf:Seq></darktable:mask_type>"
+        "<darktable:mask_version><rdf:Seq><rdf:li>1</rdf:li></rdf:Seq></darktable:mask_version>"
+        "<darktable:mask_id><rdf:Seq><rdf:li>1</rdf:li></rdf:Seq></darktable:mask_id>"
+        "<darktable:mask_nb><rdf:Seq><rdf:li>1</rdf:li></rdf:Seq></darktable:mask_nb>",
+        history, group_points, encoded_group_source, DT_MASKS_GROUP);
+    write_xmp(2, properties);
+
+    assert_int_equal(dt_exif_xmp_read(&image, xmp_path, FALSE, NULL), 0);
+    history_blend_row_t rows = { 0 };
+    dt_history_repository_foreach_row(image.id, collect_history_blend_row, &rows);
+    assert_int_equal(rows.count, 1);
+    uint32_t mask_id = 1;
+    assert_int_equal(dt_develop_blend_read_mask_id(rows.bytes[0], rows.lengths[0], rows.versions[0], &mask_id),
+                     DT_DEVELOP_BLEND_MASK_ID_READABLE);
+    assert_int_equal(mask_id, 0);
+    assert_memory_equal(rows.bytes[0], expected, cases[index].length);
+    dt_free(filename);
+    dt_free(properties);
+    dt_free(history);
+  }
+  dt_free(encoded_group_source);
+  dt_free(group_points);
+}
+
 int main(void)
 {
   const struct CMUnitTest tests[] = {
@@ -1284,8 +1658,8 @@ int main(void)
     cmocka_unit_test(test_partial_v2_legacy_mask_properties_preserve_development),
     cmocka_unit_test(test_duplicate_legacy_mask_ids_preserve_development),
     cmocka_unit_test(test_v3_masks_reuse_formid_across_history_steps),
-    cmocka_unit_test(test_invalid_v3_mask_properties_preserve_development),
-    cmocka_unit_test(test_duplicate_v3_mask_ids_in_one_history_step_preserve_development),
+    cmocka_unit_test(test_invalid_v3_mask_properties_omit_only_affected_snapshot),
+    cmocka_unit_test(test_duplicate_v3_mask_ids_omit_only_affected_snapshot),
     cmocka_unit_test(test_malformed_history_restores_cached_raw_parameters_and_flags),
     cmocka_unit_test(test_legacy_raw_parameters_decode_flip_byte),
     cmocka_unit_test(test_empty_valid_history_is_accepted),
@@ -1298,7 +1672,7 @@ int main(void)
     cmocka_unit_test(test_invalid_v3_history_numbers_preserve_development),
     cmocka_unit_test(test_valid_v3_history_numbers_are_persisted),
     cmocka_unit_test(test_v3_near_prefix_history_properties_preserve_development),
-    cmocka_unit_test(test_short_v2_history_blendop_blob_preserves_development),
+    cmocka_unit_test(test_short_v2_history_blendop_blob_is_preserved),
     cmocka_unit_test(test_v1_history_blendop_blob_is_accepted),
     cmocka_unit_test(test_v7_history_blendop_blob_is_accepted),
     cmocka_unit_test(test_empty_xmp_decode_is_valid),
@@ -1318,6 +1692,13 @@ int main(void)
     cmocka_unit_test(test_v4_timestamp_is_converted_from_unix_seconds),
     cmocka_unit_test(test_v5_timestamp_is_a_direct_gtimespan),
     cmocka_unit_test(test_malformed_v5_timestamp_preserves_development),
+    cmocka_unit_test(test_v3_invalid_snapshots_do_not_discard_independent_history),
+    cmocka_unit_test(test_v3_unassignable_mask_does_not_discard_valid_snapshot),
+    cmocka_unit_test(test_v3_mask_property_suffix_omits_only_affected_snapshot),
+    cmocka_unit_test(test_v3_overdepth_snapshot_does_not_discard_independent_snapshot),
+    cmocka_unit_test(test_omitted_snapshot_clears_readable_blend_and_preserves_undecodable_bytes),
+    cmocka_unit_test(test_legacy_bad_root_does_not_discard_independent_valid_root),
+    cmocka_unit_test(test_legacy_readable_blends_clear_omitted_root),
   };
   return cmocka_run_group_tests(tests, setup, teardown);
 }
