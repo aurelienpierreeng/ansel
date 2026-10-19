@@ -93,7 +93,10 @@ const GList* dt_exif_get_exiv2_taglist();
  * struct. returns 0 on success. */
 int dt_exif_read(dt_image_t *img, const char *path);
 
-/** Read embedded metadata and persist its tags and descriptive metadata for an existing image. */
+/** Read embedded metadata and persist its tags and descriptive metadata for an existing image.
+ * Owns a top-level transaction so failure cannot roll back a caller's work and notifications follow commit.
+ * Returns 1 without changing state when the caller already owns a transaction; returns 0 on success.
+ */
 int dt_exif_read_persisted(dt_image_t *img, const char *path);
 
 /** read exif data to image struct from given data blob, wherever you got it from. */
