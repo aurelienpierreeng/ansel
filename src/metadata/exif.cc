@@ -497,7 +497,7 @@ bool dt_exif_apply_xmp_persistence(dt_image_t *img, Exiv2::XmpData &xmpData, con
 
     return _exif_decode_xmp_scratch(img, xmpData, replace_existing);
   }
-  catch(const Exiv2::AnyError &)
+  catch(const std::exception &) // NOSONAR
   {
     return false;
   }
@@ -574,7 +574,7 @@ static bool _exif_decode_xmp_scratch(dt_image_t *img, Exiv2::XmpData &xmpData, c
       dt_datetime_exif_to_img(img, pos->toString().c_str());
     return true;
   }
-  catch(const Exiv2::AnyError &)
+  catch(const std::exception &) // NOSONAR
   {
     return false;
   }
@@ -610,7 +610,7 @@ static bool _exif_decode_iptc_datetime(dt_image_t *img, Exiv2::IptcData &iptcDat
     dt_datetime_exif_to_img(img, datetime.c_str());
     return true;
   }
-  catch(const Exiv2::AnyError &)
+  catch(const std::exception &) // NOSONAR
   {
     return false;
   }
@@ -1046,7 +1046,7 @@ void dt_exif_read_usercrop(dt_image_t *img, const char *filename)
     if(exifData.empty()) return;
     _check_usercrop(exifData, img);
   }
-  catch(const Exiv2::AnyError &e)
+  catch(const std::exception &e) // NOSONAR
   {
     std::string s(e.what());
     std::cerr << "[exiv2 dt_exif_read_usercrop] " << filename << ": " << s << std::endl;
@@ -1075,7 +1075,7 @@ void dt_exif_img_check_additional_tags(dt_image_t *img, const char *filename)
     }
     return;
   }
-  catch(const Exiv2::AnyError &e)
+  catch(const std::exception &e) // NOSONAR
   {
     std::string s(e.what());
     std::cerr << "[exiv2 reading DefaultUserCrop] " << filename << ": " << s << std::endl;
@@ -1176,7 +1176,7 @@ static bool _exif_apply_exif_metadata(const dt_image_t *img, Exiv2::ExifData &ex
     }
     return true;
   }
-  catch(const Exiv2::AnyError &)
+  catch(const std::exception &) // NOSONAR
   {
     return false;
   }
@@ -1924,7 +1924,7 @@ static bool _exif_decode_exif_data(dt_image_t *img, Exiv2::ExifData &exifData, c
     img->exif_inited = TRUE;
     return true;
   }
-  catch(const Exiv2::AnyError &e)
+  catch(const std::exception &e) // NOSONAR
   {
     std::string s(e.what());
     std::cerr << "[exiv2 _exif_decode_exif_data] " << img->filename << ": " << s << std::endl;
@@ -2007,7 +2007,7 @@ int dt_exif_get_thumbnail(const char *path, uint8_t **buffer, size_t *size, char
 
     return 0;
   }
-  catch(const Exiv2::AnyError &e)
+  catch(const std::exception &e) // NOSONAR
   {
     std::string s(e.what());
     std::cerr << "[exiv2 dt_exif_get_thumbnail] " << path << ": " << s << std::endl;
@@ -2068,7 +2068,7 @@ int dt_exif_read(dt_image_t *img, const char *path)
       img->width = image->pixelWidth();
     }
   }
-  catch(const Exiv2::AnyError &e)
+  catch(const std::exception &e) // NOSONAR
   {
     std::string s(e.what());
     std::cerr << "[exiv2 dt_exif_read] " << path << ": " << s << std::endl;
@@ -2257,7 +2257,7 @@ int dt_exif_write_blob(uint8_t *blob, uint32_t size, const char *path, const int
     imgExifData.sortByTag();
     image->writeMetadata();
   }
-  catch(const Exiv2::AnyError &e)
+  catch(const std::exception &e) // NOSONAR
   {
     std::string s(e.what());
     std::cerr << "[exiv2 dt_exif_write_blob] " << path << ": " << s << std::endl;
@@ -2537,7 +2537,7 @@ dt_colorspaces_color_profile_type_t dt_exif_get_color_space(const uint8_t *data,
 
     return DT_COLORSPACE_DISPLAY; // nothing embedded
   }
-  catch(const Exiv2::AnyError &e)
+  catch(const std::exception &e) // NOSONAR
   {
     std::string s(e.what());
     std::cerr << "[exiv2 dt_exif_get_color_space] " << s << std::endl;
@@ -2556,7 +2556,7 @@ void dt_exif_get_datetime_taken(const uint8_t *data, size_t size, char *datetime
 
     _find_datetime_taken(exifData, pos, datetime_taken);
   }
-  catch(const Exiv2::AnyError &e)
+  catch(const std::exception &e) // NOSONAR
   {
     std::string s(e.what());
     std::cerr << "[exiv2 dt_exif_get_datetime_taken] " << s << std::endl;
@@ -2597,7 +2597,7 @@ void dt_exif_init()
   {
     Exiv2::XmpProperties::propertyList("lr");
   }
-  catch(const Exiv2::AnyError &)
+  catch(const std::exception &) // NOSONAR
   {
     // if lightroom is not known register it
     Exiv2::XmpProperties::registerNs("http://ns.adobe.com/lightroom/1.0/", "lr");
@@ -2606,7 +2606,7 @@ void dt_exif_init()
   {
     Exiv2::XmpProperties::propertyList("exifEX");
   }
-  catch(const Exiv2::AnyError &)
+  catch(const std::exception &) // NOSONAR
   {
     // if exifEX is not known register it
     Exiv2::XmpProperties::registerNs("http://cipa.jp/exif/1.0/", "exifEX");
