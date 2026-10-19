@@ -718,18 +718,28 @@ static gboolean _bar_tooltip(GtkWidget *widget, gint x, gint y, gboolean keyboar
   return TRUE;
 }
 
-// One legend block: its swatch and label, its size on the line below. Only the swatch wears the colour.
+/* One legend block: its swatch, then its label with its size on the line below, both lined up
+ * clear of the swatch. Only the swatch wears the colour. */
 static GtkWidget *_bar_legend_block(const _bar_segment_t *seg, const char *swatch)
 {
+  gchar *mark = seg->color ? g_markup_printf_escaped("<span foreground=\"%s\">%s</span>", seg->color, swatch)
+                           : g_markup_escape_text(swatch, -1);
+  GtkWidget *swatch_label = gtk_label_new(NULL);
+  gtk_label_set_markup(GTK_LABEL(swatch_label), mark);
+  gtk_widget_set_valign(swatch_label, GTK_ALIGN_START);
+  g_free(mark);
+
   gchar *size = _bar_segment_text(seg);
-  gchar *markup = seg->color ? g_markup_printf_escaped("<span foreground=\"%s\">%s</span> %s\n%s", seg->color,
-                                                       swatch, seg->label, size)
-                             : g_markup_printf_escaped("%s %s\n%s", swatch, seg->label, size);
-  GtkWidget *block = gtk_label_new(NULL);
-  gtk_label_set_markup(GTK_LABEL(block), markup);
-  gtk_label_set_xalign(GTK_LABEL(block), 0.0);
+  gchar *text = g_markup_printf_escaped("%s\n%s", seg->label, size);
+  GtkWidget *text_label = gtk_label_new(NULL);
+  gtk_label_set_markup(GTK_LABEL(text_label), text);
+  gtk_label_set_xalign(GTK_LABEL(text_label), 0.0);
   g_free(size);
-  g_free(markup);
+  g_free(text);
+
+  GtkWidget *block = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 4);
+  gtk_box_pack_start(GTK_BOX(block), swatch_label, FALSE, FALSE, 0);
+  gtk_box_pack_start(GTK_BOX(block), text_label, FALSE, FALSE, 0);
   return block;
 }
 
