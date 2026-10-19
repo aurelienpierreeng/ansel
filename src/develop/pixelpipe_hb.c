@@ -911,6 +911,7 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe,
   KILL_SWITCH_ABORT;
 
   const uint64_t hash = dt_dev_pixelpipe_node_hash(pipe, piece, piece->roi_out, pos);
+  dt_dev_pixelpipe_rawdetail_mask_check_hit(pipe, piece, hash);
 
   // 1) Fast-track:
   // If we have a cache entry for this hash, return it straight away,

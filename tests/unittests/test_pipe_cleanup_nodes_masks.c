@@ -24,11 +24,17 @@
  * render or by dt_dev_pixelpipe_cleanup(), so back in the lighttable the masks of the last image
  * stayed referenced, and no memory pressure could free them.
  *
+ * Released, a mask can be evicted while the output of its provider survives. For the detail mask,
+ * whose provider is the hidden detailmask stage, a cached output then stands for the stage only
+ * while its mask is there too: dt_dev_pixelpipe_rawdetail_mask_check_hit().
+ *
  * These tests drive a pipe with no node: the masks are lines the test publishes itself, held the
  * way the pipe holds them.
  */
 
 #include "caches/pixelpipe_cache.h"
+#include "develop/imageop.h"
+#include "develop/pixelpipe.h"
 #include "develop/pixelpipe_hb.h"
 #include "system/atomic.h"
 
@@ -48,8 +54,8 @@
 #endif
 
 #define LINE_BYTES (256 * 1024)
-#define HASH_RASTER 0x0B0B0B0B0B0B0B0Bull
-#define HASH_DETAIL 0x0C0C0C0C0C0C0C0Cull
+#define HASH_RASTER 0x0B0B0B0B0B0B0B0BULL
+#define HASH_DETAIL 0x0C0C0C0C0C0C0C0CULL
 
 static int _setup(void **state __attribute__((unused)))
 {
@@ -118,11 +124,81 @@ static void _released_masks_go_with_the_flush(void **state __attribute__((unused
   g_array_free(pipe.raster_mask_hashes, TRUE);
 }
 
+#define HASH_OUTPUT 0x0D0D0D0D0D0D0D0DULL
+
+/* A detailmask piece, and its cached output: a written line nobody holds, as after a render. */
+static void _detailmask_output(dt_iop_module_t *module, dt_dev_pixelpipe_iop_t *piece, const char *op)
+{
+  memset(module, 0, sizeof(*module));
+  memset(piece, 0, sizeof(*piece));
+  g_strlcpy(module->op, op, sizeof(module->op));
+  piece->module = module;
+  piece->global_hash = 0x0E0E0E0E0E0E0E0EULL;
+  piece->roi_out.width = 16;
+  piece->roi_out.height = 8;
+  dt_dev_pixelpipe_cache_unref_entry(_publish(HASH_OUTPUT));
+}
+
+/** Its mask there, the output stands, and the pipe holds the mask from then on. */
+static void _detail_output_with_its_mask_stands(void **state __attribute__((unused)))
+{
+  dt_dev_pixelpipe_t pipe;
+  memset(&pipe, 0, sizeof(pipe));
+  pipe.raster_mask_hashes = g_array_new(FALSE, FALSE, sizeof(uint64_t));
+  pipe.rawdetail_mask_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
+  dt_iop_module_t module;
+  dt_dev_pixelpipe_iop_t piece;
+  _detailmask_output(&module, &piece, "detailmask");
+  const uint64_t mask_hash = dt_dev_pixelpipe_rawdetail_mask_hash(&piece);
+  dt_dev_pixelpipe_cache_unref_entry(_publish(mask_hash));
+
+  assert_true(dt_dev_pixelpipe_rawdetail_mask_check_hit(&pipe, &piece, HASH_OUTPUT));
+  assert_non_null(dt_dev_pixelpipe_cache_get_entry(HASH_OUTPUT));
+  assert_true(pipe.rawdetail_mask_hash == mask_hash);
+  assert_int_equal(dt_atomic_get_int(&dt_dev_pixelpipe_cache_get_entry(mask_hash)->refcount), 1);
+  assert_int_equal(pipe.rawdetail_mask_roi.width, 16);
+
+  dt_dev_pixelpipe_cleanup_nodes(&pipe);
+  g_array_free(pipe.raster_mask_hashes, TRUE);
+}
+
+/** Its mask evicted, the output goes, so that the stage runs and publishes the mask again. */
+static void _detail_output_without_its_mask_goes(void **state __attribute__((unused)))
+{
+  dt_dev_pixelpipe_t pipe;
+  memset(&pipe, 0, sizeof(pipe));
+  pipe.rawdetail_mask_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
+  dt_iop_module_t module;
+  dt_dev_pixelpipe_iop_t piece;
+  _detailmask_output(&module, &piece, "detailmask");
+
+  assert_false(dt_dev_pixelpipe_rawdetail_mask_check_hit(&pipe, &piece, HASH_OUTPUT));
+  assert_null(dt_dev_pixelpipe_cache_get_entry(HASH_OUTPUT));
+  assert_true(pipe.rawdetail_mask_hash == DT_PIXELPIPE_CACHE_HASH_INVALID);
+}
+
+/** Any other stage's output stands as it is. */
+static void _other_output_stands(void **state __attribute__((unused)))
+{
+  dt_dev_pixelpipe_t pipe;
+  memset(&pipe, 0, sizeof(pipe));
+  pipe.rawdetail_mask_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
+  dt_iop_module_t module;
+  dt_dev_pixelpipe_iop_t piece;
+  _detailmask_output(&module, &piece, "exposure");
+
+  assert_true(dt_dev_pixelpipe_rawdetail_mask_check_hit(&pipe, &piece, HASH_OUTPUT));
+  assert_non_null(dt_dev_pixelpipe_cache_get_entry(HASH_OUTPUT));
+}
+
 int main(int argc, char *argv[])
 {
   const struct CMUnitTest tests[] = {
     cmocka_unit_test_setup_teardown(_cleanup_nodes_releases_the_masks, _setup, _teardown),
     cmocka_unit_test_setup_teardown(_released_masks_go_with_the_flush, _setup, _teardown),
+    cmocka_unit_test_setup_teardown(_detail_output_with_its_mask_stands, _setup, _teardown),
+    cmocka_unit_test_setup_teardown(_detail_output_without_its_mask_goes, _setup, _teardown),
+    cmocka_unit_test_setup_teardown(_other_output_stands, _setup, _teardown),
   };
   return cmocka_run_group_tests(tests, NULL, NULL);
 }
