@@ -139,6 +139,12 @@ void dt_dev_pixelpipe_cache_get_usage(size_t *current, size_t *max);
 // evict down to, which dt_dev_pixelpipe_cache_get_usage() reports; this one never moves.
 size_t dt_dev_pixelpipe_cache_get_max_memory(void);
 
+/** What an allocation made now could get, in bytes, by the rules that grant or refuse it: the
+ *  room the plan and the system's available RAM over the pressure floor leave, counting what
+ *  eviction can take back -- lines nobody holds, and of the system's share only their host RAM.
+ *  Tile planners size working sets against it. */
+size_t dt_dev_pixelpipe_cache_get_available(void);
+
 /* Largest contiguous free run in the arena (bytes): the real upper bound on
  * what an allocation — and, transitively, a tiled module's working set — can
  * get, as opposed to the byte headroom max - current. */

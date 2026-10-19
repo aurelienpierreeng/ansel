@@ -1,6 +1,7 @@
 /*
     This file is part of Ansel,
     Copyright (C) 2026 Aurélien PIERRE.
+    Copyright (C) 2026 Guillaume Stutin.
 
     Ansel is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -62,8 +63,9 @@ void dt_configure_runtime_performance(dt_sys_resources_t *resources, gboolean in
 // than many workers, to be able to control queued jobs.
 int dt_worker_threads();
 
-// Get the remaining memory available for pipeline allocations,
-// once we subtracted caches memory and headroom from system memory
+// Unused: tile planning asks dt_dev_pixelpipe_cache_get_available(), which counts as room only what
+// eviction can take back. This one counts half the pipeline cache, held lines included, and takes the
+// budget lowered under kernel pressure for a hard limit.
 size_t dt_get_available_mem();
 
 // Get the maximum size for the whole mipmap cache

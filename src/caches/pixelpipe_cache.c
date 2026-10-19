@@ -837,6 +837,19 @@ typedef struct _cache_lru_t
 } _cache_lru_t;
 
 
+/* What eviction may take: an entry nobody holds and nobody is writing. The LRU and the room told
+ * to tile planners both ask this, so planners are never promised memory eviction cannot give back.
+ * WARNING: non thread-safe, the caller holds the cache lock. */
+static gboolean _entry_evictable(dt_pixel_cache_entry_t *cache_entry, gboolean *used)
+{
+  // Returns 1 if the lock is captured by another thread
+  // 0 if WE capture the lock, and then need to release it
+  const gboolean locked = dt_pthread_rwlock_trywrlock(&cache_entry->lock);
+  if(!locked) dt_pthread_rwlock_unlock(&cache_entry->lock);
+  *used = dt_atomic_get_int(&cache_entry->refcount) > 0;
+  return !locked && !*used;
+}
+
 // find the cache entry hash with the oldest use
 static void _cache_get_oldest(gpointer key, gpointer value, gpointer user_data)
 {
@@ -852,13 +865,8 @@ static void _cache_get_oldest(gpointer key, gpointer value, gpointer user_data)
   const int64_t age = _pixel_cache_get_age(cache_entry);
   if(age < lru->max_age)
   {
-    // Returns 1 if the lock is captured by another thread
-    // 0 if WE capture the lock, and then need to release it
-    gboolean locked = dt_pthread_rwlock_trywrlock(&cache_entry->lock);
-    if(!locked) dt_pthread_rwlock_unlock(&cache_entry->lock);
-    gboolean used = dt_atomic_get_int(&cache_entry->refcount) > 0;
-
-    if(!locked && !used)
+    gboolean used = FALSE;
+    if(_entry_evictable(cache_entry, &used))
     {
       lru->max_age = age;
       lru->hash = cache_entry->hash;
@@ -867,9 +875,22 @@ static void _cache_get_oldest(gpointer key, gpointer value, gpointer user_data)
     }
     else if(used)
       _pixel_cache_message(cache_entry, "cannot be deleted: used", TRUE);
-    else if(locked)
+    else
       _pixel_cache_message(cache_entry, "cannot be deleted: locked", TRUE);
   }
+}
+
+/* The bytes eviction can take back: [0] against the budget, [1] of host RAM -- a line kept on a
+ * device only has no host buffer, so evicting it gives the system nothing. */
+static void _cache_sum_evictable(__attribute__((unused)) gpointer key, gpointer value, gpointer user_data)
+{
+  dt_pixel_cache_entry_t *cache_entry = (dt_pixel_cache_entry_t *)value;
+  size_t *evictable = (size_t *)user_data;
+  gboolean used = FALSE;
+  if(!_entry_evictable(cache_entry, &used)) return;
+
+  evictable[0] += cache_entry->size;
+  if(!IS_NULL_PTR(cache_entry->data)) evictable[1] += cache_entry->size;
 }
 
 static void _print_cache_lines(gpointer key, gpointer value, gpointer user_data)
@@ -1779,6 +1800,8 @@ static gboolean _system_memory_pressure_valve(dt_dev_pixelpipe_cache_t *cache, s
     return TRUE;
   }
 
+  const gboolean negligible = request_size <= DT_PIXELPIPE_CACHE_PRESSURE_EXEMPT_SIZE;
+
   if(cache->sys_available_est < request_size + pressure_floor)
   {
     const size_t deficit = request_size + pressure_floor - cache->sys_available_est;
@@ -1790,31 +1813,37 @@ static gboolean _system_memory_pressure_valve(dt_dev_pixelpipe_cache_t *cache, s
       freed += before - cache->current_memory;
     }
 
-    if(freed)
+    /* Evicting only returns the pages to the ARENA. How much of that reaches the OS
+     * is not ours to guess: the per-free lazy release is a no-op on Windows until a
+     * decommit runs, and even where MADV_FREE applies, the kernel decides when those
+     * pages stop counting against us. So hand them over for real, then take the new
+     * number from the OS instead of crediting what we think we released — an
+     * over-credit here would let the allocation through on a system that is still
+     * just as full, which is precisely the OOM this valve exists to prevent.
+     * Ordering note: cache->lock is held and dt_cache_arena_trim() takes arena.lock,
+     * matching the cache->lock → arena.lock order the rest of this file already uses
+     * (see the defrag path below). */
+    if(freed) dt_cache_arena_trim(&cache->arena);
+
+    /* Re-read even when nothing was evicted: between probes the estimate is debited by
+     * every allocation and credited by no free, so what other pipes gave back since the
+     * last probe is not in it. An allocation is refused on what the OS says, never on it.
+     * A negligible one is never refused, so it does not pay for the read. */
+    if(freed || !negligible)
     {
-      /* Evicting only returns the pages to the ARENA. How much of that reaches the OS
-       * is not ours to guess: the per-free lazy release is a no-op on Windows until a
-       * decommit runs, and even where MADV_FREE applies, the kernel decides when those
-       * pages stop counting against us. So hand them over for real, then take the new
-       * number from the OS instead of crediting what we think we released — an
-       * over-credit here would let the allocation through on a system that is still
-       * just as full, which is precisely the OOM this valve exists to prevent.
-       * Ordering note: cache->lock is held and dt_cache_arena_trim() takes arena.lock,
-       * matching the cache->lock → arena.lock order the rest of this file already uses
-       * (see the defrag path below). */
-      dt_cache_arena_trim(&cache->arena);
       dt_invalidate_system_available_mem();
       const size_t probed = dt_get_system_available_mem();
       cache->sys_probe_valid = (probed > 0);
       cache->sys_available_est = probed;
       cache->sys_probe_time_us = g_get_monotonic_time();
+    }
 
+    if(freed)
       dt_print(DT_DEBUG_MEMORY | DT_DEBUG_PIPECACHE,
                "[pixelpipe_cache] system memory pressure: shed %" G_GSIZE_FORMAT " MiB of cache "
                "(%" G_GSIZE_FORMAT " MiB available after trim, floor %" G_GSIZE_FORMAT " MiB)\n",
                freed / (1024 * 1024), cache->sys_available_est / (1024 * 1024),
                pressure_floor / (1024 * 1024));
-    }
   }
 
   // The post-trim re-probe can itself come back unanswered; absence of information is
@@ -1837,8 +1866,6 @@ static gboolean _system_memory_pressure_valve(dt_dev_pixelpipe_cache_t *cache, s
    * an absolute reserve (DT_MEMORY_PRESSURE_FLOOR_DEFAULT, 200 MiB), and "always leave
    * 200 MiB to the OS" has to mean 200, not 100. The shed/trim step above already ran at
    * this same threshold, so reaching here means trimming did not recover enough. */
-  const gboolean negligible = request_size <= DT_PIXELPIPE_CACHE_PRESSURE_EXEMPT_SIZE;
-
   const gboolean allowed = negligible
                            || !cache->sys_probe_valid
                            || (cache->sys_available_est >= request_size + pressure_floor);
@@ -3388,10 +3415,33 @@ void dt_dev_pixelpipe_cache_get_usage(size_t *current, size_t *max)
   if(IS_NULL_PTR(cache)) return;
   dt_pthread_mutex_lock(&cache->lock);
   if(current) *current = cache->current_memory;
-  // The budget allocations currently evict down to, so tiling plans against it -- and never
-  // under what is held, since the callers compute `max - current` unsigned.
+  // The budget allocations currently evict down to -- never under what is held, since the
+  // callers compute `max - current` unsigned. Tiling plans against dt_dev_pixelpipe_cache_get_available().
   if(max) *max = dt_pixelpipe_cache_pressure_reported(&cache->psi.budget, cache->current_memory);
   dt_pthread_mutex_unlock(&cache->lock);
+}
+
+size_t dt_dev_pixelpipe_cache_get_available(void)
+{
+  dt_dev_pixelpipe_cache_t *cache = _pixelpipe_cache;
+  size_t evictable[2] = { 0, 0 };
+  dt_pthread_mutex_lock(&cache->lock);
+  g_hash_table_foreach(cache->entries, _cache_sum_evictable, evictable);
+  // The budget an allocation is refused on is the plan: under kernel pressure the lowered one is
+  // only what eviction aims for (_free_space_to_alloc()).
+  const size_t kept = cache->current_memory - evictable[0];
+  const size_t budget_room = (cache->max_memory > kept) ? cache->max_memory - kept : 0;
+  dt_pthread_mutex_unlock(&cache->lock);
+
+  // What the valve lets through: the system's available RAM over the floor, plus what evicting
+  // hands back to the OS (_system_memory_pressure_valve()).
+  const size_t sys_available = dt_get_system_available_mem();
+  if(sys_available == 0) return budget_room; // no information on this platform
+
+  const size_t pressure_floor = dt_get_memory_pressure_floor();
+  const size_t sys_room
+      = ((sys_available > pressure_floor) ? sys_available - pressure_floor : 0) + evictable[1];
+  return MIN(budget_room, sys_room);
 }
 
 size_t dt_dev_pixelpipe_cache_get_max_memory(void)

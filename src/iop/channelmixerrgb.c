@@ -3225,9 +3225,9 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
       // single call -- the two colour-checker paths address it with chart-box coordinates, and
       // auto_detect_WB() averages it. Tiling calls process() once per tile with a tile-local
       // roi_in, so the chart box would be applied to a fragment and whichever tile ran last would
-      // win. Whether that happens is a runtime memory decision
-      // (dt_tiling_piece_fits_host_memory(), which reads dt_get_available_mem() and the pixelpipe
-      // cache's largest free run), so it shows up on one machine and not another.
+      // win. Whether that happens is a runtime memory decision (dt_tiling_piece_fits_host_memory(),
+      // which reads dt_dev_pixelpipe_cache_get_available() and the pixelpipe cache's largest free
+      // run), so it shows up on one machine and not another.
       piece->process_tiling_ready = 0;
     }
   }
