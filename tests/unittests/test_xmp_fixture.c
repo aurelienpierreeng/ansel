@@ -21,6 +21,7 @@
 #include "testdb.h"
 
 #include "common/conf.h"
+#include "common/datetime.h"
 #include "common/xmp_sidecar.h"
 #include "darktable.h"
 #include "metadata/exif.h"
@@ -30,6 +31,7 @@
 
 int dt_test_xmp_fixture_setup(void **state, dt_test_xmp_fixture_t *fixture, const char *name)
 {
+  if(IS_NULL_PTR(dt_datetime_origin())) dt_datetime_init();
   if(testdb_setup(state)) return -1;
 
   char *config_template = g_strdup_printf("ansel-test-xmp-%s-XXXXXX.rc", name);
