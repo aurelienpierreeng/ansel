@@ -103,7 +103,10 @@ bool dt_exif_read_exif_tag(Exiv2::ExifData &exifData, Exiv2::ExifData::const_ite
  * did not come from us. @p exif_read says whether EXIF was already read for this image, so
  * that XMP is allowed to trump it. */
 bool dt_exif_decode_xmp_data(dt_image_t *img, Exiv2::XmpData &xmpData, int version,
-                             bool exif_read);
+                              bool exif_read);
+
+bool dt_exif_apply_xmp_persistence(dt_image_t *img, Exiv2::XmpData &xmpData, int xmp_version,
+                                   bool replace_existing, bool *tags_changed);
 
 #endif // DT_METADATA_EXIF_INTERNAL_H
 
