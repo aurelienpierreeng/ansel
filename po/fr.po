@@ -21747,6 +21747,22 @@ msgstr "Zoomer"
 msgid "Zoom out"
 msgstr "Dézoomer"
 
+#: ../src/views/darkroom.c:1827
+msgid "Zoom to fit"
+msgstr "Ajuster à l'écran"
+
+#: ../src/views/darkroom.c:1829
+msgid "Zooms the main image to fit the window"
+msgstr "Ajuste l'image principale à la fenêtre"
+
+#: ../src/views/darkroom.c:1830
+msgid "Zoom to 100%"
+msgstr "Zoomer à 100%"
+
+#: ../src/views/darkroom.c:1832
+msgid "Zooms the main image to 100%"
+msgstr "Affiche l'image principale à 100%"
+
 #: ../src/views/darkroom.c:2113
 msgid "toggle ISO 12646 color assessment conditions"
 msgstr "basculer les conditions d'évaluation des couleurs ISO 12646"

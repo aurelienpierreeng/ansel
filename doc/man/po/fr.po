@@ -956,13 +956,13 @@ msgstr "Mode chambre noire"
 
 #. type: =item
 #: ansel.pod:359
-msgid "B<Alt-1, 2, 3>"
-msgstr "B<Alt-1, 2, 3>"
+msgid "B<Ctrl-0, Ctrl-1>"
+msgstr "B<Ctrl-0, Ctrl-1>"
 
 #. type: textblock
 #: ansel.pod:361
-msgid "Zoom to 1:1, fill, and fit, respectively"
-msgstr "Zoomer à 1:1, remplir, ajuster, respectivement"
+msgid "Zoom to fit, to 100%, respectively"
+msgstr "Ajuster à l'écran, zoomer à 100%, respectivement"
 
 #. type: =item
 #: ansel.pod:363 ansel.pod:421 ansel.pod:435

@@ -357,9 +357,9 @@ Jump to the filmroll of an image
 
 =over
 
-=item B<Alt-1, 2, 3>
+=item B<Ctrl-0, Ctrl-1>
 
-Zoom to 1:1, fill, and fit, respectively
+Zoom to fit, to 100%, respectively
 
 =item B<Ctrl-f>
 
