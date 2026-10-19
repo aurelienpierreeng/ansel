@@ -82,7 +82,9 @@ the provider and the consumer. The canonical cached mask remains immutable.
 The pipeline keeps references to the raster-mask hashes required by its current graph in
 `dt_dev_pixelpipe_t.raster_mask_hashes`. On a new render it first retains the new set, then releases
 the previous set. This ordering prevents an unchanged mask from becoming briefly evictable between
-provider publication and downstream consumption or export.
+provider publication and downstream consumption or export. The references go with the graph:
+`dt_dev_pixelpipe_cleanup_nodes()` releases them, and the detail mask's (`rawdetail_mask_hash`)
+with them -- see "A pipe's side-band masks go with its nodes" below.
 
 An image cache hit can therefore reuse its associated raster mask without recomputing the provider
 or the modules before it. If the side-band mask was nevertheless evicted while the provider image
@@ -1336,3 +1338,32 @@ fill each buffer after allocation from a host buffer holding the poison
 forced for the measurement: the export pipe is `no_cache`, so `/plugins/<op>/cache` does not apply
 there (`cache_ram_output` in `pixelpipe_hb.c` requires the cache not to be bypassed).
 
+### A pipe's side-band masks go with its nodes
+
+*Found `199597e02a`, 2026-10-19.*
+
+`dt_dev_pixelpipe_cleanup_nodes()` releases the references the pipe holds on its raster masks
+(`raster_mask_hashes`) and on the detail mask (`rawdetail_mask_hash`), with the nodes that
+published them. Left to the next render, they outlive the image on a pipe that does not render
+again: the darkroom's two pipes live for the whole session, and `leave()` (darkroom and studio
+capture) destroys their nodes only. A referenced line is skipped by the LRU, the pressure valve
+and the kernel-pressure shedding alike, so no demand for memory could free those masks.
+
+Measured in the GUI with an `LD_PRELOAD` library that writes `dt_dev_pixelpipe_cache_get_entries_stats()`
+on request (the source of the supervisor's memory view, refcounts included): open in the darkroom
+an image whose modules consume raster masks, go back to the lighttable, and no line may remain
+referenced. With the release left to the next render, two raster masks of the preview pipe, 3.5 MiB
+each, stayed at `refs=2` there; a full-resolution one, 68 MiB, was seen held the same way.
+`tests/unittests/test_pipe_cleanup_nodes_masks.c` pins the release.
+
+On the rebuild of a changed topology (`DT_DEV_PIPE_REMOVE` in `dt_dev_pixelpipe_change()`), the
+masks are released before the following render retains them again. An eviction in between costs one
+recompute of the provider (the `DT_DEV_PIPE_REENTRY` pass of "Raster masks are dedicated side-band
+cachelines"), never a wrong mask: a consumer reads a mask through its own retained lookup.
+
+That statistics call, and the memory view built on it, lists `entries` only. The working buffers
+of `dt_pixelpipe_cache_alloc_align_*()` live in `external_entries`: they count in `current_memory`
+and in the usage bar, but appear in no list. Seen that day: 6.0 GiB of usage against 0.2 GiB of
+listed entries, the rest being the working buffers of a thumbnail pipe reconstructing highlights at
+full resolution. To see them, walk `external_entries` under `lock`: the name of each is the
+`file:line` of its allocation, and its age gives away one that outlives its run.
