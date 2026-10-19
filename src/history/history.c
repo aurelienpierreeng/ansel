@@ -40,6 +40,7 @@
 */
 
 #include "database/history_repository.h"
+#include "database/history_snapshot_repository.h"
 #include "common/thumbnail_notify.h"
 #include "history/history.h"
 #include "history/notify.h"
@@ -80,20 +81,9 @@ void dt_history_item_free(gpointer data)
   dt_free(item);
 }
 
-static void _remove_preset_flag(const int32_t imgid)
+gboolean dt_history_delete_on_image_ext(dt_image_t *image, gboolean undo)
 {
-  dt_image_t *image = dt_image_cache_get(imgid, 'w');
-  if(IS_NULL_PTR(image)) return;
-
-  // clear flag
-  image->flags &= ~DT_IMAGE_AUTO_PRESETS_APPLIED;
-
-  // write through to sql+xmp
-  dt_image_cache_write_release(image, DT_IMAGE_CACHE_SAFE);
-}
-
-void dt_history_delete_on_image_ext(int32_t imgid, gboolean undo)
-{
+  const int32_t imgid = image->id;
   dt_undo_lt_history_t *hist = undo ? dt_history_snapshot_item_init() : NULL;
 
   if(undo)
@@ -102,9 +92,17 @@ void dt_history_delete_on_image_ext(int32_t imgid, gboolean undo)
     dt_history_snapshot_undo_create(hist->imgid, &hist->before, &hist->before_history_end);
   }
 
-  dt_history_repository_delete_all_for_image(imgid);
+  if(!dt_history_repository_delete_all_for_image(imgid))
+  {
+    if(!IS_NULL_PTR(hist))
+    {
+      dt_history_snapshot_repository_clear(hist->before, imgid);
+      dt_free(hist);
+    }
+    return FALSE;
+  }
 
-  _remove_preset_flag(imgid);
+  image->flags &= ~DT_IMAGE_AUTO_PRESETS_APPLIED;
 
   /* make sure mipmaps are recomputed */
   dt_mipmap_cache_remove(imgid, TRUE);
@@ -125,12 +123,17 @@ void dt_history_delete_on_image_ext(int32_t imgid, gboolean undo)
                    dt_history_snapshot_undo_pop, dt_history_snapshot_undo_lt_history_data_free);
     dt_undo_end_group(dt_undo_get_global());
   }
+  return TRUE;
 }
 
 void dt_history_delete_on_image(int32_t imgid)
 {
-  dt_history_delete_on_image_ext(imgid, TRUE);
-  dt_history_changed(DT_HISTORY_CHANGE_TAGS);
+  dt_image_t *image = dt_image_cache_get(imgid, 'w');
+  if(IS_NULL_PTR(image)) return;
+
+  const gboolean deleted = dt_history_delete_on_image_ext(image, TRUE);
+  dt_image_cache_write_release(image, DT_IMAGE_CACHE_SAFE);
+  if(deleted) dt_history_changed(DT_HISTORY_CHANGE_TAGS);
 }
 
 char *dt_history_item_as_string(const char *name, gboolean enabled)
