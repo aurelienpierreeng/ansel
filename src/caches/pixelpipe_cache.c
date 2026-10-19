@@ -843,12 +843,11 @@ typedef struct _cache_lru_t
  * WARNING: non thread-safe, the caller holds the cache lock. */
 static gboolean _entry_evictable(dt_pixel_cache_entry_t *cache_entry, gboolean *used)
 {
-  // Returns 1 if the lock is captured by another thread
-  // 0 if WE capture the lock, and then need to release it
-  const gboolean locked = dt_pthread_rwlock_trywrlock(&cache_entry->lock);
-  if(!locked) dt_pthread_rwlock_unlock(&cache_entry->lock);
   *used = dt_atomic_get_int(&cache_entry->refcount) > 0;
-  return !locked && !*used;
+  // Nobody is writing it if its write lock can be taken: taken, it goes straight back.
+  if(dt_pthread_rwlock_trywrlock(&cache_entry->lock)) return FALSE;
+  dt_pthread_rwlock_unlock(&cache_entry->lock);
+  return !*used;
 }
 
 // find the cache entry hash with the oldest use
@@ -875,10 +874,8 @@ static void _cache_get_oldest(gpointer key, gpointer value, gpointer user_data)
       lru->cache_entry = cache_entry;
       _pixel_cache_message(cache_entry, "candidate for deletion", TRUE);
     }
-    else if(used)
-      _pixel_cache_message(cache_entry, "cannot be deleted: used", TRUE);
     else
-      _pixel_cache_message(cache_entry, "cannot be deleted: locked", TRUE);
+      _pixel_cache_message(cache_entry, used ? "cannot be deleted: used" : "cannot be deleted: locked", TRUE);
   }
 }
 
