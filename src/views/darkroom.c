@@ -1569,6 +1569,32 @@ gboolean _switch_to_prev_picture(GtkAccelGroup *accel_group, GObject *accelerabl
   return TRUE;
 }
 
+static gboolean _zoom_to_fit(GtkAccelGroup *accel_group, GObject *accelerable, guint keyval,
+                             GdkModifierType modifier, gpointer data)
+{
+  dt_develop_t *dev = (dt_develop_t *)data;
+  float center[2] = { 0.0f };
+  dt_dev_get_widget_center(dev, center);
+  _change_scaling(dev, center, 1.f);
+  return TRUE;
+}
+
+static gboolean _zoom_to_100(GtkAccelGroup *accel_group, GObject *accelerable, guint keyval,
+                             GdkModifierType modifier, gpointer data)
+{
+  dt_develop_t *dev = (dt_develop_t *)data;
+
+  // The viewport scaling is relative to the fit-to-screen scale, so 100% is its inverse. That
+  // scale is the -1 sentinel until an image has been fitted into the view.
+  const float natural_scale = dt_dev_roi_request_natural_scale(dev);
+  if(natural_scale <= 0.f) return TRUE;
+
+  float center[2] = { 0.0f };
+  dt_dev_get_widget_center(dev, center);
+  _change_scaling(dev, center, 1.f / natural_scale);
+  return TRUE;
+}
+
 /**
  * @brief Re-settle every node against the preferences that were just changed.
  *
@@ -1797,6 +1823,13 @@ void gui_init(dt_view_t *self)
   dt_accels_new_virtual_shortcut(dt_gui_get_accels(), dt_gui_get_accels()->darkroom_accels,
                                  path, dt_gui_center_widget(), GDK_KEY_minus, DT_PRIMARY_MASK);
   dt_free(path);
+
+  dt_accels_new_darkroom_action(_zoom_to_fit, dev, NULL, _("Darkroom/Main image"), _("Zoom to fit"),
+                                GDK_KEY_0, DT_PRIMARY_MASK,
+                                _("Zooms the main image to fit the window"));
+  dt_accels_new_darkroom_action(_zoom_to_100, dev, NULL, _("Darkroom/Main image"), _("Zoom to 100%"),
+                                GDK_KEY_1, DT_PRIMARY_MASK,
+                                _("Zooms the main image to 100%"));
   /*
    * Add view specific tool buttons
    */
