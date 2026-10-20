@@ -2309,10 +2309,9 @@ static void _pop_menu_dictionary(GtkWidget *treeview, GdkEventButton *event, dt_
 
     if(d->collection[0])
     {
-      char *collection = g_malloc(4096);
-      dt_collection_serialize(collection, 4096);
+      gchar *collection = dt_collection_serialize_alloc();
       if(g_strcmp0(d->collection, collection) == 0) d->collection[0] = '\0';
-      dt_free(collection);
+      g_free(collection);
     }
     if(count || d->collection[0])
     {

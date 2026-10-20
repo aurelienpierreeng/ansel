@@ -45,6 +45,7 @@
 
 static void pretty_print_collection(const char *buf, char *out, size_t outsize)
 {
+  if(IS_NULL_PTR(out) || outsize == 0) return;
   memset(out, 0, outsize);
 
   if(IS_NULL_PTR(buf) || buf[0] == '\0') return;
@@ -52,10 +53,11 @@ static void pretty_print_collection(const char *buf, char *out, size_t outsize)
   int num_rules = 0;
   char str[400] = { 0 };
   int mode, item;
-  int c;
-  sscanf(buf, "%d", &num_rules);
+  if(sscanf(buf, "%d", &num_rules) != 1 || num_rules <= 0) return;
   while(buf[0] != '\0' && buf[0] != ':') buf++;
   if(buf[0] == ':') buf++;
+
+  GString *label = g_string_new(NULL);
 
   for(int k = 0; k < num_rules; k++)
   {
@@ -66,33 +68,28 @@ static void pretty_print_collection(const char *buf, char *out, size_t outsize)
       if(k > 0) switch(mode)
         {
           case DT_LIB_COLLECT_MODE_AND:
-            c = g_strlcpy(out, _(" and "), outsize);
-            out += c;
-            outsize -= c;
+            g_string_append(label, _(" and "));
             break;
           case DT_LIB_COLLECT_MODE_OR:
-            c = g_strlcpy(out, _(" or "), outsize);
-            out += c;
-            outsize -= c;
+            g_string_append(label, _(" or "));
             break;
           default: // case DT_LIB_COLLECT_MODE_AND_NOT:
-            c = g_strlcpy(out, _(" but not "), outsize);
-            out += c;
-            outsize -= c;
+            g_string_append(label, _(" but not "));
             break;
         }
       int i = 0;
       while(str[i] != '\0' && str[i] != '$') i++;
       if(str[i] == '$') str[i] = '\0';
 
-      c = snprintf(out, outsize, "%s %s", item < DT_COLLECTION_PROP_LAST ? dt_collection_name(item) : "???",
-                   item == 0 ? dt_image_film_roll_name(str) : str);
-      out += c;
-      outsize -= c;
+      g_string_append_printf(label, "%s %s", item < DT_COLLECTION_PROP_LAST ? dt_collection_name(item) : "???",
+                             item == 0 ? dt_image_film_roll_name(str) : str);
     }
     while(buf[0] != '$' && buf[0] != '\0') buf++;
     if(buf[0] == '$') buf++;
   }
+
+  g_strlcpy(out, label->str, outsize);
+  g_string_free(label, TRUE);
 }
 
 
