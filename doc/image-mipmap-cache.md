@@ -251,6 +251,8 @@ lost there — stderr only got `could not process thumbnail!`. The causes, each 
 | `_init_8` | neither the original nor a local copy exists, or the image left the image cache | `FILE_NOT_FOUND` |
 | `_init_8` | embedded-JPEG mode "always" (2) and no embedded/companion JPEG could be read: the pipe is forbidden | `NO_EMBEDDED_THUMBNAIL` |
 | `_generate_blocking`, `DT_MIPMAP_FULL` | every decoder failed | `dt_imageio_open()`'s reason: see "Which loader failure a skull names" |
+| `_generate_blocking`, `DT_MIPMAP_FULL` | no source any more: the file went after `_init_8`'s check, or the image left the image cache | `FILE_NOT_FOUND` |
+| `dt_imageio_open` | the path exists but is not a regular file | `FILE_NOT_FOUND` |
 | `dt_imageio_export_with_flags` | pipe init failed, or the pipe returned an error / no backbuf | `PROCESSING_FAILED` |
 | `dt_imageio_export_with_flags` | the pipe returned an error after the pixelpipe cache refused it memory | `CACHE_FULL` |
 | `dt_imageio_export_with_flags` | the pipe was stopped (`dt_dev_pixelpipe_process` returns the same `1` for a kill-switch stop as for a failure) | `ABORTED` |
@@ -262,6 +264,53 @@ Not causes: an **external** stop (`shutdown_ext`, a thumbnail scrolled out of vi
 descriptor and keeps the entry flagged for generation, so it never leaves a skull; the disk cache
 never holds one (only `> 8x8` entries are written, and an unreadable `.jpg` is deleted and
 regenerated); `_init_8`'s early return for `width < 16` does not zero the size.
+
+### "File not found" is about the source, never the cached thumbnail
+
+*Found `6c0f7ffd92`, 2026-10-20, by reading every path that returns `DT_IMAGEIO_FILE_NOT_FOUND`;
+the table's two `FILE_NOT_FOUND` rows after the first come from this reading. The `EXISTS` and
+`IS_REGULAR` columns below are measured with `g_file_test()`, GLib 2.80.0, Linux, as uid 1000 —
+not root, which passes every permission check. The labels are by reading.*
+
+`FILE_NOT_FOUND` reaches a thumbnail by three paths, all about the image's source file: the
+original, or its local copy.
+
+1. `_init_8()`, before anything else: `_write_mipmap_to_disk()` asks
+   `dt_image_choose_input_path()` for a source and none exists. The candidates, in order: the
+   local copy (then its legacy path) when the image is flagged `DT_IMAGE_LOCAL_COPY`, then
+   `fullpath`, then the local copy again as a last chance. An image that left the image cache
+   gives no `dt_image_t`, hence no path either.
+2. `_generate_blocking()` at `DT_MIPMAP_FULL`, reached through the export pipe `_init_8()`
+   starts: the same lookup fails there, so the file went in between — a drive unplugged
+   mid-render. `dt_imageio_export_with_flags()` hands the full-size buffer's status back as is.
+3. `dt_imageio_open()`: a path that exists but is not a regular file returns `!DT_IMAGEIO_OK`,
+   which is `1`, which is `FILE_NOT_FOUND` by its position in the enum rather than by choice.
+
+"Exists" is `g_file_test(G_FILE_TEST_EXISTS)`, which is `access(F_OK)` on POSIX:
+
+| The source path | `EXISTS` | `IS_REGULAR` | Label |
+|---|---|---|---|
+| absent: deleted, moved, renamed, drive unplugged, share not mounted | 0 | 0 | File not found (path 1) |
+| a broken symlink | 0 | 0 | File not found (path 1) |
+| a file in a directory without search (`x`) permission | 0 | 0 | File not found (path 1) |
+| a file without read permission (mode `000`) | 1 | 1 | a decoder's failure, not "File not found" |
+| a directory named like an image | 1 | 0 | File not found (path 3) |
+
+Two `FILE_NOT_FOUND` returns never reach a thumbnail: `dt_imageio_open_j2k()`'s (it cannot open
+the file or read its header) runs inside `dt_imageio_open_raster()`, whose chain ends on
+`FILE_CORRUPTED`; and the `dt_imageio_open_libraw()` stub of a build without LibRaw is never
+called, since `dt_imageio_open_raw()` calls it only under `HAVE_LIBRAW`.
+
+The disk cache never produces it. In the cache's allocate callback, a missing `.jpg` leaves the
+entry flagged for generation, and so does an unreadable one, which is deleted; `_init_8()` then
+renders from the source. A `.jpg` that loads is shown without the source being looked at, and so
+is an entry already in RAM: a missing original keeps showing its last thumbnail, and the skull
+appears only when no thumbnail is left to show.
+
+Like every skull, it stays in RAM until the entry is evicted or invalidated. The file coming back
+does not change that: the full-size entry stays flagged for generation, but the thumbnail entry
+that asked for it does not, and the mount signal `libs/collect.c` listens to refreshes the
+folders' accessibility (`dt_film_set_folder_status()`), not the mipmap cache.
 
 ### A pipe that failed for lack of memory says so
 
