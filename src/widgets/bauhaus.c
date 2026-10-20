@@ -42,6 +42,7 @@
     Copyright (C) 2023 Alynx Zhou.
     Copyright (C) 2023 Luca Zulberti.
     Copyright (C) 2025-2026 Guillaume Stutin.
+    Copyright (C) 2026 Ankit-cs.
     
     darktable is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -1009,12 +1010,7 @@ static gboolean dt_bauhaus_popup_button_press(GtkWidget *widget, GdkEventButton 
       {
         dt_bauhaus_slider_data_t *d = &w->data.slider;
         d->is_dragging = TRUE;
-
-        // Trick to ensure new value ≠ d->pos (so we commit to pipeline), since
-        // d->pos is used for uncommitted drawings.
-        const float value = d->pos;
-        d->pos = d->oldpos;
-        dt_bauhaus_slider_set_normalized(w, value, TRUE);
+        dt_bauhaus_slider_set_normalized(w, d->pos, TRUE);
       }
       else
       {
@@ -1677,6 +1673,8 @@ GtkWidget *dt_bauhaus_slider_from_widget(dt_bauhaus_t *bh, dt_bauhaus_widget_t *
   d->format = "";
   d->factor = 1.0f;
   d->offset = 0.0f;
+
+  d->last_committed_value = _bh_round_to_n_digits(w, defval);
 
   d->grad_cnt = 0;
   d->grad_col = NULL;
@@ -2448,14 +2446,7 @@ static void dt_bauhaus_widget_accept(struct dt_bauhaus_widget_t *w)
       // We need extra conversions from cursor coordinates to set it right.
       // This needs to be kept in sync with popup_draw()
       dt_bauhaus_slider_data_t *d = &w->data.slider;
-
-      // This is needed to accept the change.
-      // d->pos is soft-updated with corrected coordinates for drawing purposes only in popup_redraw().
-      // We need to reset it to the original value temporarily, and request a proper setting
-      // with value-changed signal through dt_bauhaus_slider_set_normalized()
-      const float value = d->pos;
-      d->pos = d->oldpos;
-      dt_bauhaus_slider_set_normalized(w, value, TRUE);
+      dt_bauhaus_slider_set_normalized(w, d->pos, TRUE);
       break;
     }
     default:
@@ -3330,7 +3321,7 @@ static void _dt_bauhaus_slider_set_with_raise(GtkWidget *widget, float pos, gboo
 
 void dt_bauhaus_slider_set(GtkWidget *widget, float pos)
 {
-  // this is the public interface function, it commits the value and emits "value-changed"
+  // this is the public interface function; commits and emits "value-changed" if the rounded value changed
   _dt_bauhaus_slider_set_with_raise(widget, pos, TRUE);
 }
 
@@ -3436,9 +3427,8 @@ void dt_bauhaus_slider_set_offset(GtkWidget *widget, float offset)
 
 static void _commit_slider_value(struct dt_bauhaus_widget_t *w)
 {
-  // Announce the new value. Whoever listens decides what it costs: the history commit
-  // batches the pipeline recompute it triggers, so emitting on every scroll step is fine
-  // and this widget has no reason to hold anything back.
+  // Announce the new value once it has changed. Whoever listens decides what it costs:
+  // the history commit batches the pipeline recompute it triggers.
 
   // Don't commit anything while a reset is in progress (reloading history, applying a
   // style, ...): those set widget values programmatically and must not reach history.
@@ -3459,38 +3449,43 @@ static void _commit_slider_value(struct dt_bauhaus_widget_t *w)
             w->label);
   }
 
-  // We need te emit this signal inconditionnaly
+  // Emit value-changed signal for the committed value change
   g_signal_emit_by_name(G_OBJECT(w), "value-changed");
 }
 
 /**
  * @brief Set the value of a slider as a ratio of the GUI slider width
  *
+ * Note that d->pos is used strictly as a visual drawing position.
+ *
  * @param w Bauhaus widget
  * @param pos Relative position over the slider bar (ratio between 0 and 1)
  * @param raise Set to FALSE to redraw slider position without committing the actual value to pipeline
  * nor sending the `value-changed` event (e.g. in motion-notify events, while dragging).
- * Set to TRUE when the change is finished (e.g. in button-pressed events).
+ * Set to TRUE to commit the value and emit `value-changed`, which only happens if the rounded
+ * value differs from the last committed value.
  */
 static void dt_bauhaus_slider_set_normalized(struct dt_bauhaus_widget_t *w, float pos, gboolean raise)
 {
   dt_bauhaus_slider_data_t *d = &w->data.slider;
-  const float old_pos = d->pos;
   const float new_pos = CLAMP(pos, 0.0f, 1.0f);
 
-  if(old_pos != new_pos || raise)
+  const float new_value = new_pos * (d->max - d->min) + d->min;
+  const float precision = (float)ipow(10, d->digits) * d->factor;
+  const float rounded_value = roundf(new_value * precision) / precision;
+  d->pos = (rounded_value - d->min) / (d->max - d->min);
+
+  if(w->bauhaus->current == w)
+    gtk_widget_queue_draw(w->bauhaus->popup_area);
+
+  gtk_widget_queue_draw(GTK_WIDGET(w));
+
+  if(raise)
   {
-    const float new_value = new_pos * (d->max - d->min) + d->min;
-    const float precision = (float)ipow(10, d->digits) * d->factor;
-    const float rounded_value = roundf(new_value * precision) / precision;
-    d->pos = (rounded_value - d->min) / (d->max - d->min);
+    const gboolean value_changed = (d->last_committed_value != rounded_value);
+    d->last_committed_value = rounded_value;
 
-    if(w->bauhaus->current == w)
-      gtk_widget_queue_draw(w->bauhaus->popup_area);
-
-    gtk_widget_queue_draw(GTK_WIDGET(w));
-
-    if(raise) _commit_slider_value(w);
+    if(value_changed) _commit_slider_value(w);
   }
 }
 
