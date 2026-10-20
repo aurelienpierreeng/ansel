@@ -267,7 +267,7 @@ regenerated); `_init_8`'s early return for `width < 16` does not zero the size.
 
 ### "File not found" is about the source, never the cached thumbnail
 
-*Found `6c0f7ffd92`, 2026-10-20, by reading every path that returns `DT_IMAGEIO_FILE_NOT_FOUND`;
+*Found `c1c4123fcb`, 2026-10-20, by reading every path that returns `DT_IMAGEIO_FILE_NOT_FOUND`;
 the table's two `FILE_NOT_FOUND` rows after the first come from this reading. The `EXISTS` and
 `IS_REGULAR` columns below are measured with `g_file_test()`, GLib 2.80.0, Linux, as uid 1000 —
 not root, which passes every permission check. The labels are by reading.*
