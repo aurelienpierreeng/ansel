@@ -14,6 +14,7 @@
     Copyright (C) 2021 Bill Ferguson.
     Copyright (C) 2022 Martin Bařinka.
     Copyright (C) 2023, 2025 Aurélien PIERRE.
+    Copyright (C) 2026 Guillaume Stutin.
     
     darktable is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -157,7 +158,8 @@ typedef struct dt_accels_t
   // TRUE if we didn't find a keyboardrc config file at startup and we need to init a new one
   gboolean init;
 
-  // between key_pressed and key_release events, this stores the active key strokes
+  // between key_pressed and key_release events, this stores the active key strokes;
+  // cleared when the main window gains or loses the focus (see dt_accels_dispatch)
   GtkAccelKey active_key;
 
   // Temporarily disable accelerators
