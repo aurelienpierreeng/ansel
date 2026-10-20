@@ -27,6 +27,7 @@
     Copyright (C) 2022 Martin Bařinka.
     Copyright (C) 2022 Miloš Komarčević.
     Copyright (C) 2023 Luca Zulberti.
+    Copyright (C) 2026 Guillaume Stutin.
     
     darktable is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -1228,6 +1229,18 @@ static gboolean _key_pressed(GtkWidget *w, GdkEvent *event, dt_accels_t *accels,
 gboolean dt_accels_dispatch(GtkWidget *w, GdkEvent *event, gpointer user_data)
 {
   dt_accels_t *accels = (dt_accels_t *)user_data;
+
+  // A shortcut that opens a window (import, export) moves the focus there while its key is
+  // still down, so the release never comes back here. The held key is therefore only known
+  // within one stretch of focus: forget it when the focus comes or goes, or the next press of
+  // the same shortcut reads as auto-repeat and does nothing.
+  if(event->type == GDK_FOCUS_CHANGE)
+  {
+    dt_widget_log("[shortcuts] Focus %s, held key forgotten\n", event->focus_change.in ? "in" : "out");
+    accels->active_key.accel_key = 0;
+    accels->active_key.accel_mods = 0;
+    return FALSE;
+  }
 
   // Ditch everything that is not a key stroke or key strokes that are modifiers alone
   // Abort early for performance.

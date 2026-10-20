@@ -4,7 +4,7 @@
 
 > **Verified against `42eca0e8fe` on 2026-09-29.**
 >
-> How a keystroke reaches an action in Ansel, and the four ways that chain has broken.
+> How a keystroke reaches an action in Ansel, and the five ways that chain has broken.
 >
 > Each finding below is dated with the commit that established it. A finding is only as
 > good as its hash: before acting on one older than the code you are changing, re-measure
@@ -205,5 +205,51 @@ Two things about a key event that the trace has to state rather than pass throug
 - **A toplevel is named by its title as well as its type.** Every toplevel is a `GtkWindow`, so
   the type alone cannot say whether a key reached the main window or a panel holding the keyboard
   (the shape manager while a name is edited) — which is the question such a trace is read for.
+
+## A shortcut that opens a window is released in that window
+
+*Found `11b8d32061`, 2026-10-21.*
+
+`dt_accels_dispatch()` (`src/widgets/accelerators.c`) listens on the main window only, and it
+filters auto-repeat by remembering the key it last fired in `accels->active_key` until a release
+clears it: a press equal to `active_key` counts as a repeat and fires nothing. That pairing holds
+only while the release comes back to the window that saw the press. It does not when the shortcut
+itself moves the focus. File → Import (Ctrl+Shift+I) and File → Export (Ctrl+Shift+E) open their
+window from inside the press handler, and the key is released into that window.
+
+Measured with `-d input` on X11 under KWin, in a Debug build, whose `[shortcuts]` lines show
+whether an action ran. Of 17 openings of the export window, the release of E reached
+"Ansel - Export images" 15 times. The two exceptions were released 73 and 108 ms after the press,
+while another release at 101 ms reached the new window, so this is a race rather than a threshold.
+With the release as the only thing that clears `active_key`, what happens next depends on how
+the window was closed:
+
+- **Escape** closes it on its press, and its release lands in the main window. Any release clears
+  `active_key`, so the next Ctrl+Shift+E fires. Escape hides the problem.
+- **The mouse** releases nothing in the main window. The next Ctrl+Shift+E is read as a repeat and
+  dropped (traced as "Key pressed" with no "action executed"), its own release clears the state,
+  and only the press after it fires. Both presses dropped in the measurement followed a close
+  with the mouse.
+
+The Windows report describes the double press as the rule rather than as a race. That fits Win32
+assigning a queued keyboard message to whichever window has the focus when the message is read,
+which is after the press handler has shown the new window. That reading of Win32 was not
+measured.
+
+`dt_accels_dispatch()` therefore clears `active_key` on every `GDK_FOCUS_CHANGE` the main window
+receives. A key held when the focus leaves will be released elsewhere, and a key held when the
+focus returns was pressed elsewhere, so a held key means something only within one stretch of
+focus. The test comes first in the function, before anything reads `event->key`, because a focus
+event is not a key event. In the measurement, "Focus out" arrives right after the export action
+and before the release of E reaches the new window. The window was then closed with the mouse
+three times and reopened on the first press each time. In two of those, the release of E had
+gone to the export window, which is the case where the release alone drops the next press.
+`_is_scroll_captured_by_widget()` (`views/darkroom.c`) reads the
+same field; how it behaved with a stale value was not measured.
+
+**A Windows build under wine cannot test shortcuts.** Under wine-staging, with a French X keyboard
+layout, the GTK Win32 backend delivered every letter key with keyval `0xffffff` (VoidSymbol) and
+state `0x0`, whether or not Ctrl and Shift were held, so no shortcut fires there at all
+(2026-10-20, a Windows build of `99666b0d68`).
 
 ---
