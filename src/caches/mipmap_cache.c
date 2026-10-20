@@ -30,7 +30,7 @@
     Copyright (C) 2022 Miloš Komarčević.
     Copyright (C) 2023 Ricky Moon.
     Copyright (C) 2024 Alynx Zhou.
-    Copyright (C) 2025 Guillaume Stutin.
+    Copyright (C) 2025-2026 Guillaume Stutin.
     
     darktable is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -1346,11 +1346,25 @@ void dt_mipmap_cache_remove_at_size(const int32_t imgid, const dt_mipmap_size_t 
   }
 }
 
-// get rid of all ldr thumbnails:
+// get rid of all ldr thumbnails, and of a full-size load that failed:
 void dt_mipmap_cache_remove(const int32_t imgid, const gboolean flush_disk)
 {
   for(dt_mipmap_size_t k = DT_MIPMAP_0; k < DT_MIPMAP_F; k++)
     dt_mipmap_cache_remove_at_size(imgid, k, flush_disk);
+
+  /* The decoded raw stays: a development change does not invalidate it. A failed load holds no
+   * raw, and the thumbnails generated next would read its failure back instead of trying the file
+   * again, which may have been repaired, or may now fit in memory. */
+  dt_cache_t *full = &_get_cache(_mipmap_cache, DT_MIPMAP_FULL)->cache;
+  const uint32_t key = get_key(imgid, DT_MIPMAP_FULL);
+  dt_cache_entry_t *entry = dt_cache_testget(full, key, 'r');
+  if(IS_NULL_PTR(entry)) return;
+
+  struct dt_mipmap_buffer_dsc *dsc = _get_dsc_from_entry(entry);
+  ASAN_UNPOISON_MEMORY_REGION(dsc, dt_mipmap_buffer_dsc_size);
+  const gboolean failed = dsc->status != DT_IMAGEIO_OK;
+  dt_cache_release(full, entry);
+  if(failed) dt_cache_remove(full, key);
 }
 
 /* Same as _remove_at_size(), minus the "thumbnails only" guard, so the two input sizes can
