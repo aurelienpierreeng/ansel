@@ -39,6 +39,7 @@
     Copyright (C) 2022 Philipp Lutz.
     Copyright (C) 2023-2024 Alynx Zhou.
     Copyright (C) 2023 Ricky Moon.
+    Copyright (C) 2026 Guillaume Stutin.
     
     darktable is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -347,6 +348,26 @@ void dt_imageio_flip_buffers_ui8_to_float(float *out, const uint8_t *in, const f
   }
 }
 
+/* Every decoder answers DT_IMAGEIO_FILE_CORRUPTED to a file in another format, and rawspeed
+ * DT_IMAGEIO_UNSUPPORTED_FORMAT, so neither says anything once the whole cascade has failed. The
+ * failures kept here come from a decoder that recognised the file and says why it could not load
+ * it: the first one is the reason, and a later decoder turning the file down does not replace it. */
+static dt_imageio_retval_t _decoder_reason(const dt_imageio_retval_t reason, const dt_imageio_retval_t ret)
+{
+  if(reason != DT_IMAGEIO_FILE_CORRUPTED) return reason;
+
+  switch(ret)
+  {
+    case DT_IMAGEIO_UNSUPPORTED_FEATURE:
+    case DT_IMAGEIO_UNSUPPORTED_CAMERA:
+    case DT_IMAGEIO_LOAD_FAILED:
+    case DT_IMAGEIO_IOERROR:
+      return ret;
+    default:
+      return reason;
+  }
+}
+
 dt_imageio_retval_t dt_imageio_open_hdr(dt_image_t *img, const char *filename, dt_mipmap_buffer_t *buf)
 {
   // if buf is NULL, don't proceed
@@ -354,34 +375,40 @@ dt_imageio_retval_t dt_imageio_open_hdr(dt_image_t *img, const char *filename, d
     return DT_IMAGEIO_OK;
 
   dt_imageio_retval_t ret;
+  dt_imageio_retval_t reason = DT_IMAGEIO_FILE_CORRUPTED;
 
 #ifdef HAVE_OPENEXR
   ret = dt_imageio_open_exr(img, filename, buf);
   if(ret == DT_IMAGEIO_OK || ret == DT_IMAGEIO_CACHE_FULL)
     return ret;
+  reason = _decoder_reason(reason, ret);
 #endif
 
   ret = dt_imageio_open_rgbe(img, filename, buf);
   if(ret == DT_IMAGEIO_OK || ret == DT_IMAGEIO_CACHE_FULL)
     return ret;
+  reason = _decoder_reason(reason, ret);
 
   ret = dt_imageio_open_pfm(img, filename, buf);
   if(ret == DT_IMAGEIO_OK || ret == DT_IMAGEIO_CACHE_FULL)
     return ret;
+  reason = _decoder_reason(reason, ret);
 
 #ifdef HAVE_LIBAVIF
   ret = dt_imageio_open_avif(img, filename, buf);
   if(ret == DT_IMAGEIO_OK || ret == DT_IMAGEIO_CACHE_FULL)
     return ret;
+  reason = _decoder_reason(reason, ret);
 #endif
 
 #ifdef HAVE_LIBHEIF
   ret = dt_imageio_open_heif(img, filename, buf);
   if(ret == DT_IMAGEIO_OK || ret == DT_IMAGEIO_CACHE_FULL)
     return ret;
+  reason = _decoder_reason(reason, ret);
 #endif
 
-  return DT_IMAGEIO_FILE_CORRUPTED;
+  return reason;
 }
 
 // Decoder routing: dt_image_ext_is_ldr() drives dt_imageio_open_raster(), the generic/
@@ -481,36 +508,43 @@ dt_imageio_retval_t dt_imageio_open_raster(dt_image_t *img, const char *filename
     return DT_IMAGEIO_OK;
 
   dt_imageio_retval_t ret;
+  dt_imageio_retval_t reason = DT_IMAGEIO_FILE_CORRUPTED;
 
   ret = dt_imageio_open_jpeg(img, filename, buf);
   if(ret == DT_IMAGEIO_OK || ret == DT_IMAGEIO_CACHE_FULL)
     return ret;
+  reason = _decoder_reason(reason, ret);
 
   ret = dt_imageio_open_tiff(img, filename, buf);
   if(ret == DT_IMAGEIO_OK || ret == DT_IMAGEIO_CACHE_FULL)
     return ret;
+  reason = _decoder_reason(reason, ret);
 
 #ifdef HAVE_WEBP
   ret = dt_imageio_open_webp(img, filename, buf);
   if(ret == DT_IMAGEIO_OK || ret == DT_IMAGEIO_CACHE_FULL)
     return ret;
+  reason = _decoder_reason(reason, ret);
 #endif
 
   ret = dt_imageio_open_png(img, filename, buf);
   if(ret == DT_IMAGEIO_OK || ret == DT_IMAGEIO_CACHE_FULL)
     return ret;
+  reason = _decoder_reason(reason, ret);
 
 #ifdef HAVE_OPENJPEG
   ret = dt_imageio_open_j2k(img, filename, buf);
   if(ret == DT_IMAGEIO_OK || ret == DT_IMAGEIO_CACHE_FULL)
     return ret;
+  reason = _decoder_reason(reason, ret);
 #endif
 
   ret = dt_imageio_open_pnm(img, filename, buf);
   if(ret == DT_IMAGEIO_OK || ret == DT_IMAGEIO_CACHE_FULL)
     return ret;
+  reason = _decoder_reason(reason, ret);
 
-  return DT_IMAGEIO_FILE_CORRUPTED;
+  return reason;
 }
 
 dt_imageio_retval_t dt_imageio_open_raw(dt_image_t *img, const char *filename, dt_mipmap_buffer_t *buf)
@@ -520,6 +554,7 @@ dt_imageio_retval_t dt_imageio_open_raw(dt_image_t *img, const char *filename, d
     return DT_IMAGEIO_OK;
 
   dt_imageio_retval_t ret;
+  dt_imageio_retval_t reason = DT_IMAGEIO_FILE_CORRUPTED;
 
   /* check if user wants to force processing through Libraw */
   const gboolean force_libraw = dt_imageio_is_handled_by_libraw(img, filename);
@@ -530,6 +565,7 @@ dt_imageio_retval_t dt_imageio_open_raw(dt_image_t *img, const char *filename, d
     ret = dt_imageio_open_rawspeed(img, filename, buf);
     if(ret == DT_IMAGEIO_OK || ret == DT_IMAGEIO_CACHE_FULL)
       return ret;
+    reason = _decoder_reason(reason, ret);
   }
 
 #ifdef HAVE_LIBRAW
@@ -537,6 +573,7 @@ dt_imageio_retval_t dt_imageio_open_raw(dt_image_t *img, const char *filename, d
   ret = dt_imageio_open_libraw(img, filename, buf);
   if(ret == DT_IMAGEIO_OK || ret == DT_IMAGEIO_CACHE_FULL)
     return ret;
+  reason = _decoder_reason(reason, ret);
 #endif
 
   /* try Rawspeed again in case Libraw was forced but failed */
@@ -545,9 +582,10 @@ dt_imageio_retval_t dt_imageio_open_raw(dt_image_t *img, const char *filename, d
     ret = dt_imageio_open_rawspeed(img, filename, buf);
     if(ret == DT_IMAGEIO_OK || ret == DT_IMAGEIO_CACHE_FULL)
       return ret;
+    reason = _decoder_reason(reason, ret);
   }
 
-  return DT_IMAGEIO_FILE_CORRUPTED;
+  return reason;
 }
 
 void dt_imageio_to_fractional(float in, uint32_t *num, uint32_t *den)
@@ -1067,6 +1105,7 @@ dt_imageio_retval_t dt_imageio_open(dt_image_t *img,               // non-const 
     return !DT_IMAGEIO_OK;
 
   dt_imageio_retval_t ret = DT_IMAGEIO_FILE_CORRUPTED;
+  dt_imageio_retval_t reason = DT_IMAGEIO_FILE_CORRUPTED;
   img->loader = LOADER_UNKNOWN;
 
   // Start with the decoder(s) the extension routes to (fast path). Unlike before, a failure here
@@ -1076,23 +1115,29 @@ dt_imageio_retval_t dt_imageio_open(dt_image_t *img,               // non-const 
   // reporting "corrupted" on a file a later attempt would have opened fine.
   if(dt_imageio_is_raster(filename))
     ret = dt_imageio_open_raster(img, filename, buf);
+  reason = _decoder_reason(reason, ret);
 
   if(ret != DT_IMAGEIO_OK && ret != DT_IMAGEIO_CACHE_FULL && dt_imageio_is_raw(filename))
     ret = dt_imageio_open_raw(img, filename, buf);
+  reason = _decoder_reason(reason, ret);
 
   if(ret != DT_IMAGEIO_OK && ret != DT_IMAGEIO_CACHE_FULL && dt_imageio_is_hdr(filename))
     ret = dt_imageio_open_hdr(img, filename, buf);
+  reason = _decoder_reason(reason, ret);
 
   // fallback: bruteforce everything hoping for a miracle
   // Most likely, it's a format we never heard of.
   if(ret != DT_IMAGEIO_OK && ret != DT_IMAGEIO_CACHE_FULL)
     ret = dt_imageio_open_raster(img, filename, buf);
+  reason = _decoder_reason(reason, ret);
 
   if(ret != DT_IMAGEIO_OK && ret != DT_IMAGEIO_CACHE_FULL)
     ret = dt_imageio_open_raw(img, filename, buf);
+  reason = _decoder_reason(reason, ret);
 
   if(ret != DT_IMAGEIO_OK && ret != DT_IMAGEIO_CACHE_FULL)
     ret = dt_imageio_open_hdr(img, filename, buf);
+  reason = _decoder_reason(reason, ret);
 
   // Final check and abort. CACHE_FULL stopped the cascade above: a decoder took the file, but could
   // not allocate the memory to decode it -- the full-size buffer (dt_mipmap_cache_alloc()), or one
@@ -1110,7 +1155,7 @@ dt_imageio_retval_t dt_imageio_open(dt_image_t *img,               // non-const 
   {
     fprintf(stderr, "[imageio] The file %s is supported by none of our decoders.\n", filename);
     dt_control_log(_("The file `%s` is supported by none of our decoders."), filename);
-    return ret;
+    return reason;
   }
 
   img->p_width = img->width - img->crop_x - img->crop_width;

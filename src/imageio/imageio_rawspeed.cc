@@ -28,6 +28,7 @@
     Copyright (C) 2022 paolodepetrillo.
     Copyright (C) 2022 Philipp Lutz.
     Copyright (C) 2025 Alynx Zhou.
+    Copyright (C) 2026 Guillaume Stutin.
     
     darktable is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -495,8 +496,10 @@ dt_imageio_retval_t dt_imageio_open_rawspeed(dt_image_t *img,
   }
   catch(const rawspeed::IOException &exc)
   {
-    dt_print(DT_DEBUG_ALWAYS, "[rawspeed] (%s) I/O error: %s", img->filename, exc.what());
-    return DT_IMAGEIO_IOERROR;
+    // A read past the end of the bytes readFile() already loaded: the file is truncated or
+    // corrupted. Reading the file itself throws FileIOException.
+    dt_print(DT_DEBUG_ALWAYS, "[rawspeed] (%s) corrupt: %s", img->filename, exc.what());
+    return DT_IMAGEIO_FILE_CORRUPTED;
   }
   catch(const rawspeed::FileIOException &exc)
   {
