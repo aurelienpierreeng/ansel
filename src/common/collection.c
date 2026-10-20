@@ -54,6 +54,7 @@
     Copyright (C) 2022 Miloš Komarčević.
     Copyright (C) 2023 André Doherty.
     Copyright (C) 2024-2026 Guillaume Stutin.
+    Copyright (C) 2026 Ankit.
     
     darktable is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -717,26 +718,24 @@ GList *dt_collection_get_property_values(const dt_collection_properties_t proper
   return dt_collection_query_get_property_values(&req);
 }
 
-int dt_collection_serialize(char *buf, int bufsize)
+gchar *dt_collection_serialize(void)
 {
   char confname[200];
-  int c;
   const int num_rules = dt_conf_get_int("plugins/lighttable/collect/num_rules");
-  c = snprintf(buf, bufsize, "%d:", num_rules);
-  buf += c;
-  bufsize -= c;
+
+  GString *s = g_string_new(NULL);
+  g_string_append_printf(s, "%d:", num_rules);
+
   for(int k = 0; k < num_rules; k++)
   {
     snprintf(confname, sizeof(confname), "plugins/lighttable/collect/mode%1d", k);
     const int mode = dt_conf_get_int(confname);
-    c = snprintf(buf, bufsize, "%d:", mode);
-    buf += c;
-    bufsize -= c;
+    g_string_append_printf(s, "%d:", mode);
+
     snprintf(confname, sizeof(confname), "plugins/lighttable/collect/item%1d", k);
     const int item = dt_conf_get_int(confname);
-    c = snprintf(buf, bufsize, "%d:", item);
-    buf += c;
-    bufsize -= c;
+    g_string_append_printf(s, "%d:", item);
+
     snprintf(confname, sizeof(confname), "plugins/lighttable/collect/string%1d", k);
     const char *str = dt_conf_get_string_const(confname);
     // Fold the recursive flag back into the trailing '*' this wire format has always used, so
@@ -750,14 +749,13 @@ int dt_collection_serialize(char *buf, int bufsize)
     }
     const char *emit = str_recursive ? str_recursive : str;
     if(emit && (emit[0] != '\0'))
-      c = snprintf(buf, bufsize, "%s$", emit);
+      g_string_append_printf(s, "%s$", emit);
     else
-      c = snprintf(buf, bufsize, "%%$");
-    g_free(str_recursive);
-    buf += c;
-    bufsize -= c;
+      g_string_append(s, "%$");
+    dt_free(str_recursive);
   }
-  return 0;
+
+  return g_string_free(s, FALSE);
 }
 
 void dt_collection_deserialize(const char *buf)

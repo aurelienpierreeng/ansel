@@ -5,6 +5,7 @@
  *    Copyright (C) 2020 Pascal Obry.
  *    Copyright (C) 2021 Sakari Kapanen.
  *    Copyright (C) 2022 Martin Bařinka.
+ *    Copyright (C) 2026 Ankit.
  *    
  *    darktable is free software: you can redistribute it and/or modify
  *    it under the terms of the GNU General Public License as published by
@@ -37,8 +38,7 @@ static void _update_recentcollections()
   // No GUI-presence test needed: with no GUI this handler is never registered.
   // Serialize current request
   char confname[200] = { 0 };
-  char buf[4096];
-  dt_collection_serialize(buf, sizeof(buf));
+  gchar *buf = dt_collection_serialize();
 
   int n = -1;
   gboolean found_duplicate = FALSE;
@@ -98,6 +98,7 @@ static void _update_recentcollections()
   // Increment items if we didn't find a duplicate
   num_items += found_duplicate ? 0 : 1;
   dt_conf_set_int("plugins/lighttable/recentcollect/num_items", CLAMP(num_items, 1, max_items));
+  dt_free(buf);
 }
 
 void dt_collection_gui_register_handlers(void)

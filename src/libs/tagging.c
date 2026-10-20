@@ -32,6 +32,7 @@
     Copyright (C) 2021 Marco Carrarini.
     Copyright (C) 2022 Martin Bařinka.
     Copyright (C) 2022 Nicolas Auffray.
+    Copyright (C) 2026 Ankit.
     
     darktable is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -99,7 +100,7 @@ typedef struct dt_lib_tagging_t
   GList *floating_tag_imgs;
   gboolean tree_flag, suggestion_flag, sort_count_flag, hide_path_flag, dttags_flag;
   gboolean attached_tree_flag;  // sidebar attached view: TRUE = tree, FALSE = list
-  char *collection;
+  gchar *collection;
   char *last_tag;
   struct
   {
@@ -655,7 +656,7 @@ static void _collection_updated_callback(gpointer instance, dt_collection_change
                                          dt_lib_module_t *self)
 {
   dt_lib_tagging_t *d = (dt_lib_tagging_t *)self->data;
-  d->collection[0] = '\0';
+  dt_free(d->collection);
   // the tags suggested on an empty entry follow the current collection
   _refresh_collection_tags(self);
   _update_atdetach_buttons(self);
@@ -667,7 +668,7 @@ static void _raise_signal_tag_changed(dt_lib_module_t *self)
   // when collection is on tag any attach & detach becomes very slow
   // speeding up when jumping from tag collection to the other
   // the cost is that tag collection doesn't reflect the tag changes real time
-  if(!d->collection[0])
+  if(IS_NULL_PTR(d->collection))
   {
     // raises change only for other modules
     dt_control_signal_block_by_func(dt_control_signal_get_global(), G_CALLBACK(_collection_updated_callback), self);
@@ -2092,7 +2093,7 @@ static void _pop_menu_dictionary_goto_tag_collection(GtkWidget *menuitem, dt_lib
     gtk_tree_model_get(model, &iter, DT_LIB_TAGGING_COL_PATH, &path, DT_LIB_TAGGING_COL_COUNT, &count, -1);
     if(count)
     {
-      if(!d->collection[0]) dt_collection_serialize(d->collection, 4096);
+      if(IS_NULL_PTR(d->collection)) d->collection = dt_collection_serialize();
       gchar *tag_collection = g_strdup_printf("1:0:%d:%s$", DT_COLLECTION_PROP_TAG, path);
       dt_control_signal_block_by_func(dt_control_signal_get_global(), G_CALLBACK(_collection_updated_callback), self);
       dt_collection_deserialize(tag_collection);
@@ -2106,12 +2107,12 @@ static void _pop_menu_dictionary_goto_tag_collection(GtkWidget *menuitem, dt_lib
 static void _pop_menu_dictionary_goto_collection_back(GtkWidget *menuitem, dt_lib_module_t *self)
 {
   dt_lib_tagging_t *d = (dt_lib_tagging_t *)self->data;
-  if(d->collection[0])
+  if(!IS_NULL_PTR(d->collection))
   {
     dt_control_signal_block_by_func(dt_control_signal_get_global(), G_CALLBACK(_collection_updated_callback), self);
     dt_collection_deserialize(d->collection);
     dt_control_signal_unblock_by_func(dt_control_signal_get_global(), G_CALLBACK(_collection_updated_callback), self);
-    d->collection[0] = '\0';
+    dt_free(d->collection);
   }
 }
 
@@ -2307,14 +2308,13 @@ static void _pop_menu_dictionary(GtkWidget *treeview, GdkEventButton *event, dt_
     g_signal_connect(menuitem, "activate", (GCallback)_pop_menu_dictionary_copy_tag, self);
     gtk_menu_shell_append(GTK_MENU_SHELL(menu), menuitem);
 
-    if(d->collection[0])
+    if(!IS_NULL_PTR(d->collection))
     {
-      char *collection = g_malloc(4096);
-      dt_collection_serialize(collection, 4096);
-      if(g_strcmp0(d->collection, collection) == 0) d->collection[0] = '\0';
+      gchar *collection = dt_collection_serialize();
+      if(g_strcmp0(d->collection, collection) == 0) dt_free(d->collection);
       dt_free(collection);
     }
-    if(count || d->collection[0])
+    if(count || !IS_NULL_PTR(d->collection))
     {
       menuitem = gtk_separator_menu_item_new();
       gtk_menu_shell_append(GTK_MENU_SHELL(menu), menuitem);
@@ -2324,7 +2324,7 @@ static void _pop_menu_dictionary(GtkWidget *treeview, GdkEventButton *event, dt_
         g_signal_connect(menuitem, "activate", (GCallback)_pop_menu_dictionary_goto_tag_collection, self);
         gtk_menu_shell_append(GTK_MENU_SHELL(menu), menuitem);
       }
-      if(d->collection[0])
+      if(!IS_NULL_PTR(d->collection))
       {
         menuitem = gtk_menu_item_new_with_label(_("go back to work"));
         g_signal_connect(menuitem, "activate", (GCallback)_pop_menu_dictionary_goto_collection_back, self);
@@ -3419,7 +3419,7 @@ void gui_init(dt_lib_module_t *self)
   DT_DEBUG_CONTROL_SIGNAL_CONNECT(dt_control_signal_get_global(), DT_SIGNAL_COLLECTION_CHANGED,
                             G_CALLBACK(_collection_updated_callback), self);
 
-  d->collection = g_malloc(4096);
+  d->collection = NULL;
   d->collection_tags = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, NULL);
   _update_layout(self);
   _init_treeview(self, 0);

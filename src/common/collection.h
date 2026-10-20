@@ -28,6 +28,7 @@
     Copyright (C) 2021 Ralf Brown.
     Copyright (C) 2022-2023, 2025 Aurélien PIERRE.
     Copyright (C) 2022 Martin Bařinka.
+    Copyright (C) 2026 Ankit.
     
     darktable is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -379,9 +380,14 @@ void dt_collection_update_query(const dt_collection_t *collection, dt_collection
 /** updates the hint message for collection */
 void dt_collection_hint_message(const dt_collection_t *collection);
 
-/* serialize and deserialize into a string. */
+/**
+ * \brief serialize current collection query into an allocated string.
+ *
+ * \return an allocated string representing the collection rules, or NULL.
+ *         The caller is responsible for freeing it with dt_free().
+ */
+gchar *dt_collection_serialize(void);
 void dt_collection_deserialize(const char *buf);
-int dt_collection_serialize(char *buf, int bufsize);
 
 /* splits an input string into a number part and an optional operator part */
 void dt_collection_split_operator_number(const gchar *input, char **number1, char **number2, char **op);
