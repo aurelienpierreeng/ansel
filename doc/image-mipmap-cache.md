@@ -115,6 +115,8 @@ outright, so those two — the unprocessed input, RAM-only, every disk write bei
 `mip < DT_MIPMAP_F` — are reachable only through `dt_mipmap_cache_remove_all_sizes()`. That is
 the right default for the list above: a development change does not invalidate the decoded raw,
 and dropping it on every history commit would re-read and re-demosaic the file per slider tick.
+The one `DT_MIPMAP_FULL` entry it does drop holds no raw: a load that failed (see "A purge tries
+a failed load again" below).
 
 An image LEAVING the library is the other case, and the only caller of the all-sizes form.
 Its input buffer otherwise outlives the row, with nothing but memory pressure to reclaim it,
@@ -289,6 +291,7 @@ the run recovered from, followed by an unrelated failure in the same run, reads 
 
 A skull stays in RAM until the entry is evicted or invalidated, **whatever the cause** — a
 transient one (`CACHE_FULL`) included. The label makes that visible; it does not change it.
+`dt_mipmap_cache_remove()` invalidates it, together with the failed full-size load behind it.
 
 `_view_image_get_surface_internal()` (`views/view.c`) paints the label: every consumer
 (lighttable, filmstrip, preview window, map, print, slideshow) goes through it. It runs in a
@@ -352,6 +355,41 @@ Two statuses of the table above never reach a skull, by reading. `IOERROR` from
 `format->write_image`: the thumbnail's format copies into the cache buffer and returns `0`.
 `ABORTED`: the thumbnail's pipe is local to `dt_imageio_export_with_flags()`, so only its
 `shutdown_ext` can stop it, and that external stop restores the entry.
+
+### A purge tries a failed load again
+
+*Measured 2026-10-20 on `c1c4123fcb`, before and with this change, as above. Seen in the
+lighttable the same day: once the five broken files were repaired, "Purge selected thumbnails from
+cache" brought them back without a restart.*
+
+`dt_mipmap_cache_remove()` — "Purge selected thumbnails from cache", an embedded-JPEG mode change,
+any history change — drops the thumbnails, and also the `DT_MIPMAP_FULL` entry when its `status` is
+not `DT_IMAGEIO_OK`. Without that, the purged thumbnail was regenerated, but the export behind it
+asked for `DT_MIPMAP_FULL` and read the failure back. Fourteen broken files whose load failed —
+the NEF renamed and cut, emptied, made unreadable, cut to 4 MB and filled with `A`; the NEF cut at
+six sizes from 100 bytes to 50 kB; and a CR2, a RAF and an RW2 cut to 60 % — were repaired before
+the purge: the thumbnail stayed a skull with the same status for all fourteen. Only eviction or
+`dt_mipmap_cache_remove_all_sizes()`, an image leaving the library, dropped that entry. Now all
+fourteen give their picture back after the purge.
+
+Eviction does retry a failure by chance once enough other images are loaded. The full-size cache
+holds `worker_threads` + 1 entries and is collected above 80 % of that, by reading: in the
+lighttable, with seven images and `worker_threads=4`, each broken file was decoded twice before
+any purge, once per thumbnail request. A failure stuck in the cache is therefore the case of a
+few images, and the purge is what retries it there.
+
+The decoded raw of a healthy image still survives a purge: over the same import, thumbnail,
+purge, thumbnail sequence, `-d cache` logs one `from original file I/O`, before and now.
+
+So does a raw decoded from a broken file, since its load succeeded. LibRaw decodes the DNG cut to
+60 % and the pipe fails on it: the `PROCESSING_FAILED` skull came back after the repair and the
+purge, before and now. The cut ARW and ORF gave a picture, which a purge keeps in the same way.
+Nothing in the cache notices that the file changed.
+
+The failure stays cached until then rather than not being cached at all. A thumbnail's export
+loads the image through `dt_dev_load_image()`, which already asks for `DT_MIPMAP_FULL`
+(`_dt_dev_mipmap_prefetch_full()`), then asks for it again itself. Uncached, every thumbnail of a
+broken file would run the whole decoder cascade twice, and again for each thumbnail size.
 
 ### The label wraps onto half the skull at most
 

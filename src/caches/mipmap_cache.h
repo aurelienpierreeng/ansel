@@ -11,6 +11,7 @@
     Copyright (C) 2022 Martin Bařinka.
     Copyright (C) 2025 Alynx Zhou.
     Copyright (C) 2025 Aurélien PIERRE.
+    Copyright (C) 2026 Guillaume Stutin.
     
     darktable is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -203,7 +204,7 @@ void dt_mipmap_cache_write_get_with_caller(
 void dt_mipmap_cache_release_with_caller(dt_mipmap_buffer_t *buf, const char *file,
                                          int line);
 
-// remove thumbnails, so they will be regenerated:
+// remove thumbnails, so they will be regenerated, and a full-size load that failed, so it is tried again:
 void dt_mipmap_cache_remove(const int32_t imgid, const gboolean flush_disk);
 void dt_mipmap_cache_remove_at_size(const int32_t imgid, const dt_mipmap_size_t mip, const gboolean flush_disk);
 
