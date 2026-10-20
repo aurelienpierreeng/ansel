@@ -248,7 +248,7 @@ lost there — stderr only got `could not process thumbnail!`. The causes, each 
 |---|---|---|
 | `_init_8` | neither the original nor a local copy exists, or the image left the image cache | `FILE_NOT_FOUND` |
 | `_init_8` | embedded-JPEG mode "always" (2) and no embedded/companion JPEG could be read: the pipe is forbidden | `NO_EMBEDDED_THUMBNAIL` |
-| `_generate_blocking`, `DT_MIPMAP_FULL` | the loader failed; its own value (`UNSUPPORTED_CAMERA`, `FILE_CORRUPTED`, …) used to be dropped | the loader's |
+| `_generate_blocking`, `DT_MIPMAP_FULL` | every decoder failed | `dt_imageio_open()`'s reason: see "Which loader failure a skull names" |
 | `dt_imageio_export_with_flags` | pipe init failed, or the pipe returned an error / no backbuf | `PROCESSING_FAILED` |
 | `dt_imageio_export_with_flags` | the pipe returned an error after the pixelpipe cache refused it memory | `CACHE_FULL` |
 | `dt_imageio_export_with_flags` | the pipe was stopped (`dt_dev_pixelpipe_process` returns the same `1` for a kill-switch stop as for a failure) | `ABORTED` |
@@ -294,6 +294,64 @@ transient one (`CACHE_FULL`) included. The label makes that visible; it does not
 (lighttable, filmstrip, preview window, map, print, slideshow) goes through it. It runs in a
 worker thread, so it builds its own Pango font description rather than borrowing bauhaus's, which
 `dt_bauhaus_load_theme()` frees from the GUI thread.
+
+### Which loader failure a skull names
+
+*Measured 2026-10-20 on `c1c4123fcb`, before and with this change, by a scratch program linked
+against `libansel.so`: it imports a good file into a `:memory:` library, breaks the file, asks for
+a `DT_MIPMAP_2` thumbnail and the `DT_MIPMAP_FULL` buffer and prints their `status`, repairs the
+file, calls `dt_mipmap_cache_remove()`, and asks again. `--disable-opencl`,
+`lighttable/embedded_jpg=0`, so every thumbnail goes through the export. The table's broken files
+are made from one Nikon Z 6 NEF, which rawspeed decodes. Labels from `view.c`. Seen in the
+lighttable the same day, in French, on the same files imported whole and then broken on disk:
+"Boîtier non supporté", "Erreur d'E/S" twice, "Fichier corrompu" twice.*
+
+When every decoder fails, `dt_imageio_open()` returns the first failure that says why a decoder
+which recognised the file could not load it — `UNSUPPORTED_FEATURE`, `UNSUPPORTED_CAMERA`,
+`LOAD_FAILED` or `IOERROR` — and `FILE_CORRUPTED` otherwise (`_decoder_reason()`). Each chain
+(`dt_imageio_open_raster/_raw/_hdr()`) applies the same rule to its own decoders.
+
+The other two failures say nothing once the whole cascade has run. Every raster and HDR decoder,
+and LibRaw, answer `FILE_CORRUPTED` both to another format and to a broken file in their own;
+rawspeed answers `UNSUPPORTED_FORMAT` to a file it cannot parse, a cut header included. The
+cascade tries every decoder on every file, so kept, these would make a truncated JPEG read
+"Unsupported format": rawspeed, tried after the raster chain, does not know JPEG. "Unsupported
+format" therefore never reaches a skull.
+
+| Broken file | rawspeed | LibRaw | Before | Now |
+|---|---|---|---|---|
+| model renamed to an unknown `NIKON Z 0` | `UNSUPPORTED_CAMERA` | decodes it | no skull | no skull |
+| the same, cut to 4 MB | `UNSUPPORTED_CAMERA` | I/O error | Corrupted file | Unsupported camera |
+| 0 bytes | `FileIOException`: `IOERROR` | fails | Corrupted file | I/O error |
+| mode `000` | `FileIOException`: `IOERROR` | fails | Corrupted file | I/O error |
+| cut to 4 MB | `RawDecoderException`: `UNSUPPORTED_FORMAT` | fails | Corrupted file | Corrupted file |
+| cut to 300 bytes, inside the TIFF header | `IOException` | fails | Corrupted file | Corrupted file |
+| 1 MB of `A` | no decoder: `UNSUPPORTED_FORMAT` | fails | Corrupted file | Corrupted file |
+
+**Before, the table row above that says "the loader's" status was wrong in effect.** The loader's
+value reached `dsc->status`, but every chain ended on `return DT_IMAGEIO_FILE_CORRUPTED` and the
+cascade on `dt_imageio_open_hdr()`'s, so a failed load always read "Corrupted file".
+
+LibRaw follows rawspeed on every raw, not only on CR3 (`dt_imageio_open_raw()`). A camera or a
+feature rawspeed does not support leaves a skull only when LibRaw fails too: the first row.
+
+rawspeed's `IOException` is `FILE_CORRUPTED`, not `IOERROR`. rawspeed throws it on reading past
+the end of the copy `FileReader::readFile()` made of the whole file, so it means cut or corrupt;
+failing to read the file throws `FileIOException`. `decodeRaw()`, `decodeMetaData()` and
+`checkSupport()` rewrap it as a `RawDecoderException`, so only `RawParser::getDecoder()` lets it
+out, on a header cut short. Cut to 60 %, an ARW, a CR2, a RAF, an ORF, an RW2 and a DNG all
+failed in rawspeed through `RawDecoderException`, before and now. LibRaw then decoded the ARW, the
+ORF and the DNG anyway (under gdb, `dt_imageio_open_libraw()` returned `DT_IMAGEIO_OK`): the first
+two gave a picture, the DNG a `PROCESSING_FAILED` skull from the pipe.
+
+Reachable by reading, not measured: `UNSUPPORTED_FEATURE` (rawspeed: a sample type or size it does
+not handle, a `RawDecoderException` that mentions "supported", a `CameraMetadataException`) and
+`LOAD_FAILED` (rawspeed: a CFA image with more than one component per pixel).
+
+Two statuses of the table above never reach a skull, by reading. `IOERROR` from
+`format->write_image`: the thumbnail's format copies into the cache buffer and returns `0`.
+`ABORTED`: the thumbnail's pipe is local to `dt_imageio_export_with_flags()`, so only its
+`shutdown_ext` can stop it, and that external stop restores the entry.
 
 ### The label wraps onto half the skull at most
 
