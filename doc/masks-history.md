@@ -272,17 +272,16 @@ prematurely).
 
 ## A style stores the shapes its items use
 
-*Found `74f2f56c5e`, 2026-10-21.*
+*Found `74f2f56c5e`, 2026-10-21; the choice moved to applying `c22681e4a5`, 2026-10-21.*
 
 A style is a copy taken now and pasted later, so it carries what a paste carries: the shapes its
 items' masks are drawn with. `data.style_shapes` (data schema 10) holds them, one row per form in
 the layout of `main.masks_history`, keyed by the style alone: a style has one flat set of shapes,
 as `dev->forms` is one flat list.
 
-**Which.** Those of a module that draws its own (`IOP_FLAGS_INTERNAL_MASKS`: retouch, spots)
-always; those of any other module's drawn mask only when the style is created or edited with
-"save drawn mask shapes". The edit dialog starts that box from `dt_styles_has_drawn_shapes()`, so
-an edit that changes nothing else keeps what the style had.
+**Which.** Every shape its items' masks use: a drawn mask's as well as those of a module that
+draws its own (`IOP_FLAGS_INTERNAL_MASKS`: retouch, spots). Nothing is chosen when the style is
+created or edited; the choice comes when it is applied.
 
 **From where.** An item taken from an image takes its group as the image's history holds it *at
 that item* (`dt_masks_history_forms_at()`, the accumulation rule of
@@ -299,6 +298,17 @@ replace carry them exactly as they carry a paste's: in prepend, a module the des
 has keeps its own mask, as for a paste. At export, `dt_styles_apply_style_items()` merges one
 module at a time from a dev that holds only the shapes, because
 `dt_history_merge_module_into_history()` copies forms from a dev and from nothing else.
+
+**Which come.** `history/style/drawn_shapes`, on by default, decides at every application. The
+merge settings dialog of the style action offers it when `dt_styles_has_drawn_shapes()` says the
+style has drawn shapes to offer, the styles module has an "apply drawn mask shapes" box, and the
+paths that apply without asking (a style at import, the studio pool, export) read its last value.
+Off, `_styles_applied_shapes()` keeps only the groups of the modules that draw their own, which
+always come. A drawn mask then arrives without its shapes and with its blend params unchanged, so
+it names a group the image lacks: `_develop_blend_init_drawn_mask()` fills a drawn mask whose group
+is missing (1, or 0 when the mask is inverted), and the module applies as if it had no drawn mask
+until shapes are drawn on the image. The merge reports the missing group on stderr, as it does any
+form it cannot find.
 
 That export path applies a style's items **newest first**: `dt_styles_get_item_list()` reads them
 `ORDER BY num DESC`, prepends each and reverses the list, which leaves them descending. Of several
@@ -321,11 +331,13 @@ those rows are legitimately shorter. A style's shape of another mask version is 
 converted, since v1→v2 and v2→v3 need the image's geometry.
 
 Measured with a scratch program on an image with 45 retouch shapes and a drawn mask added on
-exposure: with the box the style stores 48 shapes, without it 46 (the retouch group and its 45
-members). Applied in append and replace to a fresh image, both bring the retouch group with its
-45 members resolved and only the first brings exposure's mask; a duplicate keeps 48, an edit
-without the box drops to 46, and a `.dtstyle` saved, deleted and imported back holds 48 and
-applies the same. Creating the style takes 6.8 to 9.5 ms instead of 1.4 to 1.8 ms, for loading
+exposure: the style stores 48 shapes, and 46 without the exposure items (the retouch group and its
+45 members). With drawn shapes on, append and replace onto a fresh image bring the retouch group
+with its 45 members resolved and exposure's mask; prepend keeps the destination's exposure. With
+them off, all three bring the retouch group and 46 forms, and exposure arrives in drawn mode with
+`mask_id` 434343 and no such group. A duplicate and an edit keep 48, an edit adding exposure from
+the image to the 46-shape style gives 48, and a `.dtstyle` saved, deleted and imported back holds
+48 and applies the same. Creating a style whose items use shapes takes 6.8 to 11.9 ms, for loading
 the image's history once.
 
 Presets still carry no shapes.
