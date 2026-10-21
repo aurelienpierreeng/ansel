@@ -42,6 +42,7 @@
 */
 #include "system/macros.h"
 #include "database/history_repository.h"
+#include "database/style_repository.h"
 #include "system/target_clones.h"
 #include "system/openmp.h"
 #include "system/mem_alloc.h"
@@ -946,28 +947,25 @@ dt_iop_module_t *dt_masks_get_mask_manager(dt_develop_t *develop)
   return NULL;
 }
 
-static void _masks_fill_used_forms(GList *forms_list, const int form_id, int *used_form_ids,
-                                   const int used_count)
+/* Add to `used` the form `form_id` and, when it is a group, every form it holds, recursively, each
+ * once and in the order they are met. `seen` also bounds a group that holds itself through its
+ * members. */
+static void _masks_collect_used_forms(GList *forms, const int form_id, GHashTable *seen, GList **used)
 {
-  for(int used_index = 0; used_index < used_count; used_index++)
+  if(!g_hash_table_add(seen, GINT_TO_POINTER(form_id))) return;
+
+  dt_masks_form_t *mask_form = dt_masks_get_from_id_ext(forms, form_id);
+  if(IS_NULL_PTR(mask_form))
   {
-    if(used_form_ids[used_index] == 0)
-    {
-      used_form_ids[used_index] = form_id;
-      break;
-    }
-    if(used_form_ids[used_index] == form_id) break;
+    fprintf(stderr, "[_masks_collect_used_forms] form %i is used but not found\n", form_id);
+    return;
   }
 
-  dt_masks_form_t *mask_form = dt_masks_get_from_id_ext(forms_list, form_id);
-  if(!IS_NULL_PTR(mask_form) && (mask_form->type & DT_MASKS_GROUP))
-  {
-    for(GList *group_node = mask_form->points; group_node; group_node = g_list_next(group_node))
-    {
-      dt_masks_form_group_t *group_entry = (dt_masks_form_group_t *)group_node->data;
-      _masks_fill_used_forms(forms_list, group_entry->formid, used_form_ids, used_count);
-    }
-  }
+  *used = g_list_prepend(*used, mask_form);
+  if(!(mask_form->type & DT_MASKS_GROUP)) return;
+
+  for(GList *group_node = mask_form->points; group_node; group_node = g_list_next(group_node))
+    _masks_collect_used_forms(forms, ((dt_masks_form_group_t *)group_node->data)->formid, seen, used);
 }
 
 int dt_masks_copy_used_forms_for_module(dt_develop_t *develop_dest, dt_develop_t *develop_src,
@@ -976,48 +974,33 @@ int dt_masks_copy_used_forms_for_module(dt_develop_t *develop_dest, dt_develop_t
   if(!(source_module->flags() & IOP_FLAGS_SUPPORTS_BLENDING)) return 0;
   if(source_module->blend_params->mask_id <= 0) return 0;
 
-  const guint form_count = g_list_length(develop_src->forms);
-  if(form_count == 0) return 0;
+  GHashTable *seen = g_hash_table_new(g_direct_hash, g_direct_equal);
+  GList *used = NULL;
+  _masks_collect_used_forms(develop_src->forms, source_module->blend_params->mask_id, seen, &used);
+  g_hash_table_destroy(seen);
+  used = g_list_reverse(used);
 
-  int *used_form_ids = dt_calloc_align(form_count * sizeof(int));
-  if(IS_NULL_PTR(used_form_ids)) return 1;
-
-  _masks_fill_used_forms(develop_src->forms, source_module->blend_params->mask_id,
-                         used_form_ids, form_count);
-
-  for(int form_index = 0; form_index < (int)form_count && used_form_ids[form_index] > 0; form_index++)
+  int err = 0;
+  for(GList *node = used; node && !err; node = g_list_next(node))
   {
-    dt_masks_form_t *mask_form = dt_masks_get_from_id(develop_src, used_form_ids[form_index]);
-    if(!IS_NULL_PTR(mask_form))
+    dt_masks_form_t *mask_form = (dt_masks_form_t *)node->data;
+    dt_masks_form_t *existing_form = dt_masks_get_from_id_ext(develop_dest->forms, mask_form->formid);
+    if(existing_form)
     {
-      dt_masks_form_t *existing_form = dt_masks_get_from_id_ext(develop_dest->forms,
-                                                                used_form_ids[form_index]);
-      if(existing_form)
-      {
-        develop_dest->forms = g_list_remove(develop_dest->forms, existing_form);
-        develop_dest->allforms = g_list_append(develop_dest->allforms, existing_form);
-      }
+      develop_dest->forms = g_list_remove(develop_dest->forms, existing_form);
+      develop_dest->allforms = g_list_append(develop_dest->allforms, existing_form);
+    }
 
-      dt_masks_form_t *new_form = dt_masks_dup_masks_form(mask_form);
-      if(IS_NULL_PTR(new_form))
-      {
-        dt_free_align(used_form_ids);
-        return 1;
-      }
-      develop_dest->forms = g_list_append(develop_dest->forms, new_form);
-    }
-    else
-    {
-      fprintf(stderr, "[dt_masks_copy_used_forms_for_module] form %i not found in source image\n",
-              used_form_ids[form_index]);
-    }
+    dt_masks_form_t *new_form = dt_masks_dup_masks_form(mask_form);
+    err = IS_NULL_PTR(new_form);
+    if(!err) develop_dest->forms = g_list_append(develop_dest->forms, new_form);
   }
 
-  dt_free_align(used_form_ids);
-  return 0;
+  g_list_free(used);
+  return err;
 }
 
-/* One serialised form: a row of main.masks_history. */
+/* One serialised form: a row of main.masks_history or of data.style_shapes. */
 typedef struct _masks_row_t
 {
   int form_id;
@@ -1031,13 +1014,14 @@ typedef struct _masks_row_t
   int source_len;
 } _masks_row_t;
 
-/* The form a row describes, converted to the current version, or NULL. `owner` names the image in
- * the messages.
+/* The form a row describes, converted to the current version, or NULL. `owner` names the image or
+ * the style in the messages.
  *
  * A row of the current version holds `point_count` points of today's struct, and one holding fewer
- * bytes is refused rather than read past its end. A row of an older version holds shorter points
- * when a field was appended since (the ellipse's flags in v4, the gradient's curvature in v5 and
- * state in v6): each is read at its stored size, the rest zeroed, and the conversion fills it. */
+ * bytes is refused rather than read past its end: a style row can come from a .dtstyle file. A row
+ * of an older version holds shorter points when a field was appended since (the ellipse's flags in
+ * v4, the gradient's curvature in v5 and state in v6): each is read at its stored size, the rest
+ * zeroed, and the conversion fills it. */
 static dt_masks_form_t *_masks_form_from_row(dt_develop_t *develop, const _masks_row_t *row, const char *owner)
 {
   dt_masks_form_t *mask_form = dt_masks_create((dt_masks_type_t)row->form);
@@ -1074,8 +1058,9 @@ static dt_masks_form_t *_masks_form_from_row(dt_develop_t *develop, const _masks
     mask_form->points = g_list_append(mask_form->points, point_data);
   }
 
+  // A style's shape has no image to convert against.
   if(mask_form->version != dt_masks_version()
-     && dt_masks_legacy_params(develop, mask_form, mask_form->version, dt_masks_version()))
+     && (IS_NULL_PTR(develop) || dt_masks_legacy_params(develop, mask_form, mask_form->version, dt_masks_version())))
   {
     fprintf(stderr, "[_masks_form_from_row] %s: mask version mismatch: history is %d, dt %d.\n", owner,
             mask_form->version, dt_masks_version());
@@ -1203,6 +1188,62 @@ void dt_masks_write_masks_history_item(const int32_t image_id, const int history
                                         point_count, mask_form->source, 2 * sizeof(float));
 
   dt_free_align(point_buffer);
+}
+
+void dt_masks_collect_shapes(GList **shapes, GList *forms, const int mask_id)
+{
+  GHashTable *seen = g_hash_table_new(g_direct_hash, g_direct_equal);
+  for(GList *node = *shapes; node; node = g_list_next(node))
+    g_hash_table_add(seen, GINT_TO_POINTER(((dt_masks_form_t *)node->data)->formid));
+
+  GList *used = NULL;
+  _masks_collect_used_forms(forms, mask_id, seen, &used);
+  g_hash_table_destroy(seen);
+
+  for(GList *node = used; node; node = g_list_next(node)) dt_masks_form_ref((dt_masks_form_t *)node->data);
+  *shapes = g_list_concat(*shapes, g_list_reverse(used));
+}
+
+void dt_masks_write_style_shapes(const int32_t styleid, GList *shapes)
+{
+  dt_style_repository_delete_shapes(styleid);
+  for(GList *node = shapes; node; node = g_list_next(node))
+  {
+    const dt_masks_form_t *mask_form = (const dt_masks_form_t *)node->data;
+    if(!mask_form->functions) continue;
+
+    guint point_count = 0;
+    size_t blob_size = 0;
+    char *point_buffer = _masks_points_blob(mask_form, &point_count, &blob_size);
+    dt_style_repository_insert_shape(styleid, mask_form->formid, mask_form->type, mask_form->name,
+                                     mask_form->version, point_buffer, blob_size, point_count,
+                                     mask_form->source, 2 * sizeof(float));
+    dt_free_align(point_buffer);
+  }
+}
+
+typedef struct _masks_style_read_ctx_t
+{
+  char *owner;
+  GList *shapes;
+} _masks_style_read_ctx_t;
+
+static void _read_style_shape_row(void *user_data, const int form_id, const int form, const char *name,
+                                  const int version, const void *points, const int points_len,
+                                  const int point_count, const void *source, const int source_len)
+{
+  _masks_style_read_ctx_t *ctx = (_masks_style_read_ctx_t *)user_data;
+  const _masks_row_t row = { form_id, form, name, version, points, points_len, point_count, source, source_len };
+  dt_masks_form_t *mask_form = _masks_form_from_row(NULL, &row, ctx->owner);
+  if(!IS_NULL_PTR(mask_form)) ctx->shapes = g_list_prepend(ctx->shapes, mask_form);
+}
+
+GList *dt_masks_read_style_shapes(const int32_t styleid)
+{
+  _masks_style_read_ctx_t ctx = { .owner = g_strdup_printf("style %" PRId32, styleid), .shapes = NULL };
+  dt_style_repository_foreach_shape(styleid, _read_style_shape_row, &ctx);
+  dt_free(ctx.owner);
+  return g_list_reverse(ctx.shapes);
 }
 
 void dt_masks_free_form(dt_masks_form_t *mask_form)

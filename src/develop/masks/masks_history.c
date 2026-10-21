@@ -121,6 +121,23 @@ void dt_masks_forms_snapshot_release(GList **snapshot)
   *snapshot = NULL;
 }
 
+gboolean dt_masks_forms_hold(GList *forms, const int formid)
+{
+  return !IS_NULL_PTR(dt_masks_get_from_id_ext(forms, formid));
+}
+
+GList *dt_masks_history_forms_at(GList *history, const dt_dev_history_item_t *item)
+{
+  GList *forms = NULL;
+  for(GList *node = history; node; node = g_list_next(node))
+  {
+    const dt_dev_history_item_t *hist = (const dt_dev_history_item_t *)node->data;
+    if(hist->forms) forms = hist->forms;
+    if(hist == item) return forms;
+  }
+  return NULL;
+}
+
 void dt_masks_release_all_forms(dt_develop_t *dev)
 {
   if(IS_NULL_PTR(dev)) return;

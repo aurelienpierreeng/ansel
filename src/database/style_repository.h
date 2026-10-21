@@ -5,6 +5,7 @@
     Copyright (C) 2012, 2019-2022 Pascal Obry.
     Copyright (C) 2018 Edgardo Hoszowski.
     Copyright (C) 2025-2026 Aurélien PIERRE.
+    Copyright (C) 2026 Guillaume Stutin.
 
     darktable is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -30,7 +31,7 @@
 extern "C" {
 #endif
 
-/** `data.styles` and `data.style_items`, plus the reads and writes of `main.history` that copy a
+/** `data.styles`, `data.style_items` and `data.style_shapes`, plus the reads and writes of `main.history` that copy a
  *  development into a style and back.
  *
  *  Nothing here returns a `dt_style_t` or a `dt_style_item_t`. Those live in `common/styles.h`,
@@ -72,7 +73,7 @@ gboolean dt_style_repository_set_iop_list(const int32_t styleid, const char *iop
 gboolean dt_style_repository_update_header(const int32_t styleid, const char *newname,
                                            const char *description);
 
-/** delete the header row and every item under it */
+/** delete the header row and every item and shape under it */
 gboolean dt_style_repository_delete(const int32_t styleid);
 
 /** one `data.styles` row */
@@ -177,6 +178,9 @@ void dt_style_repository_update_item_from_history(const int32_t styleid, const i
 void dt_style_repository_append_item_from_history(const int32_t styleid, const int32_t imgid,
                                                   const int history_num);
 
+/** the num of the style's last item, -1 when it has none */
+int dt_style_repository_get_last_num(const int32_t styleid);
+
 /** insert one fully specified item -- what reading a style back from its XML file does */
 gboolean dt_style_repository_insert_item(const int32_t styleid, const int num,
                                          const int module_version, const char *operation,
@@ -189,6 +193,30 @@ gboolean dt_style_repository_insert_item(const int32_t styleid, const int num,
 /** give every item a unique multi_priority per operation, numbered from 0 in multi_priority
  *  order. SQLite has no ROW_NUMBER, so this reads the rows and writes them back one by one. */
 gboolean dt_style_repository_normalize_multi_priority(const int32_t styleid);
+
+/* ---------------------------------------------------------------------------------------------
+ * data.style_shapes
+ * ------------------------------------------------------------------------------------------ */
+
+/** one shape row: a form serialised as in main.masks_history. `points` and `source` point INTO
+ *  the statement and die with the row. */
+typedef void (*dt_style_repository_shape_cb)(void *user_data, const int formid, const int form,
+                                             const char *name, const int version, const void *points,
+                                             const int points_len, const int points_count,
+                                             const void *source, const int source_len);
+
+/** every shape of the style */
+void dt_style_repository_foreach_shape(const int32_t styleid, dt_style_repository_shape_cb cb,
+                                       void *user_data);
+
+/** insert one shape */
+gboolean dt_style_repository_insert_shape(const int32_t styleid, const int formid, const int form,
+                                          const char *name, const int version, const void *points,
+                                          const int points_len, const int points_count,
+                                          const void *source, const int source_len);
+
+/** drop every shape of the style */
+gboolean dt_style_repository_delete_shapes(const int32_t styleid);
 
 /** finalise every cached statement. Must run before the connection closes. */
 void dt_style_repository_cleanup(void);

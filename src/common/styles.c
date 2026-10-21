@@ -28,6 +28,7 @@
     Copyright (C) 2021 Ralf Brown.
     Copyright (C) 2022, 2025-2026 Aurélien PIERRE.
     Copyright (C) 2022 Martin Bařinka.
+    Copyright (C) 2026 Guillaume Stutin.
     
     darktable is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -64,6 +65,7 @@
 
 #include "develop/develop.h"
 #include "develop/dev_history.h"
+#include "develop/masks/masks_history.h"
 
 #include <libxml/encoding.h>
 #include <libxml/xmlwriter.h>
@@ -95,10 +97,26 @@ typedef struct
   double iop_order;
 } StylePluginData;
 
+/* one <shape>: a row of data.style_shapes */
+typedef struct
+{
+  int id;
+  int type;
+  int version;
+  int points_count;
+  gchar *name;
+  unsigned char *points;
+  int points_len;
+  unsigned char *source;
+  int source_len;
+  gboolean valid;
+} StyleShapeData;
+
 typedef struct
 {
   StyleInfoData *info;
   GList *plugins;
+  GList *shapes;
   gboolean in_plugin;
 } StyleData;
 
@@ -174,7 +192,10 @@ static gboolean dt_styles_create_style_header(const char *name, const char *desc
   return TRUE;
 }
 
-static void _dt_style_update_from_image(int id, int32_t imgid, GList *filter, GList *update)
+/* `from_image` gets, for every item taken from the image, its num in the style and its num in the
+ * image's history. */
+static void _dt_style_update_from_image(int id, int32_t imgid, GList *filter, GList *update,
+                                        GHashTable *from_image)
 {
   if(update && imgid != UNKNOWN_IMAGE)
   {
@@ -188,15 +209,116 @@ static void _dt_style_update_from_image(int id, int32_t imgid, GList *filter, GL
 
       // included and update set, we then need to update the corresponding style item
       if(history_num != -1 && item_num != -1)
+      {
         dt_style_repository_update_item_from_history(id, item_num, imgid, history_num);
+        g_hash_table_insert(from_image, GINT_TO_POINTER(item_num), GINT_TO_POINTER(history_num));
+      }
       // update only, so we want to insert the new style item
       else if(history_num != -1)
+      {
         dt_style_repository_append_item_from_history(id, imgid, history_num);
+        g_hash_table_insert(from_image, GINT_TO_POINTER(dt_style_repository_get_last_num(id)),
+                            GINT_TO_POINTER(history_num));
+      }
 
       list = g_list_next(list);
       upd = g_list_next(upd);
     } while(list);
   }
+}
+
+static GList *_dt_styles_get_apply_items(const int style_id);
+
+/* The group an item's blend params name, 0 for none, -1 when its params are not of the current blend
+ * version and cannot be read here. */
+static int _styles_item_mask_id(const dt_style_item_t *item)
+{
+  if(IS_NULL_PTR(item->blendop_params)) return 0;
+  if(item->blendop_version != dt_develop_blend_version()
+     || item->blendop_params_size != sizeof(dt_develop_blend_params_t))
+    return -1;
+  return item->blendop_params->mask_id;
+}
+
+/* Whether the style keeps the shapes of an item: always for a module that draws its own (retouch),
+ * for a drawn mask only when asked. */
+static gboolean _styles_keeps_shapes(const char *operation, const gboolean drawn_shapes)
+{
+  return drawn_shapes || (dt_iop_get_module_flags(operation) & IOP_FLAGS_INTERNAL_MASKS);
+}
+
+/* Store in the style the shapes its items use, as copy and paste would carry them. An item named in
+ * `from_image` (num in the style -> num in the history of `imgid`) takes them from the image's
+ * history at that item; any other one from `old_shapes`, those the style stored before. */
+static void _styles_write_shapes(const int id, const int32_t imgid, GHashTable *from_image,
+                                 GList *old_shapes, const gboolean drawn_shapes)
+{
+  GList *items = _dt_styles_get_apply_items(id);
+  GList *shapes = NULL;
+  dt_develop_t dev_img;
+  gboolean dev_img_loaded = FALSE;
+
+  // Later items first: two items naming one form keep the later one's state, the one the image ends on.
+  for(GList *l = g_list_last(items); l; l = g_list_previous(l))
+  {
+    const dt_style_item_t *item = (const dt_style_item_t *)l->data;
+    const int mask_id = _styles_item_mask_id(item);
+    if(mask_id == 0 || !_styles_keeps_shapes(item->operation, drawn_shapes)) continue;
+
+    gpointer history_num = NULL;
+    if(!g_hash_table_lookup_extended(from_image, GINT_TO_POINTER(item->num), NULL, &history_num))
+    {
+      // the style stores shapes since the current blend version: an older item has none, and an
+      // item whose drawn mask was left out has none either
+      if(mask_id > 0 && dt_masks_forms_hold(old_shapes, mask_id))
+        dt_masks_collect_shapes(&shapes, old_shapes, mask_id);
+      continue;
+    }
+
+    // From the image, the group is read from its history, where older blend params are converted.
+    if(!dev_img_loaded)
+    {
+      dt_dev_init(&dev_img, FALSE);
+      dt_dev_reload_history_items(&dev_img, imgid);
+      dev_img_loaded = TRUE;
+    }
+
+    for(GList *h = dev_img.history; h; h = g_list_next(h))
+    {
+      const dt_dev_history_item_t *hist = (const dt_dev_history_item_t *)h->data;
+      if(hist->num != GPOINTER_TO_INT(history_num)) continue;
+      if(hist->blend_params && hist->blend_params->mask_id > 0)
+        dt_masks_collect_shapes(&shapes, dt_masks_history_forms_at(dev_img.history, hist),
+                                hist->blend_params->mask_id);
+      break;
+    }
+  }
+
+  dt_masks_write_style_shapes(id, shapes);
+
+  dt_masks_forms_snapshot_release(&shapes);
+  if(dev_img_loaded) dt_dev_cleanup(&dev_img);
+  g_list_free_full(items, dt_style_item_free);
+}
+
+gboolean dt_styles_has_drawn_shapes(const char *name)
+{
+  const int id = dt_styles_get_id_by_name(name);
+  if(id == 0) return FALSE;
+
+  GList *shapes = dt_masks_read_style_shapes(id);
+  GList *items = shapes ? _dt_styles_get_apply_items(id) : NULL;
+  gboolean found = FALSE;
+  for(GList *l = items; l && !found; l = g_list_next(l))
+  {
+    const dt_style_item_t *item = (const dt_style_item_t *)l->data;
+    const int mask_id = _styles_item_mask_id(item);
+    found = mask_id > 0 && !_styles_keeps_shapes(item->operation, FALSE)
+            && dt_masks_forms_hold(shapes, mask_id);
+  }
+  g_list_free_full(items, dt_style_item_free);
+  dt_masks_forms_snapshot_release(&shapes);
+  return found;
 }
 
 static void  _dt_style_update_iop_order(const gchar *name, const int id, const int32_t imgid,
@@ -222,7 +344,8 @@ static void  _dt_style_update_iop_order(const gchar *name, const int id, const i
 
 void dt_styles_update(const char *name, const char *newname, const char *newdescription, GList *filter,
                       const int32_t imgid, GList *update,
-                      const gboolean copy_iop_order, const gboolean update_iop_order)
+                      const gboolean copy_iop_order, const gboolean update_iop_order,
+                      const gboolean drawn_shapes)
 {
   const int id = dt_styles_get_id_by_name(name);
   if(id == 0) return;
@@ -235,7 +358,13 @@ void dt_styles_update(const char *name, const char *newname, const char *newdesc
   if(filter)
     dt_style_repository_delete_items_except(id, filter);
 
-  _dt_style_update_from_image(id, imgid, filter, update);
+  GHashTable *from_image = g_hash_table_new(g_direct_hash, g_direct_equal);
+  _dt_style_update_from_image(id, imgid, filter, update, from_image);
+
+  GList *old_shapes = dt_masks_read_style_shapes(id);
+  _styles_write_shapes(id, imgid, from_image, old_shapes, drawn_shapes);
+  dt_masks_forms_snapshot_release(&old_shapes);
+  g_hash_table_destroy(from_image);
 
   _dt_style_update_iop_order(name, id, imgid, copy_iop_order, update_iop_order);
 
@@ -255,7 +384,8 @@ void dt_styles_update(const char *name, const char *newname, const char *newdesc
 
 void dt_styles_create_from_style(const char *name, const char *newname, const char *description,
                                  GList *filter, const int32_t imgid, GList *update,
-                                 const gboolean copy_iop_order, const gboolean update_iop_order)
+                                 const gboolean copy_iop_order, const gboolean update_iop_order,
+                                 const gboolean drawn_shapes)
 {
   int id = 0;
 
@@ -271,7 +401,13 @@ void dt_styles_create_from_style(const char *name, const char *newname, const ch
 
     /* insert items from imgid if defined */
 
-    _dt_style_update_from_image(id, imgid, filter, update);
+    GHashTable *from_image = g_hash_table_new(g_direct_hash, g_direct_equal);
+    _dt_style_update_from_image(id, imgid, filter, update, from_image);
+
+    GList *old_shapes = dt_masks_read_style_shapes(oldid);
+    _styles_write_shapes(id, imgid, from_image, old_shapes, drawn_shapes);
+    dt_masks_forms_snapshot_release(&old_shapes);
+    g_hash_table_destroy(from_image);
 
     _dt_style_update_iop_order(name, id, imgid, copy_iop_order, update_iop_order);
 
@@ -290,7 +426,8 @@ void dt_styles_create_from_style(const char *name, const char *newname, const ch
 }
 
 gboolean dt_styles_create_from_image(const char *name, const char *description,
-                                     const int32_t imgid, GList *filter, gboolean copy_iop_order)
+                                     const int32_t imgid, GList *filter, gboolean copy_iop_order,
+                                     const gboolean drawn_shapes)
 {
   int id = 0;
 
@@ -310,6 +447,18 @@ gboolean dt_styles_create_from_image(const char *name, const char *description,
   {
     /* create the style_items from source image history stack */
     dt_style_repository_copy_items_from_history(id, imgid, filter);
+
+    // every item keeps the num it has in the image's history
+    GHashTable *from_image = g_hash_table_new(g_direct_hash, g_direct_equal);
+    GList *items = _dt_styles_get_apply_items(id);
+    for(GList *l = items; l; l = g_list_next(l))
+    {
+      const int num = ((dt_style_item_t *)l->data)->num;
+      g_hash_table_insert(from_image, GINT_TO_POINTER(num), GINT_TO_POINTER(num));
+    }
+    g_list_free_full(items, dt_style_item_free);
+    _styles_write_shapes(id, imgid, from_image, NULL, drawn_shapes);
+    g_hash_table_destroy(from_image);
 
     if(!copy_iop_order)
     {
@@ -602,6 +751,9 @@ static int _styles_rebuild_history_from_items(dt_develop_t *dev_src, GList *appl
 {
   dt_dev_history_free_history(dev_src);
 
+  // dev_src->forms holds the style's shapes: an item naming a group carries them, as an item
+  // committed with a drawn mask does, so they survive the pop below and reach the image.
+
   for(GList *l = applied_items; l; l = g_list_next(l))
   {
     dt_style_item_t *style_item = (dt_style_item_t *)l->data;
@@ -614,7 +766,10 @@ static int _styles_rebuild_history_from_items(dt_develop_t *dev_src, GList *appl
     if(IS_NULL_PTR(hist)) return 1;
 
     dev_src->history = g_list_append(dev_src->history, hist);
-    if(!dt_dev_history_item_update_from_params(dev_src, hist, module, module->enabled, NULL, 0, NULL, NULL))
+    GList *forms = (module->blend_params && module->blend_params->mask_id > 0)
+                       ? dt_masks_snapshot_current_forms(dev_src, FALSE)
+                       : NULL;
+    if(!dt_dev_history_item_update_from_params(dev_src, hist, module, module->enabled, NULL, 0, NULL, forms))
     {
       dt_dev_history_free_history(dev_src);
       return 1;
@@ -635,6 +790,10 @@ static int _styles_prepare_source_dev(dt_develop_t *dev_src, const char *name, c
 {
   gboolean has_iop_list = FALSE;
   if(_styles_init_source_dev(dev_src, name, imgid, &has_iop_list)) return 1;
+
+  GList *shapes = dt_masks_read_style_shapes(style_id);
+  dt_masks_replace_current_forms(dev_src, shapes);
+  dt_masks_forms_snapshot_release(&shapes);
 
   GList *si_list = _dt_styles_get_apply_items(style_id);
   if(!has_iop_list)
@@ -726,20 +885,35 @@ int dt_styles_apply_to_image_merge(const char *name, const int style_id, const i
   return ret_val;
 }
 
-void dt_styles_apply_style_item(dt_develop_t *dev, dt_style_item_t *style_item)
+static void _styles_apply_style_item(dt_develop_t *dev, dt_develop_t *dev_shapes, dt_style_item_t *style_item)
 {
   dt_pthread_rwlock_wrlock(&dev->history_mutex);
 
   dt_iop_module_t *module = _dt_styles_tmp_module_from_style_item(dev, style_item);
   if(module)
   {
-    dt_history_merge_module_into_history(dev, NULL, module);
+    dt_history_merge_module_into_history(dev, dev_shapes, module);
     dt_ioppr_resync_pipeline(dev, 0, NULL, FALSE);
     dt_dev_pop_history_items_ext(dev);
     _dt_styles_tmp_module_free(module);
   }
 
   dt_pthread_rwlock_unlock(&dev->history_mutex);
+}
+
+void dt_styles_apply_style_items(dt_develop_t *dev, const char *name, GList *style_items)
+{
+  // A merged module takes its shapes from a dev's forms: the style's travel in a dev of their own.
+  dt_develop_t dev_shapes;
+  dt_dev_init(&dev_shapes, FALSE);
+  GList *shapes = dt_masks_read_style_shapes(dt_styles_get_id_by_name(name));
+  dt_masks_replace_current_forms(&dev_shapes, shapes);
+  dt_masks_forms_snapshot_release(&shapes);
+
+  for(GList *l = style_items; l; l = g_list_next(l))
+    _styles_apply_style_item(dev, &dev_shapes, (dt_style_item_t *)l->data);
+
+  dt_dev_cleanup(&dev_shapes);
 }
 
 void dt_styles_apply_to_image(const char *name, const gboolean duplicate, const int32_t imgid)
@@ -919,6 +1093,42 @@ static void _write_item(void *user_data, const int num, const int multi_priority
   dt_free(blendop_params_txt);
 }
 
+typedef struct _write_shapes_ctx_t
+{
+  xmlTextWriterPtr writer;
+  gboolean open;
+} _write_shapes_ctx_t;
+
+/* A shape is written as attributes only: a parser that predates shapes reads the text of any element
+ * named like one of its own (name, description...) wherever it sits, and ignores attributes. */
+static void _write_shape(void *user_data, const int formid, const int form, const char *name,
+                         const int version, const void *points, const int points_len,
+                         const int points_count, const void *source, const int source_len)
+{
+  _write_shapes_ctx_t *ctx = (_write_shapes_ctx_t *)user_data;
+  if(!ctx->open)
+  {
+    xmlTextWriterStartElement(ctx->writer, BAD_CAST "shapes");
+    ctx->open = TRUE;
+  }
+
+  char *points_txt = dt_exif_xmp_encode((const unsigned char *)points, points_len, NULL);
+  char *source_txt = dt_exif_xmp_encode((const unsigned char *)source, source_len, NULL);
+
+  xmlTextWriterStartElement(ctx->writer, BAD_CAST "shape");
+  xmlTextWriterWriteFormatAttribute(ctx->writer, BAD_CAST "formid", "%d", formid);
+  xmlTextWriterWriteFormatAttribute(ctx->writer, BAD_CAST "type", "%d", form);
+  xmlTextWriterWriteAttribute(ctx->writer, BAD_CAST "name", BAD_CAST(name ? name : ""));
+  xmlTextWriterWriteFormatAttribute(ctx->writer, BAD_CAST "version", "%d", version);
+  xmlTextWriterWriteFormatAttribute(ctx->writer, BAD_CAST "points_count", "%d", points_count);
+  xmlTextWriterWriteAttribute(ctx->writer, BAD_CAST "points", BAD_CAST(points_txt ? points_txt : ""));
+  xmlTextWriterWriteAttribute(ctx->writer, BAD_CAST "source", BAD_CAST(source_txt ? source_txt : ""));
+  xmlTextWriterEndElement(ctx->writer);
+
+  dt_free(points_txt);
+  dt_free(source_txt);
+}
+
 void dt_styles_save_to_file(const char *style_name, const char *filedir, gboolean overwrite)
 {
   char stylesdir[DT_PATH_MAX] = { 0 };
@@ -991,8 +1201,13 @@ void dt_styles_save_to_file(const char *style_name, const char *filedir, gboolea
   }
   xmlTextWriterEndElement(writer);
 
+  const int id = dt_styles_get_id_by_name(style_name);
   xmlTextWriterStartElement(writer, BAD_CAST "style");
-  dt_style_repository_foreach_item_for_export(dt_styles_get_id_by_name(style_name), _write_item, writer);
+  dt_style_repository_foreach_item_for_export(id, _write_item, writer);
+  xmlTextWriterEndElement(writer);
+
+  _write_shapes_ctx_t shapes_ctx = { .writer = writer, .open = FALSE };
+  dt_style_repository_foreach_shape(id, _write_shape, &shapes_ctx);
   xmlTextWriterEndDocument(writer);
   xmlFreeTextWriter(writer);
 }
@@ -1022,6 +1237,15 @@ static StylePluginData *dt_styles_style_plugin_new()
   return plugin;
 }
 
+static void _style_shape_free(gpointer data)
+{
+  StyleShapeData *shape = (StyleShapeData *)data;
+  dt_free(shape->name);
+  dt_free(shape->points);
+  dt_free(shape->source);
+  dt_free(shape);
+}
+
 static void dt_styles_style_data_free(StyleData *style, gboolean free_segments)
 {
   g_string_free(style->info->name, free_segments);
@@ -1030,6 +1254,8 @@ static void dt_styles_style_data_free(StyleData *style, gboolean free_segments)
   style->info->iop_list = NULL;
   g_list_free(style->plugins);
   style->plugins = NULL;
+  g_list_free_full(style->shapes, _style_shape_free);
+  style->shapes = NULL;
   dt_free(style);
 }
 
@@ -1046,6 +1272,43 @@ static void dt_styles_start_tag_handler(GMarkupParseContext *context, const gcha
   {
     style->in_plugin = TRUE;
     style->plugins = g_list_prepend(style->plugins, dt_styles_style_plugin_new());
+  }
+  else if(g_ascii_strcasecmp(elt, "shape") == 0)
+  {
+    // An attribute this version does not know is skipped, so a newer file still imports.
+    StyleShapeData *shape = g_new0(StyleShapeData, 1);
+    shape->valid = TRUE;
+    for(int k = 0; attribute_names[k]; k++)
+    {
+      const char *attribute = attribute_names[k];
+      const char *value = attribute_values[k];
+      if(!g_ascii_strcasecmp(attribute, "formid"))
+        shape->id = atoi(value);
+      else if(!g_ascii_strcasecmp(attribute, "type"))
+        shape->type = atoi(value);
+      else if(!g_ascii_strcasecmp(attribute, "version"))
+        shape->version = atoi(value);
+      else if(!g_ascii_strcasecmp(attribute, "points_count"))
+        shape->points_count = atoi(value);
+      else if(!g_ascii_strcasecmp(attribute, "name"))
+      {
+        dt_free(shape->name);
+        shape->name = g_strdup(value);
+      }
+      else if(!g_ascii_strcasecmp(attribute, "points") && *value)
+      {
+        dt_free(shape->points);
+        shape->points = dt_exif_xmp_decode(value, strlen(value), &shape->points_len);
+        shape->valid &= !IS_NULL_PTR(shape->points);
+      }
+      else if(!g_ascii_strcasecmp(attribute, "source") && *value)
+      {
+        dt_free(shape->source);
+        shape->source = dt_exif_xmp_decode(value, strlen(value), &shape->source_len);
+        shape->valid &= !IS_NULL_PTR(shape->source);
+      }
+    }
+    style->shapes = g_list_prepend(style->shapes, shape);
   }
 }
 
@@ -1159,6 +1422,20 @@ static void dt_style_plugin_save(StylePluginData *plugin, gpointer styleId)
   dt_free(params);
 }
 
+static void _style_shape_save(StyleShapeData *shape, gpointer styleId)
+{
+  // what the points and source say is checked when the shape is read back
+  if(!shape->valid)
+  {
+    fprintf(stderr, "[dt_styles_import_from_file] shape %d cannot be decoded, skipped\n", shape->id);
+    return;
+  }
+  dt_style_repository_insert_shape(GPOINTER_TO_INT(styleId), shape->id, shape->type,
+                                   shape->name ? shape->name : "", shape->version, shape->points,
+                                   shape->points_len, shape->points_count, shape->source,
+                                   shape->source_len);
+}
+
 static void dt_style_save(StyleData *style)
 {
   int id = 0;
@@ -1170,6 +1447,8 @@ static void dt_style_save(StyleData *style)
   if((id = dt_styles_get_id_by_name(style->info->name->str)) != 0)
   {
     g_list_foreach(style->plugins, (GFunc)dt_style_plugin_save, GINT_TO_POINTER(id));
+    style->shapes = g_list_reverse(style->shapes);
+    g_list_foreach(style->shapes, (GFunc)_style_shape_save, GINT_TO_POINTER(id));
     dt_history_message(_("style %s was successfully imported"), style->info->name->str);
   }
 }

@@ -18,6 +18,7 @@
     Copyright (C) 2022 Diederik Ter Rahe.
     Copyright (C) 2022 Martin Bařinka.
     Copyright (C) 2025-2026 Aurélien PIERRE.
+    Copyright (C) 2026 Guillaume Stutin.
     
     darktable is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -76,28 +77,36 @@ typedef struct dt_style_item_t
 void dt_style_free(gpointer data);
 void dt_style_item_free(gpointer data);
 
-/** creates a new style from specified image, items are the history stack number of items to include in style
- */
+/** creates a new style from specified image, items are the history stack number of items to include in style.
+    The style stores the shapes of the modules that draw their own (retouch) and, with `drawn_shapes`,
+    those of the drawn masks of the other ones. */
 gboolean dt_styles_create_from_image(const char *name, const char *description,
-                                     const int32_t imgid, GList *items, gboolean copy_iop_order);
+                                     const int32_t imgid, GList *items, gboolean copy_iop_order,
+                                     const gboolean drawn_shapes);
 
-/** creates a new style from specified style, items are the style number of items to include in style */
+/** creates a new style from specified style, items are the style number of items to include in style.
+    `drawn_shapes` as in dt_styles_create_from_image(). */
 void dt_styles_create_from_style(const char *name, const char *newname, const char *description,
                                  GList *filter, const int32_t imgid, GList *update,
-                                 gboolean copy_iop_order, const gboolean update_iop_order);
+                                 gboolean copy_iop_order, const gboolean update_iop_order,
+                                 const gboolean drawn_shapes);
 
-/** update a style */
+/** update a style. `drawn_shapes` as in dt_styles_create_from_image(). */
 void dt_styles_update(const char *name, const char *newname, const char *description, GList *filter,
                       const int32_t imgid, GList *update,
-                      const gboolean copy_iop_order, const gboolean update_iop_order);
+                      const gboolean copy_iop_order, const gboolean update_iop_order,
+                      const gboolean drawn_shapes);
+
+/** returns TRUE if the style stores the shapes of a drawn mask, not only those of a module that draws its own */
+gboolean dt_styles_has_drawn_shapes(const char *name);
 
 /** applies the style to selection of images */
 
 /** applies list of styles to selection of images */
 void dt_multiple_styles_apply_to_list(GList *styles, const GList *list, gboolean duplicate);
 
-/** applies the item style to dev->history */
-void dt_styles_apply_style_item(dt_develop_t *dev, dt_style_item_t *style_item);
+/** applies the items of the named style to dev->history, with the shapes the style stores */
+void dt_styles_apply_style_items(dt_develop_t *dev, const char *name, GList *style_items);
 
 /** applies the style to image by imgid, takes care of overwrite and duplicate modes */
 void dt_styles_apply_to_image(const char *name, const gboolean duplicate, const int32_t imgid);
