@@ -199,7 +199,8 @@ Changing an open version in place has its own conditions, since nightlies have a
   reading a newer one skips what it does not know.
 
 Schema 36, data 9 and XMP 5 come from darktable releases. Data 10, which adds `data.style_shapes`
-for the shapes a style stores ([`masks-history.md`](masks-history.md)), is a deliberate exception
+for the shapes a style stores and `data.style_items.apply_shapes` for whether applying it brings
+those of each drawn mask ([`masks-history.md`](masks-history.md)), is a deliberate exception
 to "as late as possible": it ships with that feature instead of waiting for Ansel 1.0. A build that
 knows only data 9 then refuses the data library a newer one has opened ("too new for this build",
 `_database_init()` in `database/database.c`). The bumps planned for Ansel 1.0 (schema 37, XMP 6)

@@ -272,7 +272,7 @@ prematurely).
 
 ## A style stores the shapes its items use
 
-*Found `74f2f56c5e`, 2026-10-21; the choice moved to applying `c22681e4a5`, 2026-10-21.*
+*Found `74f2f56c5e`, 2026-10-21; which shapes come is the style's own since `924831382c`, 2026-10-21.*
 
 A style is a copy taken now and pasted later, so it carries what a paste carries: the shapes its
 items' masks are drawn with. `data.style_shapes` (data schema 10) holds them, one row per form in
@@ -281,7 +281,7 @@ as `dev->forms` is one flat list.
 
 **Which.** Every shape its items' masks use: a drawn mask's as well as those of a module that
 draws its own (`IOP_FLAGS_INTERNAL_MASKS`: retouch, spots). Nothing is chosen when the style is
-created or edited; the choice comes when it is applied.
+created or edited: it stores them all, and which of them applying it brings is set apart, below.
 
 **From where.** An item taken from an image takes its group as the image's history holds it *at
 that item* (`dt_masks_history_forms_at()`, the accumulation rule of
@@ -299,16 +299,25 @@ has keeps its own mask, as for a paste. At export, `dt_styles_apply_style_items(
 module at a time from a dev that holds only the shapes, because
 `dt_history_merge_module_into_history()` copies forms from a dev and from nothing else.
 
-**Which come.** `history/style/drawn_shapes`, on by default, decides at every application. The
-merge settings dialog of the style action offers it when `dt_styles_has_drawn_shapes()` says the
-style has drawn shapes to offer, the styles module has an "apply drawn mask shapes" box, and the
-paths that apply without asking (a style at import, the studio pool, export) read its last value.
-Off, `_styles_applied_shapes()` keeps only the groups of the modules that draw their own, which
-always come. A drawn mask then arrives without its shapes and with its blend params unchanged, so
-it names a group the image lacks: `_develop_blend_init_drawn_mask()` fills a drawn mask whose group
-is missing (1, or 0 when the mask is inverted), and the module applies as if it had no drawn mask
-until shapes are drawn on the image. The merge reports the missing group on stderr, as it does any
-form it cannot find.
+**Which come.** Each module instance of the style whose drawn mask has stored shapes chooses
+whether applying the style brings them: `data.style_items.apply_shapes` (data 10, `1` by default).
+The choice is the instance's (operation and `multi_name`): `dt_styles_set_module_shapes()` sets it
+on all its items at once, and one item of it set off decides for all of them, so an item an edit
+adds to an unchecked instance from an image comes without its shapes too. The styles module lists
+those instances under each style, from `dt_styles_get_shapes_modules()`, each with its box; the rows
+cannot be selected, so they are never taken for a style to apply, edit or remove. A module that
+draws its own shapes is never listed: its shapes always come. A copy of the style keeps the choice,
+and a `.dtstyle` carries it as `<apply_shapes>0</apply_shapes>` inside a `<plugin>`, written only
+when off, so a file whose boxes are all checked is what an older build writes; older parsers ignore
+an element they do not know inside `<plugin>`. Every application follows it, the styles module, the
+Styles menu, a style at import, the studio pool and export alike, because `_styles_applied_shapes()`
+reads it where they all meet: `_styles_prepare_source_dev()` and `dt_styles_apply_style_items()`.
+
+A drawn mask that comes without its shapes arrives with its blend params unchanged, so it names a
+group the image lacks: `_develop_blend_init_drawn_mask()` fills a drawn mask whose group is missing
+(1, or 0 when the mask is inverted), and the module applies as if it had no drawn mask until shapes
+are drawn on the image. The merge reports the missing group on stderr, as it does any form it
+cannot find.
 
 That export path applies a style's items **newest first**: `dt_styles_get_item_list()` reads them
 `ORDER BY num DESC`, prepends each and reverses the list, which leaves them descending. Of several
@@ -332,13 +341,22 @@ converted, since v1→v2 and v2→v3 need the image's geometry.
 
 Measured with a scratch program on an image with 45 retouch shapes and a drawn mask added on
 exposure: the style stores 48 shapes, and 46 without the exposure items (the retouch group and its
-45 members). With drawn shapes on, append and replace onto a fresh image bring the retouch group
-with its 45 members resolved and exposure's mask; prepend keeps the destination's exposure. With
-them off, all three bring the retouch group and 46 forms, and exposure arrives in drawn mode with
-`mask_id` 434343 and no such group. A duplicate and an edit keep 48, an edit adding exposure from
-the image to the 46-shape style gives 48, and a `.dtstyle` saved, deleted and imported back holds
-48 and applies the same. Creating a style whose items use shapes takes 6.8 to 11.9 ms, for loading
-the image's history once.
+45 members). The styles module lists exposure alone, checked. Checked, append and replace onto a
+fresh image bring the retouch group with its 45 members resolved and exposure's mask; prepend keeps
+the destination's exposure. Unchecked, all three and the export path bring the retouch group and 46
+forms, and exposure arrives in drawn mode with `mask_id` 434343 and no such group. A duplicate keeps
+the box unchecked, a `.dtstyle` saved, deleted and imported back keeps it and its 48 shapes, and a
+style whose boxes are all checked writes no `apply_shapes`. With one of exposure's three items set
+back to on in the database, as an edit adding an item to an unchecked instance leaves it, the box
+still reads unchecked and the four paths still bring 46 forms. The item left on is the only one
+naming a held group, so a choice read item by item shows the box checked and brings exposure's
+shapes in append and replace, as measured on a build that read it so. A duplicate and an edit keep
+48, and an edit adding exposure from the image to the 46-shape style gives 48, listed checked.
+Creating a style whose items use shapes takes 7.2 to 12.3 ms, for loading the image's history once.
+Listing the instances of 210 styles takes 18 to 19 ms, against 12 to 13 ms for their item tooltips,
+which the styles module also builds every time a key typed in its filter rebuilds the tree. The
+data 9 to 10 step, replayed on a copy of a real data library of 33 styles and 223 items, leaves
+every item at `apply_shapes` 1, and the build opens it at 10.
 
 Presets still carry no shapes.
 
