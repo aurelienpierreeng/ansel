@@ -39,6 +39,7 @@
     Copyright (C) 2022 Martin Bařinka.
     Copyright (C) 2022 Philipp Lutz.
     Copyright (C) 2023 Luca Zulberti.
+    Copyright (C) 2026 Guillaume Stutin.
     
     darktable is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -515,10 +516,10 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
 
     if(IS_NULL_PTR(image_output))
     {
-      dt_control_alert(_("Color profile replaced"), _("missing output profile has been replaced by sRGB!"),
-                       pipe->dev->image_storage.fullpath);
-      fprintf(stderr, "missing output profile `%s' has been replaced by sRGB!\n",
-              dt_colorspaces_get_name(out_type, out_filename));
+      gchar *item = g_strdup_printf(_("`%s` on %s"), dt_colorspaces_get_name(out_type, out_filename),
+                                    pipe->dev->image_storage.fullpath);
+      dt_control_alert(_("Color profile replaced"), _("missing output profile has been replaced by sRGB!"), item);
+      dt_free(item);
       out_type = DT_COLORSPACE_SRGB;
       out_filename = "";
     }
@@ -548,10 +549,11 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
   if(softproofing
      && !dt_colorspaces_profile_exists(output_role, settings.softproof_type, settings.softproof_filename))
   {
-    dt_control_alert(_("Color profile replaced"), _("missing softproof profile has been replaced by sRGB!"),
-                     pipe->dev->image_storage.fullpath);
-    fprintf(stderr, "missing softproof profile `%s' has been replaced by sRGB!\n",
-            dt_colorspaces_get_name(settings.softproof_type, settings.softproof_filename));
+    gchar *item = g_strdup_printf(_("`%s` on %s"),
+                                  dt_colorspaces_get_name(settings.softproof_type, settings.softproof_filename),
+                                  pipe->dev->image_storage.fullpath);
+    dt_control_alert(_("Color profile replaced"), _("missing softproof profile has been replaced by sRGB!"), item);
+    dt_free(item);
     proof.type = DT_COLORSPACE_SRGB;
     proof.filename = "";
   }
@@ -573,10 +575,11 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
     /* Whatever the user asked for, we cannot render it. sRGB is the fallback that has always
      * been here; saying so out loud is the point, since the exported file will not be in the
      * profile its name claims. */
+    gchar *item = g_strdup_printf(_("`%s` on %s"), dt_colorspaces_get_name(out_type, out_filename),
+                                  pipe->dev->image_storage.fullpath);
     dt_control_alert(_("Color profile replaced"), _("unsupported output profile has been replaced by sRGB!"),
-                     pipe->dev->image_storage.fullpath);
-    fprintf(stderr, "unsupported output profile `%s' has been replaced by sRGB!\n",
-            dt_colorspaces_get_name(out_type, out_filename));
+                     item);
+    dt_free(item);
     target.type = DT_COLORSPACE_SRGB;
     target.filename = "";
     target.resolved = NULL;

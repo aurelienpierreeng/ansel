@@ -2295,7 +2295,6 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *params, dt_dev
                                                self->dev->image_storage.d65_color_matrix, NULL))
     {
       const char *camera = self->dev->image_storage.camera_makermodel;
-      fprintf(stderr, "[colorspaces] `%s' color matrix not found for 4bayer image!\n", camera);
       gchar *item = g_strdup_printf("%s (%s)", self->dev->image_storage.fullpath, camera);
       dt_control_alert(_("Camera data missing"), _("color matrix not found for 4bayer image!"), item);
       dt_free(item);

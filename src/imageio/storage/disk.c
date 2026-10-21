@@ -33,6 +33,7 @@
     Copyright (C) 2021 Ralf Brown.
     Copyright (C) 2022 Martin Bařinka.
     Copyright (C) 2023 Ricky Moon.
+    Copyright (C) 2026 Guillaume Stutin.
     
     darktable is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -399,14 +400,12 @@ try_again:
 
     if(g_mkdir_with_parents(output_dir, 0755))
     {
-      fprintf(stderr, "[imageio_storage_disk] could not create directory: `%s'!\n", output_dir);
       dt_control_alert(_("Export failed"), _("could not create directory!"), output_dir);
       fail = TRUE;
       goto failed;
     }
     if(g_access(output_dir, W_OK | X_OK) != 0)
     {
-      fprintf(stderr, "[imageio_storage_disk] could not write to directory: `%s'!\n", output_dir);
       dt_control_alert(_("Export failed"), _("could not write to directory!"), output_dir);
       fail = TRUE;
       goto failed;
@@ -452,7 +451,6 @@ try_again:
   if(dt_imageio_export(imgid, filename, format, fdata, scale_factor, TRUE, TRUE, export_masks, icc_type,
                        icc_filename, icc_intent, self, sdata, num, total, metadata) != 0)
   {
-    fprintf(stderr, "[imageio_storage_disk] could not export to file: `%s'!\n", filename);
     dt_control_alert(_("Export failed"), _("could not export to file!"), filename);
     return 1;
   }

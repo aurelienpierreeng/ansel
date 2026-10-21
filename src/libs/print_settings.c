@@ -22,6 +22,7 @@
     Copyright (C) 2022 Martin Bařinka.
     Copyright (C) 2022 Miloš Komarčević.
     Copyright (C) 2022 Victor Forsiuk.
+    Copyright (C) 2026 Guillaume Stutin.
     
     darktable is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -393,7 +394,6 @@ static int _export_image(dt_job_t *job, dt_image_box *img)
     if(IS_NULL_PTR(pprof))
     {
       dt_control_alert(_("Printing failed"), _("cannot open printer profile"), params->p_icc_profile);
-      fprintf(stderr, "cannot open printer profile `%s'\n", params->p_icc_profile);
       dt_control_queue_redraw();
       return 1;
     }
@@ -411,7 +411,6 @@ static int _export_image(dt_job_t *job, dt_image_box *img)
           pprof->profile, params->p_icc_intent, params->black_point_compensation))
       {
         dt_control_alert(_("Printing failed"), _("cannot apply printer profile"), params->p_icc_profile);
-        fprintf(stderr, "cannot apply printer profile `%s'\n", params->p_icc_profile);
         dt_control_queue_redraw();
         return 1;
       }
@@ -563,7 +562,6 @@ static int _print_job_run(dt_job_t *job)
   if(fd == -1)
   {
     dt_control_alert(_("Printing failed"), _("failed to create temporary pdf for printing"), NULL);
-    fprintf(stderr, "failed to create temporary pdf for printing\n");
     return 1;
   }
   close(fd);
