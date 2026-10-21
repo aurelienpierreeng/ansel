@@ -138,7 +138,13 @@ int pixelpipe_process_on_CPU(dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_io
 
   if(err)
   {
-    fprintf(stdout, "[pixelpipe] %s process on CPU returned with an error\n", module->name());
+    // a module that reads the killswitch mid-run fails for it (doc/module-abandon.md): that run was
+    // abandoned, not broken, and stays as quiet as a stop between two modules
+    if(dt_dev_pixelpipe_has_shutdown(pipe))
+      dt_print(DT_DEBUG_PIPE, "[pixelpipe] %s process on CPU stopped: the pipe abandoned its run\n",
+               module->name());
+    else
+      fprintf(stdout, "[pixelpipe] %s process on CPU returned with an error\n", module->name());
     if(input_locked)
       dt_dev_pixelpipe_cache_rdlock_entry(FALSE, input_entry);
     dt_pixelpipe_cache_free_align(process_input_temp);
