@@ -4,7 +4,7 @@
 > GeForce GTX 1060 6GB (CUDA OpenCL). Every figure below says how it was obtained. Re-measure
 > before acting on one older than the code you are changing, and re-date this line when you do.
 
-The pipe reads its killswitch, `dt_dev_pixelpipe_has_shutdown()` (`develop/pixelpipe_hb.h:693`),
+The pipe reads its killswitch, `dt_dev_pixelpipe_has_shutdown()` (`develop/pixelpipe_hb.h:695`),
 between two modules. A module that takes seconds therefore runs to its end once the pipe no
 longer wants its output: the image changed, a parameter moved, the darkroom closed. The modules
 below also read it inside their own `process()` / `process_cl()`, at a step that leaves them
@@ -15,15 +15,17 @@ nothing to clean up but their own scratch.
 A module that sees the killswitch returns an error, and its output buffer holds garbage. Nothing
 else is needed from it: the pipe already handles a failed module without any help.
 
-- **CPU.** `pixelpipe_process_on_CPU()` prints `[pixelpipe] %s process on CPU returned with an
-  error` on stdout (`develop/pixelpipe_cpu.c:141`) and returns the error. The tiled path returns a
-  tile's error as is, without running the other tiles (`develop/tiling.c:441`).
+- **CPU.** `pixelpipe_process_on_CPU()` returns the error. With the killswitch raised, it logs
+  `[pixelpipe] %s process on CPU stopped: the pipe abandoned its run` under `-d pipe` only, as quiet
+  as a stop between two modules; otherwise it prints `... returned with an error` on stdout
+  (`develop/pixelpipe_cpu.c:143`). The tiled path returns a tile's error as is, without running the
+  other tiles (`develop/tiling.c:448`).
 - **OpenCL.** A failing `process_cl()` normally falls back to CPU and tells the user OpenCL
   failed. When the killswitch is raised, `pixelpipe_process_on_GPU()` aborts instead
   (`develop/pixelpipe_gpu.c:730`): rerunning on CPU a run nobody wants would only redo the work.
   The tiled OpenCL path ends in the same error label.
 - **Either way**, `dt_dev_pixelpipe_process_rec()` flags the output cacheline auto-destroy while it
-  still holds it (`develop/pixelpipe_hb.c:1228`), so it is never published, and no alert is shown:
+  still holds it (`develop/pixelpipe_hb.c:1233`), so it is never published, and no alert is shown:
   an abandoned run is not a failure anybody needs to hear about.
 
 A `NULL` pipe never abandons: `dt_dev_pixelpipe_has_shutdown(NULL)` is `FALSE`. A module that is
@@ -223,7 +225,8 @@ above; one run per row.
 | guided laplacians, 512 iterations, OpenCL (to exit) | 2 s | 5.82 s | 0.23 s |
 | harmonic, OpenCL (to exit) | 0.3 s | 1.34 s | 0.41 s |
 
-In every "after" run the module failed (`returned with an error` on CPU), the export wrote no file,
+In every "after" run the module failed (on CPU, the build measured printed `returned with an error`;
+see *The contract* for what it logs now), the export wrote no file,
 and nothing fell back from OpenCL to CPU. In every "before" run the module ran to its end and the
 pipe stopped at the next module. The contrast equalizer's 0.48 s is one full-resolution scale.
 
