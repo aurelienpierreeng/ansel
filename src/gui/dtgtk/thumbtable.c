@@ -65,6 +65,7 @@
 #include "control/jobs/import_jobs.h"
 
 #include "widgets/accelerators.h"
+#include "widgets/widget_settings.h"
 #include "gui/drag_and_drop.h"
 #include "views/view.h"
 #include "widgets/bauhaus.h"
@@ -1900,6 +1901,10 @@ gboolean dt_thumbtable_key_pressed_grid(GtkWidget *self, GdkEventKey *event, gpo
     }
     case GDK_KEY_Delete:
     {
+      // This is the "Remove image from library" shortcut, declared on Delete alone. A Delete
+      // with a modifier that the dispatcher let through (Shift+Delete read as auto-repeat) is
+      // not it, and must not remove anything.
+      if(!dt_modifier_is(event->state, 0)) return FALSE;
       dt_control_remove_images();
       return TRUE;
     }

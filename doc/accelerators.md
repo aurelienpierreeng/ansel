@@ -252,4 +252,41 @@ layout, the GTK Win32 backend delivered every letter key with keyval `0xffffff` 
 state `0x0`, whether or not Ctrl and Shift were held, so no shortcut fires there at all
 (2026-10-20, a Windows build of `99666b0d68`).
 
+## A press read as auto-repeat goes on to the focused widget
+
+*Found `7a35b47d25`, 2026-10-21.*
+
+When `dt_accels_dispatch()` reads a press as auto-repeat, it fires nothing and returns FALSE, so
+GTK carries the event on to the focused widget's `key-press-event`. Keys that no shortcut claims
+need this, because the grid's arrow-key navigation runs on their repeats. But the focused
+widget also sees the repeats of a key that did fire a shortcut, and it reads them its own way.
+
+File → Delete from disk (Shift+Delete) and File → Remove from library (Delete) confirm through
+`gtk_dialog_run()`, called from inside the press handler (`control/jobs/control_jobs.c`). Their
+key is therefore released into the dialog, as with import and export above. The thumbnail grid,
+`dt_thumbtable_key_pressed_grid()` (`gui/dtgtk/thumbtable.c`), implements the virtual shortcut
+"Remove image from library", declared on Delete with no modifier. It matches Delete alone,
+`dt_modifier_is(event->state, 0)`: a Shift+Delete that the dispatcher passes on removes nothing.
+
+Measured with `-d input` in a Debug build on X11 under KWin, each dialog closed with the mouse.
+The dialog that opened is the toplevel the release of Delete was traced to.
+
+| `accelerators.c` | grid | Shift+Delete presses | Delete from disk fired | "Remove image from library ?" opened |
+|---|---|---|---|---|
+| without the focus-change reset (`5632537f6e^`) | any modifier | 4, then 3 | 1, then 1 | 3, then 2 |
+| without the focus-change reset | Delete alone | 11 | 6 | 0 |
+| with it (`7a35b47d25`) | any modifier | 3 | 3 | 0 |
+
+Without the reset, every press after the first matched `active_key`, and the grid turned it into
+a removal from the library. With the grid matching Delete alone, the dropped press does nothing,
+its release reaches the main window, and the next press fires, so presses alternate. With the
+reset, "Focus out, held key forgotten" is traced after each Delete from disk and before the
+release reaches the dialog.
+
+A held key still reaches the grid. With `ask_before_delete` off, holding Shift+Delete for 1.8 s
+deleted the selected image, then sent 45 repeats past the dispatcher. They removed nothing,
+because the deleted image was the whole selection and `dt_act_on_get_images()` had nothing left
+to return. With an image still targeted, the grid's Delete-alone match is what keeps those
+repeats from removing it; that case was not measured.
+
 ---
