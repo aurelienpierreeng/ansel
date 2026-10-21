@@ -1144,7 +1144,6 @@ dt_imageio_retval_t dt_imageio_open(dt_image_t *img,               // non-const 
   // of its own. Saying that no decoder supports the file would send the user looking elsewhere.
   if(ret == DT_IMAGEIO_CACHE_FULL)
   {
-    fprintf(stderr, "[imageio] not enough memory to load %s at full size.\n", filename);
     dt_control_alert(_("Not enough memory"),
                      _("Not enough memory to load the image at full size.\n"
                        "Close other applications or add more RAM to your system."),

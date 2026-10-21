@@ -1,6 +1,7 @@
 /*
     This file is part of the Ansel project.
     Copyright (C) 2025-2026 Aurélien PIERRE.
+    Copyright (C) 2026 Guillaume Stutin.
     
     Ansel is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -428,7 +429,6 @@ int32_t _import_image(const GList *img, dt_control_import_t *data, const char *f
   if(imgid <= 0)
   {
     dt_control_alert(_("Import problem"), _("Error importing file in collection"), img_path_to_db);
-    fprintf(stderr, "[Import] Error importing file in collection: %s", img_path_to_db);
     return UNKNOWN_IMAGE;
   }
 

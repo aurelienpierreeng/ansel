@@ -13,6 +13,7 @@
  *    Copyright (C) 2021 Ralf Brown.
  *    Copyright (C) 2022 Martin Bařinka.
  *    Copyright (C) 2024 Alynx Zhou.
+ *    Copyright (C) 2026 Guillaume Stutin.
  *    
  *    darktable is free software: you can redistribute it and/or modify
  *    it under the terms of the GNU General Public License as published by
@@ -208,7 +209,6 @@ int write_image(dt_imageio_module_data_t *data, const char *filename, const void
     dt_pdf_t *pdf = dt_pdf_start(filename, page_width, page_height, page_dpi, compression);
     if(IS_NULL_PTR(pdf))
     {
-      fprintf(stderr, "[imageio_format_pdf] could not export to file: `%s'!\n", filename);
       dt_control_alert(_("Export failed"), _("could not export to file!"), filename);
       return 1;
     }
