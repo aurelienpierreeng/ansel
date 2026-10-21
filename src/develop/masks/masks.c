@@ -1017,10 +1017,105 @@ int dt_masks_copy_used_forms_for_module(dt_develop_t *develop_dest, dt_develop_t
   return 0;
 }
 
+/* One serialised form: a row of main.masks_history. */
+typedef struct _masks_row_t
+{
+  int form_id;
+  int form;
+  const char *name;
+  int version;
+  const void *points;
+  int points_len;
+  int point_count;
+  const void *source;
+  int source_len;
+} _masks_row_t;
+
+/* The form a row describes, converted to the current version, or NULL. `owner` names the image in
+ * the messages.
+ *
+ * A row of the current version holds `point_count` points of today's struct, and one holding fewer
+ * bytes is refused rather than read past its end. A row of an older version holds shorter points
+ * when a field was appended since (the ellipse's flags in v4, the gradient's curvature in v5 and
+ * state in v6): each is read at its stored size, the rest zeroed, and the conversion fills it. */
+static dt_masks_form_t *_masks_form_from_row(dt_develop_t *develop, const _masks_row_t *row, const char *owner)
+{
+  dt_masks_form_t *mask_form = dt_masks_create((dt_masks_type_t)row->form);
+  if(IS_NULL_PTR(mask_form)) return NULL;
+
+  const size_t point_struct_size = mask_form->functions ? mask_form->functions->point_struct_size : 0;
+  // the stride of a stored point, and how much of it today's struct takes
+  const size_t stored_point_size = (row->version == dt_masks_version() || row->point_count <= 0)
+                                       ? point_struct_size
+                                       : (size_t)MAX(row->points_len, 0) / (size_t)row->point_count;
+  const size_t copied_point_size = MIN(stored_point_size, point_struct_size);
+  if(!mask_form->functions || row->source_len < (int)(2 * sizeof(float)) || row->point_count < 0
+     || (row->point_count > 0 && stored_point_size == 0)
+     || (size_t)MAX(row->points_len, 0) < (size_t)row->point_count * stored_point_size)
+  {
+    fprintf(stderr, "[_masks_form_from_row] %s: form %i of type %i holds %i bytes for %i points, refused\n",
+            owner, row->form_id, row->form, row->points_len, row->point_count);
+    dt_masks_form_unref(mask_form);
+    return NULL;
+  }
+
+  mask_form->formid = row->form_id;
+  g_strlcpy(mask_form->name, row->name ? row->name : "", sizeof(mask_form->name));
+  mask_form->version = row->version;
+  mask_form->points = NULL;
+  memcpy(mask_form->source, row->source, sizeof(float) * 2);
+
+  // and now we "read" the blob
+  const char *const point_buffer = (const char *)row->points;
+  for(int point_index = 0; point_index < row->point_count; point_index++)
+  {
+    char *point_data = (char *)calloc(1, point_struct_size);
+    memcpy(point_data, point_buffer + point_index * stored_point_size, copied_point_size);
+    mask_form->points = g_list_append(mask_form->points, point_data);
+  }
+
+  if(mask_form->version != dt_masks_version()
+     && dt_masks_legacy_params(develop, mask_form, mask_form->version, dt_masks_version()))
+  {
+    fprintf(stderr, "[_masks_form_from_row] %s: mask version mismatch: history is %d, dt %d.\n", owner,
+            mask_form->version, dt_masks_version());
+    dt_history_message(_("%s: mask version mismatch: %d != %d"), owner, dt_masks_version(), mask_form->version);
+    dt_masks_form_unref(mask_form);
+    return NULL;
+  }
+
+  // Not computed here: dt_masks_replace_current_forms() (via
+  // dt_masks_form_update_gravity_center() in masks_history.c) already computes it for
+  // every form that actually ends up live in dev->forms. Computing it here too would
+  // redundantly do it for every history step's row read from masks_history -- including
+  // every duplicate of a form shared unchanged across many steps (see the un-deduped
+  // masks_history table, doc/masks_history_dedup.md) -- for forms that are either
+  // superseded (never read again) or about to be recomputed anyway.
+  return mask_form;
+}
+
+/* The points of a form as the flat array of its own point struct that a row stores; only this layer
+ * knows that struct's size. Caller frees it with dt_free_align(). */
+static char *_masks_points_blob(const dt_masks_form_t *mask_form, guint *point_count, size_t *blob_size)
+{
+  const size_t point_struct_size = mask_form->functions->point_struct_size;
+  *point_count = g_list_length(mask_form->points);
+  *blob_size = *point_count * point_struct_size;
+
+  char *const restrict point_buffer = (char *)dt_alloc_align(*blob_size);
+  size_t buffer_offset = 0;
+  for(GList *point_node = mask_form->points; point_node; point_node = g_list_next(point_node))
+  {
+    memcpy(point_buffer + buffer_offset, point_node->data, point_struct_size);
+    buffer_offset += point_struct_size;
+  }
+  return point_buffer;
+}
+
 typedef struct _masks_read_ctx_t
 {
   dt_develop_t *develop;
-  int32_t image_id;
+  const char *owner;
   dt_dev_history_item_t *history_item;
   dt_dev_history_item_t *last_history_item;
   int previous_num;
@@ -1034,53 +1129,9 @@ static void _read_mask_row(void *user_data, const int history_num, const int for
   _masks_read_ctx_t *ctx = (_masks_read_ctx_t *)user_data;
   dt_develop_t *develop = ctx->develop;
 
-  const dt_masks_type_t mask_type = form;
-  dt_masks_form_t *mask_form = dt_masks_create(mask_type);
-  mask_form->formid = form_id;
-  g_strlcpy(mask_form->name, name, sizeof(mask_form->name));
-  mask_form->version = version;
-  mask_form->points = NULL;
-  memcpy(mask_form->source, source, sizeof(float) * 2);
-
-  // and now we "read" the blob
-  if(mask_form->functions)
-  {
-    const char *const point_buffer = (const char *)points;
-    const size_t point_struct_size = mask_form->functions->point_struct_size;
-    for(int point_index = 0; point_index < point_count; point_index++)
-    {
-      char *point_data = (char *)malloc(point_struct_size);
-      memcpy(point_data, point_buffer + point_index * point_struct_size, point_struct_size);
-      mask_form->points = g_list_append(mask_form->points, point_data);
-    }
-  }
-
-  if(mask_form->version != dt_masks_version())
-  {
-    if(dt_masks_legacy_params(develop, mask_form, mask_form->version, dt_masks_version()))
-    {
-      const char *fname = develop->image_storage.filename + strlen(develop->image_storage.filename);
-      while(fname > develop->image_storage.filename && *fname != '/') fname--;
-      if(fname > develop->image_storage.filename) fname++;
-
-      fprintf(stderr,
-              "[_dev_read_masks_history] %s (imgid `%i\'): mask version mismatch: history is %d, dt %d.\n",
-              fname, ctx->image_id, mask_form->version, dt_masks_version());
-      dt_history_message(_("%s: mask version mismatch: %d != %d"),
-                     fname, dt_masks_version(), mask_form->version);
-
-      // was a `continue` over the rest of the loop body
-      return;
-    }
-  }
-
-    // Not computed here: dt_masks_replace_current_forms() below (via
-    // dt_masks_form_update_gravity_center() in masks_history.c) already computes it for
-    // every form that actually ends up live in dev->forms. Computing it here too would
-    // redundantly do it for every history step's row read from masks_history -- including
-    // every duplicate of a form shared unchanged across many steps (see the un-deduped
-    // masks_history table, doc/masks_history_dedup.md) -- for forms that are either
-    // superseded (never read again) or about to be recomputed anyway.
+  const _masks_row_t row = { form_id, form, name, version, points, points_len, point_count, source, source_len };
+  dt_masks_form_t *mask_form = _masks_form_from_row(develop, &row, ctx->owner);
+  if(IS_NULL_PTR(mask_form)) return;
 
     // if this is a new history entry let's find it
   if(ctx->previous_num != history_num)
@@ -1117,9 +1168,14 @@ static void _read_mask_row(void *user_data, const int history_num, const int for
 
 void dt_masks_read_masks_history(dt_develop_t *develop, const int32_t image_id)
 {
+  // The messages name the image by its file name.
+  const char *fname = develop->image_storage.filename + strlen(develop->image_storage.filename);
+  while(fname > develop->image_storage.filename && *fname != '/') fname--;
+  if(fname > develop->image_storage.filename) fname++;
+
   // The per-row state the loop used to keep in locals lives in the context: which history entry
   // the previous row belonged to, and the last one at or below history_end.
-  _masks_read_ctx_t ctx = { .develop = develop, .image_id = image_id, .history_item = NULL,
+  _masks_read_ctx_t ctx = { .develop = develop, .owner = fname, .history_item = NULL,
                             .last_history_item = NULL, .previous_num = -1 };
 
   dt_history_repository_foreach_mask_item(image_id, _read_mask_row, &ctx);
@@ -1134,26 +1190,17 @@ void dt_masks_write_masks_history_item(const int32_t image_id, const int history
   dt_print(DT_DEBUG_HISTORY, "[dt_masks_write_masks_history_item] writing mask %s of type %i for image %i\n",
            mask_form->name, mask_form->type, image_id);
 
-  // The points are a flat array of the shape's own point struct; only this layer knows its size.
-  const size_t point_struct_size = mask_form->functions ? mask_form->functions->point_struct_size : 0;
-  const guint point_count = mask_form->functions ? g_list_length(mask_form->points) : 0;
-
   // Preserved: with no functions there is no point struct to serialise, and the original wrote
   // nothing at all in that case -- the whole INSERT sat inside this test.
   if(!mask_form->functions) return;
 
-  char *const restrict point_buffer = (char *)dt_alloc_align(point_count * point_struct_size);
-  int buffer_offset = 0;
-  for(GList *point_node = mask_form->points; point_node; point_node = g_list_next(point_node))
-  {
-    memcpy(point_buffer + buffer_offset, point_node->data, point_struct_size);
-    buffer_offset += point_struct_size;
-  }
+  guint point_count = 0;
+  size_t blob_size = 0;
+  char *point_buffer = _masks_points_blob(mask_form, &point_count, &blob_size);
 
   dt_history_repository_write_mask_item(image_id, history_num, mask_form->formid, mask_form->type,
-                                        mask_form->name, mask_form->version, point_buffer,
-                                        point_count * point_struct_size, point_count,
-                                        mask_form->source, 2 * sizeof(float));
+                                        mask_form->name, mask_form->version, point_buffer, blob_size,
+                                        point_count, mask_form->source, 2 * sizeof(float));
 
   dt_free_align(point_buffer);
 }
