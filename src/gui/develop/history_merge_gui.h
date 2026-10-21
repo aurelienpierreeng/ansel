@@ -1,6 +1,7 @@
 /*
     This file is part of Ansel,
     Copyright (C) 2026 Aurélien PIERRE.
+    Copyright (C) 2026 Guillaume Stutin.
 
     Ansel is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -52,12 +53,15 @@ GPtrArray *_hm_collect_labels_from_history_map(GHashTable *last_by_id, const GHa
  * @param ask_key             Conf key for the "show this dialog next time" boolean.
  * @param iop_order_available Whether the source has a stored pipeline order to offer.
  *                            When FALSE the pipeline-order checkbox is disabled.
+ * @param drawn_shapes_key    Conf key for the "apply drawn mask shapes" boolean, NULL when the
+ *                            source has no such shapes to offer: the checkbox is then not shown.
  */
 gboolean dt_gui_merge_options_dialog(const char *title,
                                      const char *mode_key,
                                      const char *iop_order_key,
                                      const char *ask_key,
-                                     gboolean iop_order_available);
+                                     gboolean iop_order_available,
+                                     const char *drawn_shapes_key);
 
 gboolean _hm_show_merge_report_popup(struct dt_develop_t *dev_dest, struct dt_develop_t *dev_src,
                                      const gboolean merge_iop_order, const gboolean used_source_order,

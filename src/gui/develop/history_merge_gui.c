@@ -1,6 +1,7 @@
 /*
     This file is part of Ansel,
     Copyright (C) 2026 Aurélien PIERRE.
+    Copyright (C) 2026 Guillaume Stutin.
 
     Ansel is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -1658,7 +1659,7 @@ gboolean _hm_show_merge_report_popup(dt_develop_t *dev_dest, dt_develop_t *dev_s
 
 gboolean dt_gui_merge_options_dialog(const char *title, const char *mode_key,
                                      const char *iop_order_key, const char *ask_key,
-                                     const gboolean iop_order_available)
+                                     const gboolean iop_order_available, const char *drawn_shapes_key)
 {
   if(IS_NULL_PTR(dt_gui_get_global())) return TRUE;
   if(!g_main_context_is_owner(g_main_context_default())) return TRUE;
@@ -1735,6 +1736,19 @@ gboolean dt_gui_merge_options_dialog(const char *title, const char *mode_key,
   }
   gtk_box_pack_start(GTK_BOX(content), iop_check, FALSE, FALSE, 0);
 
+  // --- Drawn mask shapes ---
+  GtkWidget *shapes_check = NULL;
+  if(drawn_shapes_key)
+  {
+    shapes_check = gtk_check_button_new_with_label(_("Apply drawn mask shapes"));
+    gtk_widget_set_tooltip_text(shapes_check,
+        _("When checked, the modules come with the shapes of their drawn masks.\n"
+          "When unchecked, their drawn masks come without shapes, to be drawn on this image.\n"
+          "The shapes of the retouch module always come."));
+    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(shapes_check), dt_conf_get_bool(drawn_shapes_key));
+    gtk_box_pack_start(GTK_BOX(content), shapes_check, FALSE, FALSE, 0);
+  }
+
   gtk_box_pack_start(GTK_BOX(content), gtk_separator_new(GTK_ORIENTATION_HORIZONTAL), FALSE, FALSE, 6);
 
   // --- Remember choice ---
@@ -1759,6 +1773,8 @@ gboolean dt_gui_merge_options_dialog(const char *title, const char *mode_key,
     dt_conf_set_int(mode_key, new_mode);
     if(iop_order_available)
       dt_conf_set_bool(iop_order_key, gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(iop_check)));
+    if(shapes_check)
+      dt_conf_set_bool(drawn_shapes_key, gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(shapes_check)));
     dt_conf_set_bool(ask_key, gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(ask_check)));
   }
 

@@ -240,18 +240,18 @@ static int _styles_item_mask_id(const dt_style_item_t *item)
   return item->blendop_params->mask_id;
 }
 
-/* Whether the style keeps the shapes of an item: always for a module that draws its own (retouch),
- * for a drawn mask only when asked. */
-static gboolean _styles_keeps_shapes(const char *operation, const gboolean drawn_shapes)
+/* Whether a module draws its own shapes (retouch): applying a style always brings those, whatever
+ * history/style/drawn_shapes says of the shapes of drawn masks. */
+static gboolean _styles_draws_own_shapes(const char *operation)
 {
-  return drawn_shapes || (dt_iop_get_module_flags(operation) & IOP_FLAGS_INTERNAL_MASKS);
+  return (dt_iop_get_module_flags(operation) & IOP_FLAGS_INTERNAL_MASKS) != 0;
 }
 
 /* Store in the style the shapes its items use, as copy and paste would carry them. An item named in
  * `from_image` (num in the style -> num in the history of `imgid`) takes them from the image's
  * history at that item; any other one from `old_shapes`, those the style stored before. */
 static void _styles_write_shapes(const int id, const int32_t imgid, GHashTable *from_image,
-                                 GList *old_shapes, const gboolean drawn_shapes)
+                                 GList *old_shapes)
 {
   GList *items = _dt_styles_get_apply_items(id);
   GList *shapes = NULL;
@@ -263,13 +263,12 @@ static void _styles_write_shapes(const int id, const int32_t imgid, GHashTable *
   {
     const dt_style_item_t *item = (const dt_style_item_t *)l->data;
     const int mask_id = _styles_item_mask_id(item);
-    if(mask_id == 0 || !_styles_keeps_shapes(item->operation, drawn_shapes)) continue;
+    if(mask_id == 0) continue;
 
     gpointer history_num = NULL;
     if(!g_hash_table_lookup_extended(from_image, GINT_TO_POINTER(item->num), NULL, &history_num))
     {
-      // the style stores shapes since the current blend version: an older item has none, and an
-      // item whose drawn mask was left out has none either
+      // the style stores shapes since the current blend version: an older item has none
       if(mask_id > 0 && dt_masks_forms_hold(old_shapes, mask_id))
         dt_masks_collect_shapes(&shapes, old_shapes, mask_id);
       continue;
@@ -313,8 +312,7 @@ gboolean dt_styles_has_drawn_shapes(const char *name)
   {
     const dt_style_item_t *item = (const dt_style_item_t *)l->data;
     const int mask_id = _styles_item_mask_id(item);
-    found = mask_id > 0 && !_styles_keeps_shapes(item->operation, FALSE)
-            && dt_masks_forms_hold(shapes, mask_id);
+    found = mask_id > 0 && !_styles_draws_own_shapes(item->operation) && dt_masks_forms_hold(shapes, mask_id);
   }
   g_list_free_full(items, dt_style_item_free);
   dt_masks_forms_snapshot_release(&shapes);
@@ -344,8 +342,7 @@ static void  _dt_style_update_iop_order(const gchar *name, const int id, const i
 
 void dt_styles_update(const char *name, const char *newname, const char *newdescription, GList *filter,
                       const int32_t imgid, GList *update,
-                      const gboolean copy_iop_order, const gboolean update_iop_order,
-                      const gboolean drawn_shapes)
+                      const gboolean copy_iop_order, const gboolean update_iop_order)
 {
   const int id = dt_styles_get_id_by_name(name);
   if(id == 0) return;
@@ -362,7 +359,7 @@ void dt_styles_update(const char *name, const char *newname, const char *newdesc
   _dt_style_update_from_image(id, imgid, filter, update, from_image);
 
   GList *old_shapes = dt_masks_read_style_shapes(id);
-  _styles_write_shapes(id, imgid, from_image, old_shapes, drawn_shapes);
+  _styles_write_shapes(id, imgid, from_image, old_shapes);
   dt_masks_forms_snapshot_release(&old_shapes);
   g_hash_table_destroy(from_image);
 
@@ -384,8 +381,7 @@ void dt_styles_update(const char *name, const char *newname, const char *newdesc
 
 void dt_styles_create_from_style(const char *name, const char *newname, const char *description,
                                  GList *filter, const int32_t imgid, GList *update,
-                                 const gboolean copy_iop_order, const gboolean update_iop_order,
-                                 const gboolean drawn_shapes)
+                                 const gboolean copy_iop_order, const gboolean update_iop_order)
 {
   int id = 0;
 
@@ -405,7 +401,7 @@ void dt_styles_create_from_style(const char *name, const char *newname, const ch
     _dt_style_update_from_image(id, imgid, filter, update, from_image);
 
     GList *old_shapes = dt_masks_read_style_shapes(oldid);
-    _styles_write_shapes(id, imgid, from_image, old_shapes, drawn_shapes);
+    _styles_write_shapes(id, imgid, from_image, old_shapes);
     dt_masks_forms_snapshot_release(&old_shapes);
     g_hash_table_destroy(from_image);
 
@@ -426,8 +422,7 @@ void dt_styles_create_from_style(const char *name, const char *newname, const ch
 }
 
 gboolean dt_styles_create_from_image(const char *name, const char *description,
-                                     const int32_t imgid, GList *filter, gboolean copy_iop_order,
-                                     const gboolean drawn_shapes)
+                                     const int32_t imgid, GList *filter, gboolean copy_iop_order)
 {
   int id = 0;
 
@@ -457,7 +452,7 @@ gboolean dt_styles_create_from_image(const char *name, const char *description,
       g_hash_table_insert(from_image, GINT_TO_POINTER(num), GINT_TO_POINTER(num));
     }
     g_list_free_full(items, dt_style_item_free);
-    _styles_write_shapes(id, imgid, from_image, NULL, drawn_shapes);
+    _styles_write_shapes(id, imgid, from_image, NULL);
     g_hash_table_destroy(from_image);
 
     if(!copy_iop_order)
@@ -784,6 +779,27 @@ static int _styles_rebuild_history_from_items(dt_develop_t *dev_src, GList *appl
   return 0;
 }
 
+/* The shapes applying the style brings: all it stores, or, when history/style/drawn_shapes is off,
+ * only those of the modules that draw their own. A drawn mask then comes without its shapes and with
+ * its blend params unchanged: the pipe fills a drawn mask whose group is missing, so the module
+ * applies as if it had no drawn mask until shapes are drawn on the image. */
+static GList *_styles_applied_shapes(const int style_id, GList *items)
+{
+  GList *shapes = dt_masks_read_style_shapes(style_id);
+  if(dt_conf_get_bool("history/style/drawn_shapes")) return shapes;
+
+  GList *own_shapes = NULL;
+  for(GList *l = items; l; l = g_list_next(l))
+  {
+    const dt_style_item_t *item = (const dt_style_item_t *)l->data;
+    const int mask_id = _styles_item_mask_id(item);
+    if(mask_id > 0 && _styles_draws_own_shapes(item->operation) && dt_masks_forms_hold(shapes, mask_id))
+      dt_masks_collect_shapes(&own_shapes, shapes, mask_id);
+  }
+  dt_masks_forms_snapshot_release(&shapes);
+  return own_shapes;
+}
+
 static int _styles_prepare_source_dev(dt_develop_t *dev_src, const char *name, const int style_id,
                                       const int32_t imgid, GList **out_si_list, GHashTable **out_style_ids,
                                       GList **out_mod_list)
@@ -791,11 +807,11 @@ static int _styles_prepare_source_dev(dt_develop_t *dev_src, const char *name, c
   gboolean has_iop_list = FALSE;
   if(_styles_init_source_dev(dev_src, name, imgid, &has_iop_list)) return 1;
 
-  GList *shapes = dt_masks_read_style_shapes(style_id);
+  GList *si_list = _dt_styles_get_apply_items(style_id);
+
+  GList *shapes = _styles_applied_shapes(style_id, si_list);
   dt_masks_replace_current_forms(dev_src, shapes);
   dt_masks_forms_snapshot_release(&shapes);
-
-  GList *si_list = _dt_styles_get_apply_items(style_id);
   if(!has_iop_list)
   {
     // Without a stored iop_list, add order entries before creating the style modules;
@@ -906,7 +922,7 @@ void dt_styles_apply_style_items(dt_develop_t *dev, const char *name, GList *sty
   // A merged module takes its shapes from a dev's forms: the style's travel in a dev of their own.
   dt_develop_t dev_shapes;
   dt_dev_init(&dev_shapes, FALSE);
-  GList *shapes = dt_masks_read_style_shapes(dt_styles_get_id_by_name(name));
+  GList *shapes = _styles_applied_shapes(dt_styles_get_id_by_name(name), style_items);
   dt_masks_replace_current_forms(&dev_shapes, shapes);
   dt_masks_forms_snapshot_release(&shapes);
 

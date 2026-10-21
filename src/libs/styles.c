@@ -28,6 +28,7 @@
     Copyright (C) 2021 Marco Carrarini.
     Copyright (C) 2021 Victor Forsiuk.
     Copyright (C) 2022 Martin Bařinka.
+    Copyright (C) 2026 Guillaume Stutin.
     
     darktable is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -77,6 +78,7 @@ typedef struct dt_lib_styles_t
 {
   GtkEntry *entry;
   GtkWidget *duplicate;
+  GtkWidget *drawn_shapes;
   GtkTreeView *tree;
   GtkWidget *create_button, *edit_button, *delete_button, *import_button, *export_button, *apply_button;
 } dt_lib_styles_t;
@@ -763,6 +765,11 @@ static gboolean duplicate_callback(GtkEntry *entry, gpointer user_data)
   return FALSE;
 }
 
+static void _drawn_shapes_toggled(GtkToggleButton *button, gpointer user_data)
+{
+  dt_conf_set_bool("history/style/drawn_shapes", gtk_toggle_button_get_active(button));
+}
+
 static void _update(dt_lib_module_t *self)
 {
   dt_lib_cancel_postponed_update(self);
@@ -863,6 +870,16 @@ void gui_init(dt_lib_module_t *self)
   gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(d->duplicate),
                                dt_conf_get_bool("ui_last/styles_create_duplicate"));
   gtk_widget_set_tooltip_text(d->duplicate, _("creates a duplicate of the image before applying style"));
+
+  d->drawn_shapes = gtk_check_button_new_with_label(_("apply drawn mask shapes"));
+  gtk_label_set_ellipsize(GTK_LABEL(gtk_bin_get_child(GTK_BIN(d->drawn_shapes))), PANGO_ELLIPSIZE_START);
+  gtk_box_pack_start(GTK_BOX(self->widget), GTK_WIDGET(d->drawn_shapes), TRUE, FALSE, 0);
+  gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(d->drawn_shapes), dt_conf_get_bool("history/style/drawn_shapes"));
+  g_signal_connect(d->drawn_shapes, "toggled", G_CALLBACK(_drawn_shapes_toggled), NULL);
+  gtk_widget_set_tooltip_text(d->drawn_shapes,
+                              _("the modules come with the shapes of their drawn masks.\n"
+                                "unchecked, their drawn masks come without shapes, to be drawn on each image.\n"
+                                "the shapes of the retouch module always come."));
 
   GtkWidget *hbox1 = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
   GtkWidget *hbox2 = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);

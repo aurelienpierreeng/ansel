@@ -1,6 +1,7 @@
 /*
     This file is part of the Ansel project.
     Copyright (C) 2026 Aurélien PIERRE.
+    Copyright (C) 2026 Guillaume Stutin.
     
     Ansel is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -62,7 +63,10 @@ static gboolean _styles_apply_callback(GtkAccelGroup *group, GObject *accelerata
                                                     "history/style/mode",
                                                     "history/style/copy_iop_order",
                                                     "history/style/ask",
-                                                    dt_styles_has_module_order(style_name));
+                                                    dt_styles_has_module_order(style_name),
+                                                    dt_styles_has_drawn_shapes(style_name)
+                                                        ? "history/style/drawn_shapes"
+                                                        : NULL);
     dt_free(title);
     if(!ok) return FALSE;
   }

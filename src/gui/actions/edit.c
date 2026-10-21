@@ -2,6 +2,7 @@
     This file is part of the Ansel project.
     Copyright (C) 2023-2025 Aurélien PIERRE.
     Copyright (C) 2023 Luca Zulberti.
+    Copyright (C) 2026 Guillaume Stutin.
     
     Ansel is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -267,7 +268,7 @@ static gboolean paste_all_callback(GtkAccelGroup *group, GObject *acceleratable,
                                     "history/paste/mode",
                                     "history/paste/copy_iop_order",
                                     "history/paste/ask",
-                                    TRUE))
+                                    TRUE, NULL))
       return FALSE;
   }
 
@@ -298,7 +299,7 @@ static gboolean paste_parts_callback(GtkAccelGroup *group, GObject *acceleratabl
                                     "history/paste/mode",
                                     "history/paste/copy_iop_order",
                                     "history/paste/ask",
-                                    TRUE))
+                                    TRUE, NULL))
       return FALSE;
   }
 

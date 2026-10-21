@@ -18,7 +18,6 @@
     Copyright (C) 2021 Hubert Kowalski.
     Copyright (C) 2021 Ralf Brown.
     Copyright (C) 2022 Martin Bařinka.
-    Copyright (C) 2026 Guillaume Stutin.
     
     darktable is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -60,7 +59,7 @@ typedef struct dt_gui_styles_dialog_t
   gboolean edit;
   int32_t imgid;
   gchar *nameorig;
-  GtkWidget *name, *description, *duplicate, *drawn_shapes;
+  GtkWidget *name, *description, *duplicate;
   GtkTreeView *items;
   GtkTreeView *items_new;
 } dt_gui_styles_dialog_t;
@@ -238,8 +237,7 @@ static void _gui_styles_new_style_response(GtkDialog *dialog, gint response_id, 
       }
 
       if(dt_styles_create_from_image(name, gtk_entry_get_text(GTK_ENTRY(g->description)),
-                                     g->imgid, result, _gui_styles_is_copy_module_order_set(g),
-                                     gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(g->drawn_shapes))))
+                                     g->imgid, result, _gui_styles_is_copy_module_order_set(g)))
       {
         dt_control_log(_("style named '%s' successfully created"), name);
       };
@@ -292,16 +290,14 @@ static void _gui_styles_edit_style_response(GtkDialog *dialog, gint response_id,
         dt_styles_create_from_style(g->nameorig, name, gtk_entry_get_text(GTK_ENTRY(g->description)),
                                     result, g->imgid, update,
                                     _gui_styles_is_copy_module_order_set(g),
-                                    _gui_styles_is_update_module_order_set(g),
-                                    gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(g->drawn_shapes)));
+                                    _gui_styles_is_update_module_order_set(g));
       }
       else
       {
         dt_styles_update(g->nameorig, name, gtk_entry_get_text(GTK_ENTRY(g->description)),
                          result, g->imgid, update,
                          _gui_styles_is_copy_module_order_set(g),
-                         _gui_styles_is_update_module_order_set(g),
-                         gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(g->drawn_shapes)));
+                         _gui_styles_is_update_module_order_set(g));
       }
       dt_control_log(_("style %s was successfully saved"), name);
     }
@@ -427,13 +423,6 @@ static void _gui_styles_dialog_run(gboolean edit, const char *name, int32_t imgi
     g_strlcpy(title, _("create new style"), sizeof(title));
     sd->duplicate = NULL;
   }
-  sd->drawn_shapes = gtk_check_button_new_with_label(_("save drawn mask shapes"));
-  gtk_widget_set_tooltip_text(sd->drawn_shapes,
-                              _("the style also stores the shapes of drawn masks and draws them again "
-                                "on the images it is applied to.\n"
-                                "the shapes of the retouch module are always stored."));
-  if(edit)
-    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(sd->drawn_shapes), dt_styles_has_drawn_shapes(name));
   GtkWidget *window = dt_gui_main_window();
   GtkDialog *dialog = GTK_DIALOG(
       gtk_dialog_new_with_buttons(title, GTK_WINDOW(window), GTK_DIALOG_DESTROY_WITH_PARENT,
@@ -687,7 +676,6 @@ static void _gui_styles_dialog_run(gboolean edit, const char *name, int32_t imgi
 
   if(has_new_item) gtk_box_pack_start(GTK_BOX(sbox), GTK_WIDGET(sd->items_new), TRUE, TRUE, 0);
 
-  gtk_box_pack_start(GTK_BOX(content_area), GTK_WIDGET(sd->drawn_shapes), FALSE, TRUE, 0);
   if(edit) gtk_box_pack_start(GTK_BOX(content_area), GTK_WIDGET(sd->duplicate), FALSE, TRUE, 0);
 
   g_object_unref(liststore);
