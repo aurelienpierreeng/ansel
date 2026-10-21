@@ -37,7 +37,7 @@ extern "C" {
  *  Nothing here returns a `dt_style_t` or a `dt_style_item_t`. Those live in `common/styles.h`,
  *  which includes three `develop/` headers to declare `dt_iop_params_t` and
  *  `dt_develop_blend_params_t` -- four layers above this one. Rows are handed to a callback as
- *  scalars and `common/styles.c` builds the structs, which is also where a module's localized
+ *  scalars and `develop/styles.c` builds the structs, which is also where a module's localized
  *  name has to come from (`dt_iop_get_localized_name()`, same layer problem).
  *
  *  A row callback runs while this module holds its statement mutex, so a callback must not call
