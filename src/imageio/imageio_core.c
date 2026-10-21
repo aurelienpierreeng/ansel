@@ -870,20 +870,9 @@ dt_imageio_retval_t dt_imageio_export_with_flags(const int32_t imgid, const char
   dt_dev_load_image(&dev, imgid);
   dt_ioppr_resync_modules_order(&dev);
 
-  // Apply styles on top of current history
-  const gboolean use_style = !thumbnail_export && format_params->style[0] != '\0';
-  //  If a style is to be applied during export, add the iop params into the history
-  if(use_style && _apply_style_before_export(&dev, format_params, imgid))
-  {
-    status = DT_IMAGEIO_PROCESSING_FAILED;
-    goto error;
-  }
-
-  int width = MAX(format_params->max_width, 0);
-  int height = MAX(format_params->max_height, 0);
-  double scale = 1.;
-
-  // Get a pipeline, aka sequence of nodes
+  // Get a pipeline, aka sequence of nodes. It is initialised before the first `goto error`, since
+  // the error path cleans it up: a cleanup run on what the stack held there walks and frees
+  // garbage pointers. The init reads no history, so the style below still reaches the nodes.
   dt_dev_pixelpipe_t pipe;
   int res = thumbnail_export
                 ? dt_dev_pixelpipe_init_thumbnail(&pipe, &dev)
@@ -897,6 +886,20 @@ dt_imageio_retval_t dt_imageio_export_with_flags(const int32_t imgid, const char
 
   pipe.shutdown_ext = shutdown;
 
+  // Apply styles on top of current history
+  const gboolean use_style = !thumbnail_export && format_params->style[0] != '\0';
+  //  If a style is to be applied during export, add the iop params into the history
+  if(use_style && _apply_style_before_export(&dev, format_params, imgid))
+  {
+    status = DT_IMAGEIO_PROCESSING_FAILED;
+    goto error;
+  }
+
+  int width = MAX(format_params->max_width, 0);
+  int height = MAX(format_params->max_height, 0);
+  double scale = 1.;
+
+  // The nodes are built from the history, so only once the style is in it
   dt_dev_pixelpipe_create_nodes(&pipe);
 
   // Sync history with pipeline nodes
