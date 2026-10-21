@@ -913,9 +913,9 @@ int dt_dev_pixelpipe_cache_rekey(const uint64_t old_hash,
  * dt_colorspaces_set_profile_changed_handler().
  */
 
-/** @brief Tell the user something went wrong, when no alert handler is installed (see
- * dt_dev_pixelpipe_cache_set_alert_handler()). Called with an already-translated,
- * already-formatted string; the cache does not know what a toast is. */
+/** @brief Tell the user something that is fine to miss: the cache went over its budget, but the
+ * allocation went ahead. Called with an already-translated, already-formatted string; the cache
+ * does not know what a toast is. */
 typedef void (*dt_pixelpipe_cache_warn_handler_t)(const char *message);
 
 /** @brief Tell the user something that must not go unseen: what it says stays true after a toast
@@ -925,7 +925,8 @@ typedef void (*dt_pixelpipe_cache_warn_handler_t)(const char *message);
 typedef void (*dt_pixelpipe_cache_alert_handler_t)(const char *message, const char *item);
 
 /** @brief Install the alert handler. The GUI installs it, once it exists, apart from the others:
- * without a GUI there is nothing to alert with, and an alert then goes to the warn handler.
+ * without a GUI there is nothing to alert with, and an alert is then printed on stderr, the item on
+ * the line under the message.
  * @param alert may be NULL, which restores that fallback. */
 void dt_dev_pixelpipe_cache_set_alert_handler(dt_pixelpipe_cache_alert_handler_t alert);
 

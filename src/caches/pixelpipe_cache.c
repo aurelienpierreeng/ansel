@@ -128,18 +128,17 @@ void dt_dev_pixelpipe_cache_set_alert_handler(dt_pixelpipe_cache_alert_handler_t
 }
 
 /* For an allocation the cache refused: the module that asked fails, and its pipe publishes
- * nothing. That stays true long after a toast is gone, so it goes to the alert handler, and to the
- * warn handler only when no GUI installed one, with the item on the line under the message. */
+ * nothing. That stays true long after a toast is gone, so it goes to the alert handler, and to
+ * stderr when no GUI installed one, with the item on the line under the message: the warn handler
+ * is a toast there, which no view draws. */
 static void _alert_user(const char *message, const char *item)
 {
   if(!IS_NULL_PTR(_alert_handler))
     _alert_handler(message, item);
-  else if(!IS_NULL_PTR(_warn_handler))
-  {
-    gchar *text = IS_NULL_PTR(item) ? g_strdup(message) : g_strdup_printf("%s\n%s", message, item);
-    _warn_handler(text);
-    dt_free(text);
-  }
+  else if(!IS_NULL_PTR(item))
+    fprintf(stderr, "%s\n  %s\n", message, item);
+  else
+    fprintf(stderr, "%s\n", message);
 }
 
 /* For what is fine to miss: the cache went over its budget, but the allocation went ahead. */
