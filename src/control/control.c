@@ -868,15 +868,16 @@ void dt_control_set_alert_handler(dt_control_alert_handler_t handler)
   _alert_handler = handler;
 }
 
+// Without a GUI, stderr: a dt_control_log() there goes to a log no view ever draws.
 void dt_control_alert(const char *title, const char *message, const char *item)
 {
   if(IS_NULL_PTR(message)) return;
   if(!IS_NULL_PTR(_alert_handler))
     _alert_handler(title, message, item);
   else if(!IS_NULL_PTR(item))
-    dt_control_log("%s\n%s", message, item);
+    fprintf(stderr, "%s: %s\n  %s\n", title, message, item);
   else
-    dt_control_log("%s", message);
+    fprintf(stderr, "%s: %s\n", title, message);
 }
 
 static void _toast_log(const gboolean markup, const char *msg, va_list ap)

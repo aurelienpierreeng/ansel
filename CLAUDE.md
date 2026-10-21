@@ -91,7 +91,8 @@ Use `dt_control_alert(title, message, item)` from
 [`src/control/user_message.h`](src/control/user_message.h), next to `dt_control_log()`: the GUI
 shows it with `dt_gui_alert()` from [`src/gui/alert.h`](src/gui/alert.h) — a small window with
 one OK button, kept above Ansel's main window (not other applications) until it is clicked, one
-per title and message — and without a GUI (`ansel-cli`) it falls back to the toast. Any thread,
+per title and message — and without a GUI (`ansel-cli`), where no view would draw a toast, it
+prints on stderr. Any thread,
 any layer from `common/` up; only `gui/` itself calls `dt_gui_alert()` directly.
 **The message is the kind of failure and carries no value**: the same text at every call from one
 place. What varies — the file, the module, the profile — is `item`, one line, which the window

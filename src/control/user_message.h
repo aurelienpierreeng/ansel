@@ -1,6 +1,7 @@
 /*
     This file is part of Ansel.
     Copyright (C) 2026 Aurélien Pierre.
+    Copyright (C) 2026 Guillaume Stutin.
 
     Ansel is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -68,7 +69,8 @@ void dt_toast_markup_log(const char *msg, ...) __attribute__((format(printf, 1, 
  * @p message, which shows the message once and lists the items it was raised for under it, in a
  * list that scrolls. A failure that repeats over a batch -- the thumbnails of a film roll, an
  * export, sidecar files -- so stays one window that lists which items it hit, not only the last
- * one. Without a GUI -- ansel-cli, or before dt_gui_gtk_init() -- it goes to dt_control_log().
+ * one. Without a GUI -- ansel-cli, or before dt_gui_gtk_init() -- it is printed on stderr: the title,
+ * the message, and the item on the line under them.
  * Any thread.
  *
  * The message is the kind of failure: the same text at every call from one place, with no value
