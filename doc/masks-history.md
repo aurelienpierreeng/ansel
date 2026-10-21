@@ -270,6 +270,66 @@ image's history + masks_history every time). Known, not yet fixed — see
 when Ansel 1.0 is prepared, per explicit instruction not to migrate any user's live DB
 prematurely).
 
+## A style stores the shapes its items use
+
+*Found `74f2f56c5e`, 2026-10-21.*
+
+A style is a copy taken now and pasted later, so it carries what a paste carries: the shapes its
+items' masks are drawn with. `data.style_shapes` (data schema 10) holds them, one row per form in
+the layout of `main.masks_history`, keyed by the style alone: a style has one flat set of shapes,
+as `dev->forms` is one flat list.
+
+**Which.** Those of a module that draws its own (`IOP_FLAGS_INTERNAL_MASKS`: retouch, spots)
+always; those of any other module's drawn mask only when the style is created or edited with
+"save drawn mask shapes". The edit dialog starts that box from `dt_styles_has_drawn_shapes()`, so
+an edit that changes nothing else keeps what the style had.
+
+**From where.** An item taken from an image takes its group as the image's history holds it *at
+that item* (`dt_masks_history_forms_at()`, the accumulation rule of
+`dt_dev_pop_history_items_ext()`), not at `history_end`: the dialog lists the redo tail too, and an
+item above `history_end` can name a group the forms at `history_end` lack. Two items naming one form
+keep the later item's state. An item an edit keeps keeps the shapes the style had; an item whose
+blend params predate the current blend version has none, since no style stored shapes then.
+
+**Applying.** `_styles_prepare_source_dev()` puts the shapes in the source dev's forms, and
+`_styles_rebuild_history_from_items()` gives each item whose blend params name a group a snapshot
+of them. Without that snapshot `dt_dev_pop_history_items_ext()` empties `dev->forms` (it keeps the
+last snapshot, and there is none), and the merge then finds nothing to copy. From there merge and
+replace carry them exactly as they carry a paste's: in prepend, a module the destination already
+has keeps its own mask, as for a paste. At export, `dt_styles_apply_style_items()` merges one
+module at a time from a dev that holds only the shapes, because
+`dt_history_merge_module_into_history()` copies forms from a dev and from nothing else.
+
+That export path applies a style's items **newest first**: `dt_styles_get_item_list()` reads them
+`ORDER BY num DESC`, prepends each and reverses the list, which leaves them descending. Of several
+items of one module, the oldest is therefore merged last and wins, its params and its mask alike.
+Measured on a style holding three exposure items: the export dev's exposure params differ from the
+source's final ones, with or without shapes, and match them once the list is applied oldest first.
+
+**The file.** A `.dtstyle` carries them as `<shapes><shape formid type name version points_count
+points source/></shapes>` after `<style>`, every value an attribute. Older parsers, darktable's and
+Ansel's, match `name`, `description` and `iop_list` by element name wherever the element sits, so a
+`<name>` inside a shape would rename the style in an older build; an attribute is ignored. Points
+and source are encoded as the XMP blobs are.
+
+**Reading one back.** A row is checked when it is read, not when it is imported:
+`_masks_form_from_row()` refuses a row whose type has no shape functions, whose source is shorter
+than two floats, or, at the current mask version, whose points blob is shorter than its point
+count needs. A row of an older mask version is read at its stored point size, the rest zeroed:
+the conversions v3→v4, v4→v5 and v5→v6 fill fields appended to the ellipse and gradient points, so
+those rows are legitimately shorter. A style's shape of another mask version is refused rather than
+converted, since v1→v2 and v2→v3 need the image's geometry.
+
+Measured with a scratch program on an image with 45 retouch shapes and a drawn mask added on
+exposure: with the box the style stores 48 shapes, without it 46 (the retouch group and its 45
+members). Applied in append and replace to a fresh image, both bring the retouch group with its
+45 members resolved and only the first brings exposure's mask; a duplicate keeps 48, an edit
+without the box drops to 46, and a `.dtstyle` saved, deleted and imported back holds 48 and
+applies the same. Creating the style takes 6.8 to 9.5 ms instead of 1.4 to 1.8 ms, for loading
+the image's history once.
+
+Presets still carry no shapes.
+
 ---
 
 ## The masks module is being enclosed, and the ratchet counts the way out
