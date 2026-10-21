@@ -92,17 +92,32 @@ void dt_styles_update(const char *name, const char *newname, const char *descrip
                       const int32_t imgid, GList *update,
                       const gboolean copy_iop_order, const gboolean update_iop_order);
 
-/** returns TRUE if the style stores the shapes of a drawn mask, not only those of a module that draws its
-    own (retouch): applying it then has a choice to offer, history/style/drawn_shapes */
-gboolean dt_styles_has_drawn_shapes(const char *name);
+/** a module instance of a style whose drawn mask the style stores the shapes of */
+typedef struct dt_style_shapes_module_t
+{
+  gchar *operation, *multi_name; // the instance
+  gchar *label;                  // its localized name, with the mnemonic of dt_iop_get_localized_name()
+  gboolean apply;                // applying the style brings the shapes of its drawn mask
+} dt_style_shapes_module_t;
+
+/** helper that frees a dt_style_shapes_module_t, can be used in g_list_free_full() */
+void dt_style_shapes_module_free(gpointer data);
+
+/** the module instances of the style whose drawn mask has shapes stored, in item order. A module that
+    draws its own (retouch) is not listed: applying the style always brings its shapes. */
+GList *dt_styles_get_shapes_modules(const char *name);
+
+/** set whether applying the style brings the shapes of the drawn mask of one module instance */
+void dt_styles_set_module_shapes(const char *name, const char *operation, const char *multi_name,
+                                 const gboolean apply);
 
 /** applies the style to selection of images */
 
 /** applies list of styles to selection of images */
 void dt_multiple_styles_apply_to_list(GList *styles, const GList *list, gboolean duplicate);
 
-/** applies the items of the named style to dev->history, with the shapes the style stores that
-    history/style/drawn_shapes lets through */
+/** applies the items of the named style to dev->history, with the shapes the style stores but those
+    of the drawn masks set to come without them */
 void dt_styles_apply_style_items(dt_develop_t *dev, const char *name, GList *style_items);
 
 /** applies the style to image by imgid, takes care of overwrite and duplicate modes */

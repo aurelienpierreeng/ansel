@@ -2366,6 +2366,9 @@ static int _upgrade_data_schema_step(dt_database_t *db, int version)
              "[init] can't create `style_shapes' table\n");
     TRY_EXEC("CREATE INDEX data.style_shapes_styleid_index ON style_shapes (styleid)",
              "[init] can't create `style_shapes_styleid_index'\n");
+    // whether applying the style brings the shapes of the item's drawn mask
+    TRY_EXEC("ALTER TABLE data.style_items ADD COLUMN apply_shapes INTEGER NOT NULL DEFAULT 1",
+             "[init] can't add `apply_shapes' column to style_items table\n");
     // clang-format on
     new_version = 10;
   }
@@ -2552,7 +2555,8 @@ static void _create_data_schema(dt_database_t *db)
       db->handle,
       "CREATE TABLE data.style_items (styleid INTEGER, num INTEGER, module INTEGER, "
       "operation VARCHAR(256), op_params BLOB, enabled INTEGER, "
-      "blendop_params BLOB, blendop_version INTEGER, multi_priority INTEGER, multi_name VARCHAR(256))",
+      "blendop_params BLOB, blendop_version INTEGER, multi_priority INTEGER, multi_name VARCHAR(256), "
+      "apply_shapes INTEGER NOT NULL DEFAULT 1)",
       NULL, NULL, NULL);
   sqlite3_exec(
       db->handle,

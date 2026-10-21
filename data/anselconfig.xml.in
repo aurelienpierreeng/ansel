@@ -364,12 +364,6 @@
     <default>true</default>
     <shortdescription>Show merge settings dialog before each style application.</shortdescription>
   </dtconfig>
-  <dtconfig>
-    <name>history/style/drawn_shapes</name>
-    <type>bool</type>
-    <default>true</default>
-    <shortdescription>Apply the shapes of the drawn masks a style stores; those of a module that draws its own (retouch) are always applied.</shortdescription>
-  </dtconfig>
   <dtconfig prefs="misc" section="tags">
     <name>omit_tag_hierarchy</name>
     <type>bool</type>

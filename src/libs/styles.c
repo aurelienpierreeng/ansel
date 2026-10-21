@@ -70,6 +70,7 @@
 #include <gtk/gtk.h>
 #include <stdlib.h>
 #include <libxml/parser.h>
+#include "widgets/label.h"
 #include "widgets/scroll_wrap.h"
 
 DT_MODULE(1)
@@ -78,7 +79,6 @@ typedef struct dt_lib_styles_t
 {
   GtkEntry *entry;
   GtkWidget *duplicate;
-  GtkWidget *drawn_shapes;
   GtkTreeView *tree;
   GtkWidget *create_button, *edit_button, *delete_button, *import_button, *export_button, *apply_button;
 } dt_lib_styles_t;
@@ -111,6 +111,12 @@ typedef enum _styles_columns_t
   DT_STYLES_COL_NAME = 0,
   DT_STYLES_COL_TOOLTIP,
   DT_STYLES_COL_FULLNAME,
+  // a module row, under its style: whether applying the style brings the shapes of its drawn mask
+  DT_STYLES_COL_STYLE,
+  DT_STYLES_COL_OPERATION,
+  DT_STYLES_COL_MULTI_NAME,
+  DT_STYLES_COL_APPLY_SHAPES,
+  DT_STYLES_COL_IS_MODULE,
   DT_STYLES_NUM_COLS
 } _styles_columns_t;
 
@@ -213,6 +219,29 @@ static void _gui_styles_update_view(dt_lib_styles_t *d)
       }
       g_strfreev(split);
 
+      // under the style, the modules whose drawn mask it stores the shapes of, each with its box
+      GList *modules = dt_styles_get_shapes_modules(style->name);
+      for(const GList *m = modules; m; m = g_list_next(m))
+      {
+        const dt_style_shapes_module_t *module = (const dt_style_shapes_module_t *)m->data;
+        gchar *label = delete_underscore(module->label);
+        GtkTreeIter child;
+        gtk_tree_store_append(GTK_TREE_STORE(model), &child, &iter);
+        gtk_tree_store_set(GTK_TREE_STORE(model), &child,
+                           DT_STYLES_COL_NAME, label,
+                           DT_STYLES_COL_TOOLTIP,
+                           _("applying the style brings the shapes of this module's drawn mask.\n"
+                             "unchecked, its drawn mask comes without shapes, to be drawn on each image."),
+                           DT_STYLES_COL_STYLE, style->name,
+                           DT_STYLES_COL_OPERATION, module->operation,
+                           DT_STYLES_COL_MULTI_NAME, module->multi_name,
+                           DT_STYLES_COL_APPLY_SHAPES, module->apply,
+                           DT_STYLES_COL_IS_MODULE, TRUE,
+                           -1);
+        dt_free(label);
+      }
+      g_list_free_full(modules, dt_style_shapes_module_free);
+
       dt_free(items_string);
       dt_free(tooltip);
     }
@@ -223,6 +252,35 @@ static void _gui_styles_update_view(dt_lib_styles_t *d)
   gtk_tree_view_set_tooltip_column(GTK_TREE_VIEW(d->tree), DT_STYLES_COL_TOOLTIP);
   gtk_tree_view_set_model(GTK_TREE_VIEW(d->tree), model);
   g_object_unref(model);
+}
+
+static void _shapes_toggled(GtkCellRendererToggle *cell, gchar *path_str, gpointer user_data)
+{
+  dt_lib_styles_t *d = (dt_lib_styles_t *)user_data;
+  GtkTreeModel *model = gtk_tree_view_get_model(d->tree);
+  GtkTreeIter iter;
+  if(!gtk_tree_model_get_iter_from_string(model, &iter, path_str)) return;
+
+  gchar *style = NULL, *operation = NULL, *multi_name = NULL;
+  gboolean apply = FALSE;
+  gtk_tree_model_get(model, &iter, DT_STYLES_COL_STYLE, &style, DT_STYLES_COL_OPERATION, &operation,
+                     DT_STYLES_COL_MULTI_NAME, &multi_name, DT_STYLES_COL_APPLY_SHAPES, &apply, -1);
+  dt_styles_set_module_shapes(style, operation, multi_name, !apply);
+  gtk_tree_store_set(GTK_TREE_STORE(model), &iter, DT_STYLES_COL_APPLY_SHAPES, !apply, -1);
+  dt_free(style);
+  dt_free(operation);
+  dt_free(multi_name);
+}
+
+// a module row only carries its box: it is no style to apply, edit or remove
+static gboolean _row_selectable(GtkTreeSelection *selection, GtkTreeModel *model, GtkTreePath *path,
+                                gboolean path_currently_selected, gpointer data)
+{
+  GtkTreeIter iter;
+  gboolean is_module = FALSE;
+  if(gtk_tree_model_get_iter(model, &iter, path))
+    gtk_tree_model_get(model, &iter, DT_STYLES_COL_IS_MODULE, &is_module, -1);
+  return !is_module;
 }
 
 static void _styles_row_activated_callback(GtkTreeView *view, GtkTreePath *path, GtkTreeViewColumn *col,
@@ -765,11 +823,6 @@ static gboolean duplicate_callback(GtkEntry *entry, gpointer user_data)
   return FALSE;
 }
 
-static void _drawn_shapes_toggled(GtkToggleButton *button, gpointer user_data)
-{
-  dt_conf_set_bool("history/style/drawn_shapes", gtk_toggle_button_get_active(button));
-}
-
 static void _update(dt_lib_module_t *self)
 {
   dt_lib_cancel_postponed_update(self);
@@ -832,15 +885,24 @@ void gui_init(dt_lib_module_t *self)
   /* tree */
   d->tree = GTK_TREE_VIEW(gtk_tree_view_new());
   gtk_tree_view_set_headers_visible(d->tree, FALSE);
-  GtkTreeStore *treestore = gtk_tree_store_new(DT_STYLES_NUM_COLS, G_TYPE_STRING, G_TYPE_STRING, G_TYPE_STRING);
+  GtkTreeStore *treestore = gtk_tree_store_new(DT_STYLES_NUM_COLS, G_TYPE_STRING, G_TYPE_STRING, G_TYPE_STRING,
+                                               G_TYPE_STRING, G_TYPE_STRING, G_TYPE_STRING, G_TYPE_BOOLEAN,
+                                               G_TYPE_BOOLEAN);
   GtkTreeViewColumn *col = gtk_tree_view_column_new();
   gtk_tree_view_append_column(GTK_TREE_VIEW(d->tree), col);
+  GtkCellRenderer *toggle = gtk_cell_renderer_toggle_new();
+  gtk_tree_view_column_pack_start(col, toggle, FALSE);
+  gtk_tree_view_column_add_attribute(col, toggle, "active", DT_STYLES_COL_APPLY_SHAPES);
+  gtk_tree_view_column_add_attribute(col, toggle, "visible", DT_STYLES_COL_IS_MODULE);
+  g_signal_connect(toggle, "toggled", G_CALLBACK(_shapes_toggled), d);
   GtkCellRenderer *renderer = gtk_cell_renderer_text_new();
   g_object_set(renderer, "ellipsize", PANGO_ELLIPSIZE_MIDDLE, (gchar *)0);
   gtk_tree_view_column_pack_start(col, renderer, TRUE);
   gtk_tree_view_column_add_attribute(col, renderer, "text", DT_STYLES_COL_NAME);
 
   gtk_tree_selection_set_mode(gtk_tree_view_get_selection(GTK_TREE_VIEW(d->tree)), GTK_SELECTION_MULTIPLE);
+  gtk_tree_selection_set_select_function(gtk_tree_view_get_selection(GTK_TREE_VIEW(d->tree)), _row_selectable,
+                                         NULL, NULL);
   gtk_tree_view_set_model(GTK_TREE_VIEW(d->tree), GTK_TREE_MODEL(treestore));
   g_object_unref(treestore);
 
@@ -870,16 +932,6 @@ void gui_init(dt_lib_module_t *self)
   gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(d->duplicate),
                                dt_conf_get_bool("ui_last/styles_create_duplicate"));
   gtk_widget_set_tooltip_text(d->duplicate, _("creates a duplicate of the image before applying style"));
-
-  d->drawn_shapes = gtk_check_button_new_with_label(_("apply drawn mask shapes"));
-  gtk_label_set_ellipsize(GTK_LABEL(gtk_bin_get_child(GTK_BIN(d->drawn_shapes))), PANGO_ELLIPSIZE_START);
-  gtk_box_pack_start(GTK_BOX(self->widget), GTK_WIDGET(d->drawn_shapes), TRUE, FALSE, 0);
-  gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(d->drawn_shapes), dt_conf_get_bool("history/style/drawn_shapes"));
-  g_signal_connect(d->drawn_shapes, "toggled", G_CALLBACK(_drawn_shapes_toggled), NULL);
-  gtk_widget_set_tooltip_text(d->drawn_shapes,
-                              _("the modules come with the shapes of their drawn masks.\n"
-                                "unchecked, their drawn masks come without shapes, to be drawn on each image.\n"
-                                "the shapes of the retouch module always come."));
 
   GtkWidget *hbox1 = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
   GtkWidget *hbox2 = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);

@@ -188,7 +188,15 @@ gboolean dt_style_repository_insert_item(const int32_t styleid, const int num,
                                          const int enabled, const void *blendop_params,
                                          const int32_t blendop_params_size,
                                          const int blendop_version, const int multi_priority,
-                                         const char *multi_name);
+                                         const char *multi_name, const int apply_shapes);
+
+/** the nums of the items whose drawn mask applying the style brings without its shapes
+ *  (apply_shapes = 0), in num order */
+GList *dt_style_repository_get_items_without_shapes(const int32_t styleid);
+
+/** set apply_shapes on every item of one module instance of the style */
+gboolean dt_style_repository_set_apply_shapes(const int32_t styleid, const char *operation,
+                                              const char *multi_name, const gboolean apply_shapes);
 
 /** give every item a unique multi_priority per operation, numbered from 0 in multi_priority
  *  order. SQLite has no ROW_NUMBER, so this reads the rows and writes them back one by one. */
@@ -214,6 +222,9 @@ gboolean dt_style_repository_insert_shape(const int32_t styleid, const int formi
                                           const char *name, const int version, const void *points,
                                           const int points_len, const int points_count,
                                           const void *source, const int source_len);
+
+/** TRUE when the style stores a shape of id `formid` */
+gboolean dt_style_repository_holds_shape(const int32_t styleid, const int formid);
 
 /** drop every shape of the style */
 gboolean dt_style_repository_delete_shapes(const int32_t styleid);

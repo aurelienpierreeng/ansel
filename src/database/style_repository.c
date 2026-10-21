@@ -505,9 +505,9 @@ gboolean dt_style_repository_copy_items_from_style(const int32_t dest_styleid,
     query = g_strdup_printf(
              "INSERT INTO data.style_items "
              "  (styleid,num,module,operation,op_params,enabled,blendop_params,blendop_version,"
-             "   multi_priority,multi_name)"
+             "   multi_priority,multi_name,apply_shapes)"
              " SELECT ?1, num,module,operation,op_params,enabled,blendop_params,blendop_version,"
-             "   multi_priority,multi_name"
+             "   multi_priority,multi_name,apply_shapes"
              " FROM data.style_items"
              " WHERE styleid=?2 AND %s",
              predicate);
@@ -519,9 +519,9 @@ gboolean dt_style_repository_copy_items_from_style(const int32_t dest_styleid,
     DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
                                 "INSERT INTO data.style_items "
                                 "  (styleid,num,module,operation,op_params,enabled,blendop_params,"
-                                "   blendop_version,multi_priority,multi_name)"
+                                "   blendop_version,multi_priority,multi_name,apply_shapes)"
                                 " SELECT ?1, num,module,operation,op_params,enabled,blendop_params,"
-                                "        blendop_version,multi_priority,multi_name"
+                                "        blendop_version,multi_priority,multi_name,apply_shapes"
                                 " FROM data.style_items"
                                 " WHERE styleid=?2",
                                 -1, &stmt, NULL);
@@ -625,7 +625,7 @@ gboolean dt_style_repository_insert_item(const int32_t styleid, const int num,
                                          const int enabled, const void *blendop_params,
                                          const int32_t blendop_params_size,
                                          const int blendop_version, const int multi_priority,
-                                         const char *multi_name)
+                                         const char *multi_name, const int apply_shapes)
 {
   if(styleid == 0) return FALSE;
 
@@ -634,8 +634,8 @@ gboolean dt_style_repository_insert_item(const int32_t styleid, const int num,
   DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
                               "INSERT INTO data.style_items "
                               " (styleid, num, module, operation, op_params, enabled, blendop_params,"
-                              "  blendop_version, multi_priority, multi_name)"
-                              " VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+                              "  blendop_version, multi_priority, multi_name, apply_shapes)"
+                              " VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
                               -1, &stmt, NULL);
   // clang-format on
   DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, styleid);
@@ -648,7 +648,40 @@ gboolean dt_style_repository_insert_item(const int32_t styleid, const int num,
   DT_DEBUG_SQLITE3_BIND_INT(stmt, 8, blendop_version);
   DT_DEBUG_SQLITE3_BIND_INT(stmt, 9, multi_priority);
   DT_DEBUG_SQLITE3_BIND_TEXT(stmt, 10, multi_name, -1, SQLITE_TRANSIENT);
+  DT_DEBUG_SQLITE3_BIND_INT(stmt, 11, apply_shapes);
 
+  const gboolean ok = (sqlite3_step(stmt) == SQLITE_DONE);
+  sqlite3_finalize(stmt);
+  return ok;
+}
+
+GList *dt_style_repository_get_items_without_shapes(const int32_t styleid)
+{
+  sqlite3_stmt *stmt;
+  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
+                              "SELECT num FROM data.style_items WHERE styleid = ?1 AND apply_shapes = 0", -1,
+                              &stmt, NULL);
+  DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, styleid);
+  GList *nums = NULL;
+  while(sqlite3_step(stmt) == SQLITE_ROW) nums = g_list_prepend(nums, GINT_TO_POINTER(sqlite3_column_int(stmt, 0)));
+  sqlite3_finalize(stmt);
+  return g_list_reverse(nums);
+}
+
+gboolean dt_style_repository_set_apply_shapes(const int32_t styleid, const char *operation,
+                                              const char *multi_name, const gboolean apply_shapes)
+{
+  if(styleid == 0) return FALSE;
+
+  sqlite3_stmt *stmt;
+  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
+                              "UPDATE data.style_items SET apply_shapes = ?1"
+                              " WHERE styleid = ?2 AND operation = ?3 AND IFNULL(multi_name, '') = ?4",
+                              -1, &stmt, NULL);
+  DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, apply_shapes ? 1 : 0);
+  DT_DEBUG_SQLITE3_BIND_INT(stmt, 2, styleid);
+  DT_DEBUG_SQLITE3_BIND_TEXT(stmt, 3, operation, -1, SQLITE_TRANSIENT);
+  DT_DEBUG_SQLITE3_BIND_TEXT(stmt, 4, multi_name ? multi_name : "", -1, SQLITE_TRANSIENT);
   const gboolean ok = (sqlite3_step(stmt) == SQLITE_DONE);
   sqlite3_finalize(stmt);
   return ok;
@@ -776,6 +809,19 @@ gboolean dt_style_repository_insert_shape(const int32_t styleid, const int formi
   const gboolean ok = (sqlite3_step(stmt) == SQLITE_DONE);
   sqlite3_finalize(stmt);
   return ok;
+}
+
+gboolean dt_style_repository_holds_shape(const int32_t styleid, const int formid)
+{
+  sqlite3_stmt *stmt;
+  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
+                              "SELECT 1 FROM data.style_shapes WHERE styleid = ?1 AND formid = ?2 LIMIT 1", -1,
+                              &stmt, NULL);
+  DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, styleid);
+  DT_DEBUG_SQLITE3_BIND_INT(stmt, 2, formid);
+  const gboolean held = (sqlite3_step(stmt) == SQLITE_ROW);
+  sqlite3_finalize(stmt);
+  return held;
 }
 
 gboolean dt_style_repository_delete_shapes(const int32_t styleid)

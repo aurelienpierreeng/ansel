@@ -95,6 +95,7 @@ typedef struct
   GString *multi_name;
   int enabled;
   double iop_order;
+  int apply_shapes;
 } StylePluginData;
 
 /* one <shape>: a row of data.style_shapes */
@@ -240,11 +241,28 @@ static int _styles_item_mask_id(const dt_style_item_t *item)
   return item->blendop_params->mask_id;
 }
 
-/* Whether a module draws its own shapes (retouch): applying a style always brings those, whatever
- * history/style/drawn_shapes says of the shapes of drawn masks. */
+/* Whether a module draws its own shapes (retouch): applying a style always brings those, whatever the
+ * style says of its drawn masks. */
 static gboolean _styles_draws_own_shapes(const char *operation)
 {
   return (dt_iop_get_module_flags(operation) & IOP_FLAGS_INTERNAL_MASKS) != 0;
+}
+
+/* Whether `item`'s module instance comes without the shapes of its drawn mask: the choice is the
+ * instance's, so one item of it among `items` set so (num in `without`) decides for all of them, an
+ * item an edit later adds to the instance included. */
+static gboolean _styles_instance_without_shapes(GList *items, GList *without, const dt_style_item_t *item)
+{
+  const char *multi_name = item->multi_name ? item->multi_name : "";
+  for(GList *l = items; l; l = g_list_next(l))
+  {
+    const dt_style_item_t *other = (const dt_style_item_t *)l->data;
+    if(!g_strcmp0(other->operation, item->operation)
+       && !g_strcmp0(other->multi_name ? other->multi_name : "", multi_name)
+       && g_list_find(without, GINT_TO_POINTER(other->num)))
+      return TRUE;
+  }
+  return FALSE;
 }
 
 /* Store in the style the shapes its items use, as copy and paste would carry them. An item named in
@@ -300,23 +318,67 @@ static void _styles_write_shapes(const int id, const int32_t imgid, GHashTable *
   g_list_free_full(items, dt_style_item_free);
 }
 
-gboolean dt_styles_has_drawn_shapes(const char *name)
+void dt_style_shapes_module_free(gpointer data)
+{
+  dt_style_shapes_module_t *module = (dt_style_shapes_module_t *)data;
+  dt_free(module->operation);
+  dt_free(module->multi_name);
+  dt_free(module->label);
+  dt_free(module);
+}
+
+GList *dt_styles_get_shapes_modules(const char *name)
 {
   const int id = dt_styles_get_id_by_name(name);
-  if(id == 0) return FALSE;
+  if(id == 0) return NULL;
 
-  GList *shapes = dt_masks_read_style_shapes(id);
-  GList *items = shapes ? _dt_styles_get_apply_items(id) : NULL;
-  gboolean found = FALSE;
-  for(GList *l = items; l && !found; l = g_list_next(l))
+  GList *items = _dt_styles_get_apply_items(id);
+  GList *without = dt_style_repository_get_items_without_shapes(id);
+  GList *modules = NULL;
+  for(GList *l = items; l; l = g_list_next(l))
   {
     const dt_style_item_t *item = (const dt_style_item_t *)l->data;
     const int mask_id = _styles_item_mask_id(item);
-    found = mask_id > 0 && !_styles_draws_own_shapes(item->operation) && dt_masks_forms_hold(shapes, mask_id);
+    if(mask_id <= 0 || _styles_draws_own_shapes(item->operation)
+       || !dt_style_repository_holds_shape(id, mask_id))
+      continue;
+
+    // one entry per module instance, whatever number of items it has
+    const char *multi_name = item->multi_name ? item->multi_name : "";
+    dt_style_shapes_module_t *module = NULL;
+    for(GList *m = modules; m && IS_NULL_PTR(module); m = g_list_next(m))
+    {
+      dt_style_shapes_module_t *candidate = (dt_style_shapes_module_t *)m->data;
+      if(!g_strcmp0(candidate->operation, item->operation) && !g_strcmp0(candidate->multi_name, multi_name))
+        module = candidate;
+    }
+    if(IS_NULL_PTR(module))
+    {
+      module = g_new0(dt_style_shapes_module_t, 1);
+      module->operation = g_strdup(item->operation);
+      module->multi_name = g_strdup(multi_name);
+      const gchar *localized = dt_iop_get_localized_name(item->operation);
+      module->label = (*multi_name && strcmp(multi_name, "0") != 0)
+                          ? g_strdup_printf("%s %s", localized, multi_name)
+                          : g_strdup(localized);
+      module->apply = !_styles_instance_without_shapes(items, without, item);
+      modules = g_list_prepend(modules, module);
+    }
   }
+  g_list_free(without);
   g_list_free_full(items, dt_style_item_free);
-  dt_masks_forms_snapshot_release(&shapes);
-  return found;
+  return g_list_reverse(modules);
+}
+
+void dt_styles_set_module_shapes(const char *name, const char *operation, const char *multi_name,
+                                 const gboolean apply)
+{
+  const int id = dt_styles_get_id_by_name(name);
+  if(id == 0) return;
+
+  // backup style to disk, as an edit does
+  if(dt_style_repository_set_apply_shapes(id, operation, multi_name, apply))
+    dt_styles_save_to_file(name, NULL, TRUE);
 }
 
 static void  _dt_style_update_iop_order(const gchar *name, const int id, const int32_t imgid,
@@ -779,25 +841,30 @@ static int _styles_rebuild_history_from_items(dt_develop_t *dev_src, GList *appl
   return 0;
 }
 
-/* The shapes applying the style brings: all it stores, or, when history/style/drawn_shapes is off,
- * only those of the modules that draw their own. A drawn mask then comes without its shapes and with
- * its blend params unchanged: the pipe fills a drawn mask whose group is missing, so the module
- * applies as if it had no drawn mask until shapes are drawn on the image. */
+/* The shapes applying the style brings: all it stores but the groups of the module instances set to
+ * come without the shapes of their drawn mask (apply_shapes off); those of a module that draws its own
+ * always come.
+ * Such a drawn mask arrives with its blend params unchanged, naming a group the image lacks: the pipe
+ * fills a drawn mask whose group is missing, so the module applies as if it had no drawn mask until
+ * shapes are drawn on the image. */
 static GList *_styles_applied_shapes(const int style_id, GList *items)
 {
   GList *shapes = dt_masks_read_style_shapes(style_id);
-  if(dt_conf_get_bool("history/style/drawn_shapes")) return shapes;
+  GList *without = dt_style_repository_get_items_without_shapes(style_id);
+  if(IS_NULL_PTR(without)) return shapes;
 
-  GList *own_shapes = NULL;
+  GList *applied = NULL;
   for(GList *l = items; l; l = g_list_next(l))
   {
     const dt_style_item_t *item = (const dt_style_item_t *)l->data;
     const int mask_id = _styles_item_mask_id(item);
-    if(mask_id > 0 && _styles_draws_own_shapes(item->operation) && dt_masks_forms_hold(shapes, mask_id))
-      dt_masks_collect_shapes(&own_shapes, shapes, mask_id);
+    if(mask_id <= 0 || !dt_masks_forms_hold(shapes, mask_id)) continue;
+    if(_styles_draws_own_shapes(item->operation) || !_styles_instance_without_shapes(items, without, item))
+      dt_masks_collect_shapes(&applied, shapes, mask_id);
   }
+  g_list_free(without);
   dt_masks_forms_snapshot_release(&shapes);
-  return own_shapes;
+  return applied;
 }
 
 static int _styles_prepare_source_dev(dt_develop_t *dev_src, const char *name, const int style_id,
@@ -1081,6 +1148,12 @@ GList *dt_styles_get_list(const char *filter)
   return g_list_reverse(result);  // list was built in reverse order, so un-reverse it
 }
 
+typedef struct _write_items_ctx_t
+{
+  xmlTextWriterPtr writer;
+  GList *without_shapes; // nums of the items whose drawn mask comes without its shapes
+} _write_items_ctx_t;
+
 static void _write_item(void *user_data, const int num, const int multi_priority,
                         const int module_version, const char *operation, const int enabled,
                         const void *params, const int32_t params_size,
@@ -1088,7 +1161,8 @@ static void _write_item(void *user_data, const int num, const int multi_priority
                         const int blendop_version, const char *multi_name,
                         const int selimg_num, const double iop_order)
 {
-  xmlTextWriterPtr writer = (xmlTextWriterPtr)user_data;
+  _write_items_ctx_t *ctx = (_write_items_ctx_t *)user_data;
+  xmlTextWriterPtr writer = ctx->writer;
   char *op_params_txt = dt_exif_xmp_encode((const unsigned char *)params, params_size, NULL);
   char *blendop_params_txt = dt_exif_xmp_encode((const unsigned char *)blendop_params, blendop_params_size, NULL);
 
@@ -1102,6 +1176,9 @@ static void _write_item(void *user_data, const int num, const int multi_priority
   xmlTextWriterWriteFormatElement(writer, BAD_CAST "blendop_version", "%d", blendop_version);
   xmlTextWriterWriteFormatElement(writer, BAD_CAST "multi_priority", "%d", multi_priority);
   xmlTextWriterWriteFormatElement(writer, BAD_CAST "multi_name", "%s", multi_name);
+  // written only when off, so a style that brings every shape keeps the file it always had
+  if(g_list_find(ctx->without_shapes, GINT_TO_POINTER(num)))
+    xmlTextWriterWriteFormatElement(writer, BAD_CAST "apply_shapes", "%d", 0);
   xmlTextWriterEndElement(writer);
 
   // dt_style_encode() used to leak both of these on every item of every style ever saved
@@ -1219,7 +1296,10 @@ void dt_styles_save_to_file(const char *style_name, const char *filedir, gboolea
 
   const int id = dt_styles_get_id_by_name(style_name);
   xmlTextWriterStartElement(writer, BAD_CAST "style");
-  dt_style_repository_foreach_item_for_export(id, _write_item, writer);
+  _write_items_ctx_t items_ctx = { .writer = writer,
+                                   .without_shapes = dt_style_repository_get_items_without_shapes(id) };
+  dt_style_repository_foreach_item_for_export(id, _write_item, &items_ctx);
+  g_list_free(items_ctx.without_shapes);
   xmlTextWriterEndElement(writer);
 
   _write_shapes_ctx_t shapes_ctx = { .writer = writer, .open = FALSE };
@@ -1250,6 +1330,7 @@ static StylePluginData *dt_styles_style_plugin_new()
   plugin->blendop_params = g_string_new("");
   plugin->multi_name = g_string_new("");
   plugin->iop_order = -1.0;
+  plugin->apply_shapes = 1;
   return plugin;
 }
 
@@ -1405,6 +1486,10 @@ static void dt_styles_style_text_handler(GMarkupParseContext *context, const gch
     {
       plug->iop_order = atof(text);
     }
+    else if(g_ascii_strcasecmp(elt, "apply_shapes") == 0)
+    {
+      plug->apply_shapes = atoi(text);
+    }
   }
 }
 
@@ -1433,7 +1518,7 @@ static void dt_style_plugin_save(StylePluginData *plugin, gpointer styleId)
   dt_style_repository_insert_item(id, plugin->num, plugin->module, plugin->operation->str, params,
                                   params_len, plugin->enabled, blendop_params, blendop_params_len,
                                   plugin->blendop_version, plugin->multi_priority,
-                                  plugin->multi_name->str);
+                                  plugin->multi_name->str, plugin->apply_shapes);
 
   dt_free(params);
 }
