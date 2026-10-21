@@ -138,6 +138,37 @@ GList *dt_masks_history_forms_at(GList *history, const dt_dev_history_item_t *it
   return NULL;
 }
 
+void dt_masks_history_carry_new_forms(dt_develop_t *dev, GList *forms_before, GList *history)
+{
+  GList *new_forms = NULL;
+  dt_pthread_rwlock_rdlock(&dev->masks_mutex);
+  for(GList *node = dev->forms; node; node = g_list_next(node))
+    if(IS_NULL_PTR(g_list_find(forms_before, node->data))) new_forms = g_list_prepend(new_forms, node->data);
+  dt_pthread_rwlock_unlock(&dev->masks_mutex);
+  new_forms = g_list_reverse(new_forms);
+
+  for(GList *item = history; item && new_forms; item = g_list_next(item))
+  {
+    dt_dev_history_item_t *hist = (dt_dev_history_item_t *)item->data;
+    if(IS_NULL_PTR(hist->forms)) continue;
+
+    GHashTable *ids = g_hash_table_new(g_direct_hash, g_direct_equal);
+    for(GList *node = hist->forms; node; node = g_list_next(node))
+      g_hash_table_add(ids, GINT_TO_POINTER(((dt_masks_form_t *)node->data)->formid));
+
+    GList *carried = NULL;
+    for(GList *node = new_forms; node; node = g_list_next(node))
+    {
+      dt_masks_form_t *form = (dt_masks_form_t *)node->data;
+      if(!g_hash_table_contains(ids, GINT_TO_POINTER(form->formid)))
+        carried = g_list_prepend(carried, dt_masks_form_ref(form));
+    }
+    hist->forms = g_list_concat(hist->forms, g_list_reverse(carried));
+    g_hash_table_destroy(ids);
+  }
+  g_list_free(new_forms);
+}
+
 void dt_masks_release_all_forms(dt_develop_t *dev)
 {
   if(IS_NULL_PTR(dev)) return;

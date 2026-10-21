@@ -94,6 +94,12 @@ void dt_masks_write_style_shapes(const int32_t styleid, GList *shapes);
  *  A shape that cannot be read is left out. Implemented in masks.c. */
 GList *dt_masks_read_style_shapes(const int32_t styleid);
 
+/** Add to every forms snapshot of `history` (a list of dt_dev_history_item_t) the forms that
+ *  dev->forms holds and `forms_before` does not, for when the items that brought them now sit
+ *  below snapshots taken before they existed. A snapshot that already holds a form with the
+ *  same id keeps its own. */
+void dt_masks_history_carry_new_forms(struct dt_develop_t *dev, GList *forms_before, GList *history);
+
 /** Release every reference this dev holds on any form, and empty both lists.
  *
  *  dev->forms and dev->allforms are INDEPENDENT claims on possibly-shared objects

@@ -242,6 +242,35 @@ via `dt_masks_group_add_form`, so it was an orphan on top of being uncommitted).
 fixed; audit any *new* handler in `libs/shape_manager.c` / `blend_gui.c` that mutates forms without a
 trailing commit before trusting its undo/redo behavior.
 
+## Items merged below a history carry their forms into every snapshot above them
+
+*Found `5632537f6e`, 2026-10-21; measured with styles on `6898be8fb6`, 2026-10-21.*
+
+Since `dev->forms` is rebuilt from the last snapshot (above), a form is part of the edit only if
+the topmost snapshot holds it. A paste or a style in *prepend* mode (`DT_HISTORY_MERGE_PREPEND`,
+`develop/history_merge.c`) puts its items below the destination's: their own snapshots hold the
+pasted forms, but the destination's snapshots above them were taken before those forms existed.
+`dt_history_merge()` therefore snapshots the destination's forms before anything is copied --
+before the topological solve, which copies the contents of the instances it creates -- and
+`dt_masks_history_carry_new_forms()` adds every form gained since to each destination snapshot
+that lacks its id. A snapshot that already holds the id keeps its own version: in prepend the
+destination wins conflicts. Append needs nothing, the pasted items go on top.
+
+Measured headless through `dt_history_copy_and_paste_on_image()` on two Sony ARW files, pasting a
+retouch with 45 shapes (46 forms with its group) onto an image whose own retouch is a second
+instance: before, 46 forms after the paste and the pasted group unresolved -- the pasted item's
+snapshot held 92 forms, the destination's two above it 46; after, 92 forms and both groups resolved,
+45/45 members each, read back from the database. A destination with no snapshot of its own never
+loses anything, since the pasted items' snapshot is then the topmost: a blank image keeps its shapes
+in every mode, with or without the carry.
+
+A style goes through the same merge, so it lost its shapes the same way. Measured the same way with
+a style taken from the source image (46 stored shapes) and applied by `dt_styles_apply_to_image_merge()`
+onto the same destination: in prepend, 46 forms and the style's group unresolved before, 92 forms
+and both groups resolved after; append brings 92 forms either way. The carry costs rows, since each
+destination snapshot above now holds the merged forms too: the prepended image writes 276 rows to
+`main.masks_history` where the appended one writes 184.
+
 ## Same-thread rwlock reentrancy
 
 *Found `137fed9830`, 2026-07-10.*
@@ -295,7 +324,8 @@ blend params predate the current blend version has none, since no style stored s
 of them. Without that snapshot `dt_dev_pop_history_items_ext()` empties `dev->forms` (it keeps the
 last snapshot, and there is none), and the merge then finds nothing to copy. From there merge and
 replace carry them exactly as they carry a paste's: in prepend, a module the destination already
-has keeps its own mask, as for a paste. At export, `dt_styles_apply_style_items()` merges one
+has keeps its own mask, and the shapes of one it lacks reach the destination's snapshots above it
+(see above). At export, `dt_styles_apply_style_items()` merges one
 module at a time from a dev that holds only the shapes, because
 `dt_history_merge_module_into_history()` copies forms from a dev and from nothing else.
 
