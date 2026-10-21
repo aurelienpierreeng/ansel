@@ -323,7 +323,6 @@ void dt_style_shapes_module_free(gpointer data)
   dt_style_shapes_module_t *module = (dt_style_shapes_module_t *)data;
   dt_free(module->operation);
   dt_free(module->multi_name);
-  dt_free(module->label);
   dt_free(module);
 }
 
@@ -357,10 +356,6 @@ GList *dt_styles_get_shapes_modules(const char *name)
       module = g_new0(dt_style_shapes_module_t, 1);
       module->operation = g_strdup(item->operation);
       module->multi_name = g_strdup(multi_name);
-      const gchar *localized = dt_iop_get_localized_name(item->operation);
-      module->label = (*multi_name && strcmp(multi_name, "0") != 0)
-                          ? g_strdup_printf("%s %s", localized, multi_name)
-                          : g_strdup(localized);
       module->apply = !_styles_instance_without_shapes(items, without, item);
       modules = g_list_prepend(modules, module);
     }
@@ -370,15 +365,59 @@ GList *dt_styles_get_shapes_modules(const char *name)
   return g_list_reverse(modules);
 }
 
-void dt_styles_set_module_shapes(const char *name, const char *operation, const char *multi_name,
-                                 const gboolean apply)
+void dt_styles_set_shapes_modules(const char *name, GList *modules)
 {
   const int id = dt_styles_get_id_by_name(name);
-  if(id == 0) return;
+  if(id == 0 || IS_NULL_PTR(modules)) return;
+
+  gboolean set = FALSE;
+  for(GList *m = modules; m; m = g_list_next(m))
+  {
+    const dt_style_shapes_module_t *module = (const dt_style_shapes_module_t *)m->data;
+    set |= dt_style_repository_set_apply_shapes(id, module->operation, module->multi_name, module->apply);
+  }
 
   // backup style to disk, as an edit does
-  if(dt_style_repository_set_apply_shapes(id, operation, multi_name, apply))
-    dt_styles_save_to_file(name, NULL, TRUE);
+  if(set) dt_styles_save_to_file(name, NULL, TRUE);
+}
+
+GHashTable *dt_styles_get_items_with_shapes(const char *name)
+{
+  GHashTable *nums = g_hash_table_new(g_direct_hash, g_direct_equal);
+  const int id = dt_styles_get_id_by_name(name);
+  GList *shapes = id ? dt_masks_read_style_shapes(id) : NULL;
+  GList *items = shapes ? _dt_styles_get_apply_items(id) : NULL;
+  for(GList *l = items; l; l = g_list_next(l))
+  {
+    const dt_style_item_t *item = (const dt_style_item_t *)l->data;
+    const int mask_id = _styles_item_mask_id(item);
+    if(mask_id > 0 && !_styles_draws_own_shapes(item->operation) && dt_masks_forms_hold(shapes, mask_id))
+      g_hash_table_add(nums, GINT_TO_POINTER(item->num));
+  }
+  g_list_free_full(items, dt_style_item_free);
+  dt_masks_forms_snapshot_release(&shapes);
+  return nums;
+}
+
+GHashTable *dt_styles_get_image_items_with_shapes(const int32_t imgid)
+{
+  GHashTable *nums = g_hash_table_new(g_direct_hash, g_direct_equal);
+  if(imgid == UNKNOWN_IMAGE) return nums;
+
+  // the history converts older blend params, and holds the forms each item ends on
+  dt_develop_t dev_img;
+  dt_dev_init(&dev_img, FALSE);
+  dt_dev_reload_history_items(&dev_img, imgid);
+  for(GList *h = dev_img.history; h; h = g_list_next(h))
+  {
+    const dt_dev_history_item_t *hist = (const dt_dev_history_item_t *)h->data;
+    const int mask_id = hist->blend_params ? hist->blend_params->mask_id : 0;
+    if(mask_id > 0 && !_styles_draws_own_shapes(hist->op_name)
+       && dt_masks_forms_hold(dt_masks_history_forms_at(dev_img.history, hist), mask_id))
+      g_hash_table_add(nums, GINT_TO_POINTER(hist->num));
+  }
+  dt_dev_cleanup(&dev_img);
+  return nums;
 }
 
 static void  _dt_style_update_iop_order(const gchar *name, const int id, const int32_t imgid,

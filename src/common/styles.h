@@ -92,11 +92,10 @@ void dt_styles_update(const char *name, const char *newname, const char *descrip
                       const int32_t imgid, GList *update,
                       const gboolean copy_iop_order, const gboolean update_iop_order);
 
-/** a module instance of a style whose drawn mask the style stores the shapes of */
+/** a module instance of a style, and whether applying the style brings the shapes of its drawn mask */
 typedef struct dt_style_shapes_module_t
 {
   gchar *operation, *multi_name; // the instance
-  gchar *label;                  // its localized name, with the mnemonic of dt_iop_get_localized_name()
   gboolean apply;                // applying the style brings the shapes of its drawn mask
 } dt_style_shapes_module_t;
 
@@ -107,9 +106,17 @@ void dt_style_shapes_module_free(gpointer data);
     draws its own (retouch) is not listed: applying the style always brings its shapes. */
 GList *dt_styles_get_shapes_modules(const char *name);
 
-/** set whether applying the style brings the shapes of the drawn mask of one module instance */
-void dt_styles_set_module_shapes(const char *name, const char *operation, const char *multi_name,
-                                 const gboolean apply);
+/** set, for each dt_style_shapes_module_t of `modules`, whether applying the style brings the shapes
+    of the drawn mask of that module instance */
+void dt_styles_set_shapes_modules(const char *name, GList *modules);
+
+/** the nums of the style's items whose drawn mask has shapes stored, as a set. A module that draws its
+    own (retouch) is left out. */
+GHashTable *dt_styles_get_items_with_shapes(const char *name);
+
+/** the history nums of the image's items whose drawn mask has shapes, as a set. A module that draws
+    its own (retouch) is left out. */
+GHashTable *dt_styles_get_image_items_with_shapes(const int32_t imgid);
 
 /** applies the style to selection of images */
 
