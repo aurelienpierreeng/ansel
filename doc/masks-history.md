@@ -272,7 +272,7 @@ prematurely).
 
 ## A style stores the shapes its items use
 
-*Found `74f2f56c5e`, 2026-10-21; which shapes come is the style's own since `924831382c`, 2026-10-21.*
+*Found `74f2f56c5e`, 2026-10-21; which shapes come is chosen in the edit dialog since `9fbc8744c0`, 2026-10-21.*
 
 A style is a copy taken now and pasted later, so it carries what a paste carries: the shapes its
 items' masks are drawn with. `data.style_shapes` (data schema 10) holds them, one row per form in
@@ -301,17 +301,27 @@ module at a time from a dev that holds only the shapes, because
 
 **Which come.** Each module instance of the style whose drawn mask has stored shapes chooses
 whether applying the style brings them: `data.style_items.apply_shapes` (data 10, `1` by default).
-The choice is the instance's (operation and `multi_name`): `dt_styles_set_module_shapes()` sets it
-on all its items at once, and one item of it set off decides for all of them, so an item an edit
-adds to an unchecked instance from an image comes without its shapes too. The styles module lists
-those instances under each style, from `dt_styles_get_shapes_modules()`, each with its box; the rows
-cannot be selected, so they are never taken for a style to apply, edit or remove. A module that
-draws its own shapes is never listed: its shapes always come. A copy of the style keeps the choice,
-and a `.dtstyle` carries it as `<apply_shapes>0</apply_shapes>` inside a `<plugin>`, written only
-when off, so a file whose boxes are all checked is what an older build writes; older parsers ignore
-an element they do not know inside `<plugin>`. Every application follows it, the styles module, the
-Styles menu, a style at import, the studio pool and export alike, because `_styles_applied_shapes()`
-reads it where they all meet: `_styles_prepare_source_dev()` and `dt_styles_apply_style_items()`.
+The choice is the instance's (operation and `multi_name`): `dt_style_repository_set_apply_shapes()`
+sets it on all its items at once, and one item of it set off decides for all of them, so an item an
+edit adds to an unchecked instance from an image comes without its shapes too.
+
+The edit dialog sets it, in a *shapes* column. A row has a box when its item has shapes where the
+row takes it from: the style's stored shapes for an item kept from the style
+(`dt_styles_get_items_with_shapes()`), the image's history for an item updated or added from the
+selected image (`dt_styles_get_image_items_with_shapes()`). The list has one row per history item
+while the choice is the instance's, so every row of an instance follows its box. A box starts where
+the style has it (`dt_styles_get_shapes_modules()`), checked for an instance the style lacks, and
+saving writes the choice of each instance with a box on an included row
+(`dt_styles_set_shapes_modules()`), after the edit or the duplicate. A module that draws its own
+shapes never has a box: its shapes always come. The create dialog has no column, so a new style
+brings every shape.
+
+A copy of the style keeps the choice, and a `.dtstyle` carries it as `<apply_shapes>0</apply_shapes>`
+inside a `<plugin>`, written only when off, so a file whose boxes are all checked is what an older
+build writes; older parsers ignore an element they do not know inside `<plugin>`. Every application
+follows it, the styles module, the Styles menu, a style at import, the studio pool and export alike,
+because `_styles_applied_shapes()` reads it where they all meet: `_styles_prepare_source_dev()` and
+`dt_styles_apply_style_items()`.
 
 A drawn mask that comes without its shapes arrives with its blend params unchanged, so it names a
 group the image lacks: `_develop_blend_init_drawn_mask()` fills a drawn mask whose group is missing
@@ -341,7 +351,8 @@ converted, since v1→v2 and v2→v3 need the image's geometry.
 
 Measured with a scratch program on an image with 45 retouch shapes and a drawn mask added on
 exposure: the style stores 48 shapes, and 46 without the exposure items (the retouch group and its
-45 members). The styles module lists exposure alone, checked. Checked, append and replace onto a
+45 members). Of the style's three exposure items, the one naming the stored group is the only row
+with a box, and so is its image row; no other module has one. Checked, append and replace onto a
 fresh image bring the retouch group with its 45 members resolved and exposure's mask; prepend keeps
 the destination's exposure. Unchecked, all three and the export path bring the retouch group and 46
 forms, and exposure arrives in drawn mode with `mask_id` 434343 and no such group. A duplicate keeps
@@ -353,9 +364,8 @@ naming a held group, so a choice read item by item shows the box checked and bri
 shapes in append and replace, as measured on a build that read it so. A duplicate and an edit keep
 48, and an edit adding exposure from the image to the 46-shape style gives 48, listed checked.
 Creating a style whose items use shapes takes 7.2 to 12.3 ms, for loading the image's history once.
-Listing the instances of 210 styles takes 18 to 19 ms, against 12 to 13 ms for their item tooltips,
-which the styles module also builds every time a key typed in its filter rebuilds the tree. The
-data 9 to 10 step, replayed on a copy of a real data library of 33 styles and 223 items, leaves
+Opening the edit dialog reads the style's side in 0.5 ms and the image's in 2.5 ms, for loading its
+history. The data 9 to 10 step, replayed on a copy of a real data library of 33 styles and 223 items, leaves
 every item at `apply_shapes` 1, and the build opens it at 10.
 
 Presets still carry no shapes.
