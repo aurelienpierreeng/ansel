@@ -240,3 +240,34 @@ fallback. With `--disable-opencl` and diffuse set to 100 iterations, a full diff
 (`returned with an error`, no blending), the next run started about 0.5 s later and went to its
 end, and the image shown was complete. On opening, denoise (profiled), 3.8 s when it runs through,
 was stopped four times, after 3.3, 2.4, 0.4 and 0.4 s.
+
+### What an abandoned AI denoise run leaves allocated
+
+Measured 2026-10-21 on top of `5632537f6e`, clang 19. The builds also carried the stdout change of
+*The contract*, which only moves a print. No run left anything allocated, and each instrument was
+first shown to report a leak.
+
+- **The U-Net executor alone, under ASan.** A standalone harness builds `common/nn_model.c` with
+  `-fsanitize=address` and no injected allocator, so every tensor is a `malloc` that LeakSanitizer
+  tracks. It cancels each forward at its first check, then at its second, and so on until a forward
+  runs to its end. Over the six shipped models, coarse stage of the multiscale ones included, that
+  is 84 cancelled forwards, each returning `DT_NN_CANCELLED` (8 checks in a coarse forward, 10 in a
+  fine one), then one full forward per stage that asked the hook exactly that many times. No leak
+  and no ASan error. A buffer leaked on purpose in the same harness is reported.
+- **AI denoise in an export, CPU, under ASan.** `ansel-cli`, Debug with `-fsanitize=address`, a
+  Nikon Z 6 NEF (6064×4040) whose history ends with AI denoise (quarter, multiscale),
+  `--disable-opencl`. Under gdb, a breakpoint on the module's cancel hook (`_nn_cancelled`) writes 1
+  into `pipe->shutdown` at its K-th call, then gdb detaches, since LeakSanitizer does not run under
+  ptrace. K = 1 (first level of the coarse forward), 12 (fourth encoder level of the fine forward),
+  18 (before the fine head). Each run logged the stop under `-d pipe` and wrote no file. LSan
+  reported only the 4243 bytes that a preloaded library leaks at load on purpose, and the same
+  export with AI denoise disabled reports exactly that too. A first version of this control was not
+  reported: it leaked from the constructor's own frame, and a stale stack slot kept the pointer
+  reachable. It now leaks one frame down and scrubs the stack after.
+- **AI denoise in an export, OpenCL.** ASan does not see device memory, so the instrument is
+  Ansel's own count, `memory_in_use` (`common/opencl.c`), printed under `-d opencl -d memory` at
+  every allocation and release. Debug build without ASan, GTX 1060 6GB, same image, history and
+  breakpoint, K = 1, 12, 18: the count is 0 after the last release, as after the complete export
+  (AI denoise 0.99 s on GPU). No run reran the module on CPU, and each process exited 0.25 s after
+  the write. With gdb calling `dt_opencl_alloc_device_buffer(0, 1048576)` at the stop and nothing
+  releasing it, the count ends at 1048576 bytes.
