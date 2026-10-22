@@ -1,5 +1,6 @@
 /*
     This file is part of Ansel,
+    Copyright (C) 2026 Guillaume Stutin.
     Copyright (C) 2026 Paolo SANTUCCI.
 
     Ansel is free software: you can redistribute it and/or modify
@@ -95,6 +96,22 @@ static gboolean _send_key(GtkWidget *widget, const guint keyval)
   return handled;
 }
 
+/* GtkEntryCompletion maps its popup only for text typed through an event: the popup needs the
+ * device of the event being handled when the text changed, and text inserted from code, or a key
+ * emitted straight on the widget, has none. This key goes through GTK's event dispatch instead. */
+static void _type_key(GtkWidget *widget, const guint keyval)
+{
+  GdkDisplay *display = gtk_widget_get_display(widget);
+  GdkEvent *event = gdk_event_new(GDK_KEY_PRESS);
+  event->key.window = g_object_ref(gtk_widget_get_window(gtk_widget_get_toplevel(widget)));
+  event->key.send_event = TRUE;
+  event->key.time = GDK_CURRENT_TIME;
+  event->key.keyval = keyval;
+  gdk_event_set_device(event, gdk_seat_get_keyboard(gdk_display_get_default_seat(display)));
+  gtk_main_do_event(event);
+  gdk_event_free(event);
+}
+
 static gboolean _match_last_hierarchical_token(GtkEntryCompletion *completion, const gchar *key,
                                                GtkTreeIter *iter, gpointer user_data)
 {
@@ -113,6 +130,9 @@ static int _setup_completion(void **state)
   dt_tagging_completion_test_t *test = g_malloc0(sizeof(*test));
   test->window = gtk_window_new(GTK_WINDOW_TOPLEVEL);
   test->entry = GTK_ENTRY(gtk_entry_new());
+  // IBus commits a typed key after gtk_main_do_event() returns; the simple input method commits it
+  // within the event, where GTK takes the device the completion popup needs (see _type_key()).
+  g_object_set(test->entry, "im-module", "gtk-im-context-simple", NULL);
   test->store = gtk_list_store_new(1, G_TYPE_STRING);
   _append_completion(test, "subjects|animals");
   _append_completion(test, "places|france|paris");
@@ -245,7 +265,6 @@ static void test_completion_keeps_return_priority_after_reattach(void **state)
 {
   dt_tagging_completion_test_t *test = *state;
   dt_return_handler_state_t handler_state = { 0 };
-  if(!gtk_window_is_active(GTK_WINDOW(test->window))) skip();
 
   gulong handler_id = g_signal_connect(test->entry, "key-press-event",
                                        G_CALLBACK(_record_plain_return), &handler_state);
@@ -255,13 +274,12 @@ static void test_completion_keeps_return_priority_after_reattach(void **state)
   handler_id = g_signal_connect(test->entry, "key-press-event",
                                 G_CALLBACK(_record_plain_return), &handler_state);
   gint position = 0;
-  gtk_editable_insert_text(GTK_EDITABLE(test->entry), "subjects|animals, pla", -1, &position);
+  gtk_editable_insert_text(GTK_EDITABLE(test->entry), "subjects|animals, pl", -1, &position);
+  gtk_editable_set_position(GTK_EDITABLE(test->entry), -1);
+  _type_key(GTK_WIDGET(test->entry), GDK_KEY_a);
   _wait_for_completion_sources();
-  if(!_completion_popup_is_mapped(test->window))
-  {
-    g_signal_handler_disconnect(test->entry, handler_id);
-    skip();
-  }
+  assert_string_equal(gtk_entry_get_text(test->entry), "subjects|animals, pla");
+  assert_true(_completion_popup_is_mapped(test->window));
   assert_true(_send_key(GTK_WIDGET(test->entry), GDK_KEY_Down));
   assert_true(_send_key(GTK_WIDGET(test->entry), GDK_KEY_Return));
   _wait_for_completion_sources();
