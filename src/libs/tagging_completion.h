@@ -1,5 +1,6 @@
 /*
     This file is part of Ansel,
+    Copyright (C) 2026 Guillaume Stutin.
     Copyright (C) 2026 Paolo SANTUCCI.
 
     Ansel is free software: you can redistribute it and/or modify
@@ -28,7 +29,12 @@ void dt_tagging_completion_refresh(GtkListStore *store);
 gboolean dt_tagging_completion_match_selected(GtkEntryCompletion *completion, GtkTreeModel *model,
                                               GtkTreeIter *iter, gpointer user_data);
 
-/** Cancel pending completion work and clear an entry while preserving its completion. */
-void dt_tagging_entry_clear(GtkEntry *entry);
+/** Cancel pending completion work and clear an entry while preserving its completion.
+ *
+ * Reattaching the completion connects its key handler after every other handler on the entry.
+ * @p key_handler, when connected on the entry's "key-press-event" with @p user_data, is
+ * reconnected after it, so the completion still answers first the keys its popup owns. NULL when
+ * the entry has no key handler of its own. */
+void dt_tagging_entry_clear(GtkEntry *entry, GCallback key_handler, gpointer user_data);
 
 #endif // DT_LIBS_TAGGING_COMPLETION_H
