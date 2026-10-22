@@ -9,7 +9,7 @@
 #   Copyright (C) 2021 Simon Frei.
 #   Copyright (C) 2022 Apfelkraut.
 #   Copyright (C) 2022 naveen.
-#   Copyright (C) 2025 Guillaume Stutin.
+#   Copyright (C) 2025-2026 Guillaume Stutin.
 #   Copyright (C) 2025 Miguel Moquillon.
 #   
 #   darktable is free software: you can redistribute it and/or modify
@@ -275,6 +275,16 @@ jobs:
           cd "${SRC_DIR}"
           git fetch --no-tags --depth=1 origin "${{ github.base_ref }}"
           ./tools/check_unused_includes.sh --changed "origin/${{ github.base_ref }}"
+      - name: Run unit tests
+        # Debug only: that is where CMakeLists.txt builds the suite by default, with the cmocka
+        # install-deps-ubuntu.sh installs; Release builds none. --no-tests=error turns a suite that
+        # was not built into a failure instead of an empty pass. The GTK tests need a display, and
+        # without one test_tagging_completion reports itself skipped: xvfb-run gives them one.
+        # (The `skiptest` target name refers to ci-script.sh's own ctest call, not to this step.)
+        if: ${{ matrix.btype == 'Debug' }}
+        run: |
+          sudo apt-get install -y xvfb
+          xvfb-run -a ctest --test-dir "${BUILD_DIR}" --output-on-failure --no-tests=error
       - name: Upload ansel backtrace
         if: always()
         uses: actions/upload-artifact@v4

@@ -68,6 +68,36 @@ The second half is true of every gate that runs. The first half is not, measured
 Both exceptions are defensible: they gate a *diff*, and a diff needs a base ref. Knowing which
 is which is not, though — a push to master is checked by three gates, not five.
 
+## The unit suite runs on the Linux Debug cells
+
+*Established 2026-10-22 against `23b9511b02`.*
+
+The step "Run unit tests" in `ci.yml` runs `ctest` on the six Linux Debug cells, the ones where
+the suite is built: `CMakeLists.txt` turns `BUILD_TESTING` on by default in Debug when cmocka is
+found, and `install-deps-ubuntu.sh` installs it. The Release cell builds no tests.
+
+- **`--no-tests=error`** is what makes a suite that was not built fail. Without it, ctest 3.28
+  returns 0 on a build directory holding no test at all (measured: 0 without the option, 8 with
+  it), and a lost `BUILD_TESTING` would read as a green step.
+- **`xvfb-run`** gives the GTK tests a display. Without one, `test_tagging_completion` returns 77,
+  which its `SKIP_RETURN_CODE` turns into a ctest "Skipped", not a failure. Xvfb has no window
+  manager; the suite was measured under Xephyr, which has none either: 29 of 29 pass.
+- **Cost**: the whole suite takes 90 s on the Debug build here, 60 s of it `masks_geometry` and
+  24 s `test_drawlayer_batch_raster`. The thread count barely moves those two: together 83 s with
+  `OMP_NUM_THREADS=4` and 86 s with 1, so the `nofeatures` cells, built without OpenMP, should
+  cost about the same.
+
+Not run, and why:
+
+- **Windows.** The Debug cells build the suite too (`BUILD_TESTING` defaults on there as well),
+  but `masks_geometry` fails intermittently on Windows, unexplained (`unit-tests-windows.md`), and
+  the suite has been measured there with clang only, never with the GCC those cells use.
+- **macOS.** `CMakeLists.txt` does not default `BUILD_TESTING` on for Apple: ld64 has no `--wrap`,
+  so the mock tests cannot link.
+- **`.ci/ci-script.sh`'s own `ctest`**, in `target_build()`, is reached only through `TARGET=build`,
+  which only `manualrun.yml` sets, on runner images GitHub has retired. It also reruns failed tests
+  and takes the rerun's status, so a test that fails once and then passes would read as green.
+
 ## MSYS2: one stalled mirror fails the Windows dependency step
 
 Measured 2026-10-15 against `22b2e62997`. Of the last 40 failed `win-nightly.yml` runs, three
@@ -94,15 +124,6 @@ that `msys2/setup-msys2` runs itself has no such retry; none of those 40 runs st
 Found by audit on 2026-09-29 and **not fixed**. Each is the same shape: a check that reports
 success without having checked.
 
-- **`.ci/ci-script.sh:82`** ends in a stray `{` where the `skiptest` case below it has `\`.
-  `{` is a reserved word only in command position, so as an argument it is an ordinary word:
-  `cmake` runs with `-DCMAKE_INSTALL_PREFIX=... {` and the continuation lines parse as separate
-  commands. `-DBUILD_TESTING=ON` is in that block and never reaches cmake.
-- **The unit suite never runs.** `ctest` exists (`.ci/ci-script.sh:58`) inside `target_build()`,
-  called only from the `"build"` case, reachable only via `TARGET=build`, which appears only in
-  `manualrun.yml`, which runs on retired runner images (`ubuntu-18.04`, `ubuntu-20.04`) with
-  retired compilers. Six independent reasons; fixing any one alone still yields no test run.
-  Tracked in issue #1484.
 - **Gates that exit 0 when they could not check.** `check_unused_includes.sh` sends
   clang-tidy's stderr to `/dev/null`, never inspects its exit status, and increments its
   "Checked N file(s)" counter regardless — so the count its own header tells you to read as
