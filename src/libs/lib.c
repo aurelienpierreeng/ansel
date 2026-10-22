@@ -38,6 +38,7 @@
     Copyright (C) 2021-2022 Nicolas Auffray.
     Copyright (C) 2021 wpferguson.
     Copyright (C) 2022 Martin Bařinka.
+    Copyright (C) 2026 Guillaume Stutin.
     
     darktable is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -703,9 +704,6 @@ static void dt_lib_init_module(void *m)
 
     gchar *clean_name = delete_underscore(module->name(module));
     dt_capitalize_label(clean_name);
-
-    // slash is not allowed in module names because that makes accel pathes fail
-    assert(g_strrstr(clean_name, "/") == NULL);
 
     const char **views = module->views(module);
 

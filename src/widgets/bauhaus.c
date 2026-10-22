@@ -1525,20 +1525,23 @@ void dt_bauhaus_widget_set_label(GtkWidget *widget, const char *label)
     // No need to wire all possible events/interactions.
     if(m && !w->no_accels && !w->module->deprecated && label)
     {
-      // slash is not allowed in control names because that makes accel pathes fail
-      assert(g_strrstr(label, "/") == NULL);
-
-      gchar *plugin_name = g_strdup_printf("%s/%s", m->name, w->label);
-      dt_capitalize_label(plugin_name);
+      // The module name and the control label are two levels of the path: each one goes
+      // through dt_accels_build_path() on its own, so that neither can split into more.
+      gchar *module_name = g_strdup(m->name);
+      dt_capitalize_label(module_name);
 
       gchar *scope = g_strdup_printf("%s/Modules", m->view);
-      dt_accels_new_darkroom_action(_action_request_focus, widget, widget, scope, plugin_name, 0, 0,
+      gchar *module_path = dt_accels_build_path(scope, module_name);
+      dt_accels_new_darkroom_action(_action_request_focus, widget, widget, module_path, w->label, 0, 0,
                                     _("Focuses the control"));
+      gchar *darkroom_path = dt_accels_build_path("Darkroom/Modules", module_name);
       g_object_set_data_full(G_OBJECT(widget), "accel-path",
-                             dt_accels_build_path("Darkroom/Modules", plugin_name), dt_free_gpointer);
+                             dt_accels_build_path(darkroom_path, w->label), dt_free_gpointer);
       gtk_widget_set_has_tooltip(widget, TRUE);
+      dt_free(darkroom_path);
+      dt_free(module_path);
       dt_free(scope);
-      dt_free(plugin_name);
+      dt_free(module_name);
     }
 
     gtk_widget_queue_draw(GTK_WIDGET(w));

@@ -1023,10 +1023,14 @@ void dt_accels_remove_shortcut(dt_accels_t *accels, const char *path)
 
 gchar *dt_accels_build_path(const gchar *scope, const gchar *feature)
 {
-  if(strncmp(scope, "<Ansel>/", strlen("<Ansel>/")) == 0)
-    return g_strdup_printf("%s/%s", scope, feature);
-  else
-    return g_strdup_printf("<Ansel>/%s/%s", scope, feature);
+  // The preferences tree, the parent lookup and the search all split the path on "/",
+  // so a "/" from a label would make it one level deeper than its caller meant.
+  gchar *level = g_strdelimit(g_strdup(feature), "/", '-');
+  gchar *path = (strncmp(scope, "<Ansel>/", strlen("<Ansel>/")) == 0)
+                    ? g_strdup_printf("%s/%s", scope, level)
+                    : g_strdup_printf("<Ansel>/%s/%s", scope, level);
+  dt_free(level);
+  return path;
 }
 
 static void _accels_keys_decode(dt_accels_t *accels, GdkEvent *event, guint *keyval, GdkModifierType *mods)

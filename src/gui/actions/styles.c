@@ -1,6 +1,7 @@
 /*
     This file is part of the Ansel project.
     Copyright (C) 2026 Aurélien PIERRE.
+    Copyright (C) 2026 Guillaume Stutin.
     
     Ansel is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -200,8 +201,6 @@ static GtkWidget *_styles_get_submenu(GtkWidget **menus, GList **lists, GHashTab
   gtk_menu_set_accel_group(GTK_MENU(submenu), dt_gui_get_accels()->global_accels);
 
   gchar *clean_label = strip_markup(menu_label);
-  if(g_strrstr(clean_label, "/") != NULL)
-    g_strdelimit(clean_label, "/", '-');
   gchar *accel_path = dt_accels_build_path(gtk_menu_get_accel_path(GTK_MENU(parent)), clean_label);
   gtk_menu_set_accel_path(GTK_MENU(submenu), accel_path);
   dt_free(accel_path);

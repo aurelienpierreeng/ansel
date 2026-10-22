@@ -209,6 +209,17 @@ dt_accels_t *dt_accels_init(char *config_file, GtkAccelFlags flags);
 void dt_accels_cleanup(dt_accels_t *accels);
 
 
+/**
+ * @brief Build the accel path of `feature` under `scope`.
+ *
+ * `scope` is a hierarchy, its levels separated by "/", with or without the leading "<Ansel>/".
+ * `feature` is ONE level: it is a GUI label, often translated, and a "/" in it is written as "-",
+ * because the "/" is the only structure an accel path has. A label that holds one would otherwise
+ * add a level that no code asked for. To nest several labels, build the path one label at a time,
+ * passing the path built so far as the next `scope`.
+ *
+ * @return a newly allocated path, to be freed with dt_free().
+ */
 gchar *dt_accels_build_path(const gchar *scope, const gchar *feature);
 
 /**

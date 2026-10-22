@@ -289,4 +289,30 @@ because the deleted image was the whole selection and `dt_act_on_get_images()` h
 to return. With an image still targeted, the grid's Delete-alone match is what keeps those
 repeats from removing it; that case was not measured.
 
+## A GUI label is one level of an accel path
+
+*Found `ba2758e353`, 2026-10-23.*
+
+An accel path is a list of levels separated by "/", and that separator is the only structure it
+has. The preferences tree, the parent lookup `_find_parent_hashtable()` and the search all split
+the path on it (`src/widgets/accelerators.c`). The levels are GUI labels, most of them
+translated, and some are typed by the user: an IOP instance name, a style name. A "/" in one of
+them adds a level that no caller asked for. The French catalogue translates the geotagging
+module, "Datetime and GPS", as "Date/heure et GPS" (since `b7dcf716`). Of the 27 lighttable
+modules and 89 IOPs whose `name()` was checked against `po/fr.po`, it is the only one. A Debug
+build in French stopped on the assertion in `dt_lib_init_module()` (`libs/lib.c`) that forbade
+this. A release build has no assertion, and registered the module one level too deep.
+
+The rule is enforced in one place: `dt_accels_build_path(scope, feature)` treats `feature` as
+**one** level and writes a "/" in it as "-". `scope` keeps its "/", because it is a hierarchy. A
+caller that nests several labels builds the path one label at a time, passing the path built so
+far as the next scope. A bauhaus control (module, then control label) and an IOP instance (module,
+then instance name) are built that way, and `dt_gui_module_t.instance_accel_path` keeps the
+finished instance path, so that removing the shortcut rebuilds nothing.
+`tests/unittests/test_accel_build_path.c` pins the three cases.
+
+Moving the rule changes no path that was valid before. A label that held a "/" registers its
+shortcut under a new path, so a key bound to the old one is orphaned once, as described above for
+a translation that moves.
+
 ---
