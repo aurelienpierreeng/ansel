@@ -373,8 +373,16 @@ static void _test_import_sidecar_rejections_fall_back_without_handler(void **sta
   dt_control_set_alert_handler(NULL);
   const int diagnostic_fd = g_file_open_tmp("ansel-test-sidecar-diagnostic-XXXXXX", &diagnostic_path, NULL);
   assert_true(diagnostic_fd >= 0);
+  if(diagnostic_fd < 0) return;
   const int stderr_fd = test_dup(fileno(stderr));
   assert_true(stderr_fd >= 0);
+  if(stderr_fd < 0)
+  {
+    test_close(diagnostic_fd);
+    g_remove(diagnostic_path);
+    dt_free(diagnostic_path);
+    return;
+  }
   fflush(stderr);
   assert_int_equal(test_dup2(diagnostic_fd, fileno(stderr)), fileno(stderr));
   import_completion_t completion = { 0 };
