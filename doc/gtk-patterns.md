@@ -313,4 +313,36 @@ NULLs every GTK widget pointer in the struct (right after removing/destroying th
 freeing the struct outright, so any other callback still queued for the same struct sees NULL and
 skips the now-invalid widgets instead of touching freed GTK objects.
 
+## A GtkEntryCompletion's popup needs a typed key, and reattaching it reorders key handlers
+
+*Found `23b9511b02`, 2026-10-22, against GTK 3.24.41 (`gtk/gtkentrycompletion.c` at that tag).*
+
+**The popup maps only for text typed through an event.** `gtk_entry_completion_popup()` shows the
+popup from `prepare_popup_func()`, the callback of the pointer grab it takes, and it takes that
+grab only `if (completion->priv->device)`. The entry's `changed` handler fills that device from
+`gtk_get_current_event_device()`, which is NULL for text inserted from code and for a key emitted
+straight on the widget with `g_signal_emit_by_name()`. So a test that needs the popup types at
+least one key through `gtk_main_do_event()`, with the seat's keyboard as the event device
+(`_type_key()` in `tests/unittests/test_tagging_completion.c`). Measured with a probe: inserted
+text never mapped the popup and a typed key always did, under GNOME and under a bare Xephyr server
+alike. The window manager plays no part; the window was active and the entry focused on both.
+
+The key must be committed inside that event. Under GNOME, IBus committed it after
+`gtk_main_do_event()` had returned in 12 runs out of 12, 7 to 22 ms later, and the test then failed
+once in 100 runs, on the popup with the text already in the entry. The simple input method
+(`"im-module"` set to `"gtk-im-context-simple"` on the entry) committed it within the event in 6
+out of 6, and the test then passed 205 times out of 205.
+
+**Reattaching puts the completion's key handler last.** `gtk_entry_set_completion(entry, NULL)` is
+the only public way to cancel a completion's pending work: its popup timeout, and the idle that
+inserts the common prefix of the matching rows (into an emptied entry, the prefix of every row).
+`gtk_entry_set_text()` cancels neither, since it blocks the completion's `changed` handler while it
+writes. Attaching the completion again connects its `key-press-event` handler after every handler
+already on the entry. While the popup is shown, that handler answers Return, Escape and the arrows,
+so an entry's own handler for those keys must come after it. `dt_tagging_entry_clear()`
+(`libs/tagging_completion.c`) takes that handler and reconnects it after the completion's.
+Measured: left in place, the entry's handler received Return on a highlighted suggestion with the
+raw typed text, `subjects|animals, pla`; reconnected, the completion took that Return, and the
+entry's handler saw only the next one, once the popup had closed.
+
 ---

@@ -188,7 +188,7 @@ static void test_clear_cancels_completion_before_model_refresh(void **state)
   dt_tagging_completion_test_t *test = *state;
 
   gtk_entry_set_text(test->entry, "subjects");
-  dt_tagging_entry_clear(test->entry);
+  dt_tagging_entry_clear(test->entry, NULL, NULL);
   gtk_list_store_clear(test->store);
   _append_completion(test, "subjects|animals");
   _append_completion(test, "subjects|architecture");
@@ -204,13 +204,13 @@ static void test_completion_survives_repeated_single_and_hierarchical_clears(voi
   dt_tagging_completion_test_t *test = *state;
 
   gtk_entry_set_text(test->entry, "subjects");
-  dt_tagging_entry_clear(test->entry);
+  dt_tagging_entry_clear(test->entry, NULL, NULL);
   _wait_for_completion_sources();
   assert_string_equal(gtk_entry_get_text(test->entry), "");
   assert_false(_completion_popup_is_mapped(test->window));
 
   gtk_entry_set_text(test->entry, "subjects|animals, places");
-  dt_tagging_entry_clear(test->entry);
+  dt_tagging_entry_clear(test->entry, NULL, NULL);
   _wait_for_completion_sources();
   assert_string_equal(gtk_entry_get_text(test->entry), "");
   assert_false(_completion_popup_is_mapped(test->window));
@@ -230,7 +230,7 @@ static void test_clear_supports_entry_without_completion(void **state)
   GtkEntry *entry = GTK_ENTRY(gtk_entry_new());
   gtk_entry_set_text(entry, "places|france");
 
-  dt_tagging_entry_clear(entry);
+  dt_tagging_entry_clear(entry, NULL, NULL);
 
   assert_string_equal(gtk_entry_get_text(entry), "");
   assert_null(gtk_entry_get_completion(entry));
@@ -266,13 +266,9 @@ static void test_completion_keeps_return_priority_after_reattach(void **state)
   dt_tagging_completion_test_t *test = *state;
   dt_return_handler_state_t handler_state = { 0 };
 
-  gulong handler_id = g_signal_connect(test->entry, "key-press-event",
-                                       G_CALLBACK(_record_plain_return), &handler_state);
-
-  g_signal_handler_disconnect(test->entry, handler_id);
-  dt_tagging_entry_clear(test->entry);
-  handler_id = g_signal_connect(test->entry, "key-press-event",
-                                G_CALLBACK(_record_plain_return), &handler_state);
+  // Connected once, after the completion, as tagging.c connects its entry's key handler.
+  g_signal_connect(test->entry, "key-press-event", G_CALLBACK(_record_plain_return), &handler_state);
+  dt_tagging_entry_clear(test->entry, G_CALLBACK(_record_plain_return), &handler_state);
   gint position = 0;
   gtk_editable_insert_text(GTK_EDITABLE(test->entry), "subjects|animals, pl", -1, &position);
   gtk_editable_set_position(GTK_EDITABLE(test->entry), -1);
@@ -294,7 +290,7 @@ static void test_completion_keeps_return_priority_after_reattach(void **state)
   assert_int_equal(handler_state.entry_calls, 1);
   assert_string_equal(handler_state.text, "subjects|animals,places|france|paris");
 
-  g_signal_handler_disconnect(test->entry, handler_id);
+  g_signal_handlers_disconnect_by_func(test->entry, _record_plain_return, &handler_state);
   g_free(handler_state.text);
 }
 

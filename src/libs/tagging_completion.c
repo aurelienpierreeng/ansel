@@ -1,5 +1,6 @@
 /*
     This file is part of Ansel,
+    Copyright (C) 2026 Guillaume Stutin.
     Copyright (C) 2026 Paolo SANTUCCI.
 
     Ansel is free software: you can redistribute it and/or modify
@@ -68,7 +69,7 @@ gboolean dt_tagging_completion_match_selected(GtkEntryCompletion *completion, Gt
   return TRUE;
 }
 
-void dt_tagging_entry_clear(GtkEntry *entry)
+void dt_tagging_entry_clear(GtkEntry *entry, GCallback key_handler, gpointer user_data)
 {
   GtkEntryCompletion *completion = gtk_entry_get_completion(entry);
   if(!IS_NULL_PTR(completion))
@@ -81,5 +82,9 @@ void dt_tagging_entry_clear(GtkEntry *entry)
   {
     gtk_entry_set_completion(entry, completion);
     g_object_unref(completion);
+    // Detaching is the only public way to cancel the completion's pending timeout and idle, and
+    // reattaching put its key handler last: Return, Escape and the arrows belong to its popup.
+    if(!IS_NULL_PTR(key_handler) && g_signal_handlers_disconnect_by_func(entry, key_handler, user_data))
+      g_signal_connect(entry, "key-press-event", key_handler, user_data);
   }
 }

@@ -32,6 +32,7 @@
     Copyright (C) 2021 Marco Carrarini.
     Copyright (C) 2022 Martin Bařinka.
     Copyright (C) 2022 Nicolas Auffray.
+    Copyright (C) 2026 Guillaume Stutin.
     
     darktable is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -141,7 +142,8 @@ typedef enum dt_tag_sort_id
 static void _save_last_tag_used(const char *tags, dt_lib_tagging_t *d);
 static void _refresh_collection_tags(dt_lib_module_t *self);
 static void _size_recent_tags_list();
-static void _entry_clear_suppressed(GtkEntry *entry);
+static void _entry_clear_suppressed(GtkEntry *entry, dt_lib_module_t *self);
+static gboolean _enter_key_pressed(GtkWidget *entry, GdkEventKey *event, dt_lib_module_t *self);
 static gboolean _lib_tagging_tag_redo_accel(GtkAccelGroup *accel_group, GObject *accelerable, guint keyval,
                                             GdkModifierType mods, gpointer user_data);
 static gboolean _lib_tagging_tag_show_accel(GtkAccelGroup *accel_group, GObject *accelerable, guint keyval,
@@ -1379,7 +1381,7 @@ static void _create_tag_from_entry(dt_lib_module_t *self, GtkEntry *src)
   /** record last tag used */
   _save_last_tag_used(tag, d);
 
-  _entry_clear_suppressed(src);
+  _entry_clear_suppressed(src, self);
 
   _init_treeview(self, 0);
   _init_treeview(self, 1);
@@ -1405,13 +1407,13 @@ static void _new_button_clicked(GtkButton *button, dt_lib_module_t *self)
  * dt_gui_widget_freeze() (widgets/widget_settings.h) is the application-wide way to say that, and
  * the one this file already uses everywhere else: it raises the suppression depth for the rest of
  * the enclosing scope and drops it on every exit path, while each widget callback opens by asking
- * dt_gui_widgets_suppressed(). Disconnecting the handler by id and reconnecting it around the
- * clear expressed the same intent, but had to be spelled out identically at four call sites, and
- * left the entry with NO key handler at all if anything between the two ever returned early. */
-static void _entry_clear_suppressed(GtkEntry *entry)
+ * dt_gui_widgets_suppressed(). dt_tagging_entry_clear() puts _enter_key_pressed() back after the
+ * completion's key handler, which reattaching the completion connects last; the dictionary entry
+ * has no key handler, so nothing is reconnected there. */
+static void _entry_clear_suppressed(GtkEntry *entry, dt_lib_module_t *self)
 {
   dt_gui_widget_freeze();
-  dt_tagging_entry_clear(entry);
+  dt_tagging_entry_clear(entry, G_CALLBACK(_enter_key_pressed), self);
 }
 
 static gboolean _enter_key_pressed(GtkWidget *entry, GdkEventKey *event, dt_lib_module_t *self)
@@ -1434,7 +1436,7 @@ static gboolean _enter_key_pressed(GtkWidget *entry, GdkEventKey *event, dt_lib_
     {
       if(_select_next_user_attached_tag(0, d->attached_view))
       {
-        _entry_clear_suppressed(d->entry);
+        _entry_clear_suppressed(d->entry, self);
         gtk_widget_grab_focus(GTK_WIDGET(d->attached_view));
       }
       return TRUE;
@@ -1450,7 +1452,7 @@ static void _entry_clear_icon(GtkEntry *entry, const GtkEntryIconPosition positi
 {
   if(position != GTK_ENTRY_ICON_SECONDARY) return;
 
-  _entry_clear_suppressed(entry);
+  _entry_clear_suppressed(entry, self);
   gtk_widget_grab_focus(GTK_WIDGET(entry));
 }
 
@@ -2717,8 +2719,8 @@ void gui_reset(dt_lib_module_t *self)
 {
   dt_lib_tagging_t *d = (dt_lib_tagging_t *)self->data;
   // clear entry boxes and query
-  _entry_clear_suppressed(d->entry);
-  _entry_clear_suppressed(d->dict_entry);
+  _entry_clear_suppressed(d->entry, self);
+  _entry_clear_suppressed(d->dict_entry, self);
   _set_keyword(self);
   _init_treeview(self, 1);
   _update_atdetach_buttons(self);
@@ -3246,7 +3248,7 @@ void gui_init(dt_lib_module_t *self)
   // connected after gtk_entry_set_completion() so GtkEntryCompletion's own Return-key
   // handling (accepting a keyboard-highlighted popup match into the entry text) runs
   // before ours: otherwise a tag gets created from the raw typed prefix instead of the
-  // selected suggestion (#905)
+  // selected suggestion (#905). dt_tagging_entry_clear() keeps that order when it reattaches the completion.
   g_signal_connect(G_OBJECT(d->entry), "key-press-event", G_CALLBACK(_enter_key_pressed), self);
 
   // ── tag management popup window (persistent, hidden until requested) ────
