@@ -214,21 +214,11 @@ static bool _read_xmp_packet(const char *filename, std::string &packet)
 // this should work because dt first reads all known keys
 static void dt_remove_known_keys(Exiv2::XmpData &xmp)
 {
-  xmp.sortByKey();
   for(unsigned int i = 0; i < dt_xmp_keys_n; i++)
   {
-    Exiv2::XmpData::iterator pos = xmp.findKey(Exiv2::XmpKey(dt_xmp_keys[i]));
-
-    while(pos != xmp.end())
-    {
-      std::string key = pos->key();
-      const char *ckey = key.c_str();
-      size_t len = key.size();
-      // stop iterating once the key no longer matches what we are trying to delete. this assumes sorted input
-      if(!(g_str_has_prefix(ckey, dt_xmp_keys[i]) && (ckey[len] == '[' || ckey[len] == '\0')))
-        break;
-      pos = xmp.erase(pos);
-    }
+    const Exiv2::XmpKey key(dt_xmp_keys[i]);
+    Exiv2::XmpData::iterator pos;
+    while((pos = xmp.findKey(key)) != xmp.end()) xmp.eraseFamily(pos);
   }
 }
 

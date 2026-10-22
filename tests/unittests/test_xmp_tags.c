@@ -35,6 +35,8 @@
 #include "metadata/tags.h"
 #include "test_xmp_fixture.h"
 
+#include <string.h>
+
 #ifdef _WIN32
 #include "win/main_wrapper.h"
 #endif
@@ -212,6 +214,40 @@ static void test_overlong_keyword_rolls_back_tag_replacement(void **state)
   dt_free(keyword);
 }
 
+static void test_sidecar_write_preserves_double_digit_structured_array_order(void **state)
+{
+  (void)state;
+  dt_image_t image = dt_test_xmp_fixture_make_image("/testdb/xmp-tags", "regions.raw");
+  dt_test_xmp_fixture_write_packet(
+      &fixture,
+      "<MP:RegionInfo xmlns:MP=\"http://ns.microsoft.com/photo/1.2/\" "
+      "xmlns:MPRI=\"http://ns.microsoft.com/photo/1.2/t/RegionInfo#\" "
+      "xmlns:MPReg=\"http://ns.microsoft.com/photo/1.2/t/Region#\" rdf:parseType=\"Resource\">"
+      "<MPRI:Regions><rdf:Bag>"
+      "<rdf:li MPReg:PersonDisplayName=\"face-01\"/><rdf:li MPReg:PersonDisplayName=\"face-02\"/>"
+      "<rdf:li MPReg:PersonDisplayName=\"face-03\"/><rdf:li MPReg:PersonDisplayName=\"face-04\"/>"
+      "<rdf:li MPReg:PersonDisplayName=\"face-05\"/><rdf:li MPReg:PersonDisplayName=\"face-06\"/>"
+      "<rdf:li MPReg:PersonDisplayName=\"face-07\"/><rdf:li MPReg:PersonDisplayName=\"face-08\"/>"
+      "<rdf:li MPReg:PersonDisplayName=\"face-09\"/><rdf:li MPReg:PersonDisplayName=\"face-10\"/>"
+      "<rdf:li MPReg:PersonDisplayName=\"face-11\"/><rdf:li MPReg:PersonDisplayName=\"face-12\"/>"
+      "</rdf:Bag></MPRI:Regions></MP:RegionInfo>");
+
+  assert_int_equal(dt_exif_xmp_write_with_imgpath(&image, fixture.xmp_path, fixture.xmp_path), 0);
+
+  gchar *rewritten = NULL;
+  assert_true(g_file_get_contents(fixture.xmp_path, &rewritten, NULL, NULL));
+  const gchar *next_face = rewritten;
+  for(int face = 1; face <= 12; face++)
+  {
+    gchar *name = g_strdup_printf("face-%02d", face);
+    next_face = g_strstr_len(next_face, -1, name);
+    assert_non_null(next_face);
+    next_face += strlen(name);
+    dt_free(name);
+  }
+  dt_free(rewritten);
+}
+
 int main(int argc, char *argv[])
 {
   const struct CMUnitTest tests[] = {
@@ -225,6 +261,7 @@ int main(int argc, char *argv[])
     cmocka_unit_test(test_empty_hierarchical_subject_clears_user_tags),
     cmocka_unit_test(test_embedded_read_overlays_without_wipe),
     cmocka_unit_test(test_overlong_keyword_rolls_back_tag_replacement),
+    cmocka_unit_test(test_sidecar_write_preserves_double_digit_structured_array_order),
   };
   return cmocka_run_group_tests(tests, setup, teardown);
 }
