@@ -6,6 +6,7 @@
     Copyright (C) 2022 Martin Bařinka.
     Copyright (C) 2022 Miloš Komarčević.
     Copyright (C) 2025 Aurélien PIERRE.
+    Copyright (C) 2026 Guillaume Stutin.
     
     darktable is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -74,7 +75,6 @@ static gboolean _iop_plugin_focus_accel(GtkAccelGroup *accel_group, GObject *acc
 #ifdef GDK_WINDOWING_QUARTZ
 #endif
 
-#include <assert.h>
 #include <math.h>
 #include <stdlib.h>
 #include <string.h>
@@ -937,24 +937,25 @@ static void _iop_panel_label(dt_iop_module_t *module)
     return;
 
   dt_gui_module_t *mod = (dt_gui_module_t *)module;
-  if(mod->instance_name)
+  if(!IS_NULL_PTR(mod->instance_accel_path))
   {
-    char *instance_path = dt_accels_build_path(_("Darkroom/Modules/Instances"), mod->instance_name);
-    dt_accels_remove_shortcut(dt_gui_get_accels(), instance_path);
-    dt_free(instance_path);
-    dt_free(mod->instance_name);
+    dt_accels_remove_shortcut(dt_gui_get_accels(), mod->instance_accel_path);
+    dt_free(mod->instance_accel_path);
   }
 
   gchar *clean_name = delete_underscore(module->name());
   dt_capitalize_label(clean_name);
 
-  mod->instance_name
-      = g_strdup_printf("%s/%s", clean_name, (module->multi_name[0] != '\0') ? module->multi_name : "0");
+  // The module name and the instance name, which the user types, are two levels of the path:
+  // each one goes through dt_accels_build_path() on its own, so that neither can split into more.
+  gchar *module_path = dt_accels_build_path(_("Darkroom/Modules/Instances"), clean_name);
+  const char *instance = (module->multi_name[0] != '\0') ? module->multi_name : "0";
+  mod->instance_accel_path = dt_accels_build_path(module_path, instance);
 
   dt_accels_new_virtual_instance_shortcut(dt_gui_get_accels(), _iop_plugin_focus_accel, module,
-                                          dt_gui_get_accels()->darkroom_accels, _("Darkroom/Modules/Instances"),
-                                          mod->instance_name);
+                                          dt_gui_get_accels()->darkroom_accels, module_path, instance);
 
+  dt_free(module_path);
   dt_free(clean_name);
 
   gtk_label_set_ellipsize(GTK_LABEL(lab), !module->multi_name[0] ? PANGO_ELLIPSIZE_END: PANGO_ELLIPSIZE_MIDDLE);
@@ -1033,9 +1034,6 @@ void dt_iop_gui_init(dt_iop_module_t *module)
     gchar *clean_name = delete_underscore(module->name());
     dt_capitalize_label(clean_name);
 
-    // slash is not allowed in module names because that makes accel pathes fail
-    assert(g_strrstr(clean_name, "/") == NULL);
-
     dt_gui_module_t *mod = (dt_gui_module_t *)module;
     const gchar *const main_scope = _("Darkroom/Modules");
     mod->accel_path =  dt_accels_build_path(main_scope, clean_name);
@@ -1111,14 +1109,10 @@ void dt_iop_gui_cleanup_module(dt_iop_module_t *module)
     dt_free(mod->accel_path);
   }
 
-  if(mod->instance_name)
-  {
-    char *instance_path = dt_accels_build_path(_("Darkroom/Modules/Instances"), mod->instance_name);
-    dt_accels_remove_shortcut(dt_gui_get_accels(), instance_path);
-    dt_free(instance_path);
-  }
+  if(!IS_NULL_PTR(mod->instance_accel_path))
+    dt_accels_remove_shortcut(dt_gui_get_accels(), mod->instance_accel_path);
 
-  dt_free(mod->instance_name);
+  dt_free(mod->instance_accel_path);
 
   // widget_list doesn't own the widget referenced, so don't deep_free
   dt_gui_module_t *m = DT_GUI_MODULE(module);

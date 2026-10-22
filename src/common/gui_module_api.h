@@ -1,6 +1,7 @@
 /*
     This file is part of the Ansel project.
     Copyright (C) 2025 Aurélien PIERRE.
+    Copyright (C) 2026 Guillaume Stutin.
     
     Ansel is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -48,7 +49,9 @@ struct dt_gui_module_t
   /** translated name of the module */
   char *name;
 
-  char *instance_name;
+  /** accel path of the shortcut focusing this instance, under Darkroom/Modules/Instances;
+   * NULL while the instance has none */
+  char *instance_accel_path;
 
   /** translated name of the view */
   char *view;
