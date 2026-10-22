@@ -15,6 +15,7 @@
 #include "caches/image_cache.h"
 #include "darktable.h"
 #include "common/datetime.h"
+#include "gui/application.h"
 #include "gui/dtgtk/thumbtable.h"
 #include "imageio/imageio_module.h"
 #include "../../src/gui/dtgtk/thumbtable.c"
@@ -25,6 +26,7 @@
 
 static dt_imageio_t _imageio = { 0 };
 static dt_conf_t _conf = { 0 };
+static dt_gui_gtk_t _gui = { 0 };
 
 void dt_control_hinter_message(const dt_control_t *control G_GNUC_UNUSED, const char *message)
 {
@@ -47,6 +49,7 @@ static int _setup(void **state)
   dt_conf_set_bool("plugins/lighttable/collect/recursive0", FALSE);
   dt_loc_init_datadir(NULL, ANSEL_TEST_DATADIR);
   darktable.imageio = &_imageio;
+  darktable.gui = &_gui;
   dt_collection_init_global();
   return 0;
 }
@@ -60,6 +63,7 @@ static int _teardown(void **state)
   dt_free(darktable.datadir);
   darktable.datadir = NULL;
   darktable.imageio = NULL;
+  darktable.gui = NULL;
   return testdb_teardown(state);
 }
 
