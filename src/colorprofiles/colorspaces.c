@@ -35,17 +35,17 @@
     Copyright (C) 2022 Martin Bařinka.
     Copyright (C) 2023 Alynx Zhou.
     Copyright (C) 2023 Luca Zulberti.
-    
+
     darktable is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
     the Free Software Foundation, either version 3 of the License, or
     (at your option) any later version.
-    
+
     darktable is distributed in the hope that it will be useful,
     but WITHOUT ANY WARRANTY; without even the implied warranty of
     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
     GNU General Public License for more details.
-    
+
     You should have received a copy of the GNU General Public License
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
@@ -1804,7 +1804,7 @@ static GList *load_profile_from_dir(const char *subdir)
           dt_colorspaces_get_profile_name(tmpprof, lang, lang + 3, prof->name, sizeof(prof->name));
           if(prof->name[0] == '\0')
             g_strlcpy(prof->name, _("(unknown name)"), sizeof(prof->name));
-            
+
           g_strlcpy(prof->filename, filename, sizeof(prof->filename));
           prof->type = DT_COLORSPACE_FILE;
           prof->profile = tmpprof;
