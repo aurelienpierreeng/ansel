@@ -4,6 +4,8 @@
     Copyright (C) 2017 Tobias Ellinghaus.
     Copyright (C) 2020 Pascal Obry.
     Copyright (C) 2022 Martin Bařinka.
+    Copyright (C) 2026 Aurélien PIERRE.
+    Copyright (C) 2026 Guillaume Stutin.
     
     darktable is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -50,25 +52,10 @@
 
 #include "statvfs.h"
 
-/* GetDiskFreeSpaceEx**W**, not GetDiskFreeSpaceW, and the difference is the whole point of this
- * rewrite. The old form takes a DRIVE ROOT, so the shim built one out of `path[0]`:
- *
- *     szDrive[0] = path[0]; szDrive[1] = ':'; szDrive[2] = '\\'; szDrive[3] = '\0';
- *
- * which is right for C:\... and wrong for everything else -- a UNC share (`\\server\share\...`
- * became "\:\"), a redirected %LOCALAPPDATA%, a drive mounted as a folder. It then reported failure,
- * and its one caller took that as "no room" and abandoned the write, so on such a machine EVERY
- * thumbnail write failed silently. GetDiskFreeSpaceExW accepts any directory or file path and
- * resolves the volume itself.
- *
- * The counts are expressed in BYTES with f_frsize == 1 rather than in clusters. Every consumer of
- * this struct computes bytes as f_frsize * f_bavail, which that satisfies exactly; what it gives up
- * is the true cluster geometry, which GetDiskFreeSpaceExW does not report and nothing here reads.
- * The old code's f_bsize/f_frsize/f_blocks were real cluster figures, so do not reintroduce a
- * consumer that expects them without adding a second query for the geometry.
- *
- * Returns 0 on success and -1 on failure, like POSIX. The previous version returned 1 on failure,
- * which worked only because the single caller wrote `if(statvfs(...))`.
+/* GetDiskFreeSpaceExW takes any directory, where GetDiskFreeSpaceW needs a drive root, which cannot
+ * be built for a UNC share or a drive mounted as a folder. Its counts are in bytes, so they are
+ * reported with f_frsize == 1: f_frsize * f_bavail is exact, and the cluster geometry is not known.
+ * Returns 0 on success and -1 on failure, like POSIX.
  */
 int statvfs(const char *path, struct statvfs *buf)
 {

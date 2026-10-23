@@ -106,9 +106,15 @@ dsc->height > 8` and nothing else, which caught the skull and missed the other t
   Scrolling a filmstrip produced them; eviction and exit wrote each one out as a thumbnail of
   uninitialised heap, which the next session then loaded as valid.
 - **An invalidated entry** (`..._FLAG_INVALIDATE`) unlinked its file and then, with no `else` between
-  the two branches, immediately wrote the very buffer that had just been declared stale.
-  `dt_mipmap_cache_remove_at_size()` survived that only by accident — it unlinks a *second* time
-  after `dt_cache_remove()` returns — so with `flush_disk` FALSE the stale thumbnail was persisted.
+  the two branches, immediately wrote the very buffer that had just been declared stale. The flag
+  is set on a thumbnail only by `dt_mipmap_cache_remove_at_size()` with `flush_disk` TRUE, which
+  unlinks a *second* time once `dt_cache_remove()` has returned, so no stale file outlived the call.
+  What it cost was a JPEG encode and write per removed size, and a window: `dt_cache_remove()`
+  releases the cache lock before that second unlink, and a get of the same key in between runs the
+  allocate callback, which reads the disk cache — the stale file — under that lock. *Read from
+  `src/caches/cache.c` against `2fadf8a366`, not measured.* The first version of this section said
+  that with `flush_disk` FALSE the stale thumbnail was persisted; with `flush_disk` FALSE the flag
+  is never set, and the write is the ordinary eviction write.
 
 **`g_unlink()` must come after `fclose()`, in both halves.** On Windows `DeleteFileW` refuses a file
 that any handle still holds open without `FILE_SHARE_DELETE`, which the CRT's `fopen` never sets. The
@@ -128,13 +134,23 @@ unanswerable probe as "no room". `src/win/statvfs.c` built a drive root out of `
 right for `C:\...` and wrong for a UNC share, a redirected `%LOCALAPPDATA%` or a drive mounted as a
 folder — and there *every* thumbnail write failed silently. The probe now runs on the directory
 before anything is created, returns TRUE when it cannot answer, and the Windows shim uses
-`GetDiskFreeSpaceExW`, which takes any path. That shim reports its counts in bytes with
-`f_frsize == 1`: every consumer computes `f_frsize * f_bavail`, which is satisfied exactly, but the
-true cluster geometry is gone — do not add a consumer that wants it without a second query.
+`GetDiskFreeSpaceExW`, which takes any directory rather than a drive root. Its documentation asks a
+UNC path to end in a backslash, and the cache directory does not, so on a UNC share the probe may
+still fail — now without consequence, since the write goes ahead. Not tried on Windows. That shim
+reports its counts in bytes with `f_frsize == 1`: every consumer computes `f_frsize * f_bavail`,
+which is satisfied exactly, but the true cluster geometry is gone — do not add a consumer that wants
+it without a second query.
 
 The skip is logged under `-d cache` ("is not written to the disk cache: never generated | a skull"),
 because how often an aborted render leaves an entry behind is a question only a real session
 answers.
+
+*Measured 2026-10-23 against `2fadf8a366` plus #1495*, with `ansel-generate-cache --min-mip 0
+--max-mip 2` on one NEF, fresh `--configdir`, `--cachedir` and `--library`, `--disable-opencl`: the
+three thumbnails are written and the skip line appears 0 times; a second run leaves them
+byte-identical; a thumbnail truncated to 0 bytes is reported ("Reason: empty file"), unlinked and
+rewritten identically; and the three files are bit-identical (sha256) to the ones a build of
+`src/caches/mipmap_cache.c` from `2fadf8a366` writes for the same image.
 
 ## Mipmap invalidation is explicit, not hash-driven
 
