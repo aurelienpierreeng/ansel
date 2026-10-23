@@ -1,6 +1,7 @@
 /*
  *    This file is part of Ansel,
  *    Copyright (C) 2026 Aurélien PIERRE.
+ *    Copyright (C) 2026 Guillaume Stutin.
  *
  *    Ansel is free software: you can redistribute it and/or modify
  *    it under the terms of the GNU General Public License as published by
@@ -21,7 +22,7 @@
 
 #include <glib.h>
 
-/* The GUI half of common/styles.c: style operations that are a dialog rather than a
+/* The GUI half of develop/styles.c: style operations that are a dialog rather than a
  * database operation. The backend half creates, applies and deletes styles and knows
  * nothing about windows. */
 

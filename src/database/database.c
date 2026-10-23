@@ -87,7 +87,7 @@
 // whenever _create_*_schema() gets changed you HAVE to bump this version and add an update path to
 // _upgrade_*_schema_step()!
 #define CURRENT_DATABASE_VERSION_LIBRARY 36
-#define CURRENT_DATABASE_VERSION_DATA     9
+#define CURRENT_DATABASE_VERSION_DATA    10
 
 // #define USE_NESTED_TRANSACTIONS
 #define MAX_NESTED_TRANSACTIONS 0
@@ -2358,6 +2358,20 @@ static int _upgrade_data_schema_step(dt_database_t *db, int version)
     // clang-format on
     new_version = 9;
   }
+  else if(version == 9)
+  {
+    // clang-format off
+    TRY_EXEC("CREATE TABLE data.style_shapes (styleid INTEGER, formid INTEGER, form INTEGER, "
+             "name VARCHAR(256), version INTEGER, points BLOB, points_count INTEGER, source BLOB)",
+             "[init] can't create `style_shapes' table\n");
+    TRY_EXEC("CREATE INDEX data.style_shapes_styleid_index ON style_shapes (styleid)",
+             "[init] can't create `style_shapes_styleid_index'\n");
+    // whether applying the style brings the shapes of the item's drawn mask
+    TRY_EXEC("ALTER TABLE data.style_items ADD COLUMN apply_shapes INTEGER NOT NULL DEFAULT 1",
+             "[init] can't add `apply_shapes' column to style_items table\n");
+    // clang-format on
+    new_version = 10;
+  }
   else
     new_version = version; // should be the fallback so that calling code sees that we are in an infinite loop
 
@@ -2541,12 +2555,19 @@ static void _create_data_schema(dt_database_t *db)
       db->handle,
       "CREATE TABLE data.style_items (styleid INTEGER, num INTEGER, module INTEGER, "
       "operation VARCHAR(256), op_params BLOB, enabled INTEGER, "
-      "blendop_params BLOB, blendop_version INTEGER, multi_priority INTEGER, multi_name VARCHAR(256))",
+      "blendop_params BLOB, blendop_version INTEGER, multi_priority INTEGER, multi_name VARCHAR(256), "
+      "apply_shapes INTEGER NOT NULL DEFAULT 1)",
       NULL, NULL, NULL);
   sqlite3_exec(
       db->handle,
       "CREATE INDEX IF NOT EXISTS data.style_items_styleid_index ON style_items (styleid)",
       NULL, NULL, NULL);
+  ////////////////////////////// style_shapes
+  sqlite3_exec(db->handle, "CREATE TABLE data.style_shapes (styleid INTEGER, formid INTEGER, form INTEGER, "
+                           "name VARCHAR(256), version INTEGER, points BLOB, points_count INTEGER, source BLOB)",
+               NULL, NULL, NULL);
+  sqlite3_exec(db->handle, "CREATE INDEX data.style_shapes_styleid_index ON style_shapes (styleid)", NULL, NULL,
+               NULL);
   ////////////////////////////// presets
   sqlite3_exec(db->handle, "CREATE TABLE data.presets (name VARCHAR, description VARCHAR, operation "
                            "VARCHAR, op_version INTEGER, op_params BLOB, "
