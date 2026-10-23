@@ -759,12 +759,26 @@ static void _thumb_update_icons(dt_thumbnail_t *thumb)
 
   gboolean show = (thumb->over > DT_THUMBNAIL_OVERLAYS_NONE);
 
+  if(GTK_IS_WIDGET(thumb->w_top_eb))
+    gtk_widget_set_visible(thumb->w_top_eb, dt_thumbtable_info_is_grouped(thumb->info) || show || DEBUG);
   if(GTK_IS_WIDGET(thumb->w_local_copy))
     gtk_widget_set_visible(thumb->w_local_copy, (thumb->info.has_localcopy && show) || DEBUG);
   if(GTK_IS_WIDGET(thumb->w_altered))
     gtk_widget_set_visible(thumb->w_altered, (dt_thumbtable_info_is_altered(thumb->info) && show) || DEBUG);
   if(GTK_IS_WIDGET(thumb->w_group))
-    gtk_widget_set_visible(thumb->w_group, (dt_thumbtable_info_is_grouped(thumb->info) && show) || DEBUG);
+  {
+    const gboolean collapsed = !IS_NULL_PTR(thumb->table) && thumb->table->collapse_groups
+                               && (thumb->table->mode != DT_THUMBTABLE_MODE_FILEMANAGER
+                                   || thumb->table->expanded_group_id != thumb->info.group_id);
+    GtkDarktableThumbnailBtn *button = DTGTK_THUMBNAIL_BTN(thumb->w_group);
+    const gint flags = CPF_GROUPING_THUMBNAIL | (collapsed ? CPF_GROUPING_BADGE : 0);
+    if(button->icon_flags != flags)
+    {
+      button->icon_flags = flags;
+      gtk_widget_queue_draw(thumb->w_group);
+    }
+    gtk_widget_set_visible(thumb->w_group, dt_thumbtable_info_is_grouped(thumb->info) || DEBUG);
+  }
   if(GTK_IS_WIDGET(thumb->w_audio))
     gtk_widget_set_visible(thumb->w_audio, (thumb->info.has_audio && show) || DEBUG);
   if(GTK_IS_WIDGET(thumb->w_color))
@@ -888,8 +902,21 @@ static gboolean _event_grouping_release(GtkWidget *widget, GdkEventButton *event
   dt_thumbnail_t *thumb = (dt_thumbnail_t *)user_data;
   thumb_return_if_fails(thumb, TRUE);
   if(thumb->disable_actions) return FALSE;
+  if(!gtk_widget_is_visible(thumb->widget) || !gtk_widget_is_visible(thumb->w_main)
+     || !gtk_widget_is_visible(thumb->w_top_eb) || !gtk_widget_is_visible(widget)) return FALSE;
   if(dtgtk_thumbnail_btn_is_hidden(widget)) return FALSE;
-  dt_grouping_change_representative(thumb->info.id);
+  if(thumb->info.id == thumb->info.group_id) return FALSE;
+  const int32_t old_group_id = thumb->info.group_id;
+  dt_thumbtable_t *table = thumb->table;
+  const int32_t new_group_id = dt_grouping_change_representative(thumb->info.id);
+  if(new_group_id != UNKNOWN_IMAGE)
+  {
+    if(!IS_NULL_PTR(table) && table->mode == DT_THUMBTABLE_MODE_FILEMANAGER
+       && table->expanded_group_id == old_group_id)
+      table->expanded_group_id = new_group_id;
+    dt_collection_update_query(dt_collection_get_global(), DT_COLLECTION_CHANGE_GROUP_REPRESENTATIVE,
+                                DT_COLLECTION_PROP_GROUPING, NULL);
+  }
   return FALSE;
 }
 
@@ -1020,10 +1047,63 @@ static gboolean _event_star_leave(GtkWidget *widget, GdkEventCrossing *event, gp
 }
 
 
+/** @brief Paint a separated group perimeter inside the grid's unchanged cell stride.
+ * @details Cell allocations overlap through the original negative CSS margins. Drawing against
+ * the nominal stride, rather than that larger allocation, keeps neighbouring outlines apart
+ * without shrinking images. Rectangles meet without the tapered joins of transparent CSS borders.
+ * The four diagonal flags complete concave corners; filmstrip borders remain CSS-painted.
+ */
 gboolean _event_expose(GtkWidget *self, cairo_t *cr, gpointer user_data)
 {
   dt_thumbnail_t *thumb = (dt_thumbnail_t *)user_data;
   thumb_return_if_fails(thumb, TRUE);
+  if(IS_NULL_PTR(thumb->table) || thumb->table->mode != DT_THUMBTABLE_MODE_FILEMANAGER
+     || thumb->group_borders == DT_THUMBNAIL_BORDER_NONE) return FALSE;
+
+  GtkStyleContext *context = gtk_widget_get_style_context(self);
+  const GtkStateFlags state = gtk_widget_get_state_flags(self);
+  GtkBorder border;
+  gtk_style_context_get_border(context, state, &border);
+  GdkRGBA color;
+  const char *color_name = gtk_style_context_has_class(context, "hovered-group")
+                             ? "group_border_hover" : "group_border";
+  if(!gtk_style_context_lookup_color(context, color_name, &color)) return FALSE;
+
+  const double width = thumb->width;
+  const double height = thumb->height;
+  const double thickness = border.top;
+  const double gap = MAX(1.0, round(0.0625 * DT_GUI_EM_SIZE));
+  if(MIN(width, height) <= 2.0 * (gap + thickness)) return FALSE;
+  const dt_thumbnail_border_t borders = thumb->group_borders;
+  const double left = borders & DT_THUMBNAIL_BORDER_LEFT ? gap : 0.0;
+  const double right = borders & DT_THUMBNAIL_BORDER_RIGHT ? width - gap : width;
+  const double top = borders & DT_THUMBNAIL_BORDER_TOP ? gap : 0.0;
+  const double bottom = borders & DT_THUMBNAIL_BORDER_BOTTOM ? height - gap : height;
+
+  cairo_save(cr);
+  cairo_rectangle(cr, 0, 0, width, height);
+  cairo_clip(cr);
+  gdk_cairo_set_source_rgba(cr, &color);
+  if(borders & DT_THUMBNAIL_BORDER_TOP)
+    cairo_rectangle(cr, left, top, right - left, thickness);
+  if(borders & DT_THUMBNAIL_BORDER_BOTTOM)
+    cairo_rectangle(cr, left, bottom - thickness, right - left, thickness);
+  if(borders & DT_THUMBNAIL_BORDER_LEFT)
+    cairo_rectangle(cr, left, top, thickness, bottom - top);
+  if(borders & DT_THUMBNAIL_BORDER_RIGHT)
+    cairo_rectangle(cr, right - thickness, top, thickness, bottom - top);
+  for(int corner = 0; corner < 4; corner++)
+  {
+    if(!(borders & (DT_THUMBNAIL_BORDER_INNER_TOP_LEFT << corner))) continue;
+    const double x = corner % 2 ? width : 0;
+    const double y = corner / 2 ? height : 0;
+    const double dx = corner % 2 ? -1.0 : 1.0;
+    const double dy = corner / 2 ? -1.0 : 1.0;
+    cairo_rectangle(cr, x, y + dy * gap, dx * (gap + thickness), dy * thickness);
+    cairo_rectangle(cr, x + dx * gap, y, dx * thickness, dy * (gap + thickness));
+  }
+  cairo_fill(cr);
+  cairo_restore(cr);
   return FALSE;
 }
 
@@ -1182,7 +1262,7 @@ GtkWidget *dt_thumbnail_create_widget(dt_thumbnail_t *thumb)
   g_signal_connect(G_OBJECT(thumb->widget), "enter-notify-event", G_CALLBACK(_event_main_enter), thumb);
   g_signal_connect(G_OBJECT(thumb->widget), "leave-notify-event", G_CALLBACK(_event_main_leave), thumb);
   g_signal_connect(G_OBJECT(thumb->widget), "motion-notify-event", G_CALLBACK(_event_main_motion), thumb);
-  g_signal_connect(G_OBJECT(thumb->widget), "draw", G_CALLBACK(_event_expose), thumb);
+  g_signal_connect_after(G_OBJECT(thumb->widget), "draw", G_CALLBACK(_event_expose), thumb);
 
   // Main widget
   thumb->w_main = gtk_overlay_new();
@@ -1307,7 +1387,9 @@ GtkWidget *dt_thumbnail_create_widget(dt_thumbnail_t *thumb)
   gtk_box_pack_end(GTK_BOX(top_box), thumb->w_altered, FALSE, FALSE, 0);
 
   // the group bouton
-  thumb->w_group = dtgtk_thumbnail_btn_new(dtgtk_cairo_paint_grouping, 0, NULL);
+  thumb->w_group = dtgtk_thumbnail_btn_new(dtgtk_cairo_paint_grouping, CPF_GROUPING_THUMBNAIL,
+                                            &thumb->info.group_members);
+  dt_gui_remove_class(thumb->w_group, "dt_thumb_btn");
   dt_gui_add_class(thumb->w_group, "thumb-group");
   g_signal_connect(G_OBJECT(thumb->w_group), "button-release-event", G_CALLBACK(_event_grouping_release), thumb);
   g_signal_connect(G_OBJECT(thumb->w_group), "enter-notify-event", G_CALLBACK(_group_enter), thumb);
@@ -1457,7 +1539,7 @@ int dt_thumbnail_destroy(dt_thumbnail_t *thumb)
   if(thumb->widget)
   {
     GtkWidget *parent = gtk_widget_get_parent(thumb->widget);
-    if(parent && GTK_IS_CONTAINER(parent))
+    if(GTK_IS_CONTAINER(parent))
       gtk_container_remove(GTK_CONTAINER(parent), thumb->widget);
   }
   thumb->widget = NULL;
@@ -1578,8 +1660,8 @@ static int _thumb_resize_overlays(dt_thumbnail_t *thumb, int width, int height)
   // the altered icon
   gtk_widget_set_size_request(thumb->w_altered, icon_size, icon_size);
 
-  // the group bouton
-  gtk_widget_set_size_request(thumb->w_group, icon_size, icon_size);
+  const int group_height = roundf(1.4f * icon_size);
+  gtk_widget_set_size_request(thumb->w_group, roundf(1.4f * group_height), group_height);
 
   // the sound icon
   gtk_widget_set_size_request(thumb->w_audio, icon_size, icon_size);

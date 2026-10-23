@@ -51,12 +51,13 @@ typedef enum dt_undo_type_t
   DT_UNDO_DATETIME    = 1 << 9,
   DT_UNDO_DUPLICATE   = 1 << 10,
   DT_UNDO_REMOVE      = 1 << 11,
+  DT_UNDO_GROUPING    = 1 << 12,
   DT_UNDO_DEVELOP     = DT_UNDO_HISTORY | DT_UNDO_MASK | DT_UNDO_TAGS
                         | DT_UNDO_RATINGS | DT_UNDO_COLORLABELS | DT_UNDO_DUPLICATE,
   DT_UNDO_LIGHTTABLE  = DT_UNDO_RATINGS | DT_UNDO_COLORLABELS | DT_UNDO_TAGS
-                        | DT_UNDO_METADATA | DT_UNDO_LT_HISTORY | DT_UNDO_GEOTAG
-                        | DT_UNDO_FLAGS | DT_UNDO_DATETIME | DT_UNDO_DUPLICATE
-                        | DT_UNDO_REMOVE,
+                         | DT_UNDO_METADATA | DT_UNDO_LT_HISTORY | DT_UNDO_GEOTAG
+                         | DT_UNDO_FLAGS | DT_UNDO_DATETIME | DT_UNDO_DUPLICATE
+                         | DT_UNDO_REMOVE | DT_UNDO_GROUPING,
   DT_UNDO_MAP         = DT_UNDO_GEOTAG | DT_UNDO_TAGS | DT_UNDO_DATETIME,
   DT_UNDO_ALL         = DT_UNDO_MAP | DT_UNDO_DEVELOP | DT_UNDO_LIGHTTABLE
 } dt_undo_type_t;
@@ -77,6 +78,7 @@ typedef struct dt_undo_t
   dt_pthread_mutex_t mutex;
   gboolean locked;
   gboolean disable_next;
+  uint32_t deferred_clear;
 } dt_undo_t;
 
 dt_undo_t *dt_undo_init(void);
@@ -103,6 +105,9 @@ void dt_undo_do_redo(dt_undo_t *self, uint32_t filter);
 
 //  removes all items which correspond to filter in the undo/redo lists
 void dt_undo_clear(dt_undo_t *self, uint32_t filter);
+
+/** @brief Mark matching history for removal by the undo callback that currently owns @p self. */
+void dt_undo_defer_clear(dt_undo_t *self, uint32_t filter);
 
 void dt_undo_iterate_internal(dt_undo_t *self, uint32_t filter, gpointer user_data,
                               void (*apply)(gpointer user_data, dt_undo_type_t type, dt_undo_data_t item));

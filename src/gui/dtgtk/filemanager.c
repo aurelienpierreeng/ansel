@@ -146,6 +146,10 @@ static void _grid_update_content_size(dt_thumbtable_t *table)
 
 // --- Group borders ----------------------------------------------------------------------------
 
+/** @brief Find perimeter edges using visual neighbours, then inspect the four diagonals for concave joins.
+ * @details Consecutive collection entries across a row break are not horizontal neighbours.
+ * Inset perimeter segments need a join where both adjacent cells belong to the group but their diagonal does not.
+ */
 static void _grid_group_borders(dt_thumbtable_t *table, dt_thumbnail_t *thumb, dt_thumbnail_border_t *borders)
 {
   const int32_t rowid = thumb->rowid;
@@ -159,22 +163,32 @@ static void _grid_group_borders(dt_thumbtable_t *table, dt_thumbnail_t *thumb, d
     || IS_COLLECTION_EDGE(rowid + table->thumbs_per_row))
     *borders |= DT_THUMBNAIL_BORDER_BOTTOM;
 
-  if(table->lut[CLAMP_ROW(rowid - 1)].groupid != groupid
+  if(rowid % table->thumbs_per_row == 0
+    || table->lut[CLAMP_ROW(rowid - 1)].groupid != groupid
     || IS_COLLECTION_EDGE(rowid - 1))
     *borders |= DT_THUMBNAIL_BORDER_LEFT;
 
-  if(table->lut[CLAMP_ROW(rowid + 1)].groupid != groupid
+  if(rowid % table->thumbs_per_row == table->thumbs_per_row - 1
+    || table->lut[CLAMP_ROW(rowid + 1)].groupid != groupid
     || IS_COLLECTION_EDGE(rowid + 1))
     *borders |= DT_THUMBNAIL_BORDER_RIGHT;
 
-  // If the group spans over more than a full row,
-  // close the row ends. Otherwise, we leave orphans opened at the row ends.
-  if(table->lut[rowid].thumb->info.group_members > table->thumbs_per_row)
+  const int column = rowid % table->thumbs_per_row;
+  const int offsets[4] = { -table->thumbs_per_row - 1, -table->thumbs_per_row + 1,
+                           table->thumbs_per_row - 1, table->thumbs_per_row + 1 };
+  const dt_thumbnail_border_t sides[4] = {
+    DT_THUMBNAIL_BORDER_TOP | DT_THUMBNAIL_BORDER_LEFT,
+    DT_THUMBNAIL_BORDER_TOP | DT_THUMBNAIL_BORDER_RIGHT,
+    DT_THUMBNAIL_BORDER_BOTTOM | DT_THUMBNAIL_BORDER_LEFT,
+    DT_THUMBNAIL_BORDER_BOTTOM | DT_THUMBNAIL_BORDER_RIGHT
+  };
+  for(int corner = 0; corner < 4; corner++)
   {
-    if(rowid % table->thumbs_per_row == 0)
-      *borders |= DT_THUMBNAIL_BORDER_LEFT;
-    if(rowid % table->thumbs_per_row == table->thumbs_per_row - 1)
-      *borders |= DT_THUMBNAIL_BORDER_RIGHT;
+    const int diagonal = rowid + offsets[corner];
+    const gboolean crosses_row = corner % 2 == 0 ? column == 0 : column == table->thumbs_per_row - 1;
+    if(!crosses_row && !(*borders & sides[corner])
+       && (IS_COLLECTION_EDGE(diagonal) || table->lut[CLAMP_ROW(diagonal)].groupid != groupid))
+      *borders |= DT_THUMBNAIL_BORDER_INNER_TOP_LEFT << corner;
   }
 }
 

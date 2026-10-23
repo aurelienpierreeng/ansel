@@ -84,6 +84,7 @@
 #include "metadata/exif.h"
 #include "common/file_location.h"
 #include "common/grouping.h"
+#include "common/undo.h"
 #include "common/film.h"
 #include "history/history.h"
 #include "database/database.h"
@@ -1755,6 +1756,7 @@ static int32_t _image_import_internal(const int32_t film_id, const char *filenam
   gchar *basename = g_strndup(imgfname, image_extension - imgfname - 1);
   gchar *sql_pattern = g_strconcat(basename, ".%", NULL);
   int group_id;
+  gboolean grouping_changed = FALSE;
   // in case we are not a jpg check if we need to change group representative
   if(strcmp(ext, "jpg") != 0 && strcmp(ext, "jpeg") != 0)
   {
@@ -1769,6 +1771,7 @@ static int32_t _image_import_internal(const int32_t film_id, const char *filenam
       // if the group representative is a jpg, change group representative to this new imported image
       if(!strcmp(ext_lowercase, "jpg") || !strcmp(ext_lowercase, "jpeg"))
       {
+        grouping_changed = TRUE;
         other_img->group_id = id;
         dt_image_cache_write_release(other_img, DT_IMAGE_CACHE_SAFE);
         GList *members = dt_image_repository_get_group_members(other_id, other_id);
@@ -1800,6 +1803,7 @@ static int32_t _image_import_internal(const int32_t film_id, const char *filenam
     group_id = (other_group != -1) ? other_group : id;
   }
   dt_image_repository_set_group(id, group_id);
+  if(grouping_changed || group_id != id) dt_undo_clear(dt_undo_get_global(), DT_UNDO_GROUPING);
 
   // printf("[image_import] importing `%s' to img id %d\n", imgfname, id);
 
