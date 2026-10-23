@@ -2041,6 +2041,13 @@ void dt_cleanup()
   }
   else
   {
+    dt_pthread_mutex_lock(&darktable.control->log_mutex);
+    for(int index = 0; index < DT_CTL_LOG_SIZE; index++)
+    {
+      dt_free(darktable.control->log_message[index]);
+      darktable.control->log_message[index] = NULL;
+    }
+    dt_pthread_mutex_unlock(&darktable.control->log_mutex);
     dt_pthread_mutex_destroy(&darktable.control->log_mutex);
     dt_pthread_mutex_destroy(&darktable.control->run_mutex);
   }

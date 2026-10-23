@@ -110,30 +110,15 @@ gboolean dt_dev_init_default_history(dt_develop_t *dev, const int32_t imgid, gbo
  * Converts DB row fields into a history item and appends it to dev->history.
  *
  * @param user_data Context pointer (dt_dev_history_db_ctx_t).
- * @param id Image id from DB row.
- * @param num History index.
- * @param modversion Module version stored in DB.
- * @param operation Operation name.
- * @param module_params Module params blob.
- * @param param_length Params blob length.
- * @param enabled Enabled flag from DB.
- * @param blendop_params Blend params blob.
- * @param bl_length Blend blob length.
- * @param blendop_version Blend params version.
- * @param multi_priority Instance priority.
- * @param multi_name Instance name.
- * @param preset_name Optional preset name (for auto presets).
+ * @param row Borrowed repository row.
  */
-static void _dev_history_db_row_cb(void *user_data, const int32_t id, const int num, const int modversion,
-                                   const char *operation, const void *module_params, const int param_length,
-                                   const gboolean enabled, const void *blendop_params, const int bl_length,
-                                   const int blendop_version, const int multi_priority, const char *multi_name,
-                                   const char *preset_name)
+static void _dev_history_db_row_cb(void *user_data, const dt_history_repository_row_t *row)
 {
   dt_dev_history_db_ctx_t *ctx = (dt_dev_history_db_ctx_t *)user_data;
-  _process_history_db_entry(ctx->dev, ctx->imgid, id, num, modversion, operation, module_params, param_length, enabled,
-                            blendop_params, bl_length, blendop_version, multi_priority, multi_name, preset_name,
-                            ctx->legacy_params, ctx->presets);
+  _process_history_db_entry(ctx->dev, ctx->imgid, row->imgid, row->num, row->module_version, row->operation,
+                            row->op_params, row->op_params_len, row->enabled, row->blendop_params,
+                            row->blendop_params_len, row->blendop_version, row->multi_priority, row->multi_name,
+                            row->preset_name, ctx->legacy_params, ctx->presets);
 }
 
 // returns the first history item with hist->module == module

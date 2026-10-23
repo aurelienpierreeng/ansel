@@ -85,6 +85,21 @@ void dt_toast_markup_log(const char *msg, ...) __attribute__((format(printf, 1, 
  *                nothing to list. */
 void dt_control_alert(const char *title, const char *message, const char *item);
 
+/** @brief Start a thread-local alert batch.
+ *
+ * Nested batches share their pending title/message groups and flush only when the outer matching
+ * dt_control_alert_batch_end() returns. Each group retains its first item-less alert and its unique
+ * non-NULL items in first-seen order. Batches affect only calls on the thread that starts them.
+ */
+void dt_control_alert_batch_begin(void);
+
+/** @brief Finish a thread-local alert batch and deliver its pending groups.
+ *
+ * The outer matching end invokes the installed alert handler once for an item-less alert and once
+ * for every unique item, or emits one fallback log message per title/message group.
+ */
+void dt_control_alert_batch_end(void);
+
 /** @brief What dt_control_alert() hands its finished text to. Installed once by the GUI. */
 typedef void (*dt_control_alert_handler_t)(const char *title, const char *message, const char *item);
 

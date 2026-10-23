@@ -1287,47 +1287,51 @@ static int32_t dt_control_refresh_exif_run(dt_job_t *job)
   const guint total = g_list_length(t);
   double fraction = 0.0f;
   char message[512] = { 0 };
-  snprintf(message, sizeof(message), ngettext("refreshing info for %d image", "refreshing info for %d images", total), total);
+  snprintf(message, sizeof(message),
+           ngettext("refreshing info for %d image", "refreshing info for %d images", total), total);
   dt_control_job_set_progress_message(job, message);
-  while(t)
+  for(; t; t = g_list_next(t))
   {
-    const int32_t imgid = GPOINTER_TO_INT(t->data);
-    if(imgid >= 0)
-    {
-      gboolean from_cache = TRUE;
-      char sourcefile[DT_PATH_MAX];
-      dt_image_full_path(imgid,  sourcefile,  sizeof(sourcefile),  &from_cache, __FUNCTION__);
-
-      dt_image_t *img = dt_image_cache_get(imgid, 'w');
-      if(!IS_NULL_PTR(img))
-      {
-        // Re-sync the file-derived classification flags (LDR/HDR/RAW/sRAW, mosaic, monochrome,
-        // 4bayer, additional-DNG-tags, buffer-resolved) with the actual file, repairing entries
-        // that were persisted with stale/corrupted flags in the DB. We must *clear* these bits
-        // before dt_exif_read(), because it only re-seeds the LDR/HDR/RAW class when none is set
-        // yet (see exif.cc): leaving a stale DT_IMAGE_HDR in place would suppress the re-read.
-        // Everything else in img->flags is DB-only / user state that the file knows nothing about
-        // (star rating & reject, local copy, audio/txt sidecar, preset bookkeeping, monochrome
-        // workflow), so it is preserved verbatim.
-        const uint32_t file_class_flags
-            = DT_IMAGE_LDR | DT_IMAGE_RAW | DT_IMAGE_HDR | DT_IMAGE_S_RAW | DT_IMAGE_4BAYER
-            | DT_IMAGE_MONOCHROME | DT_IMAGE_MONOCHROME_BAYER | DT_IMAGE_MOSAIC
-            | DT_IMAGE_BUFFER_RESOLVED | DT_IMAGE_HAS_ADDITIONAL_DNG_TAGS;
-        img->flags &= ~file_class_flags;
-        dt_exif_read(img, sourcefile);
-        dt_image_cache_write_release(img, DT_IMAGE_CACHE_SAFE);
-      }
-      else
-        fprintf(stderr,"[dt_control_refresh_exif_run] couldn't dt_image_cache_get for imgid %i\n", imgid);
-
-      DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_DEVELOP_IMAGE_CHANGED);
-    }
-    else
-      fprintf(stderr,"[dt_control_refresh_exif_run] illegal imgid %i\n", imgid);
-
-    t = g_list_next(t);
     fraction += 1.0 / total;
     dt_control_job_set_progress(job, fraction);
+    const int32_t imgid = GPOINTER_TO_INT(t->data);
+    if(imgid < 0)
+    {
+      fprintf(stderr, "[dt_control_refresh_exif_run] illegal imgid %i\n", imgid);
+      continue;
+    }
+    gboolean from_cache = TRUE;
+    char sourcefile[DT_PATH_MAX];
+    dt_image_full_path(imgid, sourcefile, sizeof(sourcefile), &from_cache, __FUNCTION__);
+
+    dt_image_t *img = dt_image_cache_get(imgid, 'w');
+    if(!IS_NULL_PTR(img))
+    {
+      const dt_image_t original = *img;
+      // Re-sync the file-derived classification flags (LDR/HDR/RAW/sRAW, mosaic, monochrome,
+      // 4bayer, additional-DNG-tags, buffer-resolved) with the actual file, repairing entries
+      // that were persisted with stale/corrupted flags in the DB. We must *clear* these bits
+      // before dt_exif_read_persisted(), because it only re-seeds the LDR/HDR/RAW class when none is set
+      // yet (see exif.cc): leaving a stale DT_IMAGE_HDR in place would suppress the re-read.
+      // Everything else in img->flags is DB-only / user state that the file knows nothing about
+      // (star rating & reject, local copy, audio/txt sidecar, preset bookkeeping, monochrome
+      // workflow), so it is preserved verbatim.
+      const uint32_t file_class_flags = DT_IMAGE_LDR | DT_IMAGE_RAW | DT_IMAGE_HDR | DT_IMAGE_S_RAW
+                                        | DT_IMAGE_4BAYER | DT_IMAGE_MONOCHROME | DT_IMAGE_MONOCHROME_BAYER
+                                        | DT_IMAGE_MOSAIC | DT_IMAGE_BUFFER_RESOLVED
+                                        | DT_IMAGE_HAS_ADDITIONAL_DNG_TAGS;
+      img->flags &= ~file_class_flags;
+      if(dt_exif_read_persisted(img, sourcefile))
+      {
+        *img = original;
+        dt_control_log(_("failed to refresh embedded metadata for image %d"), imgid);
+      }
+      dt_image_cache_write_release(img, DT_IMAGE_CACHE_SAFE);
+    }
+    else
+      fprintf(stderr, "[dt_control_refresh_exif_run] couldn't dt_image_cache_get for imgid %i\n", imgid);
+
+    DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_DEVELOP_IMAGE_CHANGED);
   }
   dt_collection_update_query(dt_collection_get_global(), DT_COLLECTION_CHANGE_RELOAD, DT_COLLECTION_PROP_UNDEF,
                              g_list_copy(params->index));

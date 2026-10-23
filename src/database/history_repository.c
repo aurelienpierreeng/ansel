@@ -73,6 +73,24 @@ static inline void _history_stmt_mutex_ensure(void)
   }
 }
 
+static dt_history_repository_row_t _history_repository_row_from_stmt(sqlite3_stmt *stmt,
+                                                                     const char *preset_name)
+{
+  return (dt_history_repository_row_t){ .imgid = sqlite3_column_int(stmt, 0),
+                                        .num = sqlite3_column_int(stmt, 1),
+                                        .module_version = sqlite3_column_int(stmt, 2),
+                                        .operation = (const char *)sqlite3_column_text(stmt, 3),
+                                        .op_params = sqlite3_column_blob(stmt, 4),
+                                        .op_params_len = sqlite3_column_bytes(stmt, 4),
+                                        .enabled = sqlite3_column_int(stmt, 5) != 0,
+                                        .blendop_params = sqlite3_column_blob(stmt, 6),
+                                        .blendop_params_len = sqlite3_column_bytes(stmt, 6),
+                                        .blendop_version = sqlite3_column_int(stmt, 7),
+                                        .multi_priority = sqlite3_column_int(stmt, 8),
+                                        .multi_name = (const char *)sqlite3_column_text(stmt, 9),
+                                        .preset_name = preset_name };
+}
+
 
 
 int32_t dt_history_repository_get_end(const int32_t imgid)
@@ -306,28 +324,17 @@ void dt_history_repository_foreach_row(const int32_t imgid, dt_history_repositor
 
   while(sqlite3_step(stmt) == SQLITE_ROW)
   {
-    const int32_t id = sqlite3_column_int(stmt, 0);
-    const int num = sqlite3_column_int(stmt, 1);
-    const int modversion = sqlite3_column_int(stmt, 2);
-    const char *operation = (const char *)sqlite3_column_text(stmt, 3);
-    const void *module_params = sqlite3_column_blob(stmt, 4);
-    const gboolean enabled = sqlite3_column_int(stmt, 5) != 0; // ensure casting to gboolean
-    const void *blendop_params = sqlite3_column_blob(stmt, 6);
-    const int blendop_version = sqlite3_column_int(stmt, 7);
-    const int multi_priority = sqlite3_column_int(stmt, 8);
-    const char *multi_name = (const char *)sqlite3_column_text(stmt, 9);
-    const int param_length = sqlite3_column_bytes(stmt, 4);
-    const int bl_length = sqlite3_column_bytes(stmt, 6);
-
-    cb(user_data, id, num, modversion, operation, module_params, param_length, enabled,
-       blendop_params, bl_length, blendop_version, multi_priority, multi_name, "");
+    const dt_history_repository_row_t row = _history_repository_row_from_stmt(stmt, "");
+    cb(user_data, &row);
   }
 
   dt_pthread_mutex_unlock(&_history_stmt_mutex);
 }
 
-void dt_history_repository_foreach_auto_preset_row(const int32_t imgid, const dt_image_t *image, const char *workflow_preset,
-                                          const int iformat, const int excluded, dt_history_repository_row_cb cb, void *user_data)
+void dt_history_repository_foreach_auto_preset_row(const int32_t imgid, const dt_image_t *image,
+                                                   const char *workflow_preset, const int iformat,
+                                                   const int excluded, dt_history_repository_row_cb cb,
+                                                   void *user_data)
 {
   if(imgid <= 0 || IS_NULL_PTR(image) || !workflow_preset || IS_NULL_PTR(cb)) return;
 
@@ -382,30 +389,17 @@ void dt_history_repository_foreach_auto_preset_row(const int32_t imgid, const dt
 
   while(sqlite3_step(stmt) == SQLITE_ROW)
   {
-    const int32_t id = sqlite3_column_int(stmt, 0);
-    const int num = sqlite3_column_int(stmt, 1);
-    const int modversion = sqlite3_column_int(stmt, 2);
-    const char *operation = (const char *)sqlite3_column_text(stmt, 3);
-    const void *module_params = sqlite3_column_blob(stmt, 4);
-    const int enabled = sqlite3_column_int(stmt, 5);
-    const void *blendop_params = sqlite3_column_blob(stmt, 6);
-    const int blendop_version = sqlite3_column_int(stmt, 7);
-    const int multi_priority = sqlite3_column_int(stmt, 8);
-    const char *multi_name = (const char *)sqlite3_column_text(stmt, 9);
-    const char *preset_name = (const char *)sqlite3_column_text(stmt, 10);
-    const int param_length = sqlite3_column_bytes(stmt, 4);
-    const int bl_length = sqlite3_column_bytes(stmt, 6);
-
-    cb(user_data, id, num, modversion, operation, module_params, param_length, enabled,
-       blendop_params, bl_length, blendop_version, multi_priority, multi_name, preset_name);
+    const dt_history_repository_row_t row
+        = _history_repository_row_from_stmt(stmt, (const char *)sqlite3_column_text(stmt, 10));
+    cb(user_data, &row);
   }
 
   dt_pthread_mutex_unlock(&_history_stmt_mutex);
 }
 
 gboolean dt_history_repository_get_autoapply_ioporder_params(const int32_t imgid, const dt_image_t *image,
-                                                    const int iformat, const int excluded, void **params,
-                                                    int32_t *params_len)
+                                                             const int iformat, const int excluded, void **params,
+                                                             int32_t *params_len)
 {
   if(imgid <= 0 || IS_NULL_PTR(image) || IS_NULL_PTR(params) || !params_len) return FALSE;
   *params = NULL;
@@ -565,49 +559,79 @@ gboolean dt_history_repository_delete_all_for_image(const int32_t imgid)
 
   // Not cached: this runs once per "discard history", never in a loop, and five more permanent
   // statements would cost more than the preparation does.
-  gboolean ok = TRUE;
+  const gboolean owns_transaction = !dt_database_transaction_is_owned_by_current_thread();
+  if(owns_transaction && !dt_database_start_transaction()) return FALSE;
+  if(!owns_transaction
+     && sqlite3_exec(dt_database_get_sqlite3_global(), "SAVEPOINT history_delete_all", NULL, NULL, NULL) != SQLITE_OK)
+    return FALSE;
+
   sqlite3_stmt *stmt;
 
   DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
                               "DELETE FROM main.history WHERE imgid = ?1",
                               -1, &stmt, NULL);
   DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, imgid);
-  ok &= (sqlite3_step(stmt) == SQLITE_DONE);
+  gboolean ok = sqlite3_step(stmt) == SQLITE_DONE;
   sqlite3_finalize(stmt);
 
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
-                              "DELETE FROM main.module_order WHERE imgid = ?1",
-                              -1, &stmt, NULL);
-  DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, imgid);
-  ok &= (sqlite3_step(stmt) == SQLITE_DONE);
-  sqlite3_finalize(stmt);
+  if(ok)
+  {
+    DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
+                                "DELETE FROM main.module_order WHERE imgid = ?1",
+                                -1, &stmt, NULL);
+    DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, imgid);
+    ok = sqlite3_step(stmt) == SQLITE_DONE;
+    sqlite3_finalize(stmt);
+  }
 
-  // clang-format off
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
-                              "UPDATE main.images"
-                              " SET history_end = 0, aspect_ratio = 0.0"
-                              " WHERE id = ?1",
-                              -1, &stmt, NULL);
-  // clang-format on
-  DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, imgid);
-  ok &= (sqlite3_step(stmt) == SQLITE_DONE);
-  sqlite3_finalize(stmt);
+  if(ok)
+  {
+    // clang-format off
+    DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
+                                "UPDATE main.images"
+                                " SET history_end = 0, aspect_ratio = 0.0"
+                                " WHERE id = ?1",
+                                -1, &stmt, NULL);
+    // clang-format on
+    DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, imgid);
+    ok = sqlite3_step(stmt) == SQLITE_DONE;
+    sqlite3_finalize(stmt);
+  }
 
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
-                              "DELETE FROM main.masks_history WHERE imgid = ?1",
-                              -1, &stmt, NULL);
-  DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, imgid);
-  ok &= (sqlite3_step(stmt) == SQLITE_DONE);
-  sqlite3_finalize(stmt);
+  if(ok)
+  {
+    DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
+                                "DELETE FROM main.masks_history WHERE imgid = ?1",
+                                -1, &stmt, NULL);
+    DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, imgid);
+    ok = sqlite3_step(stmt) == SQLITE_DONE;
+    sqlite3_finalize(stmt);
+  }
 
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
-                              "DELETE FROM main.history_hash WHERE imgid = ?1",
-                              -1, &stmt, NULL);
-  DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, imgid);
-  ok &= (sqlite3_step(stmt) == SQLITE_DONE);
-  sqlite3_finalize(stmt);
+  if(ok)
+  {
+    DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
+                                "DELETE FROM main.history_hash WHERE imgid = ?1",
+                                -1, &stmt, NULL);
+    DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, imgid);
+    ok = sqlite3_step(stmt) == SQLITE_DONE;
+    sqlite3_finalize(stmt);
+  }
 
-  return ok;
+  if(ok && owns_transaction) return dt_database_release_transaction();
+  if(ok && sqlite3_exec(dt_database_get_sqlite3_global(), "RELEASE SAVEPOINT history_delete_all",
+                        NULL, NULL, NULL) == SQLITE_OK)
+    return TRUE;
+
+  if(owns_transaction)
+    dt_database_rollback_transaction();
+  else
+  {
+    sqlite3_exec(dt_database_get_sqlite3_global(), "ROLLBACK TO SAVEPOINT history_delete_all", NULL, NULL, NULL);
+    sqlite3_exec(dt_database_get_sqlite3_global(), "RELEASE SAVEPOINT history_delete_all", NULL, NULL, NULL);
+  }
+
+  return FALSE;
 }
 
 
@@ -725,10 +749,19 @@ void dt_history_repository_foreach_mask_item(const int32_t imgid,
   DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, imgid);
   while(sqlite3_step(stmt) == SQLITE_ROW)
   {
-    cb(user_data, sqlite3_column_int(stmt, 8), sqlite3_column_int(stmt, 1),
-       sqlite3_column_int(stmt, 2), (const char *)sqlite3_column_text(stmt, 3),
-       sqlite3_column_int(stmt, 4), sqlite3_column_blob(stmt, 5), sqlite3_column_bytes(stmt, 5),
-       sqlite3_column_int(stmt, 6), sqlite3_column_blob(stmt, 7), sqlite3_column_bytes(stmt, 7));
+    const dt_history_repository_mask_row_t row = {
+      .num = sqlite3_column_int(stmt, 8),
+      .mask_id = sqlite3_column_int(stmt, 1),
+      .form = sqlite3_column_int(stmt, 2),
+      .name = (const char *)sqlite3_column_text(stmt, 3),
+      .version = sqlite3_column_int(stmt, 4),
+      .points = sqlite3_column_blob(stmt, 5),
+      .points_len = sqlite3_column_bytes(stmt, 5),
+      .points_count = sqlite3_column_int(stmt, 6),
+      .source = sqlite3_column_blob(stmt, 7),
+      .source_len = sqlite3_column_bytes(stmt, 7),
+    };
+    cb(user_data, &row);
   }
   sqlite3_finalize(stmt);
 }
