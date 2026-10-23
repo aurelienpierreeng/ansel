@@ -140,7 +140,9 @@ typedef struct dt_thumbtable_layout_ops_t
   // (was: dt_thumbtable_key_pressed_grid FILEMANAGER-only cases)
   gboolean (*handle_key)(dt_thumbtable_t *table, GdkEventKey *event, guint key, int32_t imgid);
 
-  // Nullable. Select the image about to be opened by a Return/activate key (grid only).
+  // Nullable. Select an image: before it is opened by a Return/activate key, and after every
+  // arrow/Page/Home/End move in dt_thumbtable_move_in_grid (grid only, so the keyboard-moved-to
+  // image is also the selected one).
   void (*pre_activate)(dt_thumbtable_t *table, int32_t imgid);
 } dt_thumbtable_layout_ops_t;
 
