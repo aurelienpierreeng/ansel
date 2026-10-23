@@ -23,6 +23,7 @@
     Copyright (C) 2022 Martin Bařinka.
     Copyright (C) 2025 Alynx Zhou.
     Copyright (C) 2025-2026 Guillaume Stutin.
+    Copyright (C) 2026 Ankit-cs.
     
     darktable is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -107,6 +108,7 @@ typedef struct dt_bauhaus_slider_data_t
   float soft_min, soft_max;
   float hard_min, hard_max;
   int digits;  // how many decimals to round to
+  float last_committed_value; // last committed value (not normalized, after rounding)
 
   float (*grad_col)[3]; // colors for gradient slider
   int grad_cnt;         // how many stops
