@@ -111,6 +111,31 @@ static void test_tag_agreement(void **state)
   g_list_free(both);
 }
 
+static void test_tag_attach_refuses_unknown_image(void **state)
+{
+  (void)state;
+  const int32_t film = testdb_make_film("/testdb/attach");
+  const int32_t selected = testdb_make_image(film, "selected.raw");
+  assert_true(selected > 0);
+
+  dt_selection_repository_clear();
+  dt_selection_repository_select(selected);
+
+  guint tagid = 0;
+  assert_true(dt_tag_new("preview-keyword", &tagid));
+  assert_true(tagid > 0);
+
+  assert_false(dt_tag_attach(tagid, UNKNOWN_IMAGE, FALSE, FALSE));
+  assert_false(dt_tag_attach(tagid, 0, FALSE, FALSE));
+  assert_false(dt_is_tag_attached(tagid, selected));
+
+  assert_true(dt_tag_attach(tagid, selected, FALSE, FALSE));
+  assert_true(dt_is_tag_attached(tagid, selected));
+  assert_false(dt_tag_attach(tagid, selected, FALSE, FALSE));
+
+  dt_selection_repository_clear();
+}
+
 typedef struct _meta_collect_t
 {
   int rows;
@@ -160,6 +185,7 @@ int main(int argc, char *argv[])
   const struct CMUnitTest tests[] = {
     cmocka_unit_test(test_selection_lowest_id),
     cmocka_unit_test(test_tag_agreement),
+    cmocka_unit_test(test_tag_attach_refuses_unknown_image),
     cmocka_unit_test(test_metadata_foreach_selected),
   };
   return cmocka_run_group_tests(tests, testdb_setup, testdb_teardown);

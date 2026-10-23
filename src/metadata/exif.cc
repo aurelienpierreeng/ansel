@@ -469,34 +469,38 @@ bool dt_exif_decode_xmp_data(dt_image_t *img, Exiv2::XmpData &xmpData, int versi
     else
       dt_image_set_xmp_rating(img, -2);
 
-    if(!exif_read) dt_colorlabels_remove_labels(img->id);
-    if(FIND_XMP_TAG("Xmp.xmp.Label"))
+    if(img->id > 0)
     {
-      std::string label = pos->toString();
-      if(label == "Red") // Is it really called like that in XMP files?
-        dt_colorlabels_set_label(img->id, 0);
-      else if(label == "Yellow") // Is it really called like that in XMP files?
-        dt_colorlabels_set_label(img->id, 1);
-      else if(label == "Green")
-        dt_colorlabels_set_label(img->id, 2);
-      else if(label == "Blue") // Is it really called like that in XMP files?
-        dt_colorlabels_set_label(img->id, 3);
-      else if(label == "Purple") // Is it really called like that in XMP files?
-        dt_colorlabels_set_label(img->id, 4);
-    }
-    // if Xmp.xmp.Label not managed from an external app use dt colors
-    else if(FIND_XMP_TAG("Xmp.darktable.colorlabels"))
-    {
-      // color labels
-      const int cnt = pos->count();
-      for(int i = 0; i < cnt; i++)
+      if(!exif_read) dt_colorlabels_remove_labels(img->id);
+      if(FIND_XMP_TAG("Xmp.xmp.Label"))
       {
-        dt_colorlabels_set_label(img->id, pos->toLong(i));
+        std::string label = pos->toString();
+        if(label == "Red") // Is it really called like that in XMP files?
+          dt_colorlabels_set_label(img->id, 0);
+        else if(label == "Yellow") // Is it really called like that in XMP files?
+          dt_colorlabels_set_label(img->id, 1);
+        else if(label == "Green")
+          dt_colorlabels_set_label(img->id, 2);
+        else if(label == "Blue") // Is it really called like that in XMP files?
+          dt_colorlabels_set_label(img->id, 3);
+        else if(label == "Purple") // Is it really called like that in XMP files?
+          dt_colorlabels_set_label(img->id, 4);
+      }
+      // if Xmp.xmp.Label not managed from an external app use dt colors
+      else if(FIND_XMP_TAG("Xmp.darktable.colorlabels"))
+      {
+        // color labels
+        const int cnt = pos->count();
+        for(int i = 0; i < cnt; i++)
+        {
+          dt_colorlabels_set_label(img->id, pos->toLong(i));
+        }
       }
     }
 
-    if((dt_image_get_xmp_mode()) ||
-       dt_conf_get_bool("ui_last/import_last_tags_imported"))
+    if(img->id > 0 &&
+       ((dt_image_get_xmp_mode()) ||
+        dt_conf_get_bool("ui_last/import_last_tags_imported")))
     {
       GList *tags = NULL;
       // preserve dt tags which are not saved in xmp file
@@ -603,7 +607,8 @@ static bool _exif_decode_iptc_data(dt_image_t *img, Exiv2::IptcData &iptcData)
     Exiv2::IptcData::const_iterator pos;
     iptcData.sortByKey(); // this helps to quickly find all Iptc.Application2.Keywords
 
-    if((pos = iptcData.findKey(Exiv2::IptcKey("Iptc.Application2.Keywords"))) != iptcData.end())
+    if(img->id > 0 &&
+       (pos = iptcData.findKey(Exiv2::IptcKey("Iptc.Application2.Keywords"))) != iptcData.end())
     {
       while(pos != iptcData.end())
       {
@@ -1316,11 +1321,14 @@ static bool _exif_decode_exif_data(dt_image_t *img, Exiv2::ExifData &exifData)
     if(_check_usercrop(exifData, img))
     {
       img->flags |= DT_IMAGE_HAS_ADDITIONAL_DNG_TAGS;
+      if(img->id > 0)
+      {
         guint tagid = 0;
         char tagname[64];
         snprintf(tagname, sizeof(tagname), "darktable|mode|exif-crop");
         dt_tag_new(tagname, &tagid);
         dt_tag_attach(tagid, img->id, FALSE, FALSE);
+      }
     }
 
     if(_check_dng_opcodes(exifData, img))
@@ -2293,6 +2301,8 @@ unsigned char *dt_exif_xmp_decode(const char *input, const int len, int *output_
 
 static void _exif_import_tags(dt_image_t *img, Exiv2::XmpData::iterator &pos)
 {
+  if(img->id <= 0) return;
+
   // tags in array
   const int cnt = pos->count();
 
