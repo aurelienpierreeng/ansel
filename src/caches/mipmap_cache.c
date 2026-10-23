@@ -1213,6 +1213,17 @@ void dt_mipmap_cache_get_with_caller_and_shutdown(dt_mipmap_buffer_t *buf,
   {
     // simple case: only get and lock if it's there.
     dt_cache_entry_t *entry = dt_cache_testget(&_get_cache(cache, mip)->cache, key, mode);
+    if(entry)
+    {
+      struct dt_mipmap_buffer_dsc *dsc = _get_dsc_from_entry(entry);
+      ASAN_UNPOISON_MEMORY_REGION(dsc, dt_mipmap_buffer_dsc_size);
+      // Not there yet: a render aborted mid-way leaves the entry flagged, over a buffer holding nothing.
+      if(dsc->flags & DT_MIPMAP_BUFFER_DSC_FLAG_GENERATE)
+      {
+        dt_cache_release(&_get_cache(cache, mip)->cache, entry);
+        entry = NULL;
+      }
+    }
     buf->cache_entry = entry;
 
     if(entry)
