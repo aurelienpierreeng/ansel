@@ -100,11 +100,17 @@ dsc->height > 8` and nothing else, which caught the skull and missed the other t
 
 - **An entry that was never generated** carries `DT_MIPMAP_BUFFER_DSC_FLAG_GENERATE` over an
   uninitialised `dt_alloc_align()` block, at the mip's full dimensions — so the size test passed and
-  the JPEG encoder was handed whatever the allocator returned. This is the common case, not a corner:
-  `_generate_blocking()` deliberately leaves such an entry behind whenever the `shutdown` atomic is
-  raised mid-render, and the async surface fetcher raises it on every widget resize or image change.
-  Scrolling a filmstrip produced them; eviction and exit wrote each one out as a thumbnail of
-  uninitialised heap, which the next session then loaded as valid.
+  the JPEG encoder was handed whatever the allocator returned. `_generate_blocking()` deliberately
+  leaves such an entry behind whenever the `shutdown` atomic is raised mid-render. Only the async
+  surface fetcher passes one (`dt_view_image_get_surface_async()`: the preview window, slideshow,
+  map, print, studio capture), and it raises it on a resize, an image change, or when its widget
+  goes; lighttable and filmstrip thumbnails go through `dt_view_image_get_surface()`, which passes
+  none, and never abort. The next get of the same key renders over the entry again, so an aborted
+  entry survives only when nothing asks that size of that image again — a preview window enlarged
+  and then closed before its render ended. Eviction and exit wrote it out as a thumbnail of
+  uninitialised heap at the box's full dimensions, which the next session then loaded as valid. The
+  first version of this section called this the common case and said scrolling a filmstrip produced
+  them; the filmstrip never aborts a render (measured below).
 - **An invalidated entry** (`..._FLAG_INVALIDATE`) unlinked its file and then, with no `else` between
   the two branches, immediately wrote the very buffer that had just been declared stale. The flag
   is set on a thumbnail only by `dt_mipmap_cache_remove_at_size()` with `flush_disk` TRUE, which
@@ -168,6 +174,25 @@ it without a second query.
 The skip is logged under `-d cache` ("is not written to the disk cache: never generated | a skull"),
 because how often an aborted render leaves an entry behind is a question only a real session
 answers.
+
+*Measured 2026-10-23 in the GUI against `2fadf8a366` plus #1495*: twelve hardlinks of one NEF,
+`lighttable/embedded_jpg=0`, fresh `--configdir`, `--cachedir` and `--library`, `-d cache`, aborts
+counted by their `DT_IMAGEIO_ABORTED` ("error 11") line. Scrolling the lighttable and the filmstrip
+for 27 minutes at five thumbnails per row aborted nothing. The preview window opens at 350×350, a
+size the lighttable usually holds already, so it shows at once and renders nothing; enlarging it asks for
+size 2. Opening it on an image the window had not shown yet, enlarging it and closing it within a
+second, on three images, at three thumbnails per row:
+
+- **With master's `src/caches/mipmap_cache.c`:** 14 aborts; size 2 of images 2, 6 and 8 never
+  completed, and all three were written at exit as 1440×900 JPEGs of zeros, where a real render of
+  that image is 600×900; size 1 of images 6 and 8, which the window asked for first and which was
+  aborted too, was written as 720×450 of zeros, where a real one is 300×450.
+- **With #1495:** 11 aborts; the four entries they left behind (size 2 of images 2, 4 and 6, size 1
+  of image 6) are logged "never generated" and not written, and the 13 files written are all real
+  images.
+
+Neither session built a size from an aborted larger one, so the `TESTLOCK` half is measured only by
+the program above.
 
 *Measured 2026-10-23 against `2fadf8a366` plus #1495*, with `ansel-generate-cache --min-mip 0
 --max-mip 2` on one NEF, fresh `--configdir`, `--cachedir` and `--library`, `--disable-opencl`: the
