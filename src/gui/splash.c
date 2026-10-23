@@ -1,6 +1,7 @@
 /*
     This file is part of the Ansel project.
     Copyright (C) 2026 Aurélien PIERRE.
+    Copyright (C) 2026 Guillaume Stutin.
     
     Ansel is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -352,6 +353,9 @@ static void _splash_load_authors(void)
       gchar *trim = g_strstrip(lines[i]);
       if(trim[0] == '\0') continue;
       if(trim[0] == '*') continue;
+      // AUTHORS lists one person in every section they belong to (developer and translator, say),
+      // while the splash flattens the sections into a single line: keep each name once.
+      if(g_ptr_array_find_with_equal_func(splash->authors, trim, g_str_equal, NULL)) continue;
       g_ptr_array_add(splash->authors, g_strdup(trim));
     }
     g_strfreev(lines);
