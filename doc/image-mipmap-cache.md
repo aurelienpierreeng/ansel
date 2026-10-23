@@ -116,6 +116,30 @@ dsc->height > 8` and nothing else, which caught the skull and missed the other t
   that with `flush_disk` FALSE the stale thumbnail was persisted; with `flush_disk` FALSE the flag
   is never set, and the write is the ordinary eviction write.
 
+**An entry still flagged `GENERATE` is absent to a `DT_MIPMAP_TESTLOCK` get as well.** Keeping it
+off the disk is not enough on its own: unless the embedded JPEG is used (the default for an unedited
+raw), `_init_8()` builds a size from the next larger one a `TESTLOCK` get finds, and that get handed
+back an aborted entry's buffer at the box's full dimensions. The smaller size was downsampled from
+nothing and became an ordinary thumbnail, shown and written to disk. A `TESTLOCK` get now releases
+such an entry and answers as if it were not there, which is also what the other caller, the
+darkroom's "is the cache ready for this size" test, means by it.
+
+*Measured 2026-10-23 against `2fadf8a366` plus #1495*, with a program linked against `libansel` that
+requests size 2 of one NEF with the shutdown atomic already raised, then size 1
+(`lighttable/embedded_jpg=0`, `--disable-opencl`, fresh `--configdir`, `--cachedir` and `--library`):
+
+- **`2fadf8a366`:** a `TESTLOCK` get of size 2 returns 1440×900 of zeros; size 1 is downsampled from
+  it ("generate mip size 1 for image 1 from mip size 2"), 720×450 and all zeros; both are written to
+  the disk cache, black.
+- **With the eviction write fixed only:** size 2 is withheld ("never generated"), and the black size
+  1 is still written.
+- **With the `TESTLOCK` change too:** the get returns no buffer, size 1 is rendered from scratch
+  (300×450, mean byte value 127) and that is what is written.
+
+The buffer read as zeros here, a fresh allocation; nothing guarantees that in a long session. With
+`ansel-generate-cache` and `lighttable/embedded_jpg=0` (one size rendered from scratch, two
+downsampled from a larger one), the three files are bit-identical with and without the change.
+
 **`g_unlink()` must come after `fclose()`, in both halves.** On Windows `DeleteFileW` refuses a file
 that any handle still holds open without `FILE_SHARE_DELETE`, which the CRT's `fopen` never sets. The
 read path unlinked a file it had judged corrupt while its own read handle was open, and the write
