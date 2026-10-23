@@ -4,6 +4,8 @@
     Copyright (C) 2017 Tobias Ellinghaus.
     Copyright (C) 2020 Pascal Obry.
     Copyright (C) 2022 Martin Bařinka.
+    Copyright (C) 2026 Aurélien PIERRE.
+    Copyright (C) 2026 Guillaume Stutin.
     
     darktable is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -50,44 +52,37 @@
 
 #include "statvfs.h"
 
+/* GetDiskFreeSpaceExW takes any directory, where GetDiskFreeSpaceW needs a drive root, which cannot
+ * be built for a UNC share or a drive mounted as a folder. Its counts are in bytes, so they are
+ * reported with f_frsize == 1: f_frsize * f_bavail is exact, and the cluster geometry is not known.
+ * Returns 0 on success and -1 on failure, like POSIX.
+ */
 int statvfs(const char *path, struct statvfs *buf)
 {
-  BOOL res;
+  if(IS_NULL_PTR(path) || IS_NULL_PTR(buf)) return -1;
 
-  DWORD lpSectorsPerCluster = 0;
-  DWORD lpBytesPerSector = 0;
-  DWORD lpNumberOfFreeClusters = 0;
-  DWORD lpTotalNumberOfClusters = 0;
-  char szDrive[4];
+  memset(buf, 0, sizeof(*buf));
+  buf->f_namemax = 250;
 
-  szDrive[0] = path[0];
-  szDrive[1] = ':';
-  szDrive[2] = '\\';
-  szDrive[3] = '\0';
+  wchar_t *wpath = g_utf8_to_utf16(path, -1, NULL, NULL, NULL);
+  if(IS_NULL_PTR(wpath)) return -1;
 
-  wchar_t *wszDrive = g_utf8_to_utf16(szDrive, -1, NULL, NULL, NULL);
+  ULARGE_INTEGER free_to_caller = { 0 };
+  ULARGE_INTEGER total_bytes = { 0 };
+  ULARGE_INTEGER total_free = { 0 };
+  const BOOL res = GetDiskFreeSpaceExW(wpath, &free_to_caller, &total_bytes, &total_free);
 
-  res = GetDiskFreeSpaceW(wszDrive, &lpSectorsPerCluster, &lpBytesPerSector, &lpNumberOfFreeClusters,
-                         &lpTotalNumberOfClusters);
+  dt_free(wpath);
 
-  dt_free(wszDrive);
+  if(!res) return -1;
 
-  buf->f_bsize = lpBytesPerSector;                        /* file system block size */
-  buf->f_frsize = lpBytesPerSector * lpSectorsPerCluster; /* fragment size */
-  buf->f_blocks = lpTotalNumberOfClusters;                /* size of fs in f_frsize units */
-  buf->f_bfree = lpNumberOfFreeClusters;                  /* # free blocks */
-  buf->f_bavail = lpNumberOfFreeClusters;                 /* # free blocks for unprivileged users */
-  buf->f_files = 0;                                       /* # inodes */
-  buf->f_ffree = 0;                                       /* # free inodes */
-  buf->f_favail = 0;                                      /* # free inodes for unprivileged users */
-  buf->f_fsid = lpNumberOfFreeClusters & 0xffff;          /* file system ID */
-  buf->f_flag = 0;                                        /* mount flags */
-  buf->f_namemax = 250;                                   /* maximum filename length */
+  buf->f_bsize = 1;                                  /* file system block size */
+  buf->f_frsize = 1;                                 /* fragment size: bytes, see above */
+  buf->f_blocks = (fsblkcnt_t)total_bytes.QuadPart;  /* size of fs in f_frsize units */
+  buf->f_bfree = (fsblkcnt_t)total_free.QuadPart;    /* # free blocks */
+  buf->f_bavail = (fsblkcnt_t)free_to_caller.QuadPart; /* # free blocks for unprivileged users */
 
-  if(res != 0)
-    return 0;
-  else
-    return 1;
+  return 0;
 }
 
 // clang-format off
