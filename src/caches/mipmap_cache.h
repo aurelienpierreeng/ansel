@@ -122,7 +122,9 @@ typedef struct dt_mipmap_cache_settings_t
  * @details Every field takes effect immediately, including ::max_memory -- the LRU quota is
  * soft, so lowering it makes the next insertions evict harder rather than freeing anything
  * synchronously. Call it whenever the user changes one of the four; the application does that
- * from its DT_SIGNAL_PREFERENCES_CHANGE handler.
+ * from its DT_SIGNAL_PREFERENCES_CHANGE handler, and the thumbnail menu of the lighttable
+ * (`gui/actions/display.c`) for ::embedded_jpg, which it changes without that signal. Writing
+ * the conf key alone changes nothing: the cache keeps rendering in the mode it was told.
  *
  * @param settings the new values. NULL is a no-op.
  */
