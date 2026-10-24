@@ -126,6 +126,28 @@ path answers with an 8x8 husk, and no later render replaces it. **Only a develop
 this**: an unaltered one is drawn from the embedded JPEG and never asks for the input at all,
 which is why the symptom reads as "one broken thumbnail" rather than as a cache bug.
 
+## The embedded-JPEG mode is what the cache was told, not what conf says
+
+> **Established 2026-10-24 against `2fadf8a366`.**
+
+The cache never reads `lighttable/embedded_jpg`. `_init_8()` decides between the embedded JPEG and
+the raw from `dt_mipmap_cache_settings_t.embedded_jpg`, which `dt_mipmap_cache_set_settings()`
+sets at startup and on `DT_SIGNAL_PREFERENCES_CHANGE`. The lighttable's thumbnail menu
+(`_jpg_combobox_changed()`, `gui/actions/display.c`) changes the mode without that signal, so it
+tells the cache itself, and does so **before** it purges: a thumbnail regenerated between the
+purge and the change would be rendered in the old mode and cached.
+
+The purge drops the thumbnails on disk too (`flush_disk = TRUE`). A file in the disk cache does
+not record which mode rendered it, and the disk read in the get path takes it as it is.
+
+Measured with `-d cache` on a copy of a 51-image collection, switching from "Always process the
+RAW" to "Always use embedded JPG". When the menu wrote only the conf key, the purged thumbnails
+were rendered again from the raw (`fetch … float32 … from original file I/O`, none
+`from embedded jpeg`), for more than four minutes, one pipe at a time. With the cache told, 21
+came from the embedded JPEG, one image with none became a skull
+(`embedded JPEG mode forbids raw processing`), no raw was decoded, and all were done 1.1 s after
+the purge.
+
 ## The darkroom copies a frame into the thumbnail only when it carries no overlay
 
 *Found `ea59057346`, 2026-10-07.*
