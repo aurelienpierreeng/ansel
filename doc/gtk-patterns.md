@@ -345,4 +345,41 @@ Measured: left in place, the entry's handler received Return on a highlighted su
 raw typed text, `subjects|animals, pla`; reconnected, the completion took that Return, and the
 entry's handler saw only the next one, once the popup had closed.
 
+## On Windows, every GtkImage drawn holds two GDI objects
+
+*Found `2fadf8a366`, 2026-10-24, GTK 3.24.52 (MSYS2 UCRT64).*
+
+A Windows process may hold 10,000 GDI objects by default. Past that, `CreateDIBSection()` and
+`CreateCompatibleDC()` fail, GTK prints `infinite surface size not supported` and `drawing
+failure for widget …: out of memory`, nothing is drawn any more, and the process soon crashes.
+Whatever GTK widget a list repeats per row is multiplied by the row count against that limit, and
+the only widget in the common set that costs anything is the image.
+
+Measured with a standalone program showing 3000 rows of one widget in a `GtkListBox` inside a
+`GtkScrolledWindow`, the GDI count read with `GetGuiResources(GR_GDIOBJECTS)` 1.5 s after
+`gtk_widget_show_all()`, with the same `libgtk-3-0.dll` Ansel ships. An empty window holds 32
+objects.
+
+| widget per row | GDI objects, 3000 rows |
+|---|---|
+| `GtkLabel`: plain, markup, `<a>` link, selectable | 37 |
+| `GtkRevealer`, `GtkButton`, `GtkToggleButton` with no child | 37–39 |
+| `GtkToggleButton` with a text label (`"▸"`) | 37 |
+| `GtkExpander` | 37 |
+| `GtkImage` from an icon name, bare or in a `GtkEventBox` | **6037** |
+
+So 2 objects per image. A `gdb` session logging every GDI creation call during the event
+supervisor's growth put `CreateCompatibleDC()` (5861 calls) and `CreateDIBSection()` (5380)
+first, both called from `libgdk-3-0.dll` under a GTK signal emission: each image keeps a
+surface backed by a DC and a DIB section. On X11 and Wayland the same surface is plain memory,
+which is why this limit shows only on Windows.
+
+The event supervisor (`gui/actions/supervisor_window.c`) gave each event row an expander arrow
+drawn as a `pan-end-symbolic` image. Its timeline keeps up to 5000 rows (4000 plus the slack
+before a trim), and the Grouped view one more row per event: with the window open on a live
+session, Ansel's count went from 40 to 8164, and one session crashed past the limit. The arrow
+is now the toggle button's text, which costs none. A list that repeats a widget per row on
+Windows shows its icons as text, or draws them in a `draw` handler, never as one `GtkImage` per
+row.
+
 ---
