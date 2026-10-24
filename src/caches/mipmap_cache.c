@@ -752,11 +752,12 @@ void dt_mipmap_cache_deallocate_dynamic(void *data, dt_cache_entry_t *entry)
     // don't write skulls:
     if(dsc->width > 8 && dsc->height > 8)
     {
+      // An invalidated thumbnail is stale: writing it back would undo the unlink.
       if(dsc->flags & DT_MIPMAP_BUFFER_DSC_FLAG_INVALIDATE)
       {
         dt_mipmap_cache_unlink_ondisk_thumbnail(data, get_imgid(entry->key), mip);
       }
-      if(cache->cachedir[0] && write_to_disk && mip < DT_MIPMAP_F)
+      else if(cache->cachedir[0] && write_to_disk && mip < DT_MIPMAP_F)
       {
         // serialize to disk
         gchar cache_path[DT_PATH_MAX];

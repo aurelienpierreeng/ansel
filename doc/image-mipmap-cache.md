@@ -126,6 +126,16 @@ path answers with an 8x8 husk, and no later render replaces it. **Only a develop
 this**: an unaltered one is drawn from the embedded JPEG and never asks for the input at all,
 which is why the symptom reads as "one broken thumbnail" rather than as a cache bug.
 
+**A thumbnail removed with `flush_disk` is not written back.** *(Established 2026-10-24 against
+`2fadf8a366`.)* `dt_mipmap_cache_remove_at_size()` marks the entry
+`DT_MIPMAP_BUFFER_DSC_FLAG_INVALIDATE` before `dt_cache_remove()`, and the cleanup it runs
+(`dt_mipmap_cache_deallocate_dynamic()`) unlinks that entry's file and stops there. Only an entry
+evicted without the flag is encoded to the disk cache. The cleanup runs on the thread that calls
+the removal, with the thumbnail cache's lock held, so an encode there would hold up every
+thumbnail get. Measured with `-d cache` on a purge of 51 images driven from gdb, 6 of them
+cached at 600×899 to 1350×900: each encode-then-unlink took 4 to 8 ms; without it, no file is
+written during the purge, and a clean quit still writes all 6.
+
 ## The darkroom copies a frame into the thumbnail only when it carries no overlay
 
 *Found `ea59057346`, 2026-10-07.*
