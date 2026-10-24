@@ -3,6 +3,7 @@
     Copyright (C) 2023, 2025 Alynx Zhou.
     Copyright (C) 2023, 2025-2026 Aurélien PIERRE.
     Copyright (C) 2023 Luca Zulberti.
+    Copyright (C) 2026 Guillaume Stutin.
     
     Ansel is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -433,10 +434,17 @@ static gboolean _jpg_combobox_changed(GtkAccelGroup *group, GObject *acceleratab
   const int mode = GPOINTER_TO_INT(get_custom_data(GTK_WIDGET(user_data)));
   if(mode != dt_conf_get_int("lighttable/embedded_jpg"))
   {
-    GList *imgs = dt_collection_get_all(dt_collection_get_global(), -1);
+    // Change the mode, and tell the thumbnail cache, which does not read conf: until told, it renders
+    // in the old mode. Before the purge, so a thumbnail regenerated in between already uses the new one.
+    dt_conf_set_int("lighttable/embedded_jpg", mode);
+    dt_mipmap_cache_settings_t settings;
+    dt_mipmap_cache_get_settings(&settings);
+    settings.embedded_jpg = mode;
+    dt_mipmap_cache_set_settings(&settings);
 
-    // Empty the mipmap cache for the current collection, but only on RAM
-    // Don't delete disk cache, but RAM cache may be flushed to disk if user param sets it.
+    // Drop the current collection's thumbnails, on disk too: a file in the disk cache does not say
+    // which mode rendered it, and would be read back as it is.
+    GList *imgs = dt_collection_get_all(dt_collection_get_global(), -1);
     for(GList *img = g_list_first(imgs); img; img = g_list_next(img))
     {
       const int32_t imgid = GPOINTER_TO_INT(img->data);
@@ -444,9 +452,6 @@ static gboolean _jpg_combobox_changed(GtkAccelGroup *group, GObject *acceleratab
     }
     g_list_free(imgs);
     imgs = NULL;
-
-    // Change the mode
-    dt_conf_set_int("lighttable/embedded_jpg", mode);
 
     // Redraw thumbnails
     dt_thumbtable_refresh_thumbnail(dt_gui_get_ui()->thumbtable_lighttable, UNKNOWN_IMAGE, TRUE);
