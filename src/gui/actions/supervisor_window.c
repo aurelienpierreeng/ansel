@@ -221,7 +221,6 @@ static void _on_toggle(GtkToggleButton *t, gpointer u)
 {
   const gboolean a = gtk_toggle_button_get_active(t);
   GtkWidget *rev = (GtkWidget *)g_object_get_data(G_OBJECT(t), "revealer");
-  GtkWidget *arrow = (GtkWidget *)g_object_get_data(G_OBJECT(t), "arrow");
 
   // Lazily build an event's detail body the first time it is expanded, so the
   // JSON is not parsed for rows the user never opens (important under streaming).
@@ -236,25 +235,23 @@ static void _on_toggle(GtkToggleButton *t, gpointer u)
     }
   }
   if(rev) gtk_revealer_set_reveal_child(GTK_REVEALER(rev), a);
-  if(arrow)
-    gtk_image_set_from_icon_name(GTK_IMAGE(arrow), a ? "pan-down-symbolic" : "pan-end-symbolic",
-                                 GTK_ICON_SIZE_BUTTON);
+  gtk_button_set_label(GTK_BUTTON(t), a ? "▾" : "▸");
 }
 
 // A collapsible block: [arrow toggle][header label] + a revealer holding `body`.
 // The header is a separate label (NOT the toggle), so its hash links stay
 // clickable. Returns a vbox; the toggle button is stored as data "toggle".
+// The arrow is the button's text, not an icon: on Windows, every GtkImage drawn keeps a DC and a
+// DIB section, and with one arrow per event row that ran Ansel out of GDI objects (see
+// doc/gtk-patterns.md). A label costs none.
 static GtkWidget *_collapsible(const char *header_markup, GtkWidget *body, const gboolean expanded)
 {
   GtkWidget *vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
   GtkWidget *hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 4);
 
-  GtkWidget *toggle = gtk_toggle_button_new();
+  GtkWidget *toggle = gtk_toggle_button_new_with_label(expanded ? "▾" : "▸");
   gtk_button_set_relief(GTK_BUTTON(toggle), GTK_RELIEF_NONE);
   gtk_widget_set_focus_on_click(toggle, FALSE);
-  GtkWidget *arrow = gtk_image_new_from_icon_name(expanded ? "pan-down-symbolic" : "pan-end-symbolic",
-                                                  GTK_ICON_SIZE_BUTTON);
-  gtk_container_add(GTK_CONTAINER(toggle), arrow);
 
   GtkWidget *header = gtk_label_new(NULL);
   gtk_label_set_markup(GTK_LABEL(header), header_markup);
@@ -266,7 +263,6 @@ static GtkWidget *_collapsible(const char *header_markup, GtkWidget *body, const
   if(body) gtk_container_add(GTK_CONTAINER(revealer), body);
 
   g_object_set_data(G_OBJECT(toggle), "revealer", revealer);
-  g_object_set_data(G_OBJECT(toggle), "arrow", arrow);
   gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(toggle), expanded);
   g_signal_connect(toggle, "toggled", G_CALLBACK(_on_toggle), NULL);
 
