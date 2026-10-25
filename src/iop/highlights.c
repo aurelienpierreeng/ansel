@@ -33,7 +33,7 @@
    Copyright (C) 2022 Philipp Lutz.
    Copyright (C) 2022 Victor Forsiuk.
    Copyright (C) 2023 Alynx Zhou.
-   Copyright (C) 2023 Guillaume Stutin.
+   Copyright (C) 2023, 2026 Guillaume Stutin.
    Copyright (C) 2023 Luca Zulberti.
 
    darktable is free software: you can redistribute it and/or modify
@@ -584,8 +584,8 @@ void tiling_callback(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe
   if((d->mode == DT_IOP_HIGHLIGHTS_LAPLACIAN || d->mode == DT_IOP_HIGHLIGHTS_HARMONIC) && filters)
   {
     // Mosaic CFA and guided laplacian method: prepare for wavelets decomposition.
-    // Harmonic transposition reuses the same conservative budget (it disables tiling in
-    // commit_params and allocates region buffers well under this envelope).
+    // Harmonic transposition reuses this budget (it disables tiling in commit_params), but its
+    // OpenCL middle was measured at 2.8x factor_cl or more: see doc/highlights-reconstruction.md.
     const float scale = DS_FACTOR * dt_dev_get_module_scale(pipe, roi_in);
     const float final_radius = (float)((int)(1 << d->scales)) / scale;
     const int scales = CLAMP((int)ceilf(log2f(final_radius)), 1, MAX_NUM_SCALES);
