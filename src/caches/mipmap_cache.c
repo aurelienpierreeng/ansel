@@ -185,7 +185,8 @@ typedef enum dt_mipmap_buffer_dsc_flags
 {
   DT_MIPMAP_BUFFER_DSC_FLAG_NONE = 0,
   DT_MIPMAP_BUFFER_DSC_FLAG_GENERATE = 1 << 0,
-  DT_MIPMAP_BUFFER_DSC_FLAG_INVALIDATE = 1 << 1
+  DT_MIPMAP_BUFFER_DSC_FLAG_INVALIDATE = 1 << 1,
+  DT_MIPMAP_BUFFER_DSC_FLAG_ON_DISK = 1 << 2 // the pixels are those of the disk-cache file, as read
 } dt_mipmap_buffer_dsc_flags;
 
 // the embedded Exif data to tag thumbnails as sRGB or AdobeRGB
@@ -681,7 +682,7 @@ void dt_mipmap_cache_allocate_dynamic(void *data, dt_cache_entry_t *entry)
     dsc->height = jpg.height;
     dsc->iscale = 1.0f;
     dsc->color_space = color_space;
-    dsc->flags = 0;
+    dsc->flags = DT_MIPMAP_BUFFER_DSC_FLAG_ON_DISK;
 
     _cache_print(DT_DEBUG_CACHE, "[mipmap_cache] image %d at mip size %d (%ix%i) loaded from disk cache\n",
               imgid, mip, jpg.width, jpg.height);
@@ -808,6 +809,11 @@ void dt_mipmap_cache_deallocate_dynamic(void *data, dt_cache_entry_t *entry)
       // The pixels no longer describe the image: the file goes, and nothing may replace it.
       dt_mipmap_cache_unlink_ondisk_thumbnail(data, imgid, mip);
     }
+    // Not an entry read from its file and unchanged since: writing it would only re-encode it, at a loss.
+    else if(dsc->flags & DT_MIPMAP_BUFFER_DSC_FLAG_ON_DISK)
+      _cache_print(DT_DEBUG_CACHE,
+                   "[mipmap_cache] image %" PRId32 " at mip size %d is not written to the disk cache: read from it\n",
+                   imgid, mip);
     // Neither a render that never ran (GENERATE, over an uninitialised buffer) nor a skull (8x8).
     else if(!(dsc->flags & DT_MIPMAP_BUFFER_DSC_FLAG_GENERATE) && dsc->width > 8 && dsc->height > 8)
     {
@@ -1346,7 +1352,8 @@ void dt_mipmap_cache_swap_at_size(const int32_t imgid, const dt_mipmap_size_t mi
 
     dsc->color_space = DT_COLORSPACE_ADOBERGB;
     dsc->status = DT_IMAGEIO_OK;
-    dsc->flags &= ~DT_MIPMAP_BUFFER_DSC_FLAG_GENERATE;
+    // New pixels: the file, if there is one, no longer holds them.
+    dsc->flags &= ~(DT_MIPMAP_BUFFER_DSC_FLAG_GENERATE | DT_MIPMAP_BUFFER_DSC_FLAG_ON_DISK);
     dt_cache_release(&_get_cache(cache, mip)->cache, entry);
   }
 }
