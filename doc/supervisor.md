@@ -82,14 +82,23 @@ lines are already linked; `jq` is for filtering/shaping, not joining.
 ## GUI: the event supervisor window
 
 *Help → Event supervisor…* opens a browsable view of the in-memory event log
-(`src/gui/actions/supervisor_window.c`), laid out as a `GtkNotebook` (Timeline /
-Grouped / Memory / Search) with a global toolbar (Record, Refresh, Clear, Group
+(`src/gui/actions/supervisor_window.c`), laid out as a `GtkNotebook` (Memory /
+Timeline / Grouped / Search) with a global toolbar (Record, Refresh, Clear, Group
 by, event count, and a **search entry**). It does not need the `-d supervisor`
 flag: a **Record** check button toggles runtime capture
 (`dt_supervisor_set_recording`). Capture is **on while the window is open** and
 stops when it closes — so events are recorded live from when you open it (do the
 actions you want to trace with the window open; e.g. open it, then edit in
 darkroom to see history/node/cacheline/backbuf/widget events stream in).
+Unticking **Record** is kept, so the next window opens with capture off. The
+page shown, the *Group by* key and the Record box are kept in the conf as the user
+changes them -- `ui/supervisor/page` (by name: `memory`, `timeline`, `grouped`,
+`search`, so that it survives a change in the order of the tabs),
+`ui/supervisor/group_by`, `ui/supervisor/record` -- and restored when the window
+opens; with nothing stored, the Memory page, grouped by domain, recording. The
+page is selected before the notebook's `switch-page` handler is connected:
+appending the first page makes it current, which would otherwise be written over
+the stored page.
 The window opens where it was left and as large: its geometry is written to
 `ui/supervisor/window_{x,y,width,height}` on every `configure-event` -- not on
 close, since Ansel can quit with the window open -- except while it is maximized
@@ -211,7 +220,9 @@ its own position nor the right to set it, the size only (as the masks panel,
   clicking jumps to that object's event in the timeline (a pipeline item to its
   cacheline `create`, a mipmap item to its `mipmap` object event — whose detail
   shows the `dt_image_t` properties — via the synthetic `(imgid, mip)` key).
-  Every section has a title on a `GtkExpander`, open by default, with its bar and
+  Every section has a title on a `GtkExpander` -- a top section
+  (**RAM**, each **vRAM** device) open by default, a section under one folded --
+  with its bar and
   legend under it, which stay when it is folded: it folds only its list and its
   subsections. The expander holds the title alone and no child -- the bar and
   legend are packed after it in the section's box -- because given a box of title,
