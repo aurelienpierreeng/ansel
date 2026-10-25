@@ -15,6 +15,7 @@
     Copyright (C) 2022, 2025 Aurélien PIERRE.
     Copyright (C) 2022 Martin Bařinka.
     Copyright (C) 2025 Alynx Zhou.
+    Copyright (C) 2026 Guillaume Stutin.
     
     darktable is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -134,12 +135,15 @@ int dt_imageio_export(const int32_t imgid, const char *filename, struct dt_image
  * applied or the pixelpipe could not be set up or produced no output, DT_IMAGEIO_ABORTED when the
  * pixelpipe was stopped, DT_IMAGEIO_CACHE_FULL when the pixelpipe cache refused the run memory or
  * the output buffer could not be allocated, DT_IMAGEIO_IOERROR when the format failed to write it.
+ *
+ * @param ignore_history render the input image as no edit has touched it -- history end 0, so
+ * every module with its default params and enabled state -- instead of the image's history.
  */
 dt_imageio_retval_t dt_imageio_export_with_flags(const int32_t imgid, const char *filename,
                                  struct dt_imageio_module_format_t *format,
                                  struct dt_imageio_module_data_t *format_params, const gboolean ignore_exif,
                                  const gboolean display_byteorder, const gboolean high_quality, const double scale_factor,
-                                 const gboolean thumbnail_export, const char *filter, const gboolean copy_metadata,
+                                 const gboolean thumbnail_export, const gboolean ignore_history, const char *filter, const gboolean copy_metadata,
                                  const gboolean export_masks, dt_colorspaces_color_profile_type_t icc_type,
                                  const gchar *icc_filename, dt_iop_color_intent_t icc_intent,
                                  dt_imageio_module_storage_t *storage, dt_imageio_module_data_t *storage_params,

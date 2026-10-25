@@ -60,7 +60,7 @@
     Copyright (C) 2022 Victor Forsiuk.
     Copyright (C) 2023-2024 Alynx Zhou.
     Copyright (C) 2023 Ricky Moon.
-    Copyright (C) 2024-2025 Guillaume Stutin.
+    Copyright (C) 2024-2026 Guillaume Stutin.
     Copyright (C) 2024 Miguel Moquillon.
     
     darktable is free software: you can redistribute it and/or modify
@@ -568,7 +568,7 @@ static int32_t dt_control_merge_hdr_job_run(dt_job_t *job)
 
     // the merge reads the images at full size: the export module's size settings are not its own
     dt_imageio_export_with_flags(imgid, "unused", &buf, (dt_imageio_module_data_t *)&dat, TRUE, FALSE, FALSE, 0.0,
-                                 FALSE, "pre:rawprepare", FALSE, FALSE, DT_COLORSPACE_NONE, NULL, DT_INTENT_LAST, NULL,
+                                 FALSE, FALSE, "pre:rawprepare", FALSE, FALSE, DT_COLORSPACE_NONE, NULL, DT_INTENT_LAST, NULL,
                                  NULL, num, total, NULL, NULL);
 
     t = g_list_next(t);

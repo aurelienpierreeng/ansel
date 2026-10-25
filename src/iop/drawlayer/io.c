@@ -1,6 +1,7 @@
 /*
     This file is part of the Ansel project.
     Copyright (C) 2026 Aurélien PIERRE.
+    Copyright (C) 2026 Guillaume Stutin.
 
     Ansel is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -192,7 +193,7 @@ static gboolean _export_pre_module_fullres_to_tiff(const int32_t imgid, const ch
   }
 
   const int rc = dt_imageio_export_with_flags(
-      imgid, path, format, format_params, TRUE, FALSE, TRUE, FALSE, FALSE, (filter && filter[0]) ? filter : NULL,
+      imgid, path, format, format_params, TRUE, FALSE, TRUE, FALSE, FALSE, FALSE, (filter && filter[0]) ? filter : NULL,
       FALSE, FALSE, DT_COLORSPACE_NONE, NULL, DT_INTENT_PERCEPTUAL, NULL, NULL, 0, 0, NULL, NULL);
 
   format->free_params(format, format_params);

@@ -416,6 +416,21 @@ Two windows remain, of the same kind and present before: a change between the se
 end of `_generate_blocking()`, a few microseconds, and an entry a reader holds read-locked while
 the purge passes, which any purge skips.
 
+### An RGB file in an embedded mode shows the image before any edit
+
+> **Established 2026-10-25 against `831833157f` with `ignore_history` added on top.**
+
+What an embedded preview shows of a raw is the camera's picture, before any edit. A PNG, a TIFF or
+another RGB file usually has no embedded preview, and in an embedded mode (1 or 2) `_init_8()` then
+renders it through the pipe with `ignore_history` set in `dt_imageio_export_with_flags()`: the
+history end is set to 0 after the history is read, so every node gets its module's default params
+and enabled state -- the same picture an embedded preview would be. A raw (`may_be_raw`) is never
+rendered this way: its defaults include the auto-applied presets a raw needs to look like a photo.
+
+Measured with `ansel-generate-cache` at mip 2 in mode 2, on a 640x427 gradient PNG given a
+29-item history (exposure, filmic, crop, flip): the thumbnail's mean went from 0.809 -- the
+same as in mode 0, which renders the edits -- to 0.514, against 0.499 for the source file.
+
 ## The darkroom copies a frame into the thumbnail only when it carries no overlay
 
 *Found `ea59057346`, 2026-10-07.*

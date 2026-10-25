@@ -105,6 +105,7 @@
 #include "control/user_message.h"
 #include "develop/develop.h"
 #include "develop/imageop.h"
+#include "develop/dev_history.h"
 
 
 #include <assert.h>
@@ -618,7 +619,7 @@ int dt_imageio_export(const int32_t imgid, const char *filename, dt_imageio_modu
   else
   {
     return dt_imageio_export_with_flags(imgid, filename, format, format_params, FALSE, FALSE, TRUE, scale_factor,
-                                        FALSE, NULL, copy_metadata, export_masks, icc_type, icc_filename, icc_intent,
+                                        FALSE, FALSE, NULL, copy_metadata, export_masks, icc_type, icc_filename, icc_intent,
                                         storage, storage_params, num, total, metadata, NULL);
   }
 }
@@ -850,7 +851,8 @@ dt_imageio_retval_t dt_imageio_export_with_flags(const int32_t imgid, const char
                                  dt_imageio_module_format_t *format, dt_imageio_module_data_t *format_params,
                                  const gboolean ignore_exif, const gboolean display_byteorder,
                                  const gboolean high_quality, const double scale_factor, const gboolean thumbnail_export,
-                                 const char *filter, const gboolean copy_metadata, const gboolean export_masks,
+                                 const gboolean ignore_history, const char *filter, const gboolean copy_metadata,
+                                 const gboolean export_masks,
                                  dt_colorspaces_color_profile_type_t icc_type, const gchar *icc_filename,
                                  dt_iop_color_intent_t icc_intent, dt_imageio_module_storage_t *storage,
                                  dt_imageio_module_data_t *storage_params, int num, int total,
@@ -869,6 +871,15 @@ dt_imageio_retval_t dt_imageio_export_with_flags(const int32_t imgid, const char
   dt_dev_init(&dev, 0);
   dt_dev_load_image(&dev, imgid);
   dt_ioppr_resync_modules_order(&dev);
+
+  // The pipe syncs its nodes from the history up to history_end only, so at 0 every node gets
+  // its module's defaults. The history read above stays, and with it the module instances.
+  if(ignore_history)
+  {
+    dt_pthread_rwlock_wrlock(&dev.history_mutex);
+    dt_dev_set_history_end_ext(&dev, 0);
+    dt_pthread_rwlock_unlock(&dev.history_mutex);
+  }
 
   // Get a pipeline, aka sequence of nodes. It is initialised before the first `goto error`, since
   // the error path cleans it up: a cleanup run on what the stack held there walks and frees

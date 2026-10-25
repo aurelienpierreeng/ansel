@@ -1853,6 +1853,10 @@ static dt_imageio_retval_t _init_8(struct dt_mipmap_buffer_dsc *dsc, const int32
     return DT_IMAGEIO_NO_EMBEDDED_THUMBNAIL;
   }
 
+  // What an embedded preview shows of a raw is the picture before any edit. An RGB file that has
+  // none shows the same, so the embedded modes render it without its history.
+  const gboolean ignore_history = use_embedded_jpg && !may_be_raw;
+
   // try the real thing: rawspeed + pixelpipe
   dt_imageio_module_format_t format;
   _dummy_data_t dat;
@@ -1866,7 +1870,8 @@ static dt_imageio_retval_t _init_8(struct dt_mipmap_buffer_dsc *dsc, const int32
   // no upscaling and signal we want thumbnail export
   const dt_imageio_retval_t status
       = dt_imageio_export_with_flags(imgid, "unused", &format, (dt_imageio_module_data_t *)&dat, TRUE, FALSE,
-                                     FALSE, FALSE, TRUE, NULL, FALSE, FALSE, DT_COLORSPACE_ADOBERGB, NULL,
+                                     FALSE, FALSE, TRUE, ignore_history, NULL, FALSE, FALSE,
+                                     DT_COLORSPACE_ADOBERGB, NULL,
                                      DT_INTENT_LAST, NULL, NULL, 1, 1, NULL, shutdown);
   if(status != DT_IMAGEIO_OK)
   {
@@ -1879,7 +1884,8 @@ static dt_imageio_retval_t _init_8(struct dt_mipmap_buffer_dsc *dsc, const int32
     return status;
   }
 
-  _cache_print(DT_DEBUG_CACHE, "[mipmap_cache] generated mip %d for image %d from scratch\n", size, imgid);
+  _cache_print(DT_DEBUG_CACHE, "[mipmap_cache] generated mip %d for image %d from scratch%s\n", size, imgid,
+               ignore_history ? ", without its history" : "");
   // might be smaller, or have a different aspect than what we got as input.
   dsc->width = dat.head.width;
   dsc->height = dat.head.height;
