@@ -1,6 +1,7 @@
 /*
    This file is part of Ansel,
    Copyright (C) 2026 Aurélien PIERRE.
+   Copyright (C) 2026 Guillaume Stutin.
 
    Ansel is free software: you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -398,6 +399,12 @@ typedef struct
 // one readback, one upload + unpack kernel), so the traffic is 9*rn floats down, 4*rn up.
 // Threshold overridable via HL_CL_CPU_PX for tuning.
 #define DT_HL_CL_CPU_REGION_PX (1u << 20)
+
+// Device working set of one region on the device path (_region_guided_filter_cl), in floats per pixel
+// of its padded window. Measured 256.4 to 257.2 bytes per pixel on windows of 2.8 to 16.5 Mpx
+// (doc/highlights-reconstruction.md), so it is linear in the window. A window that does not fit what
+// the device has left takes the CPU offload, which needs 9 floats per pixel on the device.
+#define DT_HL_CL_REGION_FLOATS_PER_PX 65.f
 
 #define DT_HL_KNEE_LO 0.80f      // trust threshold: values below are assumed strictly linear
 #define DT_HL_KNEE_DET 0.995f    // clip-detection threshold in clip units
