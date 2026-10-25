@@ -201,6 +201,38 @@ byte-identical; a thumbnail truncated to 0 bytes is reported ("Reason: empty fil
 rewritten identically; and the three files are bit-identical (sha256) to the ones a build of
 `src/caches/mipmap_cache.c` from `2fadf8a366` writes for the same image.
 
+## A thumbnail read from the disk cache is not written back
+
+> **Established 2026-10-24 against `2fadf8a366`.**
+
+`dt_mipmap_cache_deallocate_dynamic()` writes a thumbnail to the disk cache on LRU eviction and, for
+everything still resident, from `dt_cache_cleanup()` at exit. The read path used to leave no trace
+on the entry (`flags = 0`), so that write could not tell a thumbnail read from its file from a fresh
+render, and re-encoded it at every session, at `database_cache_quality` (89 by default). The comment
+above the write said "Don't write existing files as both performance and quality (lossy jpg)
+suffer", and the FIXME under it that it did anyway.
+
+The entry now carries `DT_MIPMAP_BUFFER_DSC_FLAG_ON_DISK` from the read until new pixels are written
+into it, and the write is skipped while it does. Only `dt_mipmap_cache_swap_at_size()`, the
+darkroom's copy, writes new pixels into an entry read from disk, and it clears the flag; generation
+runs only on an entry flagged `GENERATE`, which a read never leaves, and
+`dt_mipmap_cache_write_get()` has no caller. A file deleted from outside behind a resident entry so
+flagged is not written again at eviction; the next session renders it.
+
+*Measured 2026-10-23 and 2026-10-24*, with a program linked against `libansel` that asks sizes 0 to
+2 of one NEF and quits, run in a loop on one cache (`lighttable/embedded_jpg=0`,
+`--disable-opencl`, fresh `--configdir`, `--cachedir` and `--library`):
+
+- **Before the flag** (`2fadf8a366`, 30 sessions, and a branch writing the same bytes session for
+  session, 150 sessions): every session from the second on read the three files and wrote them
+  back. Sizes 0 and 1 reached a fixed point: the file stopped changing after session 8 and session
+  12, at 54.6 and 54.9 dB PSNR from the first file. Size 2 did not: one 8×8 block (x 352–359,
+  y 736–743 of 600×900) gained one level per session, 155 to 254, and stopped only once near white,
+  after about 100 sessions.
+- **With the flag** (`2fadf8a366` plus this change): the three files were byte-identical over 30
+  sessions, and the first one byte-identical to `2fadf8a366`'s; an entry read from disk and then
+  overwritten through `dt_mipmap_cache_swap_at_size()` was written back with the new pixels.
+
 ## Mipmap invalidation is explicit, not hash-driven
 
 *Found `22f623c0be`, 2026-06-25.*
