@@ -125,6 +125,8 @@ typedef struct dt_mipmap_cache_settings_t
  * from its DT_SIGNAL_PREFERENCES_CHANGE handler, and the thumbnail menu of the lighttable
  * (`gui/actions/display.c`) for ::embedded_jpg, which it changes without that signal. Writing
  * the conf key alone changes nothing: the cache keeps rendering in the mode it was told.
+ * A thumbnail still rendering in the previous ::embedded_jpg is not kept: its entry stays to
+ * be generated, and the next request renders it in the new mode.
  *
  * @param settings the new values. NULL is a no-op.
  */
