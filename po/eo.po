@@ -8187,6 +8187,14 @@ msgstr "kolora etikedo"
 msgid "Open in preview window…"
 msgstr ""
 
+#: ../src/dtgtk/thumbnail.c:322
+msgid "Open centered preview"
+msgstr "Malfermi centritan antaŭrigardon"
+
+#: ../src/dtgtk/thumbnail.c:323
+msgid "Open preview at saved position"
+msgstr "Malfermi antaŭrigardon ĉe konservita pozicio"
+
 #: ../src/dtgtk/thumbnail.c:340
 #, fuzzy
 msgid "Show active modules…"

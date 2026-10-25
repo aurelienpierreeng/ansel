@@ -8380,6 +8380,14 @@ msgstr "Assegna etichetta colore"
 msgid "Open in preview window…"
 msgstr "Apro in finestra anteprima..."
 
+#: ../src/dtgtk/thumbnail.c:322
+msgid "Open centered preview"
+msgstr "Apri anteprima centrata"
+
+#: ../src/dtgtk/thumbnail.c:323
+msgid "Open preview at saved position"
+msgstr "Apri anteprima nella posizione salvata"
+
 #: ../src/dtgtk/thumbnail.c:340
 msgid "Show active modules…"
 msgstr "Visualizza moduli attivi..."

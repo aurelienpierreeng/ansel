@@ -8276,6 +8276,14 @@ msgstr "kleur etiket"
 msgid "Open in preview window…"
 msgstr ""
 
+#: ../src/dtgtk/thumbnail.c:322
+msgid "Open centered preview"
+msgstr "Maak gesentreerde voorskou oop"
+
+#: ../src/dtgtk/thumbnail.c:323
+msgid "Open preview at saved position"
+msgstr "Maak voorskou op gestoorde posisie oop"
+
 #: ../src/dtgtk/thumbnail.c:340
 #, fuzzy
 msgid "Show active modules…"

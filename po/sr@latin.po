@@ -8370,6 +8370,14 @@ msgstr "oznaka u boji"
 msgid "Open in preview window…"
 msgstr ""
 
+#: ../src/dtgtk/thumbnail.c:322
+msgid "Open centered preview"
+msgstr "Otvori centrirani pregled"
+
+#: ../src/dtgtk/thumbnail.c:323
+msgid "Open preview at saved position"
+msgstr "Otvori pregled na sačuvanoj poziciji"
+
 #: ../src/dtgtk/thumbnail.c:340
 #, fuzzy
 msgid "Show active modules…"

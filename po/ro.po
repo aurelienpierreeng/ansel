@@ -8144,6 +8144,14 @@ msgstr ""
 msgid "Open in preview window…"
 msgstr ""
 
+#: ../src/dtgtk/thumbnail.c:322
+msgid "Open centered preview"
+msgstr "Deschide previzualizarea centrată"
+
+#: ../src/dtgtk/thumbnail.c:323
+msgid "Open preview at saved position"
+msgstr "Deschide previzualizarea în poziția salvată"
+
 #: ../src/dtgtk/thumbnail.c:340
 msgid "Show active modules…"
 msgstr ""

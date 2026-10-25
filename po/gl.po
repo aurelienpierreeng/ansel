@@ -8067,6 +8067,14 @@ msgstr ""
 msgid "Open in preview window…"
 msgstr ""
 
+#: ../src/dtgtk/thumbnail.c:322
+msgid "Open centered preview"
+msgstr "Abrir vista previa centrada"
+
+#: ../src/dtgtk/thumbnail.c:323
+msgid "Open preview at saved position"
+msgstr "Abrir vista previa na posición gardada"
+
 #: ../src/dtgtk/thumbnail.c:340
 msgid "Show active modules…"
 msgstr ""

@@ -8210,6 +8210,14 @@ msgstr "kolorowe etykiety"
 msgid "Open in preview window…"
 msgstr ""
 
+#: ../src/dtgtk/thumbnail.c:322
+msgid "Open centered preview"
+msgstr "Otwórz wyśrodkowany podgląd"
+
+#: ../src/dtgtk/thumbnail.c:323
+msgid "Open preview at saved position"
+msgstr "Otwórz podgląd w zapisanej pozycji"
+
 #: ../src/dtgtk/thumbnail.c:340
 #, fuzzy
 msgid "Show active modules…"

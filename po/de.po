@@ -8377,6 +8377,14 @@ msgstr "Farbmarkierungen zuweisen"
 msgid "Open in preview window…"
 msgstr "Im Vorschaufenster öffnen…"
 
+#: ../src/dtgtk/thumbnail.c:322
+msgid "Open centered preview"
+msgstr "Zentrierte Vorschau öffnen"
+
+#: ../src/dtgtk/thumbnail.c:323
+msgid "Open preview at saved position"
+msgstr "Vorschau an gespeicherter Position öffnen"
+
 #: ../src/dtgtk/thumbnail.c:340
 msgid "Show active modules…"
 msgstr "Aktive Module zeigen…"

@@ -8319,6 +8319,14 @@ msgstr "Attribuer des labels de couleur"
 msgid "Open in preview window…"
 msgstr "Ouvrir dans une nouvelle fenêtre..."
 
+#: ../src/dtgtk/thumbnail.c:322
+msgid "Open centered preview"
+msgstr "Ouvrir l’aperçu centré"
+
+#: ../src/dtgtk/thumbnail.c:323
+msgid "Open preview at saved position"
+msgstr "Ouvrir l’aperçu à la position enregistrée"
+
 #: ../src/dtgtk/thumbnail.c:340
 msgid "Show active modules…"
 msgstr "Afficher les modules actifs…"

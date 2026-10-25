@@ -19,6 +19,19 @@
 #ifndef DT_GUI_DTGTK_PREVIEW_WINDOW_H
 #define DT_GUI_DTGTK_PREVIEW_WINDOW_H
 
-void dt_preview_window_spawn(const int32_t imgid);
+#include <glib.h>
+#include <stdint.h>
+
+/**
+ * @brief Open an image preview using default or globally persisted geometry.
+ * @param imgid Image to display.
+ * @param restore_saved_geometry TRUE to restore the global preview layout.
+ */
+void dt_preview_window_spawn(const int32_t imgid, const gboolean restore_saved_geometry);
+
+/**
+ * @brief Raise open preview windows after lighttable interaction without activating them.
+ */
+void dt_preview_window_raise_all(void);
 
 #endif // DT_GUI_DTGTK_PREVIEW_WINDOW_H

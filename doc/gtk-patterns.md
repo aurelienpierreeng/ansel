@@ -239,6 +239,39 @@ The hint costs nothing for a panel shown and hidden repeatedly: GTK consults it 
 mapping only, so a window the user has dragged elsewhere keeps the place they gave it across
 later hide/show cycles.
 
+## Persist a floating window by monitor name, not monitor index
+
+*Added 2026-10-25 against `2fadf8a366`.*
+
+The image preview is a normal decorated, resizable toplevel, independent of the main
+window's transient stack so it can be switched behind Ansel from the taskbar. Preview
+commands are available from the thumbnail's right-click context menu, leaving all thumbnail
+selection gestures unchanged. The centered command always opens a fresh 420×420 preview over
+the lighttable and neither reads nor writes the saved layout. The saved-position command
+restores and updates the last globally saved layout; the two modes do not override each other.
+
+The global preview layout stores center position, dimensions, maximized state, and monitor
+name in `anselrc`. Geometry uses ratios of the monitor's usable work area, accounting for
+taskbars and other reserved edges when moving between displays. Older full-monitor ratios are
+converted when read. Monitor names use manufacturer/model text with spaces changed to
+underscores, never enumeration indices. Geometry changes from moving, resizing, or maximizing
+a preview update this global layout.
+
+Plug and unplug notifications are coalesced before moving windows. The preview retains its
+source monitor's ratios while disconnected and returns when that monitor is added again.
+Fallback placement does not overwrite the global saved geometry. Ratios, rather than pixel
+dimensions, preserve relative layout when display dimensions change. Centered previews share
+the lighttable center. Each preview has a distinct window-manager role and is a normal
+taskbar-visible window. Opening a preview presents it, then raises all open previews in
+creation order after the context menu closes. A lighttable thumbnail click schedules the
+same non-activating raise 150 ms after the click handler, allowing Ansel's window activation
+to settle before previews are raised. This keeps the previews visible while browsing, with
+the newest preview on top. Ordinary taskbar activation does not itself raise previews. Escape
+closes a preview. The implementation uses
+GTK 3's `GdkMonitor` and `GdkScreen` APIs in
+[`preview_window.c`](../src/gui/dtgtk/preview_window.c); it does not add platform-specific
+monitor indices or bypass the window manager's decorations.
+
 ## A window a toggle button opens has exactly one state: the button's
 
 *Found `4793b08e64`, 2026-09-01.*

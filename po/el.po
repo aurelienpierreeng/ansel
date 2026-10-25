@@ -8327,6 +8327,14 @@ msgstr "χρωματική ετικέτα"
 msgid "Open in preview window…"
 msgstr ""
 
+#: ../src/dtgtk/thumbnail.c:322
+msgid "Open centered preview"
+msgstr "Άνοιγμα κεντραρισμένης προεπισκόπησης"
+
+#: ../src/dtgtk/thumbnail.c:323
+msgid "Open preview at saved position"
+msgstr "Άνοιγμα προεπισκόπησης στην αποθηκευμένη θέση"
+
 #: ../src/dtgtk/thumbnail.c:340
 #, fuzzy
 msgid "Show active modules…"

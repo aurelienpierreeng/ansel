@@ -8079,6 +8079,14 @@ msgstr "ป้ายสี"
 msgid "Open in preview window…"
 msgstr ""
 
+#: ../src/dtgtk/thumbnail.c:322
+msgid "Open centered preview"
+msgstr "เปิดภาพตัวอย่างที่จัดกึ่งกลาง"
+
+#: ../src/dtgtk/thumbnail.c:323
+msgid "Open preview at saved position"
+msgstr "เปิดภาพตัวอย่างที่ตำแหน่งที่บันทึกไว้"
+
 #: ../src/dtgtk/thumbnail.c:340
 msgid "Show active modules…"
 msgstr ""

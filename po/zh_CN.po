@@ -8115,6 +8115,14 @@ msgstr "分配颜色标签"
 msgid "Open in preview window…"
 msgstr "在预览窗口中打开…"
 
+#: ../src/dtgtk/thumbnail.c:322
+msgid "Open centered preview"
+msgstr "打开居中预览"
+
+#: ../src/dtgtk/thumbnail.c:323
+msgid "Open preview at saved position"
+msgstr "在保存的位置打开预览"
+
 #: ../src/dtgtk/thumbnail.c:340
 #, fuzzy
 msgid "Show active modules…"
