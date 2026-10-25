@@ -1138,12 +1138,17 @@ static void _generate_blocking(dt_cache_entry_t *entry, dt_mipmap_buffer_t *buf,
       "[mipmap_cache] fetch image %i at mip size %d float32 (%ix%i) from original file I/O\n",
       imgid, mip, dsc->width, dsc->height);
 
+    /* dt_mipmap_cache_alloc() resets the flags to GENERATE alone, which would forget that this is
+     * already the retry: a file that never loads would then be read again on every request. */
+    const dt_mipmap_buffer_dsc_flags retried = dsc->flags & DT_MIPMAP_BUFFER_DSC_FLAG_RETRIED;
+
     // will call dt_mipmap_cache_alloc() internally:
     dt_imageio_retval_t ret = dt_imageio_open(&buffered_image, filename, buf);
 
     // We need to update dsc because dt_imageio_open re-alloc entry->data
     dsc = _get_dsc_from_entry(entry);
     dsc->status = ret;
+    dsc->flags |= retried;
 
     if(ret == DT_IMAGEIO_OK)
     {
@@ -1273,8 +1278,10 @@ void dt_mipmap_cache_get_with_caller_and_shutdown(dt_mipmap_buffer_t *buf,
     {
       struct dt_mipmap_buffer_dsc *dsc = _get_dsc_from_entry(entry);
       ASAN_UNPOISON_MEMORY_REGION(dsc, dt_mipmap_buffer_dsc_size);
-      // Not there yet: a render aborted mid-way leaves the entry flagged, over a buffer holding nothing.
-      if(dsc->flags & DT_MIPMAP_BUFFER_DSC_FLAG_GENERATE)
+      /* Not there yet: a render aborted mid-way leaves the entry flagged, over a buffer holding nothing.
+       * Nor is a render that failed: its buffer is the 8x8 skull, and the _init_8() loop would
+       * downsample it into a smaller size as if it were that image's thumbnail. */
+      if((dsc->flags & DT_MIPMAP_BUFFER_DSC_FLAG_GENERATE) || dsc->status != DT_IMAGEIO_OK)
       {
         dt_cache_release(&_get_cache(cache, mip)->cache, entry);
         entry = NULL;
@@ -1291,6 +1298,24 @@ void dt_mipmap_cache_get_with_caller_and_shutdown(dt_mipmap_buffer_t *buf,
   {
     // simple case: blocking get
     dt_cache_entry_t *entry =  dt_cache_get_with_caller(&_get_cache(cache, mip)->cache, key, mode, file, line);
+
+    /* An entry already in the cache comes back read-locked on a 'r' get. One still flagged for
+     * generation -- a failed render, retried -- would then be rendered into under that read lock,
+     * by several readers at once. Take it again for writing; _generate_blocking() re-reads the flags,
+     * so a writer that got there first leaves nothing to do. */
+    if(mode == 'r')
+    {
+      struct dt_mipmap_buffer_dsc *dsc = _get_dsc_from_entry(entry);
+      ASAN_UNPOISON_MEMORY_REGION(dsc, dt_mipmap_buffer_dsc_size);
+      if(dsc->flags & DT_MIPMAP_BUFFER_DSC_FLAG_GENERATE)
+      {
+        entry->_lock_demoting = 1;
+        dt_cache_release(&_get_cache(cache, mip)->cache, entry);
+        entry = dt_cache_get_with_caller(&_get_cache(cache, mip)->cache, key, 'w', file, line);
+        entry->_lock_demoting = 0;
+      }
+    }
+
     buf->cache_entry = entry;
     __sync_fetch_and_add(&(_get_cache(cache, mip)->stats_fetches), 1);
     _generate_blocking(entry, buf, imgid, mip, shutdown);
@@ -1403,8 +1428,9 @@ void dt_mipmap_cache_swap_at_size(const int32_t imgid, const dt_mipmap_size_t mi
 
     dsc->color_space = DT_COLORSPACE_ADOBERGB;
     dsc->status = DT_IMAGEIO_OK;
-    // New pixels: the file, if there is one, no longer holds them.
-    dsc->flags &= ~(DT_MIPMAP_BUFFER_DSC_FLAG_GENERATE | DT_MIPMAP_BUFFER_DSC_FLAG_ON_DISK);
+    // New pixels: the file, if there is one, no longer holds them, and no failure is left to retry.
+    dsc->flags &= ~(DT_MIPMAP_BUFFER_DSC_FLAG_GENERATE | DT_MIPMAP_BUFFER_DSC_FLAG_ON_DISK
+                    | DT_MIPMAP_BUFFER_DSC_FLAG_RETRIED);
     dt_cache_release(&_get_cache(cache, mip)->cache, entry);
   }
 }
@@ -1720,21 +1746,6 @@ static dt_imageio_retval_t _init_8(struct dt_mipmap_buffer_dsc *dsc, const int32
       dt_mipmap_buffer_t tmp;
       dt_mipmap_cache_get(&tmp, imgid, k, DT_MIPMAP_TESTLOCK, 'r');
       if(IS_NULL_PTR(tmp.buf)) continue;
-
-      /* A skull is not a thumbnail. This loop only tested for a non-NULL buffer, and an entry that
-       * failed twice has one: the 8x8 dead image. Downsampled into the smaller mip, it was stored there
-       * as a valid thumbnail without that size ever attempting its own generation, so ONE failed render
-       * latched every size below it. The copy stays 8x8 (dt_iop_flip_and_zoom_8() never upscales), so
-       * the eviction guard against writing skulls still kept it off the disk cache. */
-      if(tmp.width <= 8 && tmp.height <= 8)
-      {
-        _cache_print(DT_DEBUG_CACHE,
-                     "[mipmap_cache] image %d: mip size %d is a skull, not using it as a source for"
-                     " mip size %d\n",
-                     imgid, k, size);
-        dt_mipmap_cache_release(&tmp);
-        continue;
-      }
 
       dsc->color_space = tmp.color_space;
       // downsample

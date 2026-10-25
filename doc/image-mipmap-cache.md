@@ -236,7 +236,8 @@ flagged is not written again at eviction; the next session renders it.
 ## A failed thumbnail is retried once, and a skull is never a source
 
 > **Established 2026-09-30 against `aac2ee1321`; re-measured 2026-10-25 on top of the eviction
-> rewrite and the embedded-JPEG mode snapshot (`8f8b83d8bf`).**
+> rewrite and the embedded-JPEG mode snapshot (`8f8b83d8bf`). The write lock, the full-size reload
+> and the `DT_MIPMAP_TESTLOCK` status filter measured 2026-10-25 against `51de724f6e`.**
 
 `_init_8()` and `_init_f()` report a failure as a zero-sized image. If `_generate_blocking()`
 cleared `DT_MIPMAP_BUFFER_DSC_FLAG_GENERATE` on it, the failure would be latched on the spot: every
@@ -253,10 +254,42 @@ re-entering with those dimensions does nothing at all, silently, and the skull w
 thumbnail that generated. `_generate_blocking()` puts back what
 `dt_mipmap_cache_update_buffer_addresses()` asks for first.
 
+**The retry runs under a write lock.** A `'r'` get of an entry that is not in the cache yet comes
+back write-locked (the allocator has to fill it), but one that is already there comes back
+read-locked — and an entry left at `GENERATE|RETRIED` *is* there. Rendered as it came, the retry
+wrote the pixels, the descriptor and the flags under a read lock, with any number of other readers
+in the same entry. `dt_mipmap_cache_get_with_caller_and_shutdown()` now takes such an entry again
+with `'w'` before `_generate_blocking()`, which re-reads the flags, so a second reader that waited
+behind the first finds nothing left to do. Measured with a probe on the lock's writer field, in the
+GUI: a fresh library of two copies of one NEF, one overwritten with random bytes after import,
+`embedded_jpg=0`, every thumbnail refreshed twice through
+`dt_thumbtable_refresh_thumbnail_real(…, -1, 1)`:
+
+|                                       | `51de724f6e` | with the write lock |
+|---------------------------------------|-------------:|--------------------:|
+| generations under a read lock         |            2 |                   0 |
+| generations under a write lock        |            4 |                   6 |
+| `will try again` / `failed … twice`   |        2 / 2 |               2 / 2 |
+
+The two read-locked generations were both retries (flags `GENERATE|RETRIED`), at mip 0 and at the
+full size.
+
+**The full size keeps its count across the reload.** `dt_imageio_open()` reaches
+`dt_mipmap_cache_alloc()`, which calls `dt_mipmap_cache_update_buffer_addresses()`, which resets the
+flags to `GENERATE` alone — on an allocation failure too. A retry that got that far forgot it was
+the retry, failed, and was granted another, on every request. `_generate_blocking()` carries
+`RETRIED` over the call. From the code, not measured: a random-bytes file fails in the loader
+before any allocation, so the repro above does not reach it.
+
 **A skull is not a downsample source.** `_init_8()` fills a size from the first larger size present
-in RAM. An entry still flagged `GENERATE` is not returned to that `DT_MIPMAP_TESTLOCK` get, but one
-that failed twice is — with the dead image as its buffer. The smaller mips would be filled from it
-and marked as generated **without ever attempting their own generation**.
+in RAM, through a `DT_MIPMAP_TESTLOCK` get. An entry that failed twice is no longer flagged
+`GENERATE`, and has the dead image as its buffer: returned to that get, it would fill the smaller
+mips, marked as generated **without ever attempting their own generation**. So the
+`DT_MIPMAP_TESTLOCK` get returns neither an entry flagged `GENERATE` nor one whose `dsc->status` is
+not `DT_IMAGEIO_OK` — every failure path of `_init_8()` returns a non-OK status, and the full size
+stores the loader's. Its other caller, the darkroom's preview handover, reads an entry
+`dt_mipmap_cache_swap_at_size()` has just written with `DT_IMAGEIO_OK`, and that swap also clears
+`RETRIED`: new pixels leave no failure to retry.
 
 > **An earlier account of this failure was wrong, and the measurement is the reason to record it.**
 > It said the propagated skull, "being larger than 8×8, then cleared the 'don't write skulls' guard
@@ -282,10 +315,10 @@ Measured that way (a 200 kB random-bytes NEF, `ansel-generate-cache --min-mip 0 
 | JPEGs on disk                    |            0 |              0 |
 
 Without the retry, one generation is attempted and the two smaller sizes are filled from its skull;
-with it, each size attempts its own. The skull check in the downsample loop did not fire in this run:
-every failed size still carries `GENERATE`, so the `DT_MIPMAP_TESTLOCK` get skips it. It is there
-for a size that has failed twice, which `ansel-generate-cache` does not reach — it asks once per
-size.
+with it, each size attempts its own. Every failed size still carries `GENERATE` in this run, so it
+does not exercise the status filter: `ansel-generate-cache` asks once per size and never reaches a
+size that has failed twice. With the write lock and the status filter on top of `51de724f6e`, the
+same run gives the same four lines: 3, 4, 0, 0.
 
 ## Mipmap invalidation is explicit, not hash-driven
 
