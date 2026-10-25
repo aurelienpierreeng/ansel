@@ -330,21 +330,21 @@ exit:
 }
 
 /**
- * @brief Check if an image should be written to disk, if the thumbnail should be computed from embedded JPEG,
- * and optionaly return intermediate checks to get there, like whether the input is a JPEG file and if it exists on
- * the filesystem.
+ * @brief Check if an image should be written to disk, and optionaly return what choosing the source of its
+ * thumbnail needs, like whether the input is a JPEG file, if it exists on the filesystem, and if the image
+ * was edited.
  *
  * @param imgid Database SQL ID of the image
  * @param filename Filename of the input file. Can be NULL.
  * @param ext Extension of the input file. Can be NULL.
  * @param input_exists Whether the file can be found on the filesystem. Can be NULL.
  * @param is_jpg_input Whether the file is a JPEG. Can be NULL.
- * @param use_embedded_jpg Whether the lighttable should use the embedded JPEG thumbnail. Can be NULL.
+ * @param altered Whether the image has a history, which embedded JPEG mode 1 asks. Can be NULL.
  * @param write_to_disk Whether the cached thumbnail should be flushed to disk before being flushed from RAM. Can
  * be NULL.
  */
 static void _write_mipmap_to_disk(const int32_t imgid, char *filename, char *ext, gboolean *input_exists,
-                                  gboolean *is_jpg_input, gboolean *use_embedded_jpg, gboolean *write_to_disk)
+                                  gboolean *is_jpg_input, gboolean *altered, gboolean *write_to_disk)
 {
   // Get file name
   char _filename[DT_PATH_MAX] = { 0 };
@@ -366,20 +366,7 @@ static void _write_mipmap_to_disk(const int32_t imgid, char *filename, char *ext
     if(is_jpg_input) *is_jpg_input = !strcasecmp(_ext, ".jpg") || !strcasecmp(_ext, ".jpeg");
   }
 
-  // embedded JPG mode:
-  // 0 = never use embedded thumbnail
-  // 1 = only on unedited pics,
-  // 2 = always use embedded thumbnail
-  int mode = _settings_get().embedded_jpg;
-  gboolean altered = FALSE;
-  if(mode == 1)
-  {
-    if(img) altered = img->history_items > 0;
-  }
-  const gboolean _use_embedded_jpg
-      = (mode == 2                           // always use embedded
-         || (mode == 1 && !altered));        // use embedded only on unaltered images
-  if(use_embedded_jpg) *use_embedded_jpg = _use_embedded_jpg;
+  if(altered) *altered = !IS_NULL_PTR(img) && img->history_items > 0;
 
   // Save to cache only if the option is enabled by user and the thumbnail is not the embedded thumbnail
   // The rationale is getting the un-processed JPEG thumbnail is cheap and not worth saving on disk.
@@ -397,7 +384,8 @@ static void _write_mipmap_to_disk(const int32_t imgid, char *filename, char *ext
 static void _init_f(dt_mipmap_buffer_t *mipmap_buf, float *buf, uint32_t *width, uint32_t *height, float *iscale,
                     const int32_t imgid);
 static dt_imageio_retval_t _init_8(struct dt_mipmap_buffer_dsc *dsc, const int32_t imgid,
-                                   const dt_mipmap_size_t size, dt_atomic_int *shutdown);
+                                   const dt_mipmap_size_t size, const int embedded_jpg_mode,
+                                   dt_atomic_int *shutdown);
 
 /**
  * @file: mipmap_cache.c
@@ -1074,6 +1062,7 @@ static void _generate_blocking(dt_cache_entry_t *entry, dt_mipmap_buffer_t *buf,
   const float original_iscale = dsc->iscale;
   const dt_colorspaces_color_profile_type_t original_color_space = dsc->color_space;
   const dt_imageio_retval_t original_status = dsc->status;
+  gboolean mode_changed = FALSE;
 
   if(!(dsc->flags & DT_MIPMAP_BUFFER_DSC_FLAG_GENERATE))
   {
@@ -1142,15 +1131,25 @@ static void _generate_blocking(dt_cache_entry_t *entry, dt_mipmap_buffer_t *buf,
     _cache_print(DT_DEBUG_CACHE,
              "[mipmap_cache] compute mip size %d uint8 for image %i (%ix%i) from original file \n", mip,
              imgid, dsc->width, dsc->height);
-    dsc->status = _init_8(dsc, imgid, mip, shutdown);
+    // The lighttable menu can change the embedded JPEG mode during the render, and its purge skips
+    // this entry, write-locked until we return: render in one mode, and check it is still current.
+    const int embedded_jpg_mode = _settings_get().embedded_jpg;
+    dsc->status = _init_8(dsc, imgid, mip, embedded_jpg_mode, shutdown);
+    const int current_mode = _settings_get().embedded_jpg;
+    mode_changed = embedded_jpg_mode != current_mode;
+    if(mode_changed)
+      _cache_print(DT_DEBUG_CACHE,
+                   "[mipmap_cache] image %d at mip size %d rendered in embedded JPEG mode %d, now %d: not kept\n",
+                   imgid, mip, embedded_jpg_mode, current_mode);
   }
 
-  if(shutdown && dt_atomic_get_int(shutdown))
+  if((shutdown && dt_atomic_get_int(shutdown)) || mode_changed)
   {
     /* A stale GUI request stopped its thumbnail/export pipe while this cache entry
-     * was still being produced. Keep the entry marked as "generate" so the next
-     * request can restart from a clean state instead of reusing a poisoned empty
-     * thumbnail for the rest of the session. */
+     * was still being produced, or the thumbnail was rendered in an embedded JPEG
+     * mode that is no longer the current one. Keep the entry marked as "generate"
+     * so the next request renders it again, instead of reusing a poisoned empty
+     * thumbnail, or one in the old mode, for the rest of the session. */
     dsc->width = original_width;
     dsc->height = original_height;
     dsc->iscale = original_iscale;
@@ -1580,11 +1579,15 @@ static int _find_sidecar_jpg(const char *filename, const char *ext, char *sideca
  * On entry, the width and height of @p dsc are the box the thumbnail must fit; on success, @p dsc
  * holds the size, scale and colour space of what was rendered.
  *
+ * @param embedded_jpg_mode the embedded JPEG mode to render in, read once by the caller, which
+ * keeps the result only if the mode has not changed meanwhile.
+ *
  * @return DT_IMAGEIO_OK, or why the width and height of @p dsc were set to 0 -- which the caller
  * paints as a skull, and keeps so the GUI can say why over it.
  */
 static dt_imageio_retval_t _init_8(struct dt_mipmap_buffer_dsc *dsc, const int32_t imgid,
-                                   const dt_mipmap_size_t size, dt_atomic_int *shutdown)
+                                   const dt_mipmap_size_t size, const int embedded_jpg_mode,
+                                   dt_atomic_int *shutdown)
 {
   if(size >= DT_MIPMAP_F || dsc->width < 16 || dsc->height < 16) return DT_IMAGEIO_OK;
 
@@ -1595,9 +1598,16 @@ static dt_imageio_retval_t _init_8(struct dt_mipmap_buffer_dsc *dsc, const int32
 
   char filename[DT_PATH_MAX] = { 0 };
   char ext[6] = { 0 };
-  gboolean input_exists, is_jpg_input, use_embedded_jpg;
-  const int embedded_jpg_mode = _settings_get().embedded_jpg;
-  _write_mipmap_to_disk(imgid, filename, ext, &input_exists, &is_jpg_input, &use_embedded_jpg, NULL);
+  gboolean input_exists, is_jpg_input, altered;
+  _write_mipmap_to_disk(imgid, filename, ext, &input_exists, &is_jpg_input, &altered, NULL);
+
+  // embedded JPG mode:
+  // 0 = never use embedded thumbnail
+  // 1 = only on unedited pics,
+  // 2 = always use embedded thumbnail
+  const gboolean use_embedded_jpg
+      = (embedded_jpg_mode == 2                     // always use embedded
+         || (embedded_jpg_mode == 1 && !altered));  // use embedded only on unaltered images
 
   /* do not even try to process file if it isn't available */
   if(!input_exists)

@@ -148,6 +148,40 @@ came from the embedded JPEG, one image with none became a skull
 (`embedded JPEG mode forbids raw processing`), no raw was decoded, and all were done 1.1 s after
 the purge.
 
+### A render in flight across the change is not kept
+
+> **Established 2026-10-25 against `a8d4f8e203`.**
+
+The purge cannot reach a thumbnail that is being rendered. `_generate_blocking()` runs under the
+entry's write lock, and `dt_mipmap_cache_remove_at_size()` takes the entry with
+`dt_cache_testget(..., 'w')`: a locked entry is neither flagged nor removed, only its file on disk
+is unlinked. The render cannot be stopped either. The lighttable asks for its thumbnails through
+`dt_view_image_get_surface()`, which passes no shutdown flag, and the refresh after the purge only
+orphans the job, whose cache entry the render still fills. A worker waiting on
+`dt_pipeline_threadsafe_mutex()` already holds its entry and has already chosen the raw, so a
+change usually finds several renders in flight.
+
+`_generate_blocking()` therefore reads the mode once, hands it to `_init_8()`, and reads it again
+when `_init_8()` returns. If it changed, the result is dropped the way a stopped pipe's is: the
+descriptor is restored, the buffer invalidated, `DT_MIPMAP_BUFFER_DSC_FLAG_GENERATE` kept, and the
+next request renders it in the new mode (`-d cache` prints `rendered in embedded JPEG mode 0, now
+2: not kept`). Waiting for the renders in the purge instead would hold the GUI thread for as long as
+the slowest of them, more than a minute here. The renders still run to their end; only their result
+is discarded.
+
+Measured with `-d cache` on the same copy, a session started in "Always process the RAW" on an
+empty cache, switched from gdb as the menu does (conf, `dt_mipmap_cache_set_settings()`, purge of
+the 51 images, thumbtable refresh) once the first raw thumbnail was done. Both runs had seven
+`DT_MIPMAP_0` renders in `_generate_blocking()` at the switch. Without the check, all seven
+finished from the raw 108 to 131 s after the switch and were kept, and the lighttable then read
+each of them from RAM (`will skip disk I/O, found in RAM cache`). With it, all seven finished 14 to
+104 s after the switch, were dropped, and were rendered again from the embedded JPEG 0.05 to 0.66 s
+after the drop; no raw thumbnail was kept.
+
+Two windows remain, of the same kind and present before: a change between the second read and the
+end of `_generate_blocking()`, a few microseconds, and an entry a reader holds read-locked while
+the purge passes, which any purge skips.
+
 ## The darkroom copies a frame into the thumbnail only when it carries no overlay
 
 *Found `ea59057346`, 2026-10-07.*
