@@ -539,7 +539,7 @@ lost there — stderr only got `could not process thumbnail!`. The causes, each 
 | Where | Cause | Status |
 |---|---|---|
 | `_init_8` | neither the original nor a local copy exists, or the image left the image cache | `FILE_NOT_FOUND` |
-| `_init_8` | embedded-JPEG mode "always" (2) and no embedded/companion JPEG could be read: the pipe is forbidden | `NO_EMBEDDED_THUMBNAIL` |
+| `_init_8` | embedded-JPEG mode "always" (2), an image that is a raw -- or, before its first decode, has a raw extension (`dt_image_ext_is_raw()`, so `.dng` but not `.tif`, which is RGB whether LDR or HDR) -- and no embedded/companion JPEG could be read: the pipe is forbidden. A PNG, a TIFF or another RGB file goes through the pipe instead -- it usually has no embedded preview | `NO_EMBEDDED_THUMBNAIL` |
 | `_generate_blocking`, `DT_MIPMAP_FULL` | every decoder failed | `dt_imageio_open()`'s reason: see "Which loader failure a skull names" |
 | `_generate_blocking`, `DT_MIPMAP_FULL` | no source any more: the file went after `_init_8`'s check, or the image left the image cache | `FILE_NOT_FOUND` |
 | `dt_imageio_open` | the path exists but is not a regular file | `FILE_NOT_FOUND` |
