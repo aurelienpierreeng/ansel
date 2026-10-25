@@ -228,6 +228,42 @@ each commented at the site:
   `CMakeLists.txt` therefore creates its own *before* `add_subdirectory(src)`;
   `src/external/CMakeLists.txt` asserts that, so moving it back fails the configure rather than
   producing a duplicate-target mystery.
+- Its `mainSetup.cmake` also sets `CMAKE_VISIBILITY_INLINES_HIDDEN`, and under **GCC 16 that
+  stops the build** — `src/external/CMakeLists.txt` turns it back off on `exiv2lib`,
+  `exiv2lib_int` and `exiv2-xmp`. *(Measured 2026-10-17 against `96a9bd1299`, GCC 16.2.1,
+  Fedora 44.)* The link of `libansel.so` dies with eight copies of
+
+  ```
+  /usr/bin/ld: error: hidden symbol `_ZNSt7__cxx1112basic_string...C1EOS4_'
+                      isn't defined locally
+  ```
+
+  which is `std::string`'s move constructor. libstdc++ declares `extern template class
+  basic_string<char>` (`bits/basic_string.tcc`, guarded on `__cplusplus <= 202002L`, so live
+  for Exiv2's `-std=gnu++17`), which *suppresses* emission of the member in every translation
+  unit that uses it: the definition is meant to come from `libstdc++.so`, which does export it
+  with default visibility. `-fvisibility-inlines-hidden` then marks the **reference** hidden,
+  and a hidden reference cannot bind to a shared library.
+
+  Two things about this were not obvious and cost the time:
+
+  - **It is not RawSpeed**, although RawSpeed's warnings dominate the build log that carries
+    the error and its `cmake/compiler-flags.cmake` sets the identical flag. All eight call
+    sites are Exiv2's — `Converter::cnvXmpFlash` (five), `Converter::cnvXmpGPSCoord` (two) and
+    `readWriteEpsMetadata` (one). Linking `librawspeed.a` alone under `--whole-archive` at the
+    same commit succeeds. RawSpeed is latent, not broken: LTO happens to inline every one of
+    its own uses, and nothing guarantees that holds.
+  - **The assembly is innocent.** `-save-temps=obj` on the real link shows the `.ltrans` output
+    emitting a plain `call ...@PLT` against a `GLOBAL DEFAULT UND` symbol; assembling it by
+    hand gives default visibility. The hidden marking is applied by the **LTO plugin's symbol
+    resolution**, from the visibility recorded in the IR, so it is invisible to `readelf` on
+    the inputs and to `nm` on the archives. Grepping the `.ltrans.s` files for the mangled
+    name is what attributes it.
+
+  Turning the flag off costs nothing measurable: Exiv2 is a static archive inside
+  `libansel.so`, `CMAKE_CXX_VISIBILITY_PRESET=hidden` still covers everything that is not an
+  inline, and LTO internalises the rest. The resulting `libansel.so` exports 6738 dynamic
+  symbols, of which **three** are Exiv2's and **one** is `std::`'s.
 - It installs its archive, headers, pkg-config file, CMake export set and man page. `install()` is
   shadowed for the duration (`src/external/CMakeLists.txt:311-320`: the `function(install)`
   override, `ANSEL_SUPPRESS_INSTALL` set at `:316` and released at `:320`) so none of that
