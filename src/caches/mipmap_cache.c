@@ -1598,16 +1598,17 @@ static dt_imageio_retval_t _init_8(struct dt_mipmap_buffer_dsc *dsc, const int32
 
   char filename[DT_PATH_MAX] = { 0 };
   char ext[6] = { 0 };
-  gboolean input_exists, is_jpg_input, altered;
+  gboolean input_exists = FALSE;
+  gboolean is_jpg_input = FALSE;
+  gboolean altered = FALSE;
   _write_mipmap_to_disk(imgid, filename, ext, &input_exists, &is_jpg_input, &altered, NULL);
 
   // embedded JPG mode:
   // 0 = never use embedded thumbnail
   // 1 = only on unedited pics,
   // 2 = always use embedded thumbnail
-  const gboolean use_embedded_jpg
-      = (embedded_jpg_mode == 2                     // always use embedded
-         || (embedded_jpg_mode == 1 && !altered));  // use embedded only on unaltered images
+  // so an edited image uses it only in mode 2, an unedited one in modes 1 and 2.
+  const gboolean use_embedded_jpg = altered ? embedded_jpg_mode == 2 : embedded_jpg_mode >= 1;
 
   /* do not even try to process file if it isn't available */
   if(!input_exists)
