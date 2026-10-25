@@ -581,11 +581,23 @@ static cl_int _harmonic_reconstruct_cl(struct dt_iop_module_t *self, const dt_de
       }
       // routing key = the PADDED read-window area (rx0..rx1 x ry0..ry1), the same window either path
       // reconstructs -- not the bare clipped bbox
-      const size_t region_px = (size_t)(regions[region_index].rx1 - regions[region_index].rx0 + 1)
-                               * (size_t)(regions[region_index].ry1 - regions[region_index].ry0 + 1);
-      if(region_px <= cpu_px)
+      const int region_w = regions[region_index].rx1 - regions[region_index].rx0 + 1;
+      const int region_h = regions[region_index].ry1 - regions[region_index].ry0 + 1;
+      const size_t region_px = (size_t)region_w * region_h;
+      // A big region whose working set does not fit what the device has left also takes the CPU: its
+      // allocations are not checked against the headroom once the module is admitted, and running out
+      // there sends the whole middle, every region again, to the host.
+      const gboolean fits = region_px <= cpu_px
+                            || dt_opencl_image_fits_device(devid, region_w, region_h, sizeof(float),
+                                                           DT_HL_CL_REGION_FLOATS_PER_PX, 0);
+      if(!fits)
+        dt_print(DT_DEBUG_OPENCL,
+                 "[opencl_highlights] harmonic region window %dx%d does not fit the device, reconstructed on the CPU\n",
+                 region_w, region_h);
+      if(region_px <= cpu_px || !fits)
       {
-        // small region: cross the bus once and reconstruct on the CPU (bit-identical to the CPU driver)
+        // small region, or one too big for the device: cross the bus once and reconstruct on the CPU
+        // (bit-identical to the CPU driver)
         cl_err = _region_cpu_offload_cl(devid, global_data, interp_buf, mask_buf, depth_dev, width,
                                         &regions[region_index], pipe, data->solid_color, data->iterations,
                                         data->noise_level, _hl_floor_gate(clips),

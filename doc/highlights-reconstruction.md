@@ -189,3 +189,50 @@ reference):
   a smooth well-anchored WB scene does NOT reproduce it) and `gradsky` (the sunrise geometry).
   Linear RMSE is magnitude-dominated and nearly blind to the hue failures users report — judge
   chroma with a chromaticity-share RMSE alongside it.
+
+## Highlights (harmonic) on OpenCL: a gate-0 region read a NULL buffer and killed the device
+
+> **Established 2026-10-25 against `2fadf8a366`.** GTX 1060 6 GB, driver 580.178.04.
+
+`hl_dome_blend` reads `refine[0]` (the refine gate) on its first line, whatever the gate.
+`_selfdome_stage_cl()` (`iop/highlights/core.c`) allocated `refine_dev` only inside its
+`floor_gate > 1e-6` block, so with near-equal per-channel clips (asymmetry under 1.25,
+`_hl_floor_gate()`) the kernel got a NULL buffer. Only regions whose padded window exceeds
+`DT_HL_CL_CPU_REGION_PX` take this device path, which is why only one region in hundreds hit it.
+
+On NVIDIA the read is an MMU fault, not an error code: the kernel log records
+`NVRM: Xid 31 … MMU Fault … faulted @ 0x0_00000000 … ACCESS_TYPE_READ` at the second of the failure,
+the queue returns `-5` (`CL_OUT_OF_RESOURCES`), and the context stays dead: every later kernel on the
+device fails with `-5` and every module falls back to the CPU for the rest of the session (55
+module runs on the GPU before it in one session, none of 337 after). An asynchronous queue does not
+say which kernel faulted; `clFinish()` after each enqueue named `hl_dome_blend`, and a check in
+`dt_opencl_set_kernel_arg()` found its argument 13 NULL.
+
+The buffer is now allocated at gate 0 too and zeroed by `hl_set_scalar`, which takes the kernel's
+gate-0 path; the same defect aborted the process on radeonsi under rusticl. With it allocated and
+zeroed at gate 0, measured on the same 51-image session from an empty cache: no Xid, the
+16.5 Mpx window of image 18477 reconstructed on the device in 23.1 s (70 s for the same kind of window
+on the CPU), all five harmonic images kept the device middle, and 376 module runs stayed on the GPU.
+`nvidia-smi` still peaked at 5960 of 6063 MiB.
+
+When a pipe falls back to the CPU on `-5` with no allocation failure in sight, look for an Xid in
+`journalctl -k` before suspecting memory.
+
+### A window that does not fit the device takes the CPU offload
+
+> **Established 2026-10-25 against `2fadf8a366`**, with `refine_dev` allocated and zeroed at gate 0
+> (previous section).
+
+A region on the device path holds about 64 floats per pixel of its padded window: 256.4 to
+257.2 bytes per pixel on windows of 2.8, 16.3 and 16.5 Mpx (`-d memory`, peak over the region minus
+the accounting at its start), linear in the window. Nothing checks those allocations against the
+headroom once the module is admitted, so the region loop of `_harmonic_reconstruct_cl()` now asks
+`dt_opencl_image_fits_device()` for `DT_HL_CL_REGION_FLOATS_PER_PX` (65) floats per window pixel
+before a big region, and sends a window that does not fit to `_region_cpu_offload_cl()`, which needs
+9 floats per pixel on the device. Only that window goes to the host; the other regions and the rest
+of the pipe stay on the device.
+
+Measured on the same session from an empty cache. With `forced_headroom` at 2500 MiB, both 16 Mpx
+windows were sent to the CPU (`harmonic region window 4749x3476 does not fit the device`), the
+module took 76.1 s on image 18477, `nvidia-smi` peaked at 2398 MiB, and nothing failed. With 900 MiB
+both fit, stayed on the device (31.2 s on 18477, peak 5909 MiB), and 376 module runs were on the GPU.
