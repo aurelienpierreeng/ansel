@@ -75,6 +75,7 @@ typedef struct dt_preview_window_t
 } dt_preview_window_t;
 
 void _preview_redraw(gpointer instance, dt_preview_window_t *preview);
+static void _preview_schedule_monitor_update(dt_preview_window_t *preview);
 
 static guint64 _preview_next_window_id = 0;
 static GList *_preview_windows = NULL;
@@ -470,6 +471,9 @@ static gboolean _preview_window_state_event(GtkWidget *window, GdkEventWindowSta
   gtk_window_get_size(GTK_WINDOW(window), &width, &height);
   if(preview->geometry_tracking && (event->changed_mask & GDK_WINDOW_STATE_MAXIMIZED))
     preview->user_geometry_set = TRUE;
+  if((event->changed_mask & GDK_WINDOW_STATE_ICONIFIED)
+     && !(event->new_window_state & GDK_WINDOW_STATE_ICONIFIED))
+    _preview_schedule_monitor_update(preview);
   _preview_save_geometry(window, preview, x, y, width, height);
   return FALSE;
 }
