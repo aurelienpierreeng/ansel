@@ -239,8 +239,10 @@ void dt_conf_cleanup(dt_conf_t *cf);
 /** @brief Write the settings to their file now. Overridden keys keep their stored value.
  *
  * dt_conf_set_*() writes the in-memory table only: a change is on disk once this, or
- * dt_conf_cleanup(), has run. */
-void dt_conf_flush(void);
+ * dt_conf_cleanup(), has run.
+ *
+ * @return 0 on success, 1 when the file could not be written; the reason is printed on stderr. */
+int dt_conf_flush(void);
 
 /**
  * @brief Does @p key have a value?

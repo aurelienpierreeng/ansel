@@ -802,7 +802,12 @@ void dt_gui_preferences_show()
     dt_control_log(_("Ansel needs to be restarted for settings to take effect"));
 
   // On disk now rather than at exit, so that a process that dies later keeps these settings.
-  dt_conf_flush();
+  if(dt_conf_flush())
+  {
+    char configdir[DT_PATH_MAX] = { 0 };
+    dt_loc_get_user_config_dir(configdir, sizeof(configdir));
+    dt_control_alert(_("Settings not saved"), _("the settings file could not be written in this folder"), configdir);
+  }
 
   DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_PREFERENCES_CHANGE);
 }

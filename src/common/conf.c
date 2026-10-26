@@ -947,42 +947,45 @@ gchar* dt_conf_expand_default_dir(const char *dir)
   return normalized_path;
 }
 
-static void dt_conf_print(const gchar *key, const gchar *val, FILE *f)
-{
-  fprintf(f, "%s=%s\n", key, val);
-}
-
 /** @brief Write the whole table to @p cf->filename.
  *
- * cf->mutex is held for the walk, since every dt_conf_set_*() writes the table under it.
+ * cf->mutex is held for the walk, since every dt_conf_set_*() writes the table under it, and for
+ * the write, so that two saves land in the order they read the table.
+ *
+ * g_file_set_contents() writes a temporary file and renames it over the old one: a process that dies
+ * while saving leaves the previous file, never a truncated one.
+ *
+ * @return 0 on success, 1 when the file could not be written; the reason is printed on stderr.
  */
-static void _conf_save(dt_conf_t *cf)
+static int _conf_save(dt_conf_t *cf)
 {
   dt_pthread_mutex_lock(&cf->mutex);
 
-  FILE *f = g_fopen(cf->filename, "wb");
-  if(!IS_NULL_PTR(f))
+  GList *sorted = g_list_sort(g_hash_table_get_keys(cf->table), (GCompareFunc)g_strcmp0);
+  GString *contents = g_string_new(NULL);
+  for(GList *iter = sorted; iter; iter = g_list_next(iter))
   {
-    GList *keys = g_hash_table_get_keys(cf->table);
-    GList *sorted = g_list_sort(keys, (GCompareFunc)g_strcmp0);
+    const gchar *key = (const gchar *)iter->data;
+    g_string_append_printf(contents, "%s=%s\n", key, (const gchar *)g_hash_table_lookup(cf->table, key));
+  }
+  g_list_free(sorted);
 
-    for(GList *iter = sorted; iter; iter = g_list_next(iter))
-    {
-      const gchar *key = (const gchar *)iter->data;
-      const gchar *val = (const gchar *)g_hash_table_lookup(cf->table, key);
-      dt_conf_print(key, val, f);
-    }
-
-    g_list_free(sorted);
-    sorted = NULL;
-    fclose(f);
+  GError *error = NULL;
+  const gboolean written = g_file_set_contents(cf->filename, contents->str, contents->len, &error);
+  if(!written)
+  {
+    fprintf(stderr, "[conf] could not save the settings to `%s': %s\n", cf->filename, error->message);
+    g_error_free(error);
   }
 
   dt_pthread_mutex_unlock(&cf->mutex);
+  g_string_free(contents, TRUE);
+  return !written;
 }
-void dt_conf_flush(void)
+
+int dt_conf_flush(void)
 {
-  _conf_save(darktable.conf);
+  return _conf_save(darktable.conf);
 }
 
 void dt_conf_cleanup(dt_conf_t *cf)
