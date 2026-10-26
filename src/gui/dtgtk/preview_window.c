@@ -88,7 +88,9 @@ static gboolean _preview_raise_all(gpointer user_data)
   {
     dt_preview_window_t *preview = (dt_preview_window_t *)item->data;
     GdkWindow *gdk_window = gtk_widget_get_window(preview->window);
-    if(gtk_widget_get_visible(preview->window) && !IS_NULL_PTR(gdk_window))
+    // Keep previews minimized by persistent mode out of the lighttable's raise cycle.
+    if(gtk_widget_get_visible(preview->window) && !IS_NULL_PTR(gdk_window)
+       && !(gdk_window_get_state(gdk_window) & GDK_WINDOW_STATE_ICONIFIED))
       gdk_window_raise(gdk_window);
   }
   return G_SOURCE_REMOVE;
@@ -496,6 +498,9 @@ static gboolean _preview_start_geometry_tracking(gpointer user_data)
 static void _preview_update_monitor_configuration(dt_preview_window_t *preview, GdkDisplay *display)
 {
   if(!gtk_widget_get_visible(preview->window)) return;
+  GdkWindow *gdk_window = gtk_widget_get_window(preview->window);
+  if(!IS_NULL_PTR(gdk_window) && (gdk_window_get_state(gdk_window) & GDK_WINDOW_STATE_ICONIFIED))
+    return;
 
   if(!IS_NULL_PTR(preview->return_monitor_name))
   {
@@ -811,6 +816,17 @@ void dt_preview_window_spawn(const int32_t imgid, const gboolean restore_saved_g
       g_signal_connect(display, "monitor-added", G_CALLBACK(_preview_monitor_added), preview);
   preview->monitor_removed_handler =
       g_signal_connect(display, "monitor-removed", G_CALLBACK(_preview_monitor_removed), preview);
+
+  if(restore_saved_geometry)
+  {
+    // Keep centered previews on the taskbar, but out of the lighttable while using saved geometry.
+    for(GList *item = _preview_windows; !IS_NULL_PTR(item); item = g_list_next(item))
+    {
+      dt_preview_window_t *centered_preview = (dt_preview_window_t *)item->data;
+      if(!centered_preview->persist_geometry && gtk_widget_get_visible(centered_preview->window))
+        gtk_window_iconify(GTK_WINDOW(centered_preview->window));
+    }
+  }
 
   gtk_widget_set_visible(preview->area, TRUE);
   gtk_widget_show_all(dialog);
