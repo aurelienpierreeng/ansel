@@ -106,10 +106,9 @@ void dt_preview_window_raise_all(void)
 }
 
 /**
- * @brief Return a monitor identity that stays independent of GDK's enumeration order.
- * @details Spaces become underscores because the identity is stored in anselrc.
+ * @brief Return the legacy manufacturer/model name used by existing preview geometry keys.
  */
-static gchar *_preview_monitor_name(GdkMonitor *monitor)
+static gchar *_preview_legacy_monitor_name(GdkMonitor *monitor)
 {
   const char *manufacturer = gdk_monitor_get_manufacturer(monitor);
   const char *model = gdk_monitor_get_model(monitor);
@@ -128,6 +127,21 @@ static gchar *_preview_monitor_name(GdkMonitor *monitor)
   return name;
 }
 
+/**
+ * @brief Return a monitor identity independent of GDK's monitor enumeration order.
+ * @details Manufacturer/model and logical origin distinguish matching displays.
+ */
+static gchar *_preview_monitor_name(GdkMonitor *monitor)
+{
+  gchar *legacy_name = _preview_legacy_monitor_name(monitor);
+  GdkRectangle geometry = { 0 };
+  gdk_monitor_get_geometry(monitor, &geometry);
+  gchar *name = g_strdup_printf("%s@%d_%d", legacy_name, geometry.x, geometry.y);
+  g_strdelimit(name, " /", '_');
+  dt_free(legacy_name);
+  return name;
+}
+
 static gchar *_preview_geometry_key(const char *monitor_name)
 {
   return g_strdup_printf("plugins/lighttable/preview/window/%s", monitor_name);
@@ -140,12 +154,19 @@ static gchar *_preview_geometry_key(const char *monitor_name)
 static GdkMonitor *_preview_find_monitor(GdkDisplay *display, const char *monitor_name)
 {
   const int n_monitors = gdk_display_get_n_monitors(display);
+  const gboolean legacy_identity = !IS_NULL_PTR(monitor_name) && IS_NULL_PTR(strchr(monitor_name, '@'));
   for(int i = 0; i < n_monitors; i++)
   {
     GdkMonitor *monitor = gdk_display_get_monitor(display, i);
     gchar *name = _preview_monitor_name(monitor);
-    const gboolean found = g_strcmp0(name, monitor_name) == 0;
+    gboolean found = g_strcmp0(name, monitor_name) == 0;
     dt_free(name);
+    if(!found && legacy_identity)
+    {
+      name = _preview_legacy_monitor_name(monitor);
+      found = g_strcmp0(name, monitor_name) == 0;
+      dt_free(name);
+    }
     if(found) return monitor;
   }
   return NULL;
@@ -222,8 +243,17 @@ static void _preview_center_on_lighttable(GtkWidget *window, GdkMonitor *monitor
 static gboolean _preview_read_geometry(dt_preview_window_t *preview, const char *monitor_name,
                                        GdkMonitor *monitor)
 {
-  gchar *key = _preview_geometry_key(monitor_name);
+  gchar *current_name = IS_NULL_PTR(monitor) ? g_strdup(monitor_name) : _preview_monitor_name(monitor);
+  gchar *key = _preview_geometry_key(current_name);
   gchar *value = dt_conf_get_string(key);
+  if(IS_NULL_PTR(value) && !IS_NULL_PTR(monitor))
+  {
+    gchar *legacy_name = _preview_legacy_monitor_name(monitor);
+    gchar *legacy_key = _preview_geometry_key(legacy_name);
+    value = dt_conf_get_string(legacy_key);
+    dt_free(legacy_key);
+    dt_free(legacy_name);
+  }
   int x_ratio = 0, y_ratio = 0, width_ratio = 0, height_ratio = 0, maximized = 0, format = 0;
   int fields = IS_NULL_PTR(value)
                    ? 0
@@ -269,6 +299,7 @@ static gboolean _preview_read_geometry(dt_preview_window_t *preview, const char 
 
   dt_free(value);
   dt_free(key);
+  dt_free(current_name);
   return valid && valid_values;
 }
 
@@ -726,6 +757,7 @@ void _preview_redraw(gpointer instance, dt_preview_window_t *preview)
 void dt_preview_window_spawn(const int32_t imgid, const gboolean restore_saved_geometry)
 {
   dt_preview_window_t *preview = calloc(1, sizeof(dt_preview_window_t));
+  if(IS_NULL_PTR(preview)) return;
   preview->imgid = imgid;
   dt_view_image_surface_fetcher_init(&preview->fetcher);
 

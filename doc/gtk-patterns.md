@@ -251,11 +251,12 @@ the lighttable and neither reads nor writes the saved layout. The saved-position
 restores and updates the last globally saved layout; the two modes do not override each other.
 
 The global preview layout stores center position, dimensions, maximized state, and monitor
-name in `anselrc`. Geometry uses ratios of the monitor's usable work area, accounting for
+identity in `anselrc`. Geometry uses ratios of the monitor's usable work area, accounting for
 taskbars and other reserved edges when moving between displays. Older full-monitor ratios are
-converted when read. Monitor names use manufacturer/model text with spaces changed to
-underscores, never enumeration indices. Geometry changes from moving, resizing, or maximizing
-a preview update this global layout.
+converted when read. Monitor identities combine manufacturer/model with the monitor's logical
+origin, distinguishing matching displays without relying on enumeration indices. Legacy
+manufacturer/model geometry keys are still read and migrate when the preview is next saved.
+Geometry changes from moving, resizing, or maximizing a preview update this global layout.
 
 Plug and unplug notifications are coalesced before moving windows. The preview retains its
 source monitor's ratios while disconnected and returns when that monitor is added again.
