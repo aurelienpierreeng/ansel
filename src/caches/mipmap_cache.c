@@ -901,7 +901,9 @@ void dt_mipmap_cache_flush_to_disk(void)
    * mip_thumbs: DT_MIPMAP_F and DT_MIPMAP_FULL are never written to disk. */
   const size_t reclaimed = dt_cache_gc(&cache->mip_thumbs.cache, 0.0f);
 
-  _cache_print(DT_DEBUG_CACHE, "[mipmap_cache] flushed to disk: %.2f MB banked\n",
+  // What left RAM, not what was written: an entry read from its file is dropped unwritten. The
+  // callback logs each write on its own.
+  _cache_print(DT_DEBUG_CACHE, "[mipmap_cache] flushed to disk: %.2f MB evicted from RAM\n",
                reclaimed / (1024.0 * 1024.0));
 }
 
