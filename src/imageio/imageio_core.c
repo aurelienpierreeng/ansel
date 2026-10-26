@@ -879,6 +879,7 @@ dt_imageio_retval_t dt_imageio_export_with_flags(const int32_t imgid, const char
     dt_pthread_rwlock_wrlock(&dev.history_mutex);
     dt_dev_set_history_end_ext(&dev, 0);
     dt_pthread_rwlock_unlock(&dev.history_mutex);
+    dt_print(DT_DEBUG_IMAGEIO, "[dt_imageio_export] image %" PRId32 " rendered without its history\n", imgid);
   }
 
   // Get a pipeline, aka sequence of nodes. It is initialised before the first `goto error`, since
