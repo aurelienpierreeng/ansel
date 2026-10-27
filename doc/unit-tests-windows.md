@@ -45,6 +45,29 @@ ctest entries pass** reproducibly; `masks_geometry` is intermittent (last sectio
   Ansel's ctest as "Not Run" on every platform: the submodule is added `EXCLUDE_FROM_ALL`, so
   their executables are never built. `src/CMakeLists.txt` now sets `LENSSERIOUS_TESTS OFF`.
 
+## The taskbar progress without a GUI
+
+*2026-10-27, on top of `b0f10525fd`, GCC 16.2 UCRT64 Debug on GitHub's `windows-latest`.*
+
+The first CI runs of the suite with GCC failed `test_import_jobs` on an access violation in
+every run: 5 of 5 standalone runs per cell, in both Debug cells. gdb put it in
+`dt_gui_main_window()`, reading `dt_gui_get_global()->ui` with no GUI, called from
+`global_progress_start()` (`control/progress.c`) under `dt_control_import()` → job creation →
+`dt_control_job_add_progress()`. Every job with a progress bar goes there. On Windows that
+function drives the taskbar button through `ITaskbarList3` and fetched the main window's `HWND`
+without asking whether there was a GUI; Linux talks to D-Bus there and needs no window. The
+taskbar functions now do nothing without a main window (`_taskbar_window()`), which covers
+ansel-cli as well as the tests.
+
+Earlier imports in the same process went through the same path without crashing, and the first
+crashing subtest was not always the same one (`nofeatures`: always the last one;
+`skiptest`: once `_test_public_copy_failure_reservation_forces_sibling_fallback`, then always
+the last one). The `HWND` is fetched only once `CoCreateInstance(CLSID_TaskbarList)` has
+succeeded. Ansel never calls `CoInitialize`, so that probably needs a library thread to have
+created the process's multithreaded apartment first: at the crash, a GIO `pool-0` thread was
+inside `Windows.ApplicationModel`. **Unconfirmed**: nothing logged the `HRESULT` of the calls
+that failed.
+
 ## `check_statelessness.sh` on Windows
 
 `tools/statelessness_audit.py` only knew ELF: it looked for `.o` files and parsed
