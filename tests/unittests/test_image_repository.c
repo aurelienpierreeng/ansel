@@ -1,6 +1,7 @@
 /*
     This file is part of Ansel,
     Copyright (C) 2026 Aurélien PIERRE.
+    Copyright (C) 2026 Guillaume Stutin.
 
     Ansel is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -25,14 +26,15 @@
  */
 
 #include "testdb.h"
+#include "common/image.h"
 #include "system/mem_alloc.h"
+
+#include <glib/gstdio.h>
+#include <sqlite3.h>
 
 #ifdef _WIN32
 #include "win/main_wrapper.h"
 #endif
-
-#include "common/image.h"   // dt_image_init(), dt_image_t, UNKNOWN_IMAGE
-
 
 // an arbitrary flag bit with no side meaning in these tests
 #define TEST_FLAG 2048
@@ -246,52 +248,95 @@ static void test_foreach_with_path_stops_when_asked(void **state)
   assert_int_equal(seen, 2);
 }
 
-/* dt_image_repository_load() must tell "the row is not there" apart from "the query failed", because
- * the two have opposite consequences one layer up. Its caller is the image cache's allocate
- * callback, which keeps whatever the call leaves in the struct: an id left at UNKNOWN_IMAGE makes
- * dt_image_cache_get() answer NULL for that imgid for the rest of the entry's life, and the
- * thumbnail path reads a NULL image as "the file is unavailable" and caches an 8x8 skull that
- * nothing retries. Treating a momentary SQLITE_BUSY as an absence therefore cost an image its
- * thumbnail for the whole session (#1475).
- *
- * WHAT THIS TEST GUARDS, precisely: that an ABSENCE still invalidates the struct it was handed. It
- * does NOT distinguish the two outcomes -- an implementation that wrote UNKNOWN_IMAGE
- * unconditionally, which is the one being replaced, passes it too. It is here because the first
- * draft of this fix went the other way and stopped writing the id at all, which looks harmless on
- * the allocate path (dt_image_init() has already put UNKNOWN_IMAGE there) and silently breaks
- * dt_image_cache_get_reload(): that one reloads in place with no re-init, so a row removed under it
- * would have come back as a live image.
- *
- * The error half is not reachable here. SQLITE_BUSY and SQLITE_LOCKED need a second process holding
- * the file lock and this suite runs on ":memory:"; what that branch owes is leaving img untouched,
- * for the same get_reload() reason, and no test in this fixture can hold it to that.
- *
- * Nor is the success half: dt_image_from_stmt() maps the row through dt_image_film_roll_name(),
- * which reads a conf key, and this fixture initialises no conf system -- the same reason
- * test_removed_image_repository.c gives for avoiding this function entirely. The absent path never
- * reaches the mapper, which is why it can be asserted and the present one cannot. */
-static void test_load_marks_an_absent_image_invalid(void **state)
+/* A row that is not there -- what the lighttable reads just after a removal -- marks the struct
+ * invalid. The struct starts out looking loaded, as dt_image_cache_get_reload() hands it over
+ * (in place, with no dt_image_init()): starting from UNKNOWN_IMAGE, the test would pass without
+ * the write. */
+static void test_load_marks_an_absent_image_invalid(void **state __attribute__((unused)))
 {
-  (void)state;
   const int32_t film = testdb_make_film("/testdb/absentfilm");
   assert_true(film > 0);
   const int32_t id = testdb_make_image(film, "present.raw");
   assert_true(id > 0);
 
-  /* Starting from a struct that already looks like a loaded image, which is the only arrangement
-   * that can detect anything here: dt_image_cache_get_reload() reloads IN PLACE with no re-init, so
-   * what it hands the mapper is a populated entry. Initialising to UNKNOWN_IMAGE instead would make
-   * the assertion below hold whether or not the function writes the id -- true of the version being
-   * replaced as much as of this one -- and the test would pin nothing. Verified: with the write
-   * removed, this fails; with dt_image_init() in its place, it passes either way. */
   dt_image_t img;
   dt_image_init(&img);
   img.id = id;
 
-  /* An id no row answers to. This is the ORDINARY outcome of a removal, and of the lighttable
-   * re-reading a thumbnail just after one -- not an error, and no longer logged as one. */
   assert_false(dt_image_repository_load(id + 10000, &img));
   assert_int_equal(img.id, UNKNOWN_IMAGE);
+}
+
+/* The test below needs a library on disk: in memory, every connection has a database of its own,
+ * and no other connection can lock it. */
+static gchar *_dir = NULL;
+static gchar *_library = NULL;
+
+static int _file_setup(void **state __attribute__((unused)))
+{
+  _dir = g_dir_make_tmp("ansel_test_image_repository_XXXXXX", NULL);
+  if(IS_NULL_PTR(_dir)) return -1;
+  _library = g_build_filename(_dir, "library.db", NULL);
+  const dt_database_params_t params = { .alternative = _library,
+                                        .library = NULL,
+                                        .load_data = FALSE,
+                                        .has_gui = FALSE,
+                                        .verbose = FALSE };
+  return dt_database_open(&params) == DT_DATABASE_OPEN_OK ? 0 : -1;
+}
+
+static int _file_teardown(void **state)
+{
+  testdb_teardown(state);
+  /* The library, and the empty backup marker dt_database_open() leaves beside it. The marker is
+   * read-only, which Windows will not delete. */
+  GDir *d = g_dir_open(_dir, 0, NULL);
+  if(!IS_NULL_PTR(d))
+  {
+    const char *name = NULL;
+    while((name = g_dir_read_name(d)))
+    {
+      gchar *path = g_build_filename(_dir, name, NULL);
+      g_chmod(path, 0600);
+      g_remove(path);
+      dt_free(path);
+    }
+    g_dir_close(d);
+  }
+  g_rmdir(_dir);
+  dt_free(_library);
+  dt_free(_dir);
+  return 0;
+}
+
+/* A read that fails leaves the struct as it was: the image may well exist, and invalidating an
+ * entry that dt_image_cache_get_reload() reloads in place would hide it for as long as it stays
+ * cached. The failure is the one another program causes: a second connection, standing in for
+ * it, holds the library's EXCLUSIVE lock, and the read gets SQLITE_BUSY. */
+static void test_load_failure_leaves_the_image_untouched(void **state __attribute__((unused)))
+{
+  const int32_t film = testdb_make_film("/testdb/lockedfilm");
+  assert_true(film > 0);
+  const int32_t id = testdb_make_image(film, "locked.raw");
+  assert_true(id > 0);
+
+  sqlite3 *other = NULL;
+  assert_int_equal(sqlite3_open(_library, &other), SQLITE_OK);
+  assert_int_equal(sqlite3_exec(other, "BEGIN EXCLUSIVE", NULL, NULL, NULL), SQLITE_OK);
+
+  dt_image_t img;
+  dt_image_init(&img);
+  img.id = id;
+  img.width = 4242;
+  const gboolean found = dt_image_repository_load(id, &img);
+
+  // released before asserting, so that a failure does not leave the file locked for the teardown
+  sqlite3_exec(other, "ROLLBACK", NULL, NULL, NULL);
+  sqlite3_close(other);
+
+  assert_false(found);
+  assert_int_equal(img.id, id);
+  assert_int_equal(img.width, 4242);
 }
 
 int main(int argc, char *argv[])
@@ -307,5 +352,9 @@ int main(int argc, char *argv[])
     cmocka_unit_test(test_foreach_with_path_stops_when_asked),
     cmocka_unit_test(test_load_marks_an_absent_image_invalid),
   };
-  return cmocka_run_group_tests(tests, testdb_setup, testdb_teardown);
+  const struct CMUnitTest on_disk[] = {
+    cmocka_unit_test(test_load_failure_leaves_the_image_untouched),
+  };
+  const int failed = cmocka_run_group_tests(tests, testdb_setup, testdb_teardown);
+  return failed + cmocka_run_group_tests(on_disk, _file_setup, _file_teardown);
 }
