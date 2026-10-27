@@ -30,9 +30,11 @@ endif(WIN32)
 #
 # Each test is a standalone binary linking lib_ansel. The database tests open the one
 # connection on ":memory:" and drive ALL their setup through the repository APIs -- no raw
-# SQL and no sqlite3 handle, which keeps tools/check_module_boundaries.sh at its zero
-# baselines. A test that cannot seed its rows through the public API has found a hole in
-# the API, not a reason to reach for the connection.
+# SQL and no handle on that connection, which keeps tools/check_module_boundaries.sh at its
+# zero baselines. A test that cannot seed its rows through the public API has found a hole in
+# the API, not a reason to reach for the connection. One test puts the library on disk
+# instead, so that a second connection can lock it as another program would; that
+# connection writes nothing (test_image_repository.c).
 
 set(LIB_ANSEL_UNIT_TESTS
   test_image_repository

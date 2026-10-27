@@ -12,46 +12,6 @@
 > that is recorded rather than quietly corrected: how a claim was wrong is usually the more
 > useful thing to know.
 
-## A transient database error used to become a permanent skull
-
-> **Established 2026-09-30 against `aac2ee1321`.**
-
-The chain, top to bottom, for one momentary `SQLITE_BUSY`:
-
-1. `dt_image_repository_load()` tested `sqlite3_step(stmt) == SQLITE_ROW` and treated **everything
-   else** as "no such image" — `SQLITE_BUSY`, `SQLITE_LOCKED`, `SQLITE_IOERR` included — writing
-   `img->id = -1` and logging "failed to open image N from database".
-2. Its only caller is the image cache's allocate callback, which **keeps** what the load leaves
-   behind, so the entry is invalid for the rest of its life and `dt_image_cache_get()` answers NULL
-   for that imgid from then on.
-3. `_write_mipmap_to_disk()` asks the image cache for the image; a NULL makes
-   `dt_image_choose_input_path(NULL, …)` answer `DT_IMAGE_PATH_NONE`, so `_init_8()` sees
-   `input_exists == FALSE` and abandons the thumbnail.
-4. `_generate_blocking()` clears `GENERATE` and paints the 8×8 skull, and the view reports an 8×8
-   buffer as `DT_VIEW_SURFACE_OK`, so the widget commits it and never asks again.
-
-One lock held for a moment by an indexer or a backup agent therefore cost an image its thumbnail
-for the whole session, recoverable only through "Purge selected thumbnails from cache". Steps 1–2
-are fixed; steps 3–4 are #1474.
-
-Two things to keep straight when editing this:
-
-- **`SQLITE_DONE` and an error need opposite treatment.** `DONE` is the row genuinely being absent,
-  which is the ORDINARY outcome of a removal and of the lighttable re-reading a thumbnail just
-  after one — it must write `UNKNOWN_IMAGE`, and it must not be logged as a failure. An error must
-  leave `img` untouched: `dt_image_cache_get_reload()` reloads **in place with no re-init**, so
-  invalidating there would drop a live image because a lock was held for a moment.
-- **There is a busy timeout now** (`sqlite3_busy_timeout`, 5 s, set where the other PRAGMAs are),
-  and `dt_image_repository_load()` also retries `BUSY`/`LOCKED` itself. The two cover different
-  things: the timeout waits out another *process* holding the file lock, while `LOCKED` can come
-  from a table lock inside our own connection, which the timeout does not wait on.
-
-`tests/unittests/test_image_repository.c` pins the absence half. It cannot pin the error half
-(that needs a second process) nor the success half (`dt_image_from_stmt()` reads a conf key through
-`dt_image_film_roll_name()` and the fixture initialises no conf). Note the trap the test itself
-documents: initialising the struct with `dt_image_init()` makes the assertion hold whether or not
-the function writes the id, so it must start from a struct that already looks loaded — which is
-also what `get_reload()` actually hands it.
 ## Where the on-disk thumbnail cache lives, and the one way to ask
 
 > **Established 2026-09-30 against `aac2ee1321`.**
@@ -518,6 +478,74 @@ The thumbnails stayed clean. Two limits, read from the source:
 The second size in a `synchronized` line is the entry's size before the downscale. It reads 720x450
 for an entry that was just allocated and the fitted size otherwise, so it does not mean the image
 was stretched.
+
+## A failed database read is not a missing image
+
+> **Measured 2026-10-26 on `b0f10525fd` (the probe on `f6f82cbf45`, which differs only in the
+> exit path), and 2026-10-27 with this change on top of `b0f10525fd`.** RelWithDebInfo, clang 19.
+> A probe linked to `libansel.so`, with the library on disk and a second SQLite connection taking
+> `BEGIN EXCLUSIVE`; and the lighttable on Xephyr with 40 images, driven by an `LD_PRELOAD` shim
+> that calls the real actions on the GUI thread, with an outside Python writer and `/proc/locks`
+> sampled every 2 ms.
+
+`dt_image_repository_load()` tells three outcomes apart:
+
+| `sqlite3_step()` | `img` | stderr |
+|---|---|---|
+| `SQLITE_ROW` | filled from the row | — |
+| `SQLITE_DONE`: no such row, the image was removed | `id = UNKNOWN_IMAGE`, the rest as it was | — |
+| anything else: `SQLITE_BUSY`, an I/O error | as it was | one line |
+
+An id left at `UNKNOWN_IMAGE` is not a passing state. The image cache keeps the entry, and
+`dt_image_cache_get()` answers NULL for that image for as long as the entry stays cached; the
+thumbnail path reads that NULL as "File not found" (see "Why a thumbnail is a skull" below), and
+"Purge selected thumbnails from cache" does not help, since it drops thumbnails, not image cache
+entries: on `b0f10525fd`, where a failed read did write the id, every visible thumbnail (20) failed
+to generate again after it. So a failed read leaves the struct alone:
+`dt_image_cache_get_reload()` reloads a live entry in place, with no `dt_image_init()`, and the
+entry keeps the last values that did come from the database.
+
+**The allocate path is not covered.** `dt_image_cache_allocate()` runs `dt_image_init()` before
+the load, so a read that fails there still leaves an invalid entry: in the probe, an image first
+asked for during a 2 s lock stayed NULL after it.
+
+**When a read can fail.** Ansel's connection holds a SHARED lock on `library.db` almost all the
+time — 40.0 s out of 40.1 s in the lighttable — because the cached statement of
+`dt_image_repository_load()`, stepped to `SQLITE_ROW` and not reset, keeps its read transaction
+open. While it does, no read can fail with `SQLITE_BUSY`, and an outside writer never gets its
+EXCLUSIVE lock. A load that finds no row runs the statement to `SQLITE_DONE` and ends the
+transaction; until the next successful load, an outside lock fails every read. Removing an image
+from the lighttable did not open that window: the lock went to RESERVED for the removal and back
+to SHARED within 3 ms. In the window (an absent id read, then an 8 s EXCLUSIVE lock, then two
+stars on 40 images), all 40 reloads failed; their entries stayed valid and the purged thumbnails
+regenerated. The rating itself was lost, as every write of Ansel's is while that lock is held.
+
+**Ansel's writes fail as well, and silently.** While an outside writer waits for the lock
+(PENDING), every write of Ansel's fails at once and nothing is shown: with a client committing in
+a loop, one of two 40-image rotations was lost; with an 8 s lock attempt, a two-star rating on 40
+images.
+
+**There is no busy timeout, on purpose.** SQLite does not call the busy handler when a connection
+already in a read transaction asks for the write lock, since that could deadlock, and it is
+Ansel's usual state: with `sqlite3_busy_timeout(5000)`, the same rotation and the same rating were
+lost. The timeout does act in the window above, where the rating then waited for the lock and was
+kept, but on the GUI thread: it stalled 4.57 s for an 8 s lock, and 26.61 s for a 30 s one with
+three retries of the read on top. And the allocate path runs under the image cache's global lock:
+during such a wait, another thread asking for an image already in cache waited 14.89 s.
+
+**Testing it.** A second connection in the same process locks the file as another program would;
+it takes no second process. It does take a library on disk, since on `":memory:"` each connection
+has a database of its own. And nothing of Ansel's may hold a read transaction when the lock is
+taken, or `BEGIN EXCLUSIVE` itself fails: one successful `dt_image_repository_load()` is enough.
+`tests/unittests/test_image_repository.c` pins both cases. The absent one starts from a struct
+that looks loaded, since from `UNKNOWN_IMAGE` the assertion would hold without the write. The
+success path reads conf (`dt_image_film_roll_name()`); `test_image_cache_flags_writeback.c`, whose
+fixture initialises it, covers that.
+
+Claims of an earlier version of this section, found wrong: that provoking `SQLITE_BUSY` takes a
+second process; that the purge brings back an image whose read failed; that a moment's lock by an
+indexer or a backup agent could cost a thumbnail at any time — outside the window above, it cannot
+fail a read; and that a busy timeout waits such a lock out — not for a connection already reading.
 
 ## Releasing an image cache entry returns the LOCK, not the image
 

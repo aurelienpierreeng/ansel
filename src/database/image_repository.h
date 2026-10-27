@@ -1,6 +1,7 @@
 /*
     This file is part of darktable,
     Copyright (C) 2025 Aurélien PIERRE.
+    Copyright (C) 2026 Guillaume Stutin.
 
     darktable is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -54,8 +55,10 @@ G_BEGIN_DECLS
  * @brief Fill @p img from the `main.images` row for @p imgid.
  *
  * @param imgid image to read.
- * @param img destination. On failure its `id` is set to -1, which is what
- *        dt_image_invalid() tests, and the rest is left as the caller had it.
+ * @param img destination. When there is no such row its `id` is set to UNKNOWN_IMAGE, which is
+ *        what dt_image_invalid() tests, and the rest is left as the caller had it. When the read
+ *        itself fails -- a lock held by another program, an I/O error -- @p img is left
+ *        untouched: the image may well exist.
  * @return TRUE when a row was found and read.
  */
 gboolean dt_image_repository_load(const int32_t imgid, dt_image_t *img);
