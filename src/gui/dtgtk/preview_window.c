@@ -69,6 +69,14 @@ typedef struct dt_preview_window_t
   int tracked_y;
   int tracked_width;
   int tracked_height;
+  int target_x;
+  int target_y;
+  int target_width;
+  int target_height;
+  gboolean position_after_resize;
+  gboolean position_move_pending;
+  gboolean maximize_after_move;
+  int geometry_apply_attempts;
   guint geometry_tracking_source;
   guint monitor_update_source;
   guint64 window_id;
@@ -76,6 +84,7 @@ typedef struct dt_preview_window_t
 
 void _preview_redraw(gpointer instance, dt_preview_window_t *preview);
 static void _preview_schedule_monitor_update(dt_preview_window_t *preview);
+static void _preview_defer_geometry_tracking(dt_preview_window_t *preview);
 
 static guint64 _preview_next_window_id = 0;
 static GList *_preview_windows = NULL;
@@ -149,27 +158,45 @@ static gchar *_preview_geometry_key(const char *monitor_name)
 
 /**
  * @brief Find the currently connected monitor with the saved manufacturer/model identity.
- * @details The scan compares names, never saved monitor indices, so reordered displays still match.
+ * @details Prefer the exact identity, including logical origin. If topology changes the origin,
+ * match by manufacturer/model only when that identity is unique; never guess between duplicates
+ * or rely on monitor enumeration indices.
  */
 static GdkMonitor *_preview_find_monitor(GdkDisplay *display, const char *monitor_name)
 {
   const int n_monitors = gdk_display_get_n_monitors(display);
-  const gboolean legacy_identity = !IS_NULL_PTR(monitor_name) && IS_NULL_PTR(strchr(monitor_name, '@'));
+  if(IS_NULL_PTR(monitor_name)) return NULL;
+  const char *identity_origin = strchr(monitor_name, '@');
+  gchar *wanted_base = IS_NULL_PTR(identity_origin)
+                           ? g_strdup(monitor_name)
+                           : g_strndup(monitor_name, identity_origin - monitor_name);
+  GdkMonitor *base_match = NULL;
+  int base_matches = 0;
   for(int i = 0; i < n_monitors; i++)
   {
     GdkMonitor *monitor = gdk_display_get_monitor(display, i);
     gchar *name = _preview_monitor_name(monitor);
-    gboolean found = g_strcmp0(name, monitor_name) == 0;
-    dt_free(name);
-    if(!found && legacy_identity)
+    if(g_strcmp0(name, monitor_name) == 0)
     {
-      name = _preview_legacy_monitor_name(monitor);
-      found = g_strcmp0(name, monitor_name) == 0;
       dt_free(name);
+      dt_free(wanted_base);
+      return monitor;
     }
-    if(found) return monitor;
+
+    const char *monitor_origin = strchr(name, '@');
+    gchar *monitor_base = IS_NULL_PTR(monitor_origin)
+                              ? g_strdup(name)
+                              : g_strndup(name, monitor_origin - name);
+    if(g_strcmp0(monitor_base, wanted_base) == 0)
+    {
+      base_match = monitor;
+      base_matches++;
+    }
+    dt_free(monitor_base);
+    dt_free(name);
   }
-  return NULL;
+  dt_free(wanted_base);
+  return base_matches == 1 ? base_match : NULL;
 }
 
 /**
@@ -297,16 +324,80 @@ static gboolean _preview_read_geometry(dt_preview_window_t *preview, const char 
     preview->geometry_valid = TRUE;
   }
 
+  GdkRectangle geometry = { 0 }, workarea = { 0 };
+  if(!IS_NULL_PTR(monitor))
+  {
+    gdk_monitor_get_geometry(monitor, &geometry);
+    gdk_monitor_get_workarea(monitor, &workarea);
+  }
+  dt_print(DT_DEBUG_LIGHTTABLE,
+           "[preview geometry] read key=%s monitor=%s geometry=%d,%d %dx%d "
+           "workarea=%d,%d %dx%d raw=%s valid=%d ratio=%d,%d %dx%d maximized=%d\n",
+           key, current_name, geometry.x, geometry.y, geometry.width, geometry.height,
+           workarea.x, workarea.y, workarea.width, workarea.height,
+           IS_NULL_PTR(value) ? "(missing)" : value, valid && valid_values,
+           preview->x_ratio, preview->y_ratio, preview->width_ratio, preview->height_ratio,
+           preview->maximized);
   dt_free(value);
   dt_free(key);
   dt_free(current_name);
   return valid && valid_values;
 }
 
+/**
+ * @brief Finish geometry restoration after GTK and the window manager process size and position.
+ * @details Keep geometry saves suspended while the restored placement settles.
+ */
 static gboolean _preview_finish_geometry_apply(gpointer user_data)
 {
   dt_preview_window_t *preview = (dt_preview_window_t *)user_data;
   preview->geometry_apply_source = 0;
+  if(preview->position_after_resize)
+  {
+    if(preview->tracked_width != preview->target_width
+       || preview->tracked_height != preview->target_height)
+    {
+      preview->geometry_apply_attempts++;
+      if(preview->geometry_apply_attempts < 30)
+      {
+        preview->geometry_apply_source =
+            g_timeout_add(100, _preview_finish_geometry_apply, preview);
+        return G_SOURCE_REMOVE;
+      }
+    }
+    preview->position_after_resize = FALSE;
+    preview->position_move_pending = TRUE;
+    preview->geometry_apply_attempts = 0;
+    gtk_window_move(GTK_WINDOW(preview->window), preview->target_x, preview->target_y);
+    _preview_defer_geometry_tracking(preview);
+    return G_SOURCE_REMOVE;
+  }
+  if(preview->maximize_after_move)
+  {
+    preview->geometry_apply_attempts++;
+    if(preview->geometry_apply_attempts < 30)
+    {
+      preview->geometry_apply_source =
+          g_timeout_add(100, _preview_finish_geometry_apply, preview);
+      return G_SOURCE_REMOVE;
+    }
+    preview->maximize_after_move = FALSE;
+    preview->position_move_pending = FALSE;
+    gtk_window_maximize(GTK_WINDOW(preview->window));
+    _preview_defer_geometry_tracking(preview);
+    return G_SOURCE_REMOVE;
+  }
+  if(preview->position_move_pending)
+  {
+    preview->geometry_apply_attempts++;
+    if(preview->geometry_apply_attempts < 30)
+    {
+      preview->geometry_apply_source =
+          g_timeout_add(100, _preview_finish_geometry_apply, preview);
+      return G_SOURCE_REMOVE;
+    }
+    preview->position_move_pending = FALSE;
+  }
   preview->applying_geometry = FALSE;
   if(!IS_NULL_PTR(preview->return_monitor_name)
      && g_strcmp0(preview->monitor_name, preview->return_monitor_name) == 0
@@ -360,11 +451,34 @@ static void _preview_apply_geometry(GtkWidget *window, GdkMonitor *monitor, dt_p
   const int y = workarea.y + (int)((gint64)workarea.height * preview->y_ratio / 10000) - height / 2;
   const int clamped_x = CLAMP(x, workarea.x, workarea.x + workarea.width - width);
   const int clamped_y = CLAMP(y, workarea.y, workarea.y + workarea.height - height);
+  gchar *monitor_name = _preview_monitor_name(monitor);
+  dt_print(DT_DEBUG_LIGHTTABLE,
+           "[preview geometry] apply monitor=%s workarea=%d,%d %dx%d ratio=%d,%d %dx%d "
+           "maximized=%d target=%d,%d %dx%d clamped=%d,%d\n",
+           monitor_name, workarea.x, workarea.y, workarea.width, workarea.height,
+           preview->x_ratio, preview->y_ratio, preview->width_ratio, preview->height_ratio,
+           preview->maximized, x, y, width, height, clamped_x, clamped_y);
+  dt_free(monitor_name);
   _preview_defer_geometry_tracking(preview);
+  preview->target_x = clamped_x;
+  preview->target_y = clamped_y;
+  preview->target_width = width;
+  preview->target_height = height;
+  preview->position_after_resize = TRUE;
+  preview->position_move_pending = FALSE;
+  preview->maximize_after_move = preview->maximized;
+  preview->geometry_apply_attempts = 0;
   gtk_window_unmaximize(GTK_WINDOW(window));
+  gtk_window_set_default_size(GTK_WINDOW(window), width, height);
   gtk_window_resize(GTK_WINDOW(window), width, height);
-  gtk_window_move(GTK_WINDOW(window), clamped_x, clamped_y);
-  if(preview->maximized) gtk_window_maximize(GTK_WINDOW(window));
+  if(width == preview->tracked_width && height == preview->tracked_height)
+  {
+    preview->position_after_resize = FALSE;
+    preview->position_move_pending = TRUE;
+    preview->geometry_apply_attempts = 0;
+    gtk_window_move(GTK_WINDOW(window), clamped_x, clamped_y);
+    _preview_defer_geometry_tracking(preview);
+  }
 }
 
 /**
@@ -398,6 +512,11 @@ static void _preview_save_geometry(GtkWidget *window, dt_preview_window_t *previ
   gchar *monitor_name = _preview_monitor_name(monitor);
   if(preview->applying_geometry)
   {
+    dt_print(DT_DEBUG_LIGHTTABLE,
+             "[preview geometry] save skipped applying=1 monitor=%s position=%d,%d size=%dx%d "
+             "return=%s\n",
+             monitor_name, x, y, width, height,
+             IS_NULL_PTR(preview->return_monitor_name) ? "(none)" : preview->return_monitor_name);
     dt_free(monitor_name);
     return;
   }
@@ -408,6 +527,10 @@ static void _preview_save_geometry(GtkWidget *window, dt_preview_window_t *previ
      && IS_NULL_PTR(_preview_find_monitor(display, preview->monitor_name)))
   {
     preview->return_monitor_name = g_strdup(preview->monitor_name);
+    dt_print(DT_DEBUG_LIGHTTABLE,
+             "[preview geometry] save deferred missing-monitor=%s current=%s position=%d,%d "
+             "size=%dx%d\n",
+             preview->monitor_name, monitor_name, x, y, width, height);
     dt_free(monitor_name);
     return;
   }
@@ -415,11 +538,19 @@ static void _preview_save_geometry(GtkWidget *window, dt_preview_window_t *previ
   if(!IS_NULL_PTR(preview->return_monitor_name)
      && g_strcmp0(preview->monitor_name, monitor_name) != 0)
   {
+    dt_print(DT_DEBUG_LIGHTTABLE,
+             "[preview geometry] save skipped waiting-for=%s current=%s position=%d,%d "
+             "size=%dx%d\n",
+             preview->return_monitor_name, monitor_name, x, y, width, height);
     dt_free(monitor_name);
     return;
   }
   if(!IS_NULL_PTR(preview->return_monitor_name))
   {
+    dt_print(DT_DEBUG_LIGHTTABLE,
+             "[preview geometry] save skipped return-pending=%s monitor=%s position=%d,%d "
+             "size=%dx%d\n",
+             preview->return_monitor_name, monitor_name, x, y, width, height);
     dt_free(monitor_name);
     return;
   }
@@ -428,6 +559,10 @@ static void _preview_save_geometry(GtkWidget *window, dt_preview_window_t *previ
   gdk_monitor_get_workarea(monitor, &workarea);
   if(workarea.width < 1 || workarea.height < 1)
   {
+    dt_print(DT_DEBUG_LIGHTTABLE,
+             "[preview geometry] save skipped invalid-workarea monitor=%s "
+             "workarea=%d,%d %dx%d\n",
+             monitor_name, workarea.x, workarea.y, workarea.width, workarea.height);
     dt_free(monitor_name);
     return;
   }
@@ -443,6 +578,13 @@ static void _preview_save_geometry(GtkWidget *window, dt_preview_window_t *previ
   preview->height_ratio = CLAMP((int)((gint64)height * 10000 / workarea.height), 1, 10000);
   preview->maximized = gtk_window_is_maximized(GTK_WINDOW(window));
   preview->geometry_valid = TRUE;
+  dt_print(DT_DEBUG_LIGHTTABLE,
+           "[preview geometry] save monitor=%s position=%d,%d size=%dx%d "
+           "workarea=%d,%d %dx%d ratio=%d,%d %dx%d maximized=%d persist=%d user=%d\n",
+           monitor_name, x, y, width, height, workarea.x, workarea.y, workarea.width,
+           workarea.height, preview->x_ratio, preview->y_ratio, preview->width_ratio,
+           preview->height_ratio, preview->maximized, preview->persist_geometry,
+           preview->user_geometry_set);
   if(preview->persist_geometry && preview->user_geometry_set)
   {
     _preview_write_geometry(monitor_name, preview);
@@ -455,13 +597,48 @@ static void _preview_save_geometry(GtkWidget *window, dt_preview_window_t *previ
 static gboolean _preview_configure_event(GtkWidget *window, GdkEventConfigure *event, gpointer user_data)
 {
   dt_preview_window_t *preview = (dt_preview_window_t *)user_data;
-  if(preview->applying_geometry)
+  const gboolean changed = event->x != preview->tracked_x || event->y != preview->tracked_y
+                           || event->width != preview->tracked_width
+                           || event->height != preview->tracked_height;
+  if(preview->applying_geometry || preview->geometry_tracking)
+  {
+    preview->tracked_x = event->x;
+    preview->tracked_y = event->y;
+    preview->tracked_width = event->width;
+    preview->tracked_height = event->height;
+  }
+  if(changed)
+    dt_print(DT_DEBUG_LIGHTTABLE,
+             "[preview geometry] configure position=%d,%d size=%dx%d changed=%d tracking=%d "
+             "applying=%d monitor-update=%u saved-monitor=%s return=%s ratio=%d,%d %dx%d\n",
+             event->x, event->y, event->width, event->height, changed, preview->geometry_tracking,
+             preview->applying_geometry, preview->monitor_update_source,
+             IS_NULL_PTR(preview->monitor_name) ? "(none)" : preview->monitor_name,
+             IS_NULL_PTR(preview->return_monitor_name) ? "(none)" : preview->return_monitor_name,
+             preview->x_ratio, preview->y_ratio, preview->width_ratio, preview->height_ratio);
+  if(preview->position_after_resize && event->width == preview->target_width
+     && event->height == preview->target_height)
+  {
+    preview->position_after_resize = FALSE;
+    preview->position_move_pending = TRUE;
+    preview->geometry_apply_attempts = 0;
+    gtk_window_move(GTK_WINDOW(window), preview->target_x, preview->target_y);
+  }
+  if(preview->maximize_after_move && preview->position_move_pending
+     && ABS(event->x - preview->target_x) <= 2 && ABS(event->y - preview->target_y) <= 2)
+  {
+    preview->position_move_pending = FALSE;
+    preview->maximize_after_move = FALSE;
+    preview->geometry_apply_attempts = 0;
+    gtk_window_maximize(GTK_WINDOW(window));
+  }
+  else if(preview->position_move_pending && !preview->maximize_after_move
+          && ABS(event->x - preview->target_x) <= 2 && ABS(event->y - preview->target_y) <= 2)
+    preview->position_move_pending = FALSE;
+  if(preview->applying_geometry && preview->monitor_update_source == 0)
     _preview_defer_geometry_tracking(preview);
   if(preview->geometry_tracking)
   {
-    const gboolean changed = event->x != preview->tracked_x || event->y != preview->tracked_y
-                             || event->width != preview->tracked_width
-                             || event->height != preview->tracked_height;
     if(changed && !preview->applying_geometry)
     {
       GdkWindow *gdk_window = gtk_widget_get_window(window);
@@ -485,10 +662,6 @@ static gboolean _preview_configure_event(GtkWidget *window, GdkEventConfigure *e
         preview->user_geometry_set = TRUE;
       dt_free(monitor_name);
     }
-    preview->tracked_x = event->x;
-    preview->tracked_y = event->y;
-    preview->tracked_width = event->width;
-    preview->tracked_height = event->height;
   }
   _preview_save_geometry(window, preview, event->x, event->y, event->width, event->height);
   return FALSE;
@@ -542,16 +715,30 @@ static void _preview_update_monitor_configuration(dt_preview_window_t *preview, 
     GdkMonitor *return_monitor = _preview_find_monitor(display, preview->return_monitor_name);
     if(!IS_NULL_PTR(return_monitor))
     {
+      gchar *monitor_name = _preview_monitor_name(return_monitor);
+      dt_print(DT_DEBUG_LIGHTTABLE,
+               "[preview monitor] restore saved=%s matched=%s ratio=%d,%d %dx%d\n",
+               preview->return_monitor_name, monitor_name, preview->x_ratio, preview->y_ratio,
+               preview->width_ratio, preview->height_ratio);
+      dt_free(monitor_name);
       dt_free(preview->monitor_name);
       preview->monitor_name = g_strdup(preview->return_monitor_name);
       _preview_apply_geometry(preview->window, return_monitor, preview);
-      gtk_window_present(GTK_WINDOW(preview->window));
       return;
     }
   }
 
   GdkMonitor *monitor = _preview_find_monitor(display, preview->monitor_name);
-  if(!IS_NULL_PTR(monitor)) return;
+  if(!IS_NULL_PTR(monitor))
+  {
+    gchar *monitor_name = _preview_monitor_name(monitor);
+    dt_print(DT_DEBUG_LIGHTTABLE, "[preview monitor] retained=%s return=%s\n",
+             monitor_name, IS_NULL_PTR(preview->return_monitor_name)
+                               ? "(none)"
+                               : preview->return_monitor_name);
+    dt_free(monitor_name);
+    return;
+  }
   if(IS_NULL_PTR(preview->return_monitor_name))
     preview->return_monitor_name = g_strdup(preview->monitor_name);
 
@@ -559,10 +746,15 @@ static void _preview_update_monitor_configuration(dt_preview_window_t *preview, 
   if(IS_NULL_PTR(monitor)) return;
 
   gchar *monitor_name = _preview_monitor_name(monitor);
+  dt_print(DT_DEBUG_LIGHTTABLE,
+           "[preview monitor] fallback saved=%s return=%s selected=%s ratio=%d,%d %dx%d\n",
+           IS_NULL_PTR(preview->monitor_name) ? "(none)" : preview->monitor_name,
+           IS_NULL_PTR(preview->return_monitor_name) ? "(none)" : preview->return_monitor_name,
+           monitor_name, preview->x_ratio, preview->y_ratio, preview->width_ratio,
+           preview->height_ratio);
   dt_free(preview->monitor_name);
   preview->monitor_name = monitor_name;
   _preview_apply_geometry(preview->window, monitor, preview);
-  gtk_window_present(GTK_WINDOW(preview->window));
 }
 
 static gboolean _preview_monitor_update_idle(gpointer user_data)
@@ -570,11 +762,24 @@ static gboolean _preview_monitor_update_idle(gpointer user_data)
   dt_preview_window_t *preview = (dt_preview_window_t *)user_data;
   preview->monitor_update_source = 0;
   _preview_update_monitor_configuration(preview, gtk_widget_get_display(preview->window));
+  if(preview->geometry_apply_source == 0)
+  {
+    preview->applying_geometry = FALSE;
+  }
   return G_SOURCE_REMOVE;
 }
 
 static void _preview_schedule_monitor_update(dt_preview_window_t *preview)
 {
+  // Ignore window-manager reflow events until the coalesced monitor update applies the
+  // preview's saved geometry; otherwise a transient unplug/replug position can be persisted.
+  if(preview->geometry_apply_source != 0)
+    g_source_remove(preview->geometry_apply_source);
+  preview->geometry_apply_source = 0;
+  preview->position_after_resize = FALSE;
+  preview->position_move_pending = FALSE;
+  preview->maximize_after_move = FALSE;
+  preview->applying_geometry = TRUE;
   if(preview->monitor_update_source == 0)
     preview->monitor_update_source = g_timeout_add(100, _preview_monitor_update_idle, preview);
 }
@@ -582,12 +787,23 @@ static void _preview_schedule_monitor_update(dt_preview_window_t *preview)
 static void _preview_monitors_changed(GdkScreen *screen, gpointer user_data)
 {
   dt_preview_window_t *preview = (dt_preview_window_t *)user_data;
+  dt_print(DT_DEBUG_LIGHTTABLE, "[preview monitor] monitors-changed count=%d\n",
+           gdk_display_get_n_monitors(gdk_screen_get_display(screen)));
   _preview_schedule_monitor_update(preview);
 }
 
 static void _preview_monitor_added(GdkDisplay *display, GdkMonitor *monitor, gpointer user_data)
 {
   dt_preview_window_t *preview = (dt_preview_window_t *)user_data;
+  GdkRectangle geometry = { 0 }, workarea = { 0 };
+  gchar *monitor_name = _preview_monitor_name(monitor);
+  gdk_monitor_get_geometry(monitor, &geometry);
+  gdk_monitor_get_workarea(monitor, &workarea);
+  dt_print(DT_DEBUG_LIGHTTABLE,
+           "[preview monitor] added=%s geometry=%d,%d %dx%d workarea=%d,%d %dx%d\n",
+           monitor_name, geometry.x, geometry.y, geometry.width, geometry.height,
+           workarea.x, workarea.y, workarea.width, workarea.height);
+  dt_free(monitor_name);
   _preview_schedule_monitor_update(preview);
 }
 
@@ -595,6 +811,16 @@ static void _preview_monitor_removed(GdkDisplay *display, GdkMonitor *monitor, g
 {
   dt_preview_window_t *preview = (dt_preview_window_t *)user_data;
   gchar *removed_monitor_name = _preview_monitor_name(monitor);
+  GdkRectangle geometry = { 0 }, workarea = { 0 };
+  gdk_monitor_get_geometry(monitor, &geometry);
+  gdk_monitor_get_workarea(monitor, &workarea);
+  dt_print(DT_DEBUG_LIGHTTABLE,
+           "[preview monitor] removed=%s geometry=%d,%d %dx%d workarea=%d,%d %dx%d "
+           "saved=%s return=%s\n",
+           removed_monitor_name, geometry.x, geometry.y, geometry.width, geometry.height,
+           workarea.x, workarea.y, workarea.width, workarea.height,
+           IS_NULL_PTR(preview->monitor_name) ? "(none)" : preview->monitor_name,
+           IS_NULL_PTR(preview->return_monitor_name) ? "(none)" : preview->return_monitor_name);
   if(IS_NULL_PTR(preview->return_monitor_name)
      && g_strcmp0(preview->monitor_name, removed_monitor_name) == 0)
     preview->return_monitor_name = g_strdup(removed_monitor_name);
@@ -769,7 +995,7 @@ void dt_preview_window_spawn(const int32_t imgid, const gboolean restore_saved_g
   dt_free(role);
 
   const dt_image_t *img = dt_image_cache_get(imgid, 'r');
-  gchar *name = g_strdup_printf(_("Ansel - Preview: %s [v%d]"), img->filename, img->version);
+  gchar *name = g_strdup_printf(_("Ansel - Preview: %s [%d]"), img->filename, img->version);
   dt_image_cache_read_release(img);
   gtk_window_set_title(GTK_WINDOW(dialog), name);
   dt_free(name);

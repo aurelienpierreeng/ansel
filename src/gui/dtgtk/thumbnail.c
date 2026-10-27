@@ -316,11 +316,11 @@ static GtkWidget *_create_menu(dt_thumbnail_t *thumb)
   menu_item = _gtk_menu_item_new_with_markup("<span foreground='#BB22BB'>\342\254\244</span> Purple", sub_menu, _color_label_callback, thumb);
   g_object_set_data(G_OBJECT(menu_item), "custom-data", GINT_TO_POINTER(4));
 
-  sep = gtk_separator_menu_item_new();
-  gtk_menu_shell_append(GTK_MENU_SHELL(menu), sep);
-
-  _gtk_menu_item_new_with_markup(_("Open centered preview"), menu, _preview_window_open, thumb);
-  _gtk_menu_item_new_with_markup(_("Open preview at saved position"), menu,
+  menu_item = _gtk_menu_item_new_with_markup(_("Open in preview window…"), menu, NULL, thumb);
+  sub_menu = gtk_menu_new();
+  gtk_menu_item_set_submenu(GTK_MENU_ITEM(menu_item), sub_menu);
+  _gtk_menu_item_new_with_markup(_("Open centered preview"), sub_menu, _preview_window_open, thumb);
+  _gtk_menu_item_new_with_markup(_("Open preview at saved position"), sub_menu,
                                  _preview_window_open_saved, thumb);
 
   sep = gtk_separator_menu_item_new();
