@@ -111,3 +111,7 @@ busy (a `ninja` had just finished; other files in the tree were changing), which
 a thread race in `dt_masks_get_mask_roi()` — **unconfirmed**: no failing image was captured.
 Next step: loop the test under load or with varied `OMP_NUM_THREADS` and keep the PNGs of
 the first failure.
+
+CI cannot see either (2026-10-27, on top of `b0f10525fd`): both are differences against the
+baselines, which are compared only where `tests/image_test/samples` is cloned, and no workflow
+clones it (`ci.md`). Reproducing them takes a local run with the bank.

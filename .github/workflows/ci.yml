@@ -415,6 +415,17 @@ jobs:
             exit 1
           fi
           test -s "${probe}/out.png"
+      - name: Run unit tests
+        # Debug only, as on Linux: that is where CMakeLists.txt builds the suite by default, with
+        # the cmocka install-deps-windows-msys2.sh installs; Release builds none. --no-tests=error
+        # turns a suite that was not built into a failure instead of an empty pass. No xvfb here:
+        # GTK draws through Win32, and if gtk_init_check() still fails, test_tagging_completion
+        # reports itself skipped. The MSYS2 DLLs resolve through the shell's PATH, libansel.dll is
+        # copied beside the tests. masks_geometry runs too: its intermittent Windows failure is a
+        # difference against the baseline PNGs, and CI has no baselines to compare (doc/ci.md).
+        if: ${{ matrix.btype == 'Debug' }}
+        run: |
+          ctest --test-dir "${BUILD_DIR}" --output-on-failure --no-tests=error
 
   macOS:
     name: macOS.${{ matrix.compiler.compiler }}.${{ matrix.build.xcode }}.${{ matrix.target }}.${{ matrix.btype }}.${{ matrix.generator }}
