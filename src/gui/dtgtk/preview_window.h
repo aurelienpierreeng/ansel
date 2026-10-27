@@ -23,15 +23,9 @@
 #include <stdint.h>
 
 /**
- * @brief Open an image preview using default or globally persisted geometry.
+ * @brief Open an image preview using shared session geometry or centered 420×420 geometry.
  * @param imgid Image to display.
- * @param restore_saved_geometry TRUE to restore the global preview layout.
  */
-void dt_preview_window_spawn(const int32_t imgid, const gboolean restore_saved_geometry);
-
-/**
- * @brief Raise open preview windows after lighttable interaction without activating them.
- */
-void dt_preview_window_raise_all(void);
+void dt_preview_window_spawn(const int32_t imgid);
 
 #endif // DT_GUI_DTGTK_PREVIEW_WINDOW_H

@@ -204,12 +204,7 @@ static void _color_label_callback(GtkWidget *widget, dt_thumbnail_t *thumb)
 
 static void _preview_window_open(GtkWidget *widget, dt_thumbnail_t *thumb)
 {
-  dt_preview_window_spawn(thumb->info.id, FALSE);
-}
-
-static void _preview_window_open_saved(GtkWidget *widget, dt_thumbnail_t *thumb)
-{
-  dt_preview_window_spawn(thumb->info.id, TRUE);
+  dt_preview_window_spawn(thumb->info.id);
 }
 
 static void _active_module_row(void *user_data, const int num, const char *op, const char *multi)
@@ -316,12 +311,7 @@ static GtkWidget *_create_menu(dt_thumbnail_t *thumb)
   menu_item = _gtk_menu_item_new_with_markup("<span foreground='#BB22BB'>\342\254\244</span> Purple", sub_menu, _color_label_callback, thumb);
   g_object_set_data(G_OBJECT(menu_item), "custom-data", GINT_TO_POINTER(4));
 
-  menu_item = _gtk_menu_item_new_with_markup(_("Open in preview window…"), menu, NULL, thumb);
-  sub_menu = gtk_menu_new();
-  gtk_menu_item_set_submenu(GTK_MENU_ITEM(menu_item), sub_menu);
-  _gtk_menu_item_new_with_markup(_("Open centered preview"), sub_menu, _preview_window_open, thumb);
-  _gtk_menu_item_new_with_markup(_("Open preview at saved position"), sub_menu,
-                                 _preview_window_open_saved, thumb);
+  _gtk_menu_item_new_with_markup(_("Preview image"), menu, _preview_window_open, thumb);
 
   sep = gtk_separator_menu_item_new();
   gtk_menu_shell_append(GTK_MENU_SHELL(menu), sep);
@@ -830,7 +820,6 @@ static gboolean _event_main_press(GtkWidget *widget, GdkEventButton *event, gpoi
     gtk_menu_popup_at_pointer(GTK_MENU(menu), NULL);
     return TRUE;
   }
-
   return FALSE;
 }
 
@@ -846,13 +835,8 @@ static gboolean _event_main_release(GtkWidget *widget, GdkEventButton *event, gp
   {
     if(dt_modifier_is(event->state, 0))
       dt_selection_select_single(dt_selection_get_global(), thumb->info.id);
-    else if(dt_modifier_is(event->state, DT_PRIMARY_MASK))
-      dt_selection_toggle(dt_selection_get_global(), thumb->info.id);
     else if(dt_modifier_is(event->state, GDK_SHIFT_MASK) && thumb->table)
       dt_thumbtable_select_range(thumb->table, thumb->rowid);
-    // Because selection might include several images, we handle styling globally
-    // in the thumbtable scope, catching the SELECTION_CHANGED signal.
-    dt_preview_window_raise_all();
     return TRUE;
   }
   else if(event->button == 1
