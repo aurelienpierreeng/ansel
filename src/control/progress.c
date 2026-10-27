@@ -26,8 +26,9 @@
 
 #include "system/macros.h"
 #include "system/mem_alloc.h"
-// dt_gui_main_window() is used only under _WIN32 below; a Linux clang-tidy run analyses
-// the other branch and cannot see it. Removing this include breaks the Windows build.
+// dt_gui_get_global() and dt_gui_main_window() are used only under _WIN32 below; a Linux
+// clang-tidy run analyses the other branch and cannot see them. Removing this include breaks
+// the Windows build.
 // The suppression is on the line itself: NOLINTNEXTLINE applies to the immediately
 // following line, so a multi-line reason above it suppresses a comment and nothing else.
 #include "gui/application.h"  // NOLINT(misc-include-cleaner)
@@ -50,6 +51,16 @@
 #ifndef ITaskbarList3_HrInit
   #define ITaskbarList3_HrInit(This) (This)->lpVtbl->HrInit(This)
 #endif
+
+/* The taskbar button the progress is drawn on belongs to the main window. Without a GUI --
+ * ansel-cli, the unit tests -- there is no window and no button, and dt_gui_main_window()
+ * would dereference the missing GUI. Jobs create progress bars in either case. */
+static HWND _taskbar_window(void)
+{
+  if(IS_NULL_PTR(dt_gui_get_global())) return NULL;
+  GdkWindow *window = gtk_widget_get_window(dt_gui_main_window());
+  return IS_NULL_PTR(window) ? NULL : GDK_WINDOW_HWND(window);
+}
 #endif
 
 
@@ -101,6 +112,9 @@ static void global_progress_start(dt_control_t *control, dt_progress_t *progress
 
 #else // _WIN32
 
+  const HWND hwnd = _taskbar_window();
+  if(IS_NULL_PTR(hwnd)) return;
+
   // we can't init this in dt_control_progress_init as it's run too early :/
   if(!control->progress_system.taskbarlist)
   {
@@ -112,7 +126,6 @@ static void global_progress_start(dt_control_t *control, dt_progress_t *progress
 
   if(control->progress_system.taskbarlist)
   {
-    HWND hwnd = GDK_WINDOW_HWND(gtk_widget_get_window(dt_gui_main_window()));
     if(ITaskbarList3_SetProgressState(control->progress_system.taskbarlist, hwnd, TBPF_NORMAL) != S_OK)
       fprintf(stderr, "[progress_create] SetProgressState failed\n");
     if(ITaskbarList3_SetProgressValue(control->progress_system.taskbarlist, hwnd, control->progress_system.global_progress * 100, 100) != S_OK)
@@ -153,9 +166,9 @@ static void global_progress_set(dt_control_t *control, dt_progress_t *progress, 
 
 #else // _WIN32
 
-  if(control->progress_system.taskbarlist)
+  const HWND hwnd = _taskbar_window();
+  if(control->progress_system.taskbarlist && !IS_NULL_PTR(hwnd))
   {
-    HWND hwnd = GDK_WINDOW_HWND(gtk_widget_get_window(dt_gui_main_window()));
     if(ITaskbarList3_SetProgressValue(control->progress_system.taskbarlist, hwnd, control->progress_system.global_progress * 100, 100) != S_OK)
       fprintf(stderr, "[progress_create] SetProgressValue failed\n");
   }
@@ -209,9 +222,9 @@ static void global_progress_end(dt_control_t *control, dt_progress_t *progress)
 
 #else // _WIN32
 
-  if(control->progress_system.taskbarlist)
+  const HWND hwnd = _taskbar_window();
+  if(control->progress_system.taskbarlist && !IS_NULL_PTR(hwnd))
   {
-    HWND hwnd = GDK_WINDOW_HWND(gtk_widget_get_window(dt_gui_main_window()));
     if(control->progress_system.n_progress_bar == 0)
     {
       if(ITaskbarList3_SetProgressState(control->progress_system.taskbarlist, hwnd, TBPF_NOPROGRESS) != S_OK)
