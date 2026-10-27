@@ -76,6 +76,7 @@ void _preview_redraw(gpointer instance, dt_preview_window_t *preview);
 
 static guint64 _preview_next_window_id = 0;
 static GList *_preview_windows = NULL;
+static dt_preview_window_t *_preview_focused_window = NULL;
 static gboolean _preview_geometry_valid = FALSE;
 static int _preview_x = 0;
 static int _preview_y = 0;
@@ -321,6 +322,16 @@ static gboolean _preview_main_window_state_event(GtkWidget *window, GdkEventWind
 }
 
 /**
+ * @brief Use the last-focused preview as the placement source for the next preview.
+ */
+static gboolean _preview_focus_in_event(GtkWidget *window, GdkEventFocus *event,
+                                        gpointer user_data)
+{
+  _preview_focused_window = (dt_preview_window_t *)user_data;
+  return FALSE;
+}
+
+/**
  * @brief Forget the main-window signal connections if it is destroyed first.
  */
 static void _preview_main_window_destroy(GtkWidget *window, gpointer user_data)
@@ -399,6 +410,8 @@ static void _preview_window_destroy(GtkWidget *dialog, gpointer user_data)
   }
 
   _preview_windows = g_list_remove(_preview_windows, preview);
+  if(_preview_focused_window == preview)
+    _preview_focused_window = NULL;
 
   // Disconnect before freeing: otherwise the handler can fire with a dangling preview pointer.
   DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(dt_control_signal_get_global(), G_CALLBACK(_preview_redraw), preview);
@@ -523,20 +536,35 @@ void dt_preview_window_spawn(const int32_t imgid)
 
   GtkWidget *main_window = dt_gui_main_window();
   GdkMonitor *maximized_monitor = NULL;
-  GList *last_preview = g_list_last(_preview_windows);
-  if(!IS_NULL_PTR(last_preview))
+  int x = _preview_x, y = _preview_y;
+  int width = _preview_geometry_valid ? _preview_width : 420;
+  int height = _preview_geometry_valid ? _preview_height : 420;
+  gboolean has_focused_geometry = FALSE;
+  dt_preview_window_t *focused_preview = _preview_focused_window;
+  if(!IS_NULL_PTR(focused_preview) && gtk_widget_get_visible(focused_preview->window))
   {
-    dt_preview_window_t *last = (dt_preview_window_t *)last_preview->data;
-    GdkWindow *last_window = gtk_widget_get_window(last->window);
-    if(gtk_widget_get_visible(last->window) && !IS_NULL_PTR(last_window)
-       && gtk_window_is_maximized(GTK_WINDOW(last->window)))
-      maximized_monitor =
-          gdk_display_get_monitor_at_window(gtk_widget_get_display(last->window), last_window);
+    GdkWindow *focused_gdk_window = gtk_widget_get_window(focused_preview->window);
+    if(!IS_NULL_PTR(focused_gdk_window))
+    {
+      GdkMonitor *focused_monitor =
+          gdk_display_get_monitor_at_window(focused_preview->display, focused_gdk_window);
+      if(!IS_NULL_PTR(focused_monitor))
+      {
+        if(gtk_window_is_maximized(GTK_WINDOW(focused_preview->window)))
+        {
+          maximized_monitor = focused_monitor;
+          has_focused_geometry = TRUE;
+        }
+        else
+        {
+          gtk_window_get_position(GTK_WINDOW(focused_preview->window), &x, &y);
+          gtk_window_get_size(GTK_WINDOW(focused_preview->window), &width, &height);
+          has_focused_geometry = width >= 120 && height >= 120;
+        }
+      }
+    }
   }
 
-  int x = _preview_x, y = _preview_y;
-  const int width = _preview_geometry_valid ? _preview_width : 420;
-  const int height = _preview_geometry_valid ? _preview_height : 420;
   int preview_width = width, preview_height = height;
   if(!IS_NULL_PTR(maximized_monitor))
   {
@@ -550,10 +578,11 @@ void dt_preview_window_spawn(const int32_t imgid)
   const gboolean has_saved_geometry = _preview_geometry_valid;
   gtk_window_set_default_size(GTK_WINDOW(dialog), preview_width, preview_height);
   const gboolean has_center_position =
-      IS_NULL_PTR(maximized_monitor) && !has_saved_geometry
+      IS_NULL_PTR(maximized_monitor) && !has_focused_geometry && !has_saved_geometry
       && _preview_center_on_lighttable(preview_width, preview_height, &x, &y);
   preview->restore_move_pending =
-      IS_NULL_PTR(maximized_monitor) && (has_saved_geometry || has_center_position);
+      IS_NULL_PTR(maximized_monitor)
+      && (has_focused_geometry || has_saved_geometry || has_center_position);
   preview->restore_x = x;
   preview->restore_y = y;
   if(preview->restore_move_pending || !IS_NULL_PTR(maximized_monitor))
@@ -563,6 +592,8 @@ void dt_preview_window_spawn(const int32_t imgid)
   g_signal_connect(G_OBJECT(dialog), "delete-event", G_CALLBACK(_preview_delete_event), preview);
   g_signal_connect(G_OBJECT(dialog), "configure-event", G_CALLBACK(_preview_configure_event), preview);
   g_signal_connect(G_OBJECT(dialog), "key-press-event", G_CALLBACK(_preview_key_press_event), preview);
+  g_signal_connect(G_OBJECT(dialog), "focus-in-event",
+                   G_CALLBACK(_preview_focus_in_event), preview);
 
   preview->area = gtk_drawing_area_new();
   gtk_widget_set_hexpand(preview->area, TRUE);
