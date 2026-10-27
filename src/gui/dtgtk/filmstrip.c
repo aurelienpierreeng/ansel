@@ -270,6 +270,7 @@ const dt_thumbtable_layout_ops_t *dt_thumbtable_filmstrip_ops(void)
     .grab_focus = NULL,     // filmstrip never grabs keyboard focus for its content widget
     .handle_key = NULL,     // filmstrip has no grid-only navigation/selection keys
     .pre_activate = NULL,   // filmstrip activates without pre-selecting
+    .on_keyboard_move = NULL, // its highlight is the active image, not the selection (#954)
   };
   return &ops;
 }

@@ -1764,7 +1764,7 @@ void dt_thumbtable_move_in_grid(dt_thumbtable_t *table, GdkEventKey *event, dt_t
       offset = + table->view_height / table->thumb_height * table->thumbs_per_row;
       break;
     case DT_TT_MOVE_START:
-      offset = - origin_imgid;
+      offset = - current_rowid;
       break;
     case DT_TT_MOVE_END:
       offset = +table->collection_count; // will be clamped below, don't care
@@ -1778,6 +1778,8 @@ void dt_thumbtable_move_in_grid(dt_thumbtable_t *table, GdkEventKey *event, dt_t
   dt_pthread_mutex_unlock(&table->lock);
 
   dt_thumbtable_dispatch_over(table, event->type, new_imgid);
+
+  if(table->ops->on_keyboard_move) table->ops->on_keyboard_move(table, event, new_rowid, new_imgid);
 
   if(!_is_rowid_visible(table, new_rowid))
   {
