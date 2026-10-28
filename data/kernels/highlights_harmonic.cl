@@ -1,6 +1,7 @@
 /*
     This file is part of Ansel,
     Copyright (C) 2026 Aurélien PIERRE.
+    Copyright (C) 2026 Miguel Moquillon.
 
     Ansel is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -19,8 +20,8 @@
 // Device kernels of the "harmonic transposition" highlight reconstruction (single precision).
 // The host orchestration lives in src/iop/highlights_harmonic.h; every kernel here mirrors a
 // CPU reference function there and is validated against it by the env-gated HL_*_TEST
-// self-tests. The double-precision solver kernels live in highlights_sparse.cl (they need
-// the fp64 extension, which this file must not require on every device).
+// self-tests. The sparse solver kernels, which need more than single precision, live in
+// highlights_sparse.cl and compute in hl_real_t (native double or double-float, hl_real.h).
 
 #include "common.h"
 #include "compensated.h"
@@ -35,8 +36,9 @@
 //
 // Do not guard on cl_khr_fp64 again. Measured on Apple M1: that runtime DEFINES the macro
 // without advertising the extension, so a guarded block compiles and each kernel touching a
-// double then fails at clCreateKernel (-48), per kernel, not per program. The fp64 kernels
-// that remain are the sparse Cholesky of highlights_sparse.cl.
+// double then fails at clCreateKernel (-48), per kernel, not per program. The sparse Cholesky
+// of highlights_sparse.cl is the one place that needs more than float; the host picks its
+// arithmetic per device (hl_real.h).
 
 // ===== harmonic-fill kernels (highlights harmonic transposition) ============================
 // "Harmonic fill" = repeatedly replace every hole pixel by the average of its four neighbours

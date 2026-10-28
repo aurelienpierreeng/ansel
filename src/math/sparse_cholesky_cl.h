@@ -1,6 +1,7 @@
 /*
    This file is part of Ansel,
    Copyright (C) 2026 Aurélien PIERRE.
+   Copyright (C) 2026 Miguel Moquillon.
 
    Ansel is free software: you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -27,6 +28,7 @@
 
 #include "common/logging.h"
 #include "system/macros.h"
+#include "system/mem_alloc.h"   // dt_free()
 #include "math/sparse_cholesky.h" // _sp_etree / _sp_ereach (host symbolic)
 #include "common/times.h"
 
@@ -61,12 +63,13 @@ typedef struct
   int devid;
 } _sp_chol_cl_t;
 
-// ===== GPU sparse Cholesky (double precision, level-scheduled) ==============================
+// ===== GPU sparse Cholesky (hl_real_t, level-scheduled) =====================================
 // Same symmetric-positive-definite systems as the CPU solver, factored and solved on the
 // device: the host performs the symbolic analysis on integer metadata only (elimination tree,
 // pattern of the factor L, flat column-modification update schedules, level schedule = groups
 // of mutually independent columns that can be processed in parallel), then the kernels in
-// data/kernels/highlights_sparse.cl run the numeric work in 64-bit floats. This is the
+// data/kernels/highlights_sparse.cl run the numeric work in hl_real_t: native double where the
+// device has fp64, a (hi, lo) float2 double-float elsewhere (data/kernels/hl_real.h). This is the
 // foundation of the no-roundtrip GPU pipeline (no mid-pipeline download/re-upload of pixels):
 // the right-hand side b and the solution x live in device buffers.
 
@@ -111,7 +114,7 @@ static inline cl_mem _sp_cl_upload(const int devid, const void *data, const size
 static inline cl_mem _sp_cl_upload_real(const int devid, const double *const src, const size_t n)
 {
   if(dt_opencl_device_has_fp64(devid)) return _sp_cl_upload(devid, src, sizeof(double) * n);
-  cl_float2 *split = malloc(sizeof(cl_float2) * n);
+  cl_float2 *split = g_try_malloc(sizeof(cl_float2) * n);
   if(IS_NULL_PTR(split)) return NULL;
   for(size_t i = 0; i < n; i++)
   {
@@ -120,7 +123,7 @@ static inline cl_mem _sp_cl_upload_real(const int devid, const double *const src
     split[i].s[1] = (float)(src[i] - (double)hi);
   }
   cl_mem mem = _sp_cl_upload(devid, split, sizeof(cl_float2) * n);
-  free(split);
+  dt_free(split);
   return mem;
 }
 
@@ -129,17 +132,17 @@ static inline int _sp_cl_read_real(const int devid, double *const dst, cl_mem me
 {
   if(dt_opencl_device_has_fp64(devid))
     return dt_opencl_read_buffer_from_device(devid, dst, mem, 0, sizeof(double) * n, CL_TRUE) == CL_SUCCESS;
-  cl_float2 *split = malloc(sizeof(cl_float2) * n);
+  cl_float2 *split = g_try_malloc(sizeof(cl_float2) * n);
   if(IS_NULL_PTR(split)) return 0;
   const int ok = dt_opencl_read_buffer_from_device(devid, split, mem, 0, sizeof(cl_float2) * n, CL_TRUE) == CL_SUCCESS;
   if(ok)
     for(size_t i = 0; i < n; i++) dst[i] = (double)split[i].s[0] + (double)split[i].s[1];
-  free(split);
+  dt_free(split);
   return ok;
 }
 
 // Factor the matrix A (upper-triangular compressed-sparse-column, symmetric positive
-// definite, double precision) on the GPU: host-side symbolic analysis (integer metadata),
+// definite, host double values) on the GPU: host-side symbolic analysis (integer metadata),
 // device-side numeric factorization, level by level. gd carries the kernel handles.
 // Mirrors _sp_chol_factor on the CPU: any change here must be mirrored there and re-validated
 // with the HL_SPCL_TEST self-test (_sp_chol_cl_selftest).
@@ -555,8 +558,10 @@ fail:
   return NULL;
 }
 
-// Solve the factored system L L^T x = b on the GPU, with b in a device double buffer
-// (n doubles), overwritten in place with the solution; level-scheduled forward then backward
+// Solve the factored system L L^T x = b on the GPU, with b in a device hl_real_t buffer
+// (n values, uploaded from host doubles with _sp_cl_upload_real() and read back with
+// _sp_cl_read_real() -- raw doubles are garbage on a device without fp64), overwritten in
+// place with the solution; level-scheduled forward then backward
 // substitution. Returns 0 on success. gd = kernel handles.
 // Mirrors _sp_chol_solve on the CPU: any change here must be mirrored there and re-validated
 // with the HL_SPCL_TEST self-test (_sp_chol_cl_selftest).

@@ -2,6 +2,7 @@
    This file is part of Ansel,
    Copyright (C) 2026 Aurélien PIERRE.
    Copyright (C) 2026 Guillaume Stutin.
+   Copyright (C) 2026 Miguel Moquillon.
 
    Ansel is free software: you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -116,7 +117,8 @@ int process_harmonic(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pip
 #ifdef HAVE_OPENCL
   // The GPU sparse-solver self-test lives here as well as in process_harmonic_cl(): on a device
   // whose memory budget throws this whole module back to the CPU before any kernel runs (an
-  // 8 GB Apple M1 at full sensor resolution), the CL path is otherwise never entered and
+  // 8 GB Apple M1 at full sensor resolution, whenever its free RAM is short), the CL path is
+  // otherwise never entered and
   // HL_SPCL_TEST could not exercise the double-float Cholesky at all. It allocates its own
   // small device buffers and touches nothing of the image.
   if(pipe->devid >= 0)
