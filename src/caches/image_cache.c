@@ -235,7 +235,12 @@ void dt_image_cache_allocate(void *data, dt_cache_entry_t *entry)
   // dt_alloc_align: dt_image_t embeds dt_aligned_pixel_t members (alignof 64); see #1212.
   dt_image_t *img = (dt_image_t *)dt_alloc_align(sizeof(dt_image_t));
   entry->data = img;
-  if(IS_NULL_PTR(img)) return; // dt_cache_get() frees the entry and answers NULL
+  if(IS_NULL_PTR(img))
+  {
+    // dt_cache_get() frees the entry and answers NULL
+    fprintf(stderr, "[image_cache] could not allocate a cache entry for image %" PRId32 "\n", (int32_t)entry->key);
+    return;
+  }
   dt_image_init(img);
   _image_cache_reload_from_db(img, entry->key, DT_SV_CREATE); // emits the create event
 
