@@ -22230,6 +22230,22 @@ msgstr "Erreur de traitement"
 msgid "Aborted"
 msgstr "Interrompu"
 
+#: ../src/views/view.c:1131
+msgid ""
+"Not enough memory to display the thumbnail.\n"
+"Close other applications or add more RAM to your system."
+msgstr ""
+"Pas assez de mémoire pour afficher la miniature.\n"
+"Fermez d'autres applications ou ajoutez de la RAM à votre système."
+
+#: ../src/develop/develop.c:990 ../src/imageio/imageio_core.c:1163
+msgid ""
+"Not enough memory to load the image at full size.\n"
+"Close other applications or add more RAM to your system."
+msgstr ""
+"Pas assez de mémoire pour charger l'image en pleine résolution.\n"
+"Fermez d'autres applications ou ajoutez de la RAM à votre système."
+
 #: ../tools/generate_prefs.xsl:493 ../tools/generate_prefs.xsl:506
 msgid "</xsl:text><xsl:value-of select="
 msgstr "</xsl:text><xsl:value-of select="
