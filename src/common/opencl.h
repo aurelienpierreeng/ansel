@@ -282,6 +282,11 @@ typedef struct dt_opencl_device_t
   // failing cleanly with CL_OUT_OF_RESOURCES.
   gboolean host_unified_memory;
 
+  // Whether dt_opencl_get_device_available() bounds a host-unified device's working set by
+  // max_mem_alloc / 2, a proxy for Intel NEO's per-context GPU aperture. FALSE only for an
+  // Apple GPU (Apple Silicon) under Apple's OpenCL, decided once in dt_opencl_device_init().
+  gboolean aperture_clamp;
+
   // Some devices are known to be unused by other apps so there is no need to test for available memory at all.
   // Also some devices might behave badly with the checking code, in this case we could enforce a headroom here.
   size_t forced_headroom;
