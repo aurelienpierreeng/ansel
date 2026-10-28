@@ -829,7 +829,7 @@ static gboolean _event_main_release(GtkWidget *widget, GdkEventButton *event, gp
   thumb_return_if_fails(thumb, TRUE);
   thumb->dragging = FALSE;
 
-  // Select thumbnails normally; previews are opened explicitly from the right-click menu.
+  // Keep thumbnail selection gestures separate from the preview-window context menu.
   if(event->button == 1
      && thumb->table && thumb->table->mode == DT_THUMBTABLE_MODE_FILEMANAGER)
   {
@@ -837,6 +837,8 @@ static gboolean _event_main_release(GtkWidget *widget, GdkEventButton *event, gp
       dt_selection_select_single(dt_selection_get_global(), thumb->info.id);
     else if(dt_modifier_is(event->state, GDK_SHIFT_MASK) && thumb->table)
       dt_thumbtable_select_range(thumb->table, thumb->rowid);
+    else if(dt_modifier_is(event->state, DT_PRIMARY_MASK))
+      dt_selection_toggle(dt_selection_get_global(), thumb->info.id);
     return TRUE;
   }
   else if(event->button == 1
