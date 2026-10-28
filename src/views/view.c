@@ -1090,6 +1090,7 @@ static dt_view_surface_value_t _view_image_get_surface_internal(int32_t imgid, i
   else
   {
     const dt_image_t *image = dt_image_cache_get(imgid, 'r');
+    if(IS_NULL_PTR(image)) return DT_VIEW_SURFACE_KO;
     const int full_width = image->width;
     const int full_height = image->height;
     dt_image_cache_read_release(image);

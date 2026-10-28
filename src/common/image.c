@@ -55,7 +55,7 @@
   Copyright (C) 2022 paolodepetrillo.
   Copyright (C) 2022 Victor Forsiuk.
   Copyright (C) 2023 Ricky Moon.
-  Copyright (C) 2024-2025 Guillaume Stutin.
+  Copyright (C) 2024-2026 Guillaume Stutin.
   
   darktable is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -201,46 +201,42 @@ gboolean dt_image_is_monochrome(const dt_image_t *img)
 
 static void _image_set_monochrome_flag(const int32_t imgid, gboolean monochrome, gboolean undo_on)
 {
-  dt_image_t *img = NULL;
-  gboolean changed = FALSE;
-
-  img = dt_image_cache_get(imgid, 'r');
-  if(img)
+  const dt_image_t *rimg = dt_image_cache_get(imgid, 'r');
+  if(IS_NULL_PTR(rimg))
   {
-    const int mask_bw = dt_image_monochrome_flags(img);
-    dt_image_cache_read_release(img);
-
-    if((!monochrome) && (mask_bw & DT_IMAGE_MONOCHROME_PREVIEW))
-    {
-      // wanting it to be color found preview
-      img = dt_image_cache_get(imgid, 'w');
-      img->flags &= ~(DT_IMAGE_MONOCHROME_PREVIEW | DT_IMAGE_MONOCHROME_WORKFLOW);
-      changed = TRUE;
-    }
-    if(monochrome && ((mask_bw == 0) || (mask_bw == DT_IMAGE_MONOCHROME_PREVIEW)))
-    {
-      // wanting monochrome and found color or just preview without workflow activation
-      img = dt_image_cache_get(imgid, 'w');
-      img->flags |= (DT_IMAGE_MONOCHROME_PREVIEW | DT_IMAGE_MONOCHROME_WORKFLOW);
-      changed = TRUE;
-    }
-    if(changed)
-    {
-      const int mask = dt_image_monochrome_flags(img);
-      dt_image_cache_write_release(img, DT_IMAGE_CACHE_RELAXED);
-
-      if(undo_on)
-      {
-        dt_undo_monochrome_t *undomono = (dt_undo_monochrome_t *)malloc(sizeof(dt_undo_monochrome_t));
-        undomono->imgid = imgid;
-        undomono->before = mask_bw;
-        undomono->after = mask;
-        dt_undo_record(dt_undo_get_global(), NULL, DT_UNDO_FLAGS, undomono, _pop_undo, g_free);
-      }
-    }
+    fprintf(stderr, "[image] could not dt_image_cache_get imgid %i\n", imgid);
+    return;
   }
+  const int mask_bw = dt_image_monochrome_flags(rimg);
+  dt_image_cache_read_release(rimg);
+
+  // wanting it to be color and found preview
+  const gboolean to_color = !monochrome && (mask_bw & DT_IMAGE_MONOCHROME_PREVIEW);
+  // wanting monochrome and found color or just preview without workflow activation
+  const gboolean to_monochrome = monochrome && (mask_bw == 0 || mask_bw == DT_IMAGE_MONOCHROME_PREVIEW);
+  if(!to_color && !to_monochrome) return;
+
+  dt_image_t *img = dt_image_cache_get(imgid, 'w');
+  if(IS_NULL_PTR(img))
+  {
+    fprintf(stderr, "[image] could not dt_image_cache_get imgid %i\n", imgid);
+    return;
+  }
+  if(to_monochrome)
+    img->flags |= (DT_IMAGE_MONOCHROME_PREVIEW | DT_IMAGE_MONOCHROME_WORKFLOW);
   else
-    fprintf(stderr,"[image] could not dt_image_cache_get imgid %i\n", imgid);
+    img->flags &= ~(DT_IMAGE_MONOCHROME_PREVIEW | DT_IMAGE_MONOCHROME_WORKFLOW);
+  const int mask = dt_image_monochrome_flags(img);
+  dt_image_cache_write_release(img, DT_IMAGE_CACHE_RELAXED);
+
+  if(undo_on)
+  {
+    dt_undo_monochrome_t *undomono = (dt_undo_monochrome_t *)malloc(sizeof(dt_undo_monochrome_t));
+    undomono->imgid = imgid;
+    undomono->before = mask_bw;
+    undomono->after = mask;
+    dt_undo_record(dt_undo_get_global(), NULL, DT_UNDO_FLAGS, undomono, _pop_undo, g_free);
+  }
 }
 
 void dt_image_set_monochrome_flag(const int32_t imgid, gboolean monochrome)
@@ -842,31 +838,47 @@ void dt_image_set_xmp_rating(dt_image_t *img, const int rating)
 
 void dt_image_get_location(const int32_t imgid, dt_image_geoloc_t *geoloc)
 {
+  *geoloc = (dt_image_geoloc_t){ NAN, NAN, NAN };
   const dt_image_t *img = dt_image_cache_get(imgid, 'r');
+  if(IS_NULL_PTR(img)) return;
   geoloc->longitude = img->geoloc.longitude;
   geoloc->latitude = img->geoloc.latitude;
   geoloc->elevation = img->geoloc.elevation;
   dt_image_cache_read_release(img);
 }
 
-static void _set_location(const int32_t imgid, const dt_image_geoloc_t *geoloc)
+// 0 on success, 1 when the image cannot be read: nothing is written then
+static int _set_location(const int32_t imgid, const dt_image_geoloc_t *geoloc)
 {
   /* fetch image from cache */
   dt_image_t *image = dt_image_cache_get(imgid, 'w');
+  if(IS_NULL_PTR(image))
+  {
+    fprintf(stderr, "[_set_location] could not load image %i, its location is unchanged\n", imgid);
+    return 1;
+  }
 
   memcpy(&image->geoloc, geoloc, sizeof(dt_image_geoloc_t));
 
   dt_image_cache_write_release(image, DT_IMAGE_CACHE_SAFE);
+  return 0;
 }
 
-static void _set_datetime(const int32_t imgid, const char *datetime)
+// 1 when the image cannot be read, as _set_location()
+static int _set_datetime(const int32_t imgid, const char *datetime)
 {
   /* fetch image from cache */
   dt_image_t *image = dt_image_cache_get(imgid, 'w');
+  if(IS_NULL_PTR(image))
+  {
+    fprintf(stderr, "[_set_datetime] could not load image %i, its date/time is unchanged\n", imgid);
+    return 1;
+  }
 
   dt_datetime_exif_to_img(image, datetime);
 
   dt_image_cache_write_release(image, DT_IMAGE_CACHE_SAFE);
+  return 0;
 }
 
 static void _pop_undo(gpointer user_data, const dt_undo_type_t type, dt_undo_data_t data, const dt_undo_action_t action, GList **imgs)
@@ -880,7 +892,7 @@ static void _pop_undo(gpointer user_data, const dt_undo_type_t type, dt_undo_dat
       dt_undo_geotag_t *undogeotag = (dt_undo_geotag_t *)list->data;
       const dt_image_geoloc_t *geoloc = (action == DT_ACTION_UNDO) ? &undogeotag->before : &undogeotag->after;
 
-      _set_location(undogeotag->imgid, geoloc);
+      if(_set_location(undogeotag->imgid, geoloc)) continue;
 
       *imgs = g_list_prepend(*imgs, GINT_TO_POINTER(undogeotag->imgid));
       i++;
@@ -900,8 +912,9 @@ static void _pop_undo(gpointer user_data, const dt_undo_type_t type, dt_undo_dat
     {
       dt_undo_datetime_t *undodatetime = (dt_undo_datetime_t *)list->data;
 
-      _set_datetime(undodatetime->imgid, (action == DT_ACTION_UNDO)
-                                         ? undodatetime->before : undodatetime->after);
+      if(_set_datetime(undodatetime->imgid, (action == DT_ACTION_UNDO)
+                                            ? undodatetime->before : undodatetime->after))
+        continue;
 
       *imgs = g_list_prepend(*imgs, GINT_TO_POINTER(undodatetime->imgid));
       i++;
@@ -1005,18 +1018,16 @@ static void _image_set_location(GList *imgs, const dt_image_geoloc_t *geoloc, GL
   {
     const int32_t imgid = GPOINTER_TO_INT(images->data);
 
-    if(undo_on)
-    {
-      dt_undo_geotag_t *undogeotag = (dt_undo_geotag_t *)malloc(sizeof(dt_undo_geotag_t));
-      undogeotag->imgid = imgid;
-      dt_image_get_location(imgid, &undogeotag->before);
+    dt_image_geoloc_t before = { NAN, NAN, NAN };
+    if(undo_on) dt_image_get_location(imgid, &before);
 
-      memcpy(&undogeotag->after, geoloc, sizeof(dt_image_geoloc_t));
+    if(_set_location(imgid, geoloc) || !undo_on) continue;
 
-      *undo = g_list_append(*undo, undogeotag);
-    }
-
-    _set_location(imgid, geoloc);
+    dt_undo_geotag_t *undogeotag = (dt_undo_geotag_t *)malloc(sizeof(dt_undo_geotag_t));
+    undogeotag->imgid = imgid;
+    undogeotag->before = before;
+    memcpy(&undogeotag->after, geoloc, sizeof(dt_image_geoloc_t));
+    *undo = g_list_append(*undo, undogeotag);
   }
 }
 
@@ -1058,19 +1069,18 @@ static void _image_set_images_locations(const GList *img, const GArray *gloc,
   {
     const int32_t imgid = GPOINTER_TO_INT(imgs->data);
     const dt_image_geoloc_t *geoloc = &g_array_index(gloc, dt_image_geoloc_t, i);
-    if(undo_on)
-    {
-      dt_undo_geotag_t *undogeotag = (dt_undo_geotag_t *)malloc(sizeof(dt_undo_geotag_t));
-      undogeotag->imgid = imgid;
-      dt_image_get_location(imgid, &undogeotag->before);
-
-      memcpy(&undogeotag->after, geoloc, sizeof(dt_image_geoloc_t));
-
-      *undo = g_list_prepend(*undo, undogeotag);
-    }
-
-    _set_location(imgid, geoloc);
     i++;
+
+    dt_image_geoloc_t before = { NAN, NAN, NAN };
+    if(undo_on) dt_image_get_location(imgid, &before);
+
+    if(_set_location(imgid, geoloc) || !undo_on) continue;
+
+    dt_undo_geotag_t *undogeotag = (dt_undo_geotag_t *)malloc(sizeof(dt_undo_geotag_t));
+    undogeotag->imgid = imgid;
+    undogeotag->before = before;
+    memcpy(&undogeotag->after, geoloc, sizeof(dt_image_geoloc_t));
+    *undo = g_list_prepend(*undo, undogeotag);
   }
 }
 
@@ -1410,10 +1420,15 @@ static int32_t _image_duplicate_with_version(const int32_t imgid, const int32_t 
        || dt_tag_detach_by_string("darktable|exported", newid, FALSE, FALSE))
       dt_metadata_tags_changed();
 
+    // the duplicate's row is a copy of the original's, group_id included, so an original that
+    // cannot be read leaves it in that group
     const dt_image_t *img = dt_image_cache_get(imgid, 'r');
-    const int grpid = img->group_id;
-    dt_image_cache_read_release(img);
-    dt_grouping_add_to_group(grpid, newid);
+    if(!IS_NULL_PTR(img))
+    {
+      const int grpid = img->group_id;
+      dt_image_cache_read_release(img);
+      dt_grouping_add_to_group(grpid, newid);
+    }
 
     // Reloading here exposes newid to the lighttable grid: it becomes eligible for thumbnail
     // generation immediately, against whatever history it has *right now*. Callers still about
@@ -1759,11 +1774,11 @@ static int32_t _image_import_internal(const int32_t film_id, const char *filenam
   if(strcmp(ext, "jpg") != 0 && strcmp(ext, "jpeg") != 0)
   {
     const int32_t other_group = dt_image_repository_find_group_for_pattern(film_id, sql_pattern, TRUE, id);
-    // if we have a group already
-    if(other_group != -1)
+    // if we have a group already, and its representative can be read
+    dt_image_t *other_img = (other_group != -1) ? dt_image_cache_get(other_group, 'w') : NULL;
+    if(!IS_NULL_PTR(other_img))
     {
       int other_id = other_group;
-      dt_image_t *other_img = dt_image_cache_get(other_id, 'w');
       const char *other_extension = dt_util_path_get_extension(other_img->filename);
       gchar *ext_lowercase = g_ascii_strdown(other_extension, -1);
       // if the group representative is a jpg, change group representative to this new imported image
@@ -1776,6 +1791,7 @@ static int32_t _image_import_internal(const int32_t film_id, const char *filenam
         {
           other_id = GPOINTER_TO_INT(l->data);
           dt_image_t *group_img = dt_image_cache_get(other_id, 'w');
+          if(IS_NULL_PTR(group_img)) continue;
           group_img->group_id = id;
           dt_image_cache_write_release(group_img, DT_IMAGE_CACHE_SAFE);
         }
@@ -1805,6 +1821,18 @@ static int32_t _image_import_internal(const int32_t film_id, const char *filenam
 
   // lock as shortly as possible:
   dt_image_t *img = dt_image_cache_get(id, 'w');
+  if(IS_NULL_PTR(img))
+  {
+    // a row whose Exif was never read would stay in the library and block a new import of the file
+    fprintf(stderr, "[image_import] could not load image %i for `%s', removing it\n", id, normalized_filename);
+    if(id > 0) dt_image_remove(id);
+    dt_free(ext);
+    dt_free(imgfname);
+    dt_free(basename);
+    dt_free(sql_pattern);
+    dt_free(normalized_filename);
+    return 0;
+  }
   img->group_id = group_id;
 
   // read dttags and exif for database queries!
@@ -2101,12 +2129,19 @@ int32_t dt_image_rename(const int32_t imgid, const int32_t filmid, const gchar *
       while(dup_list)
       {
         const int id = GPOINTER_TO_INT(dup_list->data);
+        dup_list = g_list_delete_link(dup_list, dup_list);
         img = dt_image_cache_get(id, 'w');
+        if(IS_NULL_PTR(img))
+        {
+          // the file and its sidecars have moved, the row of this duplicate has not
+          dt_control_alert(_("File operation failed"),
+                           _("the file was moved, but the library could not record its new place"), newimg);
+          continue;
+        }
         img->film_id = filmid;
         if(newname) g_strlcpy(img->filename, newname, DT_MAX_FILENAME_LEN);
         // write through to db and queue xmp write
         dt_image_cache_write_release(img, DT_IMAGE_CACHE_SAFE);
-        dup_list = g_list_delete_link(dup_list, dup_list);
       }
       g_list_free(dup_list);
       dup_list = NULL;
@@ -2354,6 +2389,12 @@ int dt_image_local_copy_set(const int32_t imgid)
   // update cache local copy flags, do this even if the local copy already exists as we need to set the flags
   // for duplicate
   img = dt_image_cache_get(imgid, 'w');
+  if(IS_NULL_PTR(img))
+  {
+    // the copy is written but not flagged, so nothing reads it; asking again flags it
+    dt_control_alert(_("File operation failed"), _("cannot create local copy."), srcpath);
+    return 1;
+  }
   img->flags |= DT_IMAGE_LOCAL_COPY;
   dt_image_cache_write_release(img, DT_IMAGE_CACHE_RELAXED);
 
@@ -2452,6 +2493,12 @@ int dt_image_local_copy_reset(const int32_t imgid)
   // or is not present.
 
   img = dt_image_cache_get(imgid, 'w');
+  if(IS_NULL_PTR(img))
+  {
+    // the copy is gone already, and a stale flag falls back to the original (dt_image_choose_input_path())
+    fprintf(stderr, "[dt_image_local_copy_reset] could not load image %i, its local copy flag stays\n", imgid);
+    return 0;
+  }
   img->flags &= ~DT_IMAGE_LOCAL_COPY;
   dt_image_cache_write_release(img, DT_IMAGE_CACHE_RELAXED);
 
@@ -2659,19 +2706,18 @@ static void _image_set_datetimes(const GList *img, const GArray *dtime,
     const int32_t imgid = GPOINTER_TO_INT(imgs->data);
     // if char *datetime, the returned pointer is not correct => use of _datetime_t
     const _datetime_t *datetime = &g_array_index(dtime, _datetime_t, i);
-    if(undo_on)
-    {
-      dt_undo_datetime_t *undodatetime = (dt_undo_datetime_t *)malloc(sizeof(dt_undo_datetime_t));
-      undodatetime->imgid = imgid;
-      dt_image_get_datetime(imgid, undodatetime->before);
-
-      memcpy(&undodatetime->after, datetime->dt, DT_DATETIME_LENGTH);
-
-      *undo = g_list_prepend(*undo, undodatetime);
-    }
-
-    _set_datetime(imgid, datetime->dt);
     i++;
+
+    char before[DT_DATETIME_LENGTH] = { 0 };
+    if(undo_on) dt_image_get_datetime(imgid, before);
+
+    if(_set_datetime(imgid, datetime->dt) || !undo_on) continue;
+
+    dt_undo_datetime_t *undodatetime = (dt_undo_datetime_t *)malloc(sizeof(dt_undo_datetime_t));
+    undodatetime->imgid = imgid;
+    memcpy(&undodatetime->before, before, DT_DATETIME_LENGTH);
+    memcpy(&undodatetime->after, datetime->dt, DT_DATETIME_LENGTH);
+    *undo = g_list_prepend(*undo, undodatetime);
   }
 }
 
@@ -2697,18 +2743,17 @@ static void _image_set_datetime(const GList *img, const char *datetime,
   for(GList *imgs = (GList *)img; imgs;  imgs = g_list_next(imgs))
   {
     const int32_t imgid = GPOINTER_TO_INT(imgs->data);
-    if(undo_on)
-    {
-      dt_undo_datetime_t *undodatetime = (dt_undo_datetime_t *)malloc(sizeof(dt_undo_datetime_t));
-      undodatetime->imgid = imgid;
-      dt_image_get_datetime(imgid, undodatetime->before);
 
-      memcpy(&undodatetime->after, datetime, DT_DATETIME_LENGTH);
+    char before[DT_DATETIME_LENGTH] = { 0 };
+    if(undo_on) dt_image_get_datetime(imgid, before);
 
-      *undo = g_list_prepend(*undo, undodatetime);
-    }
+    if(_set_datetime(imgid, datetime) || !undo_on) continue;
 
-    _set_datetime(imgid, datetime);
+    dt_undo_datetime_t *undodatetime = (dt_undo_datetime_t *)malloc(sizeof(dt_undo_datetime_t));
+    undodatetime->imgid = imgid;
+    memcpy(&undodatetime->before, before, DT_DATETIME_LENGTH);
+    memcpy(&undodatetime->after, datetime, DT_DATETIME_LENGTH);
+    *undo = g_list_prepend(*undo, undodatetime);
   }
 }
 

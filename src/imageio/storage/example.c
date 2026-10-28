@@ -20,6 +20,7 @@
     Copyright (C) 2023, 2025 Aurélien PIERRE.
     Copyright (C) 2023 Maurizio Paglia.
     Copyright (C) 2023 Ricky Moon.
+    Copyright (C) 2026 Guillaume Stutin.
     
     darktable is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -223,7 +224,7 @@ void finalize_store(dt_imageio_module_storage_t *self, dt_imageio_module_data_t 
     _email_attachment_t *attachment = (_email_attachment_t *)iter->data;
     gchar *filename = g_path_get_basename(attachment->file);
     const dt_image_t *img = dt_image_cache_get(attachment->imgid, 'r');
-    dt_image_print_exif(img, exif, sizeof(exif));
+    if(!IS_NULL_PTR(img)) dt_image_print_exif(img, exif, sizeof(exif));
     dt_image_cache_read_release(img);
 
     gchar *imgbody = g_strdup_printf(imageBodyFormat, filename, exif);

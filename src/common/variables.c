@@ -31,7 +31,7 @@
     Copyright (C) 2021-2022 Ralf Brown.
     Copyright (C) 2022-2026 Aurélien PIERRE.
     Copyright (C) 2022 Martin Bařinka.
-    Copyright (C) 2023-2025 Guillaume Stutin.
+    Copyright (C) 2023-2026 Guillaume Stutin.
     Copyright (C) 2023 Luca Zulberti.
     
     darktable is free software: you can redistribute it and/or modify
@@ -549,9 +549,13 @@ static gboolean _expand_image_and_version(dt_variables_params_t *params, char **
     gchar buffer[1024];
     const dt_image_t *img = params->img ? (dt_image_t *)params->img
                                         : dt_image_cache_get(params->imgid, 'r');
-    dt_image_print_exif(img, buffer, sizeof(buffer));
+    // an image that cannot be read expands to nothing, as its other fields do
+    if(!IS_NULL_PTR(img))
+    {
+      dt_image_print_exif(img, buffer, sizeof(buffer));
+      result = g_strdup(buffer);
+    }
     if(IS_NULL_PTR(params->img)) dt_image_cache_read_release(img);
-    result = g_strdup(buffer);
   }
   else if(_has_prefix(variable, "VERSION.NAME") || _has_prefix(variable, "VERSION_NAME"))
   {

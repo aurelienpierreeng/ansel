@@ -952,6 +952,7 @@ static void _jump_to()
   {
     char path[512];
     const dt_image_t *img = dt_image_cache_get(imgid, 'r');
+    if(IS_NULL_PTR(img)) return;
     dt_image_film_roll_directory(img, path, sizeof(path));
     dt_image_cache_read_release(img);
     char collect[1024];

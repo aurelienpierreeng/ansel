@@ -1,6 +1,7 @@
 /*
     This file is part of the Ansel project.
     Copyright (C) 2025 Aurélien PIERRE.
+    Copyright (C) 2026 Guillaume Stutin.
     
     Ansel is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -26,6 +27,7 @@
 #include "control/signal.h"
 #include "gui/application.h"
 #include "control/control.h"
+#include "control/user_message.h"
 #include "caches/image_cache.h"
 #include "views/view.h"
 
@@ -163,15 +165,20 @@ void _preview_redraw(gpointer instance, dt_preview_window_t *preview)
 
 void dt_preview_window_spawn(const int32_t imgid)
 {
+  const dt_image_t *img = dt_image_cache_get(imgid, 'r');
+  if(IS_NULL_PTR(img))
+  {
+    dt_control_log(_("No image to open !"));
+    return;
+  }
+  gchar *name = g_strdup_printf(_("Ansel - Preview : %s"), img->filename);
+  dt_image_cache_read_release(img);
+
   dt_preview_window_t *preview = calloc(1, sizeof(dt_preview_window_t));
   preview->imgid = imgid;
   dt_view_image_surface_fetcher_init(&preview->fetcher);
 
   GtkWidget *dialog = gtk_dialog_new();
-
-  const dt_image_t *img = dt_image_cache_get(imgid, 'r');
-  gchar *name = g_strdup_printf(_("Ansel - Preview : %s"), img->filename);
-  dt_image_cache_read_release(img);
   gtk_window_set_title(GTK_WINDOW(dialog), name);
   dt_free(name);
 

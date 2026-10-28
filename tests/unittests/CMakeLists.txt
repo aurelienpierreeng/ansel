@@ -48,6 +48,7 @@ set(LIB_ANSEL_UNIT_TESTS
   test_accel_map_defaults
   test_accel_build_path
   test_image_cache_flags_writeback
+  test_image_cache_unreadable
   # Not database tests, but they want the same standalone-binary-linking-lib_ansel treatment,
   # and splitting the list to say so would be more ceremony than it is worth.
   test_pipe_cache_policy

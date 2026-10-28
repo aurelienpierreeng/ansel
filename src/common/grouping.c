@@ -12,6 +12,7 @@
     Copyright (C) 2022 Aldric Renaudin.
     Copyright (C) 2022, 2025 Aurélien PIERRE.
     Copyright (C) 2022 Martin Bařinka.
+    Copyright (C) 2026 Guillaume Stutin.
     
     darktable is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -35,14 +36,6 @@
 #include "database/image_repository.h"
 #include "caches/image_cache.h"
 
-int32_t dt_grouping_get_image_group(const int32_t image_id)
-{
-  const dt_image_t *img = dt_image_cache_get(image_id, 'r');
-  const int img_group_id = img->group_id;
-  dt_image_cache_read_release(img);
-  return img_group_id;
-}
-
 /** add an image to a group */
 void dt_grouping_add_to_group(const int32_t group_id, const int32_t image_id)
 {
@@ -50,6 +43,7 @@ void dt_grouping_add_to_group(const int32_t group_id, const int32_t image_id)
   dt_grouping_remove_from_group(image_id);
 
   dt_image_t *img = dt_image_cache_get(image_id, 'w');
+  if(IS_NULL_PTR(img)) return;
   img->group_id = group_id;
   dt_image_cache_write_release(img, DT_IMAGE_CACHE_SAFE);
 }
@@ -71,8 +65,10 @@ int dt_grouping_remove_from_group(const int32_t image_id)
     for(GList *o = others; o; o = g_list_next(o))
     {
       const int other_id = GPOINTER_TO_INT(o->data);
-      if(new_group_id == -1) new_group_id = other_id;
+      // the group is not named after an image that cannot be read; the update below still moves its row
       dt_image_t *other_img = dt_image_cache_get(other_id, 'w');
+      if(IS_NULL_PTR(other_img)) continue;
+      if(new_group_id == -1) new_group_id = other_id;
       other_img->group_id = new_group_id;
       dt_image_cache_write_release(other_img, DT_IMAGE_CACHE_SAFE);
       imgs = g_list_prepend(imgs, GINT_TO_POINTER(other_id));
@@ -93,6 +89,7 @@ int dt_grouping_remove_from_group(const int32_t image_id)
   {
     // change the group_id for this image.
     dt_image_t *wimg = dt_image_cache_get(image_id, 'w');
+    if(IS_NULL_PTR(wimg)) return -1;
     new_group_id = wimg->group_id;
     wimg->group_id = image_id;
     dt_image_cache_write_release(wimg, DT_IMAGE_CACHE_SAFE);
@@ -108,6 +105,7 @@ int dt_grouping_remove_from_group(const int32_t image_id)
 int dt_grouping_change_representative(const int32_t image_id)
 {
   dt_image_t *img = dt_image_cache_get(image_id, 'r');
+  if(IS_NULL_PTR(img)) return -1;
   const int group_id = img->group_id;
   dt_image_cache_read_release(img);
 
@@ -117,6 +115,7 @@ int dt_grouping_change_representative(const int32_t image_id)
   {
     const int other_id = GPOINTER_TO_INT(m->data);
     dt_image_t *other_img = dt_image_cache_get(other_id, 'w');
+    if(IS_NULL_PTR(other_img)) continue;
     other_img->group_id = image_id;
     dt_image_cache_write_release(other_img, DT_IMAGE_CACHE_SAFE);
     imgs = g_list_prepend(imgs, GINT_TO_POINTER(other_id));
