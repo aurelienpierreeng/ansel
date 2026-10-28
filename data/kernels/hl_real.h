@@ -19,6 +19,8 @@
 #ifndef DT_KERNELS_HL_REAL_H
 #define DT_KERNELS_HL_REAL_H
 
+#include "compensated.h" // csum_two_sum(): Knuth's two-sum, one copy for both headers
+
 // hl_real_t: the arithmetic of the sparse Cholesky solvers (highlights_sparse.cl), which need
 // more than single precision -- the biharmonic systems they factor are conditioned like h^-4,
 // about 3e8 at the DT_HL_SPARSE_MAX cap, and a float factorization loses every digit and
@@ -36,16 +38,23 @@
 //
 // Do NOT decide this on the cl_khr_fp64 preprocessor macro: Apple's runtime DEFINES it without
 // having the extension, the program then builds, and every kernel touching a double fails at
-// clCreateKernel (-48). Measured on Apple M1, see CLAUDE.md.
+// clCreateKernel (-48). Measured on Apple M1, see doc/highlights-reconstruction.md.
 //
 // Both representations are 8 bytes, so the host allocates the same buffers either way and
 // converts a double vector on its way in and out (_sp_cl_upload_real / _sp_cl_read_real in
 // src/math/sparse_cholesky_cl.h). The two-product relies on fma() being a fused, exactly
-// rounded operation; two-sum has no multiply, so -cl-mad-enable cannot contract it.
+// rounded operation; two-sum has no multiply, so -cl-mad-enable cannot contract it, but
+// reassociating math options fold it to plain float -- see compensated.h.
 
 #ifdef DT_DEVICE_FP64
 
+// The host has read real fp64 off the device, so the extension macros can be trusted here.
+// cl_amd_fp64 is the older AMD extension some devices carry instead of cl_khr_fp64.
+#if defined(cl_khr_fp64)
 #pragma OPENCL EXTENSION cl_khr_fp64 : enable
+#elif defined(cl_amd_fp64)
+#pragma OPENCL EXTENSION cl_amd_fp64 : enable
+#endif
 typedef double hl_real_t;
 
 static inline hl_real_t hl_real(const float x) { return (double)x; }
@@ -61,15 +70,7 @@ static inline hl_real_t hl_sqrt(const hl_real_t a) { return sqrt(a); }
 
 typedef float2 hl_real_t;
 
-// (s, e) with s = fl(a + b) and s + e == a + b exactly, whatever the magnitudes (Knuth)
-static inline float2 hl_two_sum(const float a, const float b)
-{
-  const float s = a + b;
-  const float bb = s - a;
-  return (float2)(s, (a - (s - bb)) + (b - bb));
-}
-
-// same, valid when |a| >= |b| (Dekker): one operation fewer
+// csum_two_sum(a, b), valid only when |a| >= |b| (Dekker): one operation fewer
 static inline float2 hl_quick_two_sum(const float a, const float b)
 {
   const float s = a + b;
@@ -89,8 +90,8 @@ static inline hl_real_t hl_zero(void) { return (float2)(0.f, 0.f); }
 
 static inline hl_real_t hl_add(const hl_real_t a, const hl_real_t b)
 {
-  float2 s = hl_two_sum(a.x, b.x);
-  const float2 t = hl_two_sum(a.y, b.y);
+  float2 s = csum_two_sum(a.x, b.x);
+  const float2 t = csum_two_sum(a.y, b.y);
   s.y += t.x;
   s = hl_quick_two_sum(s.x, s.y);
   s.y += t.y;
