@@ -682,6 +682,7 @@ static int dt_opencl_device_init(dt_opencl_t *cl, const int dev, cl_device_id *d
   dt_print_nts(DT_DEBUG_OPENCL, "   DEVICE:                   %d: '%s'%s\n", k, infostr, (newdevice) ? ", NEW" : "" );
   dt_print_nts(DT_DEBUG_OPENCL, "   CANONICAL NAME:           %s\n", cname);
   dt_print_nts(DT_DEBUG_OPENCL, "   PLATFORM NAME & VENDOR:   %s, %s\n", platform_name, platform_vendor);
+  dt_print_nts(DT_DEBUG_OPENCL, "   DEVICE VENDOR:            %s (id 0x%x)\n", vendor, vendor_id);
 
   err = dt_opencl_get_device_info(cl, devid, CL_DRIVER_VERSION, (void **)&driverversion, &driverversion_size);
   if(err != CL_SUCCESS)
