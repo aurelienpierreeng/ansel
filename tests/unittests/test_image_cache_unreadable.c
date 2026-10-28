@@ -128,8 +128,8 @@ static gboolean _group_is(const int32_t group_id, const int32_t *members, const 
 {
   GList *got = dt_image_repository_get_group_members(group_id, -1);
   gboolean same = (g_list_length(got) == (guint)count);
-  for(int k = 0; k < count && same; k++)
-    same = !IS_NULL_PTR(g_list_find(got, GINT_TO_POINTER(members[k])));
+  for(int k = 0; k < count; k++)
+    same = same && !IS_NULL_PTR(g_list_find(got, GINT_TO_POINTER(members[k])));
   g_list_free(got);
   return same;
 }
@@ -152,7 +152,9 @@ static void _group_of_three(const char *folder, int32_t *a, int32_t *b, int32_t 
 /* The member that cannot be read keeps its group_id; the others follow the new representative. */
 static void test_change_representative_skips_an_unreadable_member(void **state __attribute__((unused)))
 {
-  int32_t a, b, c;
+  int32_t a = 0;
+  int32_t b = 0;
+  int32_t c = 0;
   _group_of_three("/testdb/representative", &a, &b, &c);
 
   assert_int_equal(dt_grouping_change_representative(b), b);
@@ -169,7 +171,9 @@ static void test_change_representative_skips_an_unreadable_member(void **state _
  * of the first member, and the update of the rows still moves the unreadable one into it. */
 static void test_remove_from_group_names_the_group_after_a_readable_member(void **state __attribute__((unused)))
 {
-  int32_t a, b, c;
+  int32_t a = 0;
+  int32_t b = 0;
+  int32_t c = 0;
   _group_of_three("/testdb/leaving", &a, &b, &c);
 
   assert_int_equal(dt_grouping_remove_from_group(a), b);
