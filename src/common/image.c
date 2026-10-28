@@ -204,7 +204,8 @@ static void _image_set_monochrome_flag(const int32_t imgid, gboolean monochrome,
   const dt_image_t *rimg = dt_image_cache_get(imgid, 'r');
   if(IS_NULL_PTR(rimg))
   {
-    fprintf(stderr, "[image] could not dt_image_cache_get imgid %i\n", imgid);
+    fprintf(stderr, "[_image_set_monochrome_flag] could not load image %i, its monochrome flag is unchanged\n",
+            imgid);
     return;
   }
   const int mask_bw = dt_image_monochrome_flags(rimg);
@@ -219,7 +220,8 @@ static void _image_set_monochrome_flag(const int32_t imgid, gboolean monochrome,
   dt_image_t *img = dt_image_cache_get(imgid, 'w');
   if(IS_NULL_PTR(img))
   {
-    fprintf(stderr, "[image] could not dt_image_cache_get imgid %i\n", imgid);
+    fprintf(stderr, "[_image_set_monochrome_flag] could not load image %i, its monochrome flag is unchanged\n",
+            imgid);
     return;
   }
   if(to_monochrome)
@@ -2088,7 +2090,7 @@ int32_t dt_image_rename(const int32_t imgid, const int32_t filmid, const gchar *
 
   // get current local copy if any
   dt_image_t *img = dt_image_cache_get(imgid, 'r');
-  if(img)
+  if(!IS_NULL_PTR(img))
   {
     dt_image_choose_input_path(img, copysrcpath, sizeof(copysrcpath), TRUE);
     dt_image_cache_read_release(img);
@@ -2153,7 +2155,7 @@ int32_t dt_image_rename(const int32_t imgid, const int32_t filmid, const gchar *
     {
       // get new name
       img = dt_image_cache_get(imgid, 'r');
-      if(img)
+      if(!IS_NULL_PTR(img))
       {
         dt_image_choose_input_path(img, copydestpath, sizeof(copydestpath), TRUE);
         dt_image_cache_read_release(img);

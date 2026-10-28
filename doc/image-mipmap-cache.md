@@ -560,7 +560,7 @@ releases it. What a missing image means depends on the caller:
 | downscaled float input (`_init_f()`), Exif blob of an export, `$(IMAGE.EXIF)` | that piece fails: a zero-sized input, no Exif blob (stderr), an empty expansion |
 | import: the group's representative, a member | the new image leads its own group; the member keeps its group |
 | import: the new image itself | its row is removed again and the import of that file fails — a row whose Exif was never read would block a new import of the file |
-| `dt_grouping_*()` | the member is skipped; a group is never named after it, although `dt_grouping_remove_from_group()` still moves its row; the image itself unreadable answers -1, "no change" |
+| `dt_grouping_*()` | the member is not written through the cache, but an update of the rows still moves it with the others; a group is never named after it; the image itself unreadable answers -1, "no change" |
 | location, date/time, monochrome setters | the image is left as it is (stderr), with no undo step; undo and redo skip it |
 | duplicate | the copy of the original's row, `group_id` included, is its group |
 | move or rename | a duplicate's row stays on the old film roll, and a "File operation failed" window gives the new path |
@@ -574,7 +574,10 @@ leaves — the second connection of "Testing it" holds the lock while the image 
 anything else of the test reads — and pins grouping, the setters and a move. *Measured
 2026-10-28, Debug, clang 19, on the change merged with the allocation-failure work as it stood just
 before landing in `1442b277c6` (its code differs by one split assignment in `caches/mipmap_cache.c`):*
-the four tests pass, and with the callers put back as they were, each ends in SIGSEGV. An
+the four tests pass, and with the callers put back as they were, each ends in SIGSEGV. *On top of
+`c99e5d42fc`:* `dt_grouping_change_representative()` left the unreadable member alone in a group
+named after the old representative, which had moved to the new group; the test asserting the
+whole group under the new representative fails there, and passes once the rows are moved. An
 allocation failure reaches the import: `ansel-cli` importing a PNG, under an `LD_PRELOAD` shim whose
 `posix_memalign()` answers `ENOMEM` once inside `dt_image_cache_allocate()`. With the callers as
 they were, SIGSEGV on `img->group_id` in `_image_import_internal()`; with them, the import of the
