@@ -25,7 +25,10 @@
 // Knuth's two-sum -- exact, s + e == a + b, whatever the magnitudes -- and folds it into
 // the error lane. The bound is a couple of ulp on the result, independent of the number of
 // terms, which is at least what the double gave once narrowed. Nothing here multiplies, so
-// the -cl-mad-enable option every device is built with cannot contract any of it.
+// -cl-mad-enable cannot contract any of it. It does rely on the compiler NOT reassociating:
+// under -cl-unsafe-math-optimizations or -cl-fast-relaxed-math clang folds the error term of
+// csum_two_sum() to 0.0 (measured, doc/opencl-math-accuracy.md), and dt_opencl_device_init()
+// migrates the per-device `building` key away from the old default that carried them.
 //
 // It exists because cl_khr_fp64 is an OPTIONAL OpenCL extension: Apple's runtime has none,
 // and the reductions in highlights_harmonic.cl / highlights_sparse.cl were the reason five

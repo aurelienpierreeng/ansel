@@ -106,7 +106,8 @@ Intel now lands on exactly the NVIDIA figure.
 ## Overriding per device
 
 The defaults above are only what Ansel writes the **first time** it sees a device. The live value
-is a per-device key in `anselrc` and is never overwritten once present:
+is a per-device key in `anselrc` and is never overwritten once present — with one exception,
+below:
 
 ```
 cldevice_v4/<index>/<canonical-name>/building=-cl-mad-enable -cl-no-signed-zeros
@@ -123,9 +124,23 @@ After changing it, drop the compiled kernel cache so it rebuilds:
 rm -rf ~/.cache/ansel/cached_kernels_for_*
 ```
 
-**Because the key is sticky, an existing installation keeps the old unsafe flags.** Users who
-already ran an affected build must either edit that key or delete it and let Ansel rewrite the
-new default. Testing a default change therefore requires a fresh `--configdir`.
+**The key is sticky, except for the legacy default.** A key that still reads exactly
+`-cl-fast-relaxed-math -cl-no-signed-zeros -cl-unsafe-math-optimizations` — the default before
+`d90978a75c` — is replaced by the current default at the next start (`dt_opencl_device_init()`);
+any other value, i.e. one a user wrote, is kept. Until that migration existed, every install
+older than 2026-08-18 kept the unsafe flags, OpenCL disabled or not, since the key is written
+before `opencl` is read. Testing any *future* default change still requires a fresh
+`--configdir` or a migration of the same kind.
+
+*Migration added 2026-10-28 against `8e628de1c2`.* It became necessary rather than nice: the
+compensated sums of `data/kernels/compensated.h` and the double-float of `hl_real.h` rely on the
+compiler not reassociating. Measured with clang 23 (`-cc1 -triple spir64-unknown-unknown -O2
+-emit-llvm`), the error term of `csum_two_sum()` compiles to its 6 flops under
+`-cl-mad-enable -cl-no-signed-zeros`, and to `store float 0.0` under the legacy default or under
+`-cl-unsafe-math-optimizations` alone — the compensation, and on an fp64-less device the whole
+double-float, silently gone. (First measured by the PR #1541 reviewer with clang 18.) No `#error`
+tripwire on `__FAST_RELAXED_MATH__` guards those headers: a program that fails to build fails
+`dt_opencl_device_init()` as a whole, which would cost the user the GPU, not just this module.
 
 ## If you are adding a kernel
 
