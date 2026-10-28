@@ -42,6 +42,7 @@
 void dt_grouping_add_to_group(const int32_t group_id, const int32_t image_id)
 {
   const dt_image_t *const current = dt_image_cache_get(image_id, 'r');
+  if(IS_NULL_PTR(current)) return;
   const int32_t current_group_id = current->group_id;
   dt_image_cache_read_release(current);
   if(current_group_id == group_id) return;
