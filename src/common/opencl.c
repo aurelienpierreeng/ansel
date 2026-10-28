@@ -33,6 +33,7 @@
     Copyright (C) 2022 Victor Forsiuk.
     Copyright (C) 2024 Alynx Zhou.
     Copyright (C) 2025-2026 Guillaume Stutin.
+    Copyright (C) 2026 Miguel Moquillon.
     
     darktable is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
