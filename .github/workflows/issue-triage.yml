@@ -1,5 +1,6 @@
 #   This file is part of the Ansel project.
 #   Copyright (C) 2026 Aurélien PIERRE.
+#   Copyright (C) 2026 Guillaume Stutin.
 #
 #   Ansel is free software: you can redistribute it and/or modify
 #   it under the terms of the GNU General Public License as published by
@@ -33,6 +34,14 @@
 # cannot write to user/org Projects v2) plus the PROJECT_NUMBER repository
 # variable. Set repository variable CLOSE_NONBUGS=true to auto-close
 # support/feature/spam issues instead of leaving them open.
+#
+# GitHub Models was retired on 2026-07-30: its endpoint answers a plain-text
+# "OK" to every request, so every issue takes the human-review path until the
+# classifier is moved to another provider.
+#
+# A failed run is notified by mail to whoever triggered it, which here is the
+# author of the issue. The job therefore never fails the run: its failures
+# show in the Actions tab, not in the author's inbox.
 
 name: Issue triage
 
@@ -48,6 +57,7 @@ permissions:
 jobs:
   triage:
     runs-on: ubuntu-latest
+    continue-on-error: true
     steps:
       - name: Install jq
         run: sudo apt-get update && sudo apt-get install -y jq
@@ -139,7 +149,14 @@ jobs:
           resp=$(curl -sS https://models.github.ai/inference/chat/completions \
             -H "Authorization: Bearer ${GH_MODELS_TOKEN}" \
             -H "Content-Type: application/json" \
-            -d "$req")
+            -d "$req" || true)
+
+          # An answer that is not a JSON object is no answer: say what came
+          # back, then take the human-review path below.
+          if ! printf '%s' "$resp" | jq -e 'type == "object"' >/dev/null 2>&1; then
+            echo "::warning::classifier endpoint answered no JSON object: $(printf '%s' "$resp" | head -c 120 | tr -d '\r\n')"
+            resp='{}'
+          fi
 
           stop=$(printf '%s' "$resp" | jq -r '.choices[0].finish_reason // "error"')
           text=$(printf '%s' "$resp" | jq -r '.choices[0].message.content // empty')
