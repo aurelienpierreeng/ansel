@@ -1103,7 +1103,7 @@ static void _accels_recent_set(int index, const char *value)
  * a toast would stop saying too soon. */
 static void _pixelpipe_cache_alert(const char *message, const char *item)
 {
-  dt_gui_alert(_("Not enough memory"), message, item);
+  dt_gui_alert(_("Not enough memory"), message, item, FALSE);
 }
 
 /* common/ reports startup progress; opening the splash on the first message is display

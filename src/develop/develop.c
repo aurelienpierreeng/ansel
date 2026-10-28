@@ -986,10 +986,10 @@ static gboolean _dt_dev_mipmap_prefetch_full(dt_develop_t *dev, const int32_t im
   {
     char path[DT_PATH_MAX] = { 0 };
     dt_image_full_path(imgid, path, sizeof(path), NULL, __FUNCTION__);
-    dt_control_alert(_("Not enough memory"),
-                     _("Not enough memory to load the image at full size.\n"
-                       "Close other applications or add more RAM to your system."),
-                     path[0] ? path : NULL);
+    dt_control_alert_once(_("Not enough memory"),
+                          _("Not enough memory to load the image at full size.\n"
+                            "Close other applications or add more RAM to your system."),
+                          path[0] ? path : NULL);
   }
 
   dt_mipmap_cache_release(&buf);

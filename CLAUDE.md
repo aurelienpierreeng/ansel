@@ -101,6 +101,9 @@ A value put in the message opens one window per value instead. An item of severa
 with `g_strdup_printf()` and freed after the call — a module on an image is
 ``_("`%s` on %s")``, `self->op` then `dev->image_storage.fullpath`. Reuse one of the existing
 titles ("Module failed", "Export failed", "Not enough memory", …) before inventing one.
+A failure that repeats as long as its cause lasts — memory running short, where every new request
+fails again — is `dt_control_alert_once()`: the same window and list, but once it is closed it does
+not open again this session for that title and message.
 A window that needs
 more than OK — other buttons, a list of its own, a question — is a `dt_gui_alert_t` object
 (`dt_gui_alert_new()` with a kind, then `_add_text/_add_widget/_add_button/_show/_destroy`), as

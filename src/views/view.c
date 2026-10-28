@@ -1127,10 +1127,10 @@ static dt_view_surface_value_t _view_image_get_surface_internal(int32_t imgid, i
   {
     char path[DT_PATH_MAX] = { 0 };
     dt_image_full_path(imgid, path, sizeof(path), NULL, __FUNCTION__);
-    dt_control_alert(_("Not enough memory"),
-                     _("Not enough memory to display the thumbnail.\n"
-                       "Close other applications or add more RAM to your system."),
-                     path[0] ? path : NULL);
+    dt_control_alert_once(_("Not enough memory"),
+                          _("Not enough memory to display the thumbnail.\n"
+                            "Close other applications or add more RAM to your system."),
+                          path[0] ? path : NULL);
   }
 
   // if we don't get buffer, no image is available at the moment
