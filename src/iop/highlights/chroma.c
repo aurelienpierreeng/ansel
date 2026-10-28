@@ -753,6 +753,7 @@ static cl_int _aniso_pyramid_cl(const int devid, void *gd_void, cl_mem ratios, c
   if(global_data->kernel_hl_reduce_finalize < 0) return DT_OPENCL_DEFAULT_ERROR; // kernel unavailable
 
   cl_mem gnorm_dev = dt_opencl_alloc_device_buffer(devid, sizeof(float)); // gradient-mean normaliser, device-resident
+  if(IS_NULL_PTR(gnorm_dev)) return DT_OPENCL_DEFAULT_ERROR;
   // the pyramid levels run reaction-free; the "inpaint a flat color" pull is applied by the
   // direct solve and the full-resolution polish only, like the CPU twin
   const float no_react = 0.f;
@@ -999,7 +1000,6 @@ static cl_int _aniso_pyramid_cl(const int devid, void *gd_void, cl_mem ratios, c
 cl_int _aniso_stage_cl(const int devid, void *gd_void, cl_mem estimate, cl_mem valid, cl_mem clip0,
                        const int region_w, const int region_h, const float radius, const float floor_gate, const float solid_color, const dt_dev_pixelpipe_t *pipe)
 {
-  cl_mem gnorm_dev = dt_opencl_alloc_device_buffer(devid, sizeof(float)); // gradient-mean normaliser, device-resident
   dt_iop_highlights_global_data_t *global_data = (dt_iop_highlights_global_data_t *)gd_void;
   const size_t region_pixels = (size_t)region_w * region_h;
   cl_int cl_err = DT_OPENCL_DEFAULT_ERROR;
@@ -1016,6 +1016,7 @@ cl_int _aniso_stage_cl(const int devid, void *gd_void, cl_mem estimate, cl_mem v
 
   if(global_data->kernel_hl_aniso_rhs < 0 || global_data->kernel_hl_aniso_scatter < 0) return cl_err; // kernel unavailable
 
+  cl_mem gnorm_dev = dt_opencl_alloc_device_buffer(devid, sizeof(float)); // gradient-mean normaliser, device-resident
   cl_mem valid_packed = dt_opencl_alloc_device_buffer(devid, sizeof(float) * region_pixels * 4);
   cl_mem luminance = dt_opencl_alloc_device_buffer(devid, sizeof(float) * region_pixels);
   cl_mem ratios = dt_opencl_alloc_device_buffer(devid, sizeof(float) * region_pixels * 4);
@@ -1033,8 +1034,9 @@ cl_int _aniso_stage_cl(const int devid, void *gd_void, cl_mem estimate, cl_mem v
   double *matrix_values = NULL;
   float *edge_weights = NULL;
   _sp_chol_cl_t *factor = NULL;
-  if(!valid_packed || !luminance || !ratios || !hole || !scratch1 || !scratch2 || !tensor_xx || !tensor_xy
-     || !tensor_yy || !hole_mask)
+  if(IS_NULL_PTR(gnorm_dev) || IS_NULL_PTR(valid_packed) || IS_NULL_PTR(luminance) || IS_NULL_PTR(ratios)
+     || IS_NULL_PTR(hole) || IS_NULL_PTR(scratch1) || IS_NULL_PTR(scratch2) || IS_NULL_PTR(tensor_xx)
+     || IS_NULL_PTR(tensor_xy) || IS_NULL_PTR(tensor_yy) || IS_NULL_PTR(hole_mask))
     goto out;
 
   // validity mask + luminance + ratio planes + all-clip hole in one sweep
