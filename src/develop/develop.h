@@ -518,13 +518,18 @@ typedef enum dt_dev_image_storage_t
 
 // Optionally prefetch `DT_MIPMAP_FULL`, then refresh dev->image_storage from the image cache.
 // Returns a status code to differentiate missing source image data from DB/cache failures.
-dt_dev_image_storage_t dt_dev_ensure_image_storage(dt_develop_t *dev, const int32_t imgid);
+// @p read_status, when not NULL, receives why the full-size read failed (`CACHE_FULL`, the loader's
+// reason...), DT_IMAGEIO_OK once it succeeded; it is not written when that read did not run.
+dt_dev_image_storage_t dt_dev_ensure_image_storage(dt_develop_t *dev, const int32_t imgid,
+                                                   dt_imageio_retval_t *read_status);
 
 // Start background pipeline threads. They run fulltime until we close darkroom,
 // so no need to recall that
 void dt_dev_start_all_pipelines(dt_develop_t *dev);
 
-dt_dev_image_storage_t dt_dev_load_image(dt_develop_t *dev, const int32_t imgid);
+// Load the image and read its history. On failure nothing is read, not even dev->image_storage:
+// a pipe must not run on that dev. @p read_status as for dt_dev_ensure_image_storage().
+dt_dev_image_storage_t dt_dev_load_image(dt_develop_t *dev, const int32_t imgid, dt_imageio_retval_t *read_status);
 /** checks if provided imgid is the image currently in develop */
 int dt_dev_is_current_image(dt_develop_t *dev, int32_t imgid);
 

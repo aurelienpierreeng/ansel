@@ -1391,7 +1391,7 @@ void dt_dev_pop_history_items_ext(dt_develop_t *dev) REQUIRES_SHARED(dev->histor
 
   // Ensure `dev->image_storage` is up-to-date before modules reload their defaults.
   // This avoids using incomplete RAW metadata (WB coeffs, matrices) on newly-inited images.
-  dt_dev_ensure_image_storage(dev, dev->image_storage.id);
+  dt_dev_ensure_image_storage(dev, dev->image_storage.id, NULL);
 
   // Reset every module to its default params first; the history overlay below then overwrites the
   // ones that have entries. Per-image defaults were already computed at history init / instance
@@ -1923,7 +1923,7 @@ int dt_dev_replace_history_on_image(dt_develop_t *dev_src, const int32_t dest_im
 {
   if(dest_imgid <= 0) return 1;
 
-  dt_dev_ensure_image_storage(dev_src, dest_imgid);
+  dt_dev_ensure_image_storage(dev_src, dest_imgid, NULL);
 
   // Same shape as dt_dev_reload_history_items(): the whole rebuild runs under the write lock,
   // released before dt_dev_write_history(), which takes the read lock itself.
@@ -2297,7 +2297,7 @@ gboolean dt_dev_read_history_ext(dt_develop_t *dev, const int32_t imgid) REQUIRE
   // query it while (re)loading defaults (e.g. temperature/colorin).
   // This is redundant with `_dt_dev_load_raw()` called from `dt_dev_load_image()`,
   // but some call sites reload history without guaranteeing a prior FULL open.
-  if(dt_dev_ensure_image_storage(dev, imgid)) 
+  if(dt_dev_ensure_image_storage(dev, imgid, NULL)) 
     return FALSE;
 
   // Start fresh
