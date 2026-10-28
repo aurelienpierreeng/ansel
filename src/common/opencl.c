@@ -555,6 +555,7 @@ static int dt_opencl_device_init(dt_opencl_t *cl, const int dev, cl_device_id *d
   cl->dev[dev].used_global_mem = 0;
   cl->dev[dev].nvidia_sm_20 = 0;
   cl->dev[dev].fp64 = 0;
+  cl->dev[dev].aperture_clamp = TRUE;
   cl->dev[dev].vendor = NULL;
   cl->dev[dev].runtime_id = NULL;
   cl->dev[dev].name = NULL;
@@ -720,6 +721,13 @@ static int dt_opencl_device_init(dt_opencl_t *cl, const int dev, cl_device_id *d
                                            &fp64_config, NULL);
   cl->dev[dev].fp64 = (fp64_config != 0);
 
+  /* Apple Silicon's GPU, under Apple's own runtime, is the one host-unified device the
+   * max_mem_alloc / 2 clamp is known to starve (dt_opencl_get_device_available()). Both names
+   * are tested: an Intel Mac publishes the same "Apple" platform but its GPUs report "Intel Inc."
+   * or "AMD" as their vendor, and nothing has been measured there. Measured on an M1: platform
+   * "Apple", device vendor "Apple", vendor id 0x1027f00. */
+  const gboolean apple_silicon = !strncasecmp(platform_name, "Apple", 5) && !strncasecmp(vendor, "Apple", 5);
+  cl->dev[dev].aperture_clamp = !apple_silicon;
 
   if(!strncasecmp(vendor, "NVIDIA", 6))
   {
@@ -1211,7 +1219,6 @@ static const _gpu_runtime_t _gpu_runtimes[] = {
   { "intelocl",         "Intel(R) OpenCL", "intel" },
   { "libnvidia-opencl", "NVIDIA",          "nvidia" },
   { "nvopencl",         "NVIDIA",          "nvidia" },
-  { "OpenCL.framework", "Apple",           "apple" },    // macOS OpenCL-on-Metal shim, see dt_opencl_get_device_available()
   { NULL, NULL, NULL }
 };
 
@@ -3269,18 +3276,18 @@ cl_ulong dt_opencl_get_device_available(const int devid)
     if(system_available > 0)
       available = MIN(available, (cl_ulong)((system_available > reserved) ? system_available - reserved : 0));
 
-    /* Limit 2 is Intel's. Apple's OpenCL-on-Metal shim reports CL_DEVICE_MAX_MEM_ALLOC_SIZE
+    /* Limit 2 is Intel's. Apple's OpenCL on Apple Silicon reports CL_DEVICE_MAX_MEM_ALLOC_SIZE
      * as 3/16 of its global memory -- 1024 MiB of 5461 on an 8 GB M1, 2048 of 10923 on a
      * 16 GB M2 Pro, 3410 of 18186 on a 24 GB M4 Pro -- so this clamp made the budget about a
-     * sixteenth of the RAM (512 MiB, 1 GiB, 1.7 GiB), and unified memory on Apple silicon has
+     * sixteenth of the RAM (512 MiB, 1 GiB, 1.7 GiB), and unified memory on Apple Silicon has
      * no per-context aperture of that kind (Metal's own per-buffer limit is about half the
-     * machine). The two bounds above track real memory and keep refusing what does not fit:
-     * measured on the 8 GB M1, the harmonic highlights working set (2392 MiB) is still sent
-     * to the CPU by the live-RAM bound, correctly, while on 16 and 18 GB Macs (M2 Pro, M3 Pro,
-     * M4) the whole pipeline runs on the GPU. */
-    const char *runtime = _opencl->dev[devid].runtime_id;
-    const gboolean apple_shim = !IS_NULL_PTR(runtime) && !strcmp(runtime, "apple");
-    if(!apple_shim) available = MIN(available, (cl_ulong)(_opencl->dev[devid].max_mem_alloc / 2));
+     * machine). Such a device has aperture_clamp unset (dt_opencl_device_init()). The two bounds
+     * above track real memory and keep refusing what does not fit: measured on the 8 GB M1, the
+     * live-RAM bound left 1.2 to 2.1 GiB, so profiled denoise (3.5 to 3.8 GiB asked) stays on the
+     * CPU and the harmonic highlights (1734 MiB) runs on the GPU when free RAM allows, while on
+     * the five Macs from 16 to 36 GB the whole pipeline runs on the GPU. */
+    if(_opencl->dev[devid].aperture_clamp)
+      available = MIN(available, (cl_ulong)(_opencl->dev[devid].max_mem_alloc / 2));
   }
   return available;
 }
