@@ -76,9 +76,12 @@
 #include "caches/mipmap_cache.h"
 #include "metadata/tags.h"
 #include "common/conf.h"
+#include "common/image.h"
+#include "common/paths.h"   // DT_PATH_MAX
 #include "control/control.h"
 #include "control/signal.h"
 #include "control/jobs.h"
+#include "control/user_message.h"
 #include "develop/blend.h"
 #include "develop/develop.h"
 #include "develop/imageop.h"
@@ -976,6 +979,18 @@ static gboolean _dt_dev_mipmap_prefetch_full(dt_develop_t *dev, const int32_t im
   // 0x0 was a measured fact about the image, and dt_dev_geometry_refresh()'s own guard
   // (dt_dev_geometry_raw_inited) then let the size fold run on it.
   dt_dev_geometry_set_raw_size(dev, ok ? buf.width : 0, ok ? buf.height : 0, ok);
+
+  /* The entry could not be allocated just now. A decode that ran out of memory leaves an entry
+   * behind, and dt_imageio_open() says so itself, in the same window. */
+  if(IS_NULL_PTR(buf.cache_entry) && buf.status == DT_IMAGEIO_CACHE_FULL)
+  {
+    char path[DT_PATH_MAX] = { 0 };
+    dt_image_full_path(imgid, path, sizeof(path), NULL, __FUNCTION__);
+    dt_control_alert(_("Not enough memory"),
+                     _("Not enough memory to load the image at full size.\n"
+                       "Close other applications or add more RAM to your system."),
+                     path[0] ? path : NULL);
+  }
 
   dt_mipmap_cache_release(&buf);
 
