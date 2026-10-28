@@ -1547,7 +1547,7 @@ static void _init_f(dt_mipmap_buffer_t *mipmap_buf, float *out, uint32_t *width,
   dt_image_path_source_t source = DT_IMAGE_PATH_NONE;
   {
     const dt_image_t *img = dt_image_cache_get(imgid, 'r');
-    if(img)
+    if(!IS_NULL_PTR(img))
     {
       source = dt_image_choose_input_path(img, filename, sizeof(filename), FALSE);
       dt_image_cache_read_release(img);

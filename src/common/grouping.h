@@ -38,7 +38,7 @@ void dt_grouping_add_to_group(int32_t group_id, int32_t image_id);
 int dt_grouping_remove_from_group(int32_t image_id);
 
 /** make an image the representative of the group it is in. returns the new group_id, or -1 when the
- * image could not be read. A member that cannot be read keeps its group_id. */
+ * image could not be read. A member that cannot be read moves to the new group with the others. */
 int dt_grouping_change_representative(int32_t image_id);
 
 /** get images of the group */

@@ -55,7 +55,7 @@ int dt_grouping_remove_from_group(const int32_t image_id)
   GList *imgs = NULL;
 
   const dt_image_t *img = dt_image_cache_get(image_id, 'r');
-  if(!img) return -1;
+  if(IS_NULL_PTR(img)) return -1;
   const int img_group_id = img->group_id;
   dt_image_cache_read_release(img);
   if(img_group_id == image_id)
@@ -114,6 +114,7 @@ int dt_grouping_change_representative(const int32_t image_id)
   for(GList *m = members; m; m = g_list_next(m))
   {
     const int other_id = GPOINTER_TO_INT(m->data);
+    // a member that cannot be read is not written through the cache; the update below moves its row
     dt_image_t *other_img = dt_image_cache_get(other_id, 'w');
     if(IS_NULL_PTR(other_img)) continue;
     other_img->group_id = image_id;
@@ -121,6 +122,7 @@ int dt_grouping_change_representative(const int32_t image_id)
     imgs = g_list_prepend(imgs, GINT_TO_POINTER(other_id));
   }
   g_list_free(members);
+  dt_image_repository_reassign_group(group_id, image_id, -1);
 
   return image_id;
 }

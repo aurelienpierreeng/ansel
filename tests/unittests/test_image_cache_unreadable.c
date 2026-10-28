@@ -149,8 +149,9 @@ static void _group_of_three(const char *folder, int32_t *a, int32_t *b, int32_t 
   _make_unreadable(*c);
 }
 
-/* The member that cannot be read keeps its group_id; the others follow the new representative. */
-static void test_change_representative_skips_an_unreadable_member(void **state __attribute__((unused)))
+/* The member that cannot be read follows the new representative with the others: its row moves,
+ * and no group is left named after an image that is no longer in it. */
+static void test_change_representative_moves_an_unreadable_member(void **state __attribute__((unused)))
 {
   int32_t a = 0;
   int32_t b = 0;
@@ -159,12 +160,12 @@ static void test_change_representative_skips_an_unreadable_member(void **state _
 
   assert_int_equal(dt_grouping_change_representative(b), b);
 
-  assert_true(_group_is(b, (int32_t[]){ a, b }, 2));
-  assert_true(_group_is(a, (int32_t[]){ c }, 1));
+  assert_true(_group_is(b, (int32_t[]){ a, b, c }, 3));
+  assert_true(_group_is(a, NULL, 0));
 
   // and an image that cannot be read is not made a representative
   assert_int_equal(dt_grouping_change_representative(c), -1);
-  assert_true(_group_is(a, (int32_t[]){ c }, 1));
+  assert_true(_group_is(b, (int32_t[]){ a, b, c }, 3));
 }
 
 /* The representative leaves: the group takes the name of the first member that can be read, not
@@ -249,7 +250,7 @@ static void test_rename_leaves_an_unreadable_duplicate_behind(void **state __att
 int main(int argc, char *argv[])
 {
   const struct CMUnitTest tests[] = {
-    cmocka_unit_test_setup_teardown(test_change_representative_skips_an_unreadable_member, _setup, _teardown),
+    cmocka_unit_test_setup_teardown(test_change_representative_moves_an_unreadable_member, _setup, _teardown),
     cmocka_unit_test_setup_teardown(test_remove_from_group_names_the_group_after_a_readable_member, _setup,
                                     _teardown),
     cmocka_unit_test_setup_teardown(test_setters_leave_an_unreadable_image_alone, _setup, _teardown),
