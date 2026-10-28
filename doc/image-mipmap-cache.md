@@ -643,8 +643,15 @@ full-size input, with the message `dt_imageio_open()` gives a decode that ran ou
 both land in one window. *Seen in the GUI on top of `600b680296`, the same day, all thumbnail
 allocations refused: three skulls labelled "RAM insuffisante" and one window listing the three
 files; `ansel-cli` prints the full-size window on stderr.* Nothing is cached, so every new request
-for that thumbnail tries the allocation again: once OK is clicked, the window opens again at the
-next refusal (a zoom change: 24 refusals, 8 per image, and the window back each time).
+for that thumbnail tries the allocation again (a zoom change: 24 refusals, 8 per image, measured
+on top of `600b680296`), and a `dt_control_alert()` would bring the window back at each one once OK
+is clicked. So both callers, and `dt_imageio_open()` for its decode, raise it with
+`dt_control_alert_once()` (on top of `c2a2a33088`): the window lists every file refused while it is
+up, and once closed it does not open again this session for that message -- the skulls keep
+saying it on the thumbnails. *Seen in the GUI on top of `c2a2a33088`, 2026-10-28, under the same refusals: the
+window listed the three files, and after OK a zoom change left the skulls and did not bring it
+back.* An alert raised without `once` under the same title and message
+still opens the window, and the `once` items that come while it is up are listed in it.
 
 In an export, the first get to fail is `_dt_dev_mipmap_prefetch_full()`, through
 `dt_dev_load_image()`, whose failure the export does not check. One failure and the run goes on

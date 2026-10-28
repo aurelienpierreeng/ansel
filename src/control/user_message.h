@@ -85,8 +85,15 @@ void dt_toast_markup_log(const char *msg, ...) __attribute__((format(printf, 1, 
  *                nothing to list. */
 void dt_control_alert(const char *title, const char *message, const char *item);
 
-/** @brief What dt_control_alert() hands its finished text to. Installed once by the GUI. */
-typedef void (*dt_control_alert_handler_t)(const char *title, const char *message, const char *item);
+/** @brief dt_control_alert() for a failure that repeats as long as its cause lasts -- memory
+ * running short, where every new request fails again. Its window lists every item while it is up,
+ * like any other; once closed, it does not open again this session for the same @p title and
+ * @p message. Without a GUI, printed on stderr each time, as dt_control_alert(). */
+void dt_control_alert_once(const char *title, const char *message, const char *item);
+
+/** @brief What dt_control_alert() and dt_control_alert_once() hand their finished text to, with
+ * @p once non-zero for the latter. Installed once by the GUI. */
+typedef void (*dt_control_alert_handler_t)(const char *title, const char *message, const char *item, int once);
 
 /** @brief Install the alert handler; NULL restores the fallback to dt_control_log(). */
 void dt_control_set_alert_handler(dt_control_alert_handler_t handler);

@@ -262,11 +262,15 @@ typedef struct dt_alert_message_t
   gchar *title;
   gchar *message;
   gchar *item;
+  gboolean once;
 } dt_alert_message_t;
 
 // The dt_gui_alert() windows on screen, by title and message: the box that lists each one's items.
 // GUI thread only.
 static GHashTable *_alert_windows = NULL;
+// The titles and messages raised `once` whose window has been closed: they open no other. GUI
+// thread only.
+static GHashTable *_alert_closed = NULL;
 
 static void _alert_message_free(gpointer data)
 {
@@ -278,9 +282,11 @@ static void _alert_message_free(gpointer data)
 }
 
 // The list goes with its window, whatever closes it -- OK, its title bar, Escape: the message is
-// free for the next alert.
-static void _alert_window_items_destroyed(GtkWidget *block __attribute__((unused)), gpointer user_data)
+// free for the next alert, unless it was raised `once`.
+static void _alert_window_items_destroyed(GtkWidget *block, gpointer user_data)
 {
+  if(g_object_get_data(G_OBJECT(block), "once"))
+    g_hash_table_add(_alert_closed, g_strdup((const gchar *)user_data));
   g_hash_table_remove(_alert_windows, (const gchar *)user_data);
 }
 
@@ -308,7 +314,10 @@ static gboolean _alert_show(gpointer user_data)
 {
   const dt_alert_message_t *message = (const dt_alert_message_t *)user_data;
   if(IS_NULL_PTR(_alert_windows))
+  {
     _alert_windows = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, NULL);
+    _alert_closed = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, NULL);
+  }
 
   // One window per kind of message: its title and its text, which say what went wrong, never where.
   // The same pair again while its window is up only adds its item to that window's list. A title
@@ -318,6 +327,13 @@ static gboolean _alert_show(gpointer user_data)
   GtkWidget *block = g_hash_table_lookup(_alert_windows, key);
   if(IS_NULL_PTR(block))
   {
+    // Raised `once` and closed already: the window is not opened again. One that is up -- opened
+    // by an alert that was not `once` -- still lists the item.
+    if(message->once && g_hash_table_contains(_alert_closed, key))
+    {
+      dt_free(key);
+      return G_SOURCE_REMOVE;
+    }
     alert = dt_gui_alert_new(DT_GUI_ALERT_NOTICE, message->title, message->title);
     dt_gui_alert_add_text(alert, message->message);
     // Under the message, the list of its items, which appears with the first one.
@@ -337,6 +353,9 @@ static gboolean _alert_show(gpointer user_data)
   }
   else
     dt_free(key);
+
+  // A window that a `once` message reached stays closed for the next ones; the others still reopen it.
+  if(message->once) g_object_set_data(G_OBJECT(block), "once", GINT_TO_POINTER(TRUE));
 
   gboolean added = FALSE;
   if(!IS_NULL_PTR(message->item)
@@ -390,12 +409,13 @@ static gboolean _alert_show(gpointer user_data)
   return G_SOURCE_REMOVE;
 }
 
-void dt_gui_alert(const char *title, const char *message, const char *item)
+void dt_gui_alert(const char *title, const char *message, const char *item, const gboolean once)
 {
   dt_alert_message_t *copy = g_new0(dt_alert_message_t, 1);
   copy->title = g_strdup(title);
   copy->message = g_strdup(message);
   copy->item = g_strdup(item);
+  copy->once = once;
   // Always deferred, even on the GUI thread: a caller may hold a lock -- the pixelpipe cache
   // alerts from under its own -- and building a window must not run inside it.
   g_idle_add_full(G_PRIORITY_DEFAULT, _alert_show, copy, _alert_message_free);

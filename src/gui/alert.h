@@ -106,8 +106,11 @@ void dt_gui_alert_destroy(dt_gui_alert_t *alert);
  * @param message the text under it, already translated; plain text, not markup
  * @param item    one line of the list under it -- an image's full path, or a module's name and
  *                the image; plain text. NULL when there is nothing to list.
+ * @param once    TRUE for a failure that repeats as long as its cause lasts: once its window is
+ *                closed, this title and message do not open another this session. Its window, while
+ *                up, lists every item all the same.
  */
-void dt_gui_alert(const char *title, const char *message, const char *item);
+void dt_gui_alert(const char *title, const char *message, const char *item, const gboolean once);
 
 #endif // DT_GUI_ALERT_H
 
