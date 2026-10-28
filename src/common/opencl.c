@@ -726,8 +726,8 @@ static int dt_opencl_device_init(dt_opencl_t *cl, const int dev, cl_device_id *d
   /* Apple Silicon's GPU, under Apple's own runtime, is the one host-unified device the
    * max_mem_alloc / 2 clamp is known to starve (dt_opencl_get_device_available()). Both names
    * are tested: an Intel Mac publishes the same "Apple" platform but its GPUs report "Intel Inc."
-   * or "AMD" as their vendor, and nothing has been measured there. Measured on an M1: platform
-   * "Apple", device vendor "Apple", vendor id 0x1027f00. */
+   * or "AMD" as their vendor, and nothing has been measured there. Measured on an M1 and an
+   * M4 Pro (clinfo): platform "Apple", device vendor "Apple", vendor id 0x1027f00 on both. */
   const gboolean apple_silicon = !strncasecmp(platform_name, "Apple", 5) && !strncasecmp(vendor, "Apple", 5);
   cl->dev[dev].aperture_clamp = !apple_silicon;
 
