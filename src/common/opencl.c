@@ -956,11 +956,23 @@ static int dt_opencl_device_init(dt_opencl_t *cl, const int dev, cl_device_id *d
 #endif
 
   gchar* compile_option_name_cname = g_strdup_printf("%s/%i/%s/building", DT_CLDEVICE_HEAD, dev, cl->dev[dev].cname);
-  const char* compile_opt = NULL;
+  const char* compile_opt = dt_conf_key_exists(compile_option_name_cname)
+                                ? dt_conf_get_string_const(compile_option_name_cname)
+                                : NULL;
 
-  if(dt_conf_key_exists(compile_option_name_cname))
-    compile_opt = dt_conf_get_string_const(compile_option_name_cname);
-  else
+  /* The key is written once and never rewritten, so every install that ran Ansel before
+   * d90978a75c (2026-08-18) still carries the default of that time, unsafe math included --
+   * Macs too, where OpenCL was off, since the key is written before `opencl` is read. Those
+   * options license reassociation, and clang does reassociate: measured with clang 23
+   * (-cc1 -triple spir64 -O2), the error term of a Knuth two-sum (data/kernels/compensated.h,
+   * hl_real.h) folds to `store float 0.0` under them and keeps its 6 flops under the current
+   * default. The old default, and only it verbatim, is therefore replaced by the current one;
+   * options a user wrote by hand stay theirs. */
+  if(!IS_NULL_PTR(compile_opt)
+     && !strcmp(compile_opt, "-cl-fast-relaxed-math -cl-no-signed-zeros -cl-unsafe-math-optimizations"))
+    compile_opt = NULL;
+
+  if(IS_NULL_PTR(compile_opt))
   {
     switch(vendor_id)
     {
