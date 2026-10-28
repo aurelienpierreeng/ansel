@@ -418,6 +418,14 @@ static int dt_control_merge_hdr_process(dt_imageio_module_data_t *datai, const c
 
   // just take a copy. also do it after blocking read, so filters will make sense.
   const dt_image_t *img = dt_image_cache_get(imgid, 'r');
+  if(IS_NULL_PTR(img))
+  {
+    // a merge missing one of its exposures is not the merge that was asked for
+    dt_control_alert(_("Image could not be opened"), _("Could not read image information from the database."),
+                     NULL);
+    d->abort = TRUE;
+    return 1;
+  }
   const dt_image_t image = *img;
   dt_image_cache_read_release(img);
 

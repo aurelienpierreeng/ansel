@@ -38,7 +38,7 @@
     Copyright (C) 2022 Martin Bařinka.
     Copyright (C) 2022 Philipp Lutz.
     Copyright (C) 2023 Luca Zulberti.
-    Copyright (C) 2025 Guillaume Stutin.
+    Copyright (C) 2025-2026 Guillaume Stutin.
     
     darktable is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -341,6 +341,7 @@ static void _deflicker_prepare_histogram(dt_iop_module_t *self, uint32_t **histo
                                          dt_dev_histogram_stats_t *histogram_stats)
 {
   const dt_image_t *img = dt_image_cache_get(self->dev->image_storage.id, 'r');
+  if(IS_NULL_PTR(img)) return;
   dt_image_t image = *img;
   dt_image_cache_read_release(img);
 

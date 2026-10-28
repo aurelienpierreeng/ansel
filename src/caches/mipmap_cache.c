@@ -1566,6 +1566,14 @@ static void _init_f(dt_mipmap_buffer_t *mipmap_buf, float *out, uint32_t *width,
   // lock image after we have the buffer, we might need to lock the image struct for
   // writing during raw loading, to write to width/height.
   const dt_image_t *image = dt_image_cache_get(imgid, 'r');
+  if(IS_NULL_PTR(image) || IS_NULL_PTR(buf.buf) || buf.width == 0 || buf.height == 0)
+  {
+    dt_image_cache_read_release(image);
+    dt_mipmap_cache_release(&buf);
+    *width = *height = 0;
+    *iscale = 0.0f;
+    return;
+  }
 
   dt_iop_roi_t roi_in, roi_out;
   roi_in.x = roi_in.y = 0;
@@ -1581,14 +1589,6 @@ static void _init_f(dt_mipmap_buffer_t *mipmap_buf, float *out, uint32_t *width,
   roi_out.scale = fminf(((float)wd) / (float)image->width, ((float)ht) / (float)image->height);
   roi_out.width = roi_out.scale * roi_in.width;
   roi_out.height = roi_out.scale * roi_in.height;
-
-  if(IS_NULL_PTR(buf.buf) || buf.width == 0 || buf.height == 0)
-  {
-    dt_image_cache_read_release(image);
-    *width = *height = 0;
-    *iscale = 0.0f;
-    return;
-  }
 
   mipmap_buf->color_space = DT_COLORSPACE_NONE; // TODO: do we need that information in this buffer?
 

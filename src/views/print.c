@@ -13,6 +13,7 @@
     Copyright (C) 2022-2023, 2025 Aurélien PIERRE.
     Copyright (C) 2022 Martin Bařinka.
     Copyright (C) 2023 Ricky Moon.
+    Copyright (C) 2026 Guillaume Stutin.
     
     darktable is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -444,15 +445,14 @@ int try_enter(dt_view_t *self)
   const int32_t imgid = prt->incoming_selection ? GPOINTER_TO_INT(prt->incoming_selection->data)
                                                 : dt_selection_get_first_id(dt_selection_get_global());
 
-  if(imgid < 0)
+  // this loads the image from db if needed, and answers NULL for no image or one it cannot read:
+  const dt_image_t *img = dt_image_cache_get(imgid, 'r');
+  if(IS_NULL_PTR(img))
   {
     // fail :(
     dt_control_log(_("no image to open !"));
     return 1;
   }
-
-  // this loads the image from db if needed:
-  const dt_image_t *img = dt_image_cache_get(imgid, 'r');
   // get image and check if it has been deleted from disk first!
 
   char imgfilename[DT_PATH_MAX] = { 0 };

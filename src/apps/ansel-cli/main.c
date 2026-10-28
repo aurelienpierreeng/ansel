@@ -663,9 +663,12 @@ int main(int argc, char *arg[])
     {
       int id = GPOINTER_TO_INT(iter->data);
       dt_image_t *image = dt_image_cache_get(id, 'w');
-      if(dt_exif_xmp_read(image, xmp_filename, 1) != 0)
+      if(IS_NULL_PTR(image) || dt_exif_xmp_read(image, xmp_filename, 1) != 0)
       {
-        fprintf(stderr, _("error: can't open xmp file %s"), xmp_filename);
+        if(IS_NULL_PTR(image))
+          fprintf(stderr, "%s", _("Could not read image information from the database."));
+        else
+          fprintf(stderr, _("error: can't open xmp file %s"), xmp_filename);
         fprintf(stderr, "\n");
         dt_free(m_arg);
         dt_free(output_filename);
