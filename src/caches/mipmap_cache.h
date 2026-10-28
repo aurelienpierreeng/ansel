@@ -76,6 +76,8 @@ typedef struct dt_mipmap_buffer_t
   float iscale;
   uint8_t *buf;
   dt_colorspaces_color_profile_type_t color_space;
+  /** @brief NULL with a non-NULL @ref buf when a blocking get could not allocate the thumbnail's
+   * entry: @ref buf is then a shared, read-only skull and @ref status is DT_IMAGEIO_CACHE_FULL. */
   dt_cache_entry_t *cache_entry;
   /** @brief Why the entry holds no image: a thumbnail drawn as a skull, or a full-size input
    * with no pixels. DT_IMAGEIO_OK otherwise, and when @ref buf is NULL because the entry is

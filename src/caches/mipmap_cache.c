@@ -242,24 +242,28 @@ static const size_t dt_mipmap_buffer_dsc_size __attribute__((unused)) = sizeof(s
 
 static uint8_t * _get_buffer_from_dsc(struct dt_mipmap_buffer_dsc *dsc);
 
+// The 8x8 skull a thumbnail shows when it holds no image, in DT_COLORSPACE_DISPLAY.
+#define X 0xffffffffu
+#define o 0u
+static const uint32_t _skull_8[64] DT_ALIGNED_ARRAY
+    = { o, o, o, o, o, o, o, o,
+        o, o, X, X, X, X, o, o,
+        o, X, o, X, X, o, X, o,
+        o, X, X, X, X, X, X, o,
+        o, o, X, o, o, X, o, o,
+        o, o, o, o, o, o, o, o,
+        o, o, X, X, X, X, o, o,
+        o, o, o, o, o, o, o, o };
+#undef o
+#undef X
+
 static inline void *dead_image_8(struct dt_mipmap_buffer_dsc *dsc)
 {
   dsc->width = dsc->height = 8;
   dsc->iscale = 1.0f;
   dsc->color_space = DT_COLORSPACE_DISPLAY;
-  assert(dsc->size > 64 * sizeof(uint32_t));
-  const uint32_t X = 0xffffffffu;
-  const uint32_t o = 0u;
-  const uint32_t image[]
-      = { o, o, o, o, o, o, o, o, 
-          o, o, X, X, X, X, o, o, 
-          o, X, o, X, X, o, X, o, 
-          o, X, X, X, X, X, X, o,
-          o, o, X, o, o, X, o, o, 
-          o, o, o, o, o, o, o, o, 
-          o, o, X, X, X, X, o, o, 
-          o, o, o, o, o, o, o, o };
-  memcpy(_get_buffer_from_dsc(dsc), image, sizeof(uint32_t) * 64);
+  assert(dsc->size > sizeof(_skull_8));
+  memcpy(_get_buffer_from_dsc(dsc), _skull_8, sizeof(_skull_8));
   return _get_buffer_from_dsc(dsc);
 }
 
@@ -1297,13 +1301,22 @@ void dt_mipmap_cache_get_with_caller_and_shutdown(dt_mipmap_buffer_t *buf,
     // simple case: blocking get
     dt_cache_entry_t *entry =  dt_cache_get_with_caller(&_get_cache(cache, mip)->cache, key, mode, file, line);
 
-    /* The payload could not be allocated: no buffer, and CACHE_FULL for the callers that pass the
-     * status on (the export), to whom an OK status with no buffer reads as a success. */
+    /* The payload could not be allocated: CACHE_FULL for the callers that pass the status on (the
+     * export), to whom an OK status with no buffer reads as a success. A thumbnail still shows a
+     * skull, the shared one since no entry holds a copy: read-only, and no entry to release. */
     if(IS_NULL_PTR(entry))
     {
       buf->cache_entry = NULL;
       _invalidate_buffer(buf);
       buf->status = DT_IMAGEIO_CACHE_FULL;
+      if(mip < DT_MIPMAP_F)
+      {
+        buf->width = 8;
+        buf->height = 8;
+        buf->iscale = 1.0f;
+        buf->color_space = DT_COLORSPACE_DISPLAY;
+        buf->buf = (uint8_t *)_skull_8;
+      }
       fprintf(stderr, "[mipmap_cache] could not allocate a cache entry for image %" PRId32 " at mip size %d\n",
               imgid, mip);
       return;

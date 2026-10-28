@@ -626,11 +626,25 @@ re-gets — of an entry marked `_lock_demoting`, which `_cache_gc_locked()` and 
 skip — cannot answer NULL and do not check.
 
 **Mipmap cache.** `dt_mipmap_cache_allocate_dynamic()` leaves `entry->data` NULL when
-`dt_alloc_align()` fails. A blocking get then answers a NULL `buf->buf` with status `CACHE_FULL`:
-the export hands that status back, and `OK` with no buffer would read as a success there —
-`_init_8()` would then copy into the descriptor the output size the export sets only after its
-pipe ran (measured: the disk-cache write of that thumbnail fails on libjpeg's "Maximum supported
-image dimension is 65500 pixels").
+`dt_alloc_align()` fails. A blocking get then answers status `CACHE_FULL` with a NULL
+`cache_entry`: no buffer for a `DT_MIPMAP_F` or `DT_MIPMAP_FULL` input, and for a thumbnail the
+8x8 skull itself, `_skull_8`, shared and read-only since no entry holds a copy (releasing it is a
+no-op, as for any buffer without an entry). The status matters to the export, which hands it
+back: `OK` with no buffer would read as a success there — `_init_8()` would then copy into the
+descriptor the output size the export sets only after its pipe ran (measured: the disk-cache write
+of that thumbnail fails on libjpeg's "Maximum supported image dimension is 65500 pixels").
+
+A NULL `cache_entry` with `CACHE_FULL` is a failure of this very request, where a failed render or
+decode leaves an entry behind. The two callers that see it open a "Not enough memory" window,
+which `caches/` cannot do itself, sitting below `control/`:
+`_view_image_get_surface_internal()` (`views/view.c`) for a thumbnail, whose skull reads "Out of
+RAM" like any `CACHE_FULL` skull, and `_dt_dev_mipmap_prefetch_full()` (`develop/develop.c`) for a
+full-size input, with the message `dt_imageio_open()` gives a decode that ran out of memory, so
+both land in one window. *Seen in the GUI on top of `600b680296`, the same day, all thumbnail
+allocations refused: three skulls labelled "RAM insuffisante" and one window listing the three
+files; `ansel-cli` prints the full-size window on stderr.* Nothing is cached, so every new request
+for that thumbnail tries the allocation again: once OK is clicked, the window opens again at the
+next refusal (a zoom change: 24 refusals, 8 per image, and the window back each time).
 
 In an export, the first get to fail is `_dt_dev_mipmap_prefetch_full()`, through
 `dt_dev_load_image()`, whose failure the export does not check. One failure and the run goes on
@@ -651,9 +665,11 @@ image").
 
 *Found `8bef6908d9`, 2026-10-05, by reading every path that zeroes a thumbnail's size (#1531).*
 
-A skull is painted by one function: `_paint_skulls()` (`caches/mipmap_cache.c`) replaces any
-thumbnail whose descriptor came out of generation as `0x0` with the 8x8 `dead_image_8()`. Every
-cause therefore goes through zeroing `dsc->width/height`, and until this change the cause was
+A skull is one 8x8 pattern, `_skull_8` (`caches/mipmap_cache.c`). `_paint_skulls()` copies it
+(`dead_image_8()`) over any thumbnail whose descriptor came out of generation as `0x0`; a
+thumbnail whose entry could not be allocated is handed the pattern itself (see "A cache entry that
+cannot be allocated"). Every cause of a failed render therefore goes through zeroing
+`dsc->width/height`, and until this change the cause was
 lost there — stderr only got `could not process thumbnail!`. The causes, each now kept as a
 `dt_imageio_retval_t` in `dsc->status` and handed to readers in `dt_mipmap_buffer_t.status`:
 
@@ -664,6 +680,7 @@ lost there — stderr only got `could not process thumbnail!`. The causes, each 
 | `_generate_blocking`, `DT_MIPMAP_FULL` | every decoder failed | `dt_imageio_open()`'s reason: see "Which loader failure a skull names" |
 | `_generate_blocking`, `DT_MIPMAP_FULL` | no source any more: the file went after `_init_8`'s check, or the image left the image cache | `FILE_NOT_FOUND` |
 | `dt_imageio_open` | the path exists but is not a regular file | `FILE_NOT_FOUND` |
+| `dt_mipmap_cache_get`, a thumbnail size | the thumbnail's own entry could not be allocated: the shared skull, with no entry behind it | `CACHE_FULL` |
 | `dt_imageio_export_with_flags` | the full-size input's mipmap entry could not be allocated: see "A cache entry that cannot be allocated" | `CACHE_FULL` |
 | `dt_imageio_export_with_flags` | pipe init failed, or the pipe returned an error / no backbuf | `PROCESSING_FAILED` |
 | `dt_imageio_export_with_flags` | the pipe returned an error after the pixelpipe cache refused it memory | `CACHE_FULL` |

@@ -54,7 +54,7 @@
     Copyright (C) 2022 Nicolas Auffray.
     Copyright (C) 2022 Sakari Kapanen.
     Copyright (C) 2023 Maurizio Paglia.
-    Copyright (C) 2025 Guillaume Stutin.
+    Copyright (C) 2025-2026 Guillaume Stutin.
     
     darktable is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -84,7 +84,10 @@
 #include "common/undo.h"
 #include "common/usermanual_url.h"
 #include "common/conf.h"
+#include "common/image.h"
+#include "common/paths.h"   // DT_PATH_MAX
 #include "control/control.h"
+#include "control/user_message.h"
 #include "develop/develop.h"
 #include "develop/supervisor.h"
 #include "widgets/expander.h"
@@ -1117,6 +1120,18 @@ static dt_view_surface_value_t _view_image_get_surface_internal(int32_t imgid, i
   const int buf_wd = buf.width;
   const int buf_ht = buf.height;
   const dt_imageio_retval_t status = buf.status;
+
+  /* The thumbnail's own entry could not be allocated just now: the skull below says so on the
+   * thumbnail, the window says what to do about it. */
+  if(IS_NULL_PTR(buf.cache_entry) && status == DT_IMAGEIO_CACHE_FULL)
+  {
+    char path[DT_PATH_MAX] = { 0 };
+    dt_image_full_path(imgid, path, sizeof(path), NULL, __FUNCTION__);
+    dt_control_alert(_("Not enough memory"),
+                     _("Not enough memory to display the thumbnail.\n"
+                       "Close other applications or add more RAM to your system."),
+                     path[0] ? path : NULL);
+  }
 
   // if we don't get buffer, no image is available at the moment
   if(IS_NULL_PTR(buf.buf))
