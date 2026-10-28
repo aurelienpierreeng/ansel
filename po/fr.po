@@ -22246,6 +22246,12 @@ msgstr ""
 "Pas assez de mémoire pour charger l'image en pleine résolution.\n"
 "Fermez d'autres applications ou ajoutez de la RAM à votre système."
 
+#: ../src/common/image.c:2138
+msgid "the file was moved, but the library could not record its new place"
+msgstr ""
+"le fichier a été déplacé, mais la bibliothèque n'a pas pu enregistrer son "
+"nouvel emplacement"
+
 #: ../tools/generate_prefs.xsl:493 ../tools/generate_prefs.xsl:506
 msgid "</xsl:text><xsl:value-of select="
 msgstr "</xsl:text><xsl:value-of select="
