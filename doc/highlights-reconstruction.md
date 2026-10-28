@@ -305,7 +305,8 @@ since the native half is otherwise compiled only by users' drivers.
 ### On Apple Silicon the device budget is not `max_mem_alloc / 2`
 
 *Measured 2026-09-26 to 2026-10-02 on six Apple Silicon Macs (8 to 36 GB), base `e83ba5865d`;
-the device field below added 2026-10-28 against `8e628de1c2`.*
+the device field below added 2026-10-28 against `8e628de1c2`; its vendor test measured on an
+M1 the same day, and on a tester's M4 Pro with `clinfo` (discussion #1466, comment 19248411).*
 
 `dt_opencl_get_device_available()` (`common/opencl.c`) bounds a host-unified device's working
 set by `max_mem_alloc / 2`, a proxy for Intel NEO's per-context aperture calibrated on a P630.
@@ -318,7 +319,8 @@ max alloc is a fixed figure on Apple: it scales with the RAM.
 
 The clamp is skipped where `dt_opencl_device_t.aperture_clamp` is unset, which
 `dt_opencl_device_init()` decides once: platform name AND device vendor both "Apple" (measured
-on an M1: platform `Apple`, vendor `Apple`, vendor id `0x1027f00`). The platform alone would
+on an M1 and an M4 Pro: platform `Apple`, vendor `Apple`, vendor id `0x1027f00` on both; M2, M3
+and M5 not checked yet — the `DEVICE VENDOR` line of the `-d opencl` log shows it). The platform alone would
 also take in Intel Macs, which publish the same "Apple" platform for GPUs whose vendor is
 "Intel Inc." or "AMD", and where nothing was measured. It is deliberately not keyed on the
 crash-attribution table (`_gpu_runtimes[]`): that table's module column must name a runtime's
