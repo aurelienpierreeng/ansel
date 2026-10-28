@@ -1,6 +1,7 @@
 /*
    This file is part of Ansel,
    Copyright (C) 2026 Aurélien PIERRE.
+   Copyright (C) 2026 Miguel Moquillon.
 
    Ansel is free software: you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -297,7 +298,7 @@ hl_aniso_scatter(global const hl_real_t *rhs, global const int *pgrid, global fl
 // tree-sum in local memory, and each work-group writes one partial sum to `partial`; the
 // small array of per-group results is finished on the device by hl_cg_fold / hl_cg_alpha_step.
 // Every vector is float and every scalar published to `state` is float, so nothing here needs
-// fp64: this section sits OUTSIDE the HL_SPARSE_FP64 guard and builds on every device. hole =
+// hl_real_t: this section is plain fp32 and builds the same on every device. hole =
 // byte mask of the unknown pixels; everything outside it is untouched or zeroed. Mirrors the
 // CG fallback of the CPU _region_pde_solve, driven by _region_pde_cg_cl -- any change here
 // must be mirrored there and re-validated with the HL_CORECL_TEST self-test.
