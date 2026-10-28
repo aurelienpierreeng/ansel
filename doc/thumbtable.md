@@ -236,6 +236,10 @@ Left/Right/Page/Home/End navigation and Return/activate. The engine first offers
 filmstrip has none), then handles the shared keys itself, delegating the pre-activate selection to
 `ops->pre_activate`.
 
+In the lighttable filemanager, a plain thumbnail click selects only that image, the primary
+modifier-click toggles the clicked image in the selection, and Shift-click selects a range. This
+matches the corresponding Space-key selection gestures.
+
 ## Extending
 
 - **Add a per-mode behaviour**: add a function pointer to @ref dt_thumbtable_layout_ops_t, implement
