@@ -123,6 +123,11 @@ int process(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_
   dt_mipmap_buffer_t buf;
 
   dt_mipmap_cache_get(&buf, pipe->imgid, pipe->size, DT_MIPMAP_BLOCKING, 'r');
+  if(IS_NULL_PTR(buf.buf))
+  {
+    dt_mipmap_cache_release(&buf);
+    return 1;
+  }
 
   // Catch out-of-bounds here because roi_in -> roi_out conversions
   // use float scaling that may not always respect initial size.
@@ -165,6 +170,11 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
   dt_mipmap_buffer_t buf;
 
   dt_mipmap_cache_get(&buf, pipe->imgid, pipe->size, DT_MIPMAP_BLOCKING, 'r');
+  if(IS_NULL_PTR(buf.buf))
+  {
+    dt_mipmap_cache_release(&buf);
+    return FALSE;
+  }
 
   // Catch out-of-bounds here because roi_in -> roi_out conversions
   // use float scaling that may not always respect initial size.
