@@ -660,13 +660,18 @@ on the thumbnail). Two in a row and the export's own get fails: `CACHE_FULL` (`e
 `basebuffer` fails its run on a NULL buffer as well, which takes the entry being evicted after the
 export's get and not re-allocated (by reading: the shim cannot order that eviction).
 
-**Image cache.** `dt_image_cache_allocate()` returns early when `dt_alloc_align()` fails, and
-`dt_image_cache_get()` and `dt_image_cache_get_reload()` answer NULL. Not every caller checks: an
-import then crashes on `img->group_id` in `_image_import_internal()` (`common/image.c`), and about
-20 of the 100 calls outside `image_cache.c` dereference the answer untested (a grep heuristic: an
-assignment, then no NULL test or `dt_image_invalid()` in the next four lines). They are the same
-callers that a NULL for a vanished row reaches (see "A failed database read is not a missing
-image").
+**Image cache.** `dt_image_cache_allocate()` returns early when `dt_alloc_align()` fails, saying
+so on stderr (`[image_cache] could not allocate a cache entry for image N`), and
+`dt_image_cache_get()` and `dt_image_cache_get_reload()` answer NULL. No window says it: `caches/`
+cannot open one, and not every caller checks -- an import crashes right after the line, on
+`img->group_id` in `_image_import_internal()` (`common/image.c`). Counted on top of `314f2a3875`,
+18 of the 97 calls outside `image_cache.c` dereference the answer untested: a script flags an
+assignment with no NULL test in the next five lines, and each flag was then read. Two flags are
+not dereferences: `_get_thumbnail_input()` (`mipmap_cache.c`) hands the answer to
+`dt_image_choose_input_path()` and tests it further down, and `ansel-cli` hands it to
+`dt_exif_xmp_read()`, which answers 1 for NULL -- the CLI then says it cannot open the XMP file and
+exits. `variables.c`'s, in a conditional expression, was found by reading. They are the same callers that a NULL for a vanished row reaches (see "A failed
+database read is not a missing image").
 
 ## Why a thumbnail is a skull, and how it says so
 
