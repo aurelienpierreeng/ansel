@@ -2083,150 +2083,150 @@ int32_t dt_image_rename(const int32_t imgid, const int32_t filmid, const gchar *
     dt_free(newdir);
   }
 
-  if(new)
+  // no destination: the film roll has no folder, or the new name reached outside it
+  if(IS_NULL_PTR(new)) return result;
+
+  // get current local copy if any
+  dt_image_t *img = dt_image_cache_get(imgid, 'r');
+  if(img)
   {
-    // get current local copy if any
-    dt_image_t *img = dt_image_cache_get(imgid, 'r');
-    if(img)
+    dt_image_choose_input_path(img, copysrcpath, sizeof(copysrcpath), TRUE);
+    dt_image_cache_read_release(img);
+  }
+
+  // move image
+  GError *moveError = NULL;
+  gboolean moveStatus = g_file_move(old, new, 0, NULL, NULL, NULL, &moveError);
+
+  if(moveStatus)
+  {
+    _move_text_sidecar_if_present(oldimg, newimg, FALSE);
+
+    // first move xmp files of image and duplicates
+    GList *dup_list = dt_image_repository_get_duplicate_ids(imgid);
+    for(GList *l = dup_list; l; l = g_list_next(l))
     {
-      dt_image_choose_input_path(img, copysrcpath, sizeof(copysrcpath), TRUE);
-      dt_image_cache_read_release(img);
+      const int32_t id = GPOINTER_TO_INT(l->data);
+      gchar oldxmp[DT_PATH_MAX] = { 0 };
+      gchar newxmp[DT_PATH_MAX] = { 0 };
+      g_strlcpy(oldxmp, oldimg, sizeof(oldxmp));
+      g_strlcpy(newxmp, newimg, sizeof(newxmp));
+      dt_image_path_append_version(id, oldxmp, sizeof(oldxmp));
+      dt_image_path_append_version(id, newxmp, sizeof(newxmp));
+      g_strlcat(oldxmp, ".xmp", sizeof(oldxmp));
+      g_strlcat(newxmp, ".xmp", sizeof(newxmp));
+
+      GFile *goldxmp = g_file_new_for_path(oldxmp);
+      GFile *gnewxmp = g_file_new_for_path(newxmp);
+
+      g_file_move(goldxmp, gnewxmp, 0, NULL, NULL, NULL, NULL);
+
+      g_object_unref(goldxmp);
+      g_object_unref(gnewxmp);
     }
 
-    // move image
-    GError *moveError = NULL;
-    gboolean moveStatus = g_file_move(old, new, 0, NULL, NULL, NULL, &moveError);
-
-    if(moveStatus)
+    // then update database and cache
+    // if update was performed in above loop, dt_image_path_append_version()
+    // would return wrong version!
+    while(dup_list)
     {
-      _move_text_sidecar_if_present(oldimg, newimg, FALSE);
-
-      // first move xmp files of image and duplicates
-      GList *dup_list = dt_image_repository_get_duplicate_ids(imgid);
-      for(GList *l = dup_list; l; l = g_list_next(l))
+      const int id = GPOINTER_TO_INT(dup_list->data);
+      dup_list = g_list_delete_link(dup_list, dup_list);
+      img = dt_image_cache_get(id, 'w');
+      if(IS_NULL_PTR(img))
       {
-        const int32_t id = GPOINTER_TO_INT(l->data);
-        gchar oldxmp[DT_PATH_MAX] = { 0 }, newxmp[DT_PATH_MAX] = { 0 };
-        g_strlcpy(oldxmp, oldimg, sizeof(oldxmp));
-        g_strlcpy(newxmp, newimg, sizeof(newxmp));
-        dt_image_path_append_version(id, oldxmp, sizeof(oldxmp));
-        dt_image_path_append_version(id, newxmp, sizeof(newxmp));
-        g_strlcat(oldxmp, ".xmp", sizeof(oldxmp));
-        g_strlcat(newxmp, ".xmp", sizeof(newxmp));
-
-        GFile *goldxmp = g_file_new_for_path(oldxmp);
-        GFile *gnewxmp = g_file_new_for_path(newxmp);
-
-        g_file_move(goldxmp, gnewxmp, 0, NULL, NULL, NULL, NULL);
-
-        g_object_unref(goldxmp);
-        g_object_unref(gnewxmp);
+        // the file and its sidecars have moved, the row of this duplicate has not
+        dt_control_alert(_("File operation failed"),
+                         _("the file was moved, but the library could not record its new place"), newimg);
+        continue;
       }
-
-      // then update database and cache
-      // if update was performed in above loop, dt_image_path_append_version()
-      // would return wrong version!
-      while(dup_list)
-      {
-        const int id = GPOINTER_TO_INT(dup_list->data);
-        dup_list = g_list_delete_link(dup_list, dup_list);
-        img = dt_image_cache_get(id, 'w');
-        if(IS_NULL_PTR(img))
-        {
-          // the file and its sidecars have moved, the row of this duplicate has not
-          dt_control_alert(_("File operation failed"),
-                           _("the file was moved, but the library could not record its new place"), newimg);
-          continue;
-        }
-        img->film_id = filmid;
-        if(newname) g_strlcpy(img->filename, newname, DT_MAX_FILENAME_LEN);
-        // write through to db and queue xmp write
-        dt_image_cache_write_release(img, DT_IMAGE_CACHE_SAFE);
-      }
-      g_list_free(dup_list);
-      dup_list = NULL;
-
-      // finally, rename local copy if any
-      if(g_file_test(copysrcpath, G_FILE_TEST_EXISTS))
-      {
-        // get new name
-        img = dt_image_cache_get(imgid, 'r');
-        if(img)
-        {
-          dt_image_choose_input_path(img, copydestpath, sizeof(copydestpath), TRUE);
-          dt_image_cache_read_release(img);
-        }
-
-        GFile *cold = g_file_new_for_path(copysrcpath);
-        GFile *cnew = g_file_new_for_path(copydestpath);
-
-        g_clear_error(&moveError);
-        moveStatus = g_file_move(cold, cnew, 0, NULL, NULL, NULL, &moveError);
-        if(!moveStatus)
-        {
-          fprintf(stderr, "[dt_image_rename] error moving local copy `%s' -> `%s'\n", copysrcpath, copydestpath);
-
-          if(g_error_matches(moveError, G_IO_ERROR, G_IO_ERROR_NOT_FOUND))
-          {
-            gchar *oldBasename = g_path_get_basename(copysrcpath);
-            dt_control_alert(_("File operation failed"), _("cannot access local copy"), oldBasename);
-            dt_free(oldBasename);
-          }
-          else if(g_error_matches(moveError, G_IO_ERROR, G_IO_ERROR_EXISTS)
-                  || g_error_matches(moveError, G_IO_ERROR, G_IO_ERROR_IS_DIRECTORY))
-          {
-            gchar *newBasename = g_path_get_basename(copydestpath);
-            dt_control_alert(_("File operation failed"), _("cannot write local copy"), newBasename);
-            dt_free(newBasename);
-          }
-          else
-          {
-            gchar *oldBasename = g_path_get_basename(copysrcpath);
-            gchar *newBasename = g_path_get_basename(copydestpath);
-            gchar *item = g_strdup_printf("%s -> %s", oldBasename, newBasename);
-            dt_control_alert(_("File operation failed"), _("error moving local copy"), item);
-            dt_free(item);
-            dt_free(oldBasename);
-            dt_free(newBasename);
-          }
-        }
-
-        g_object_unref(cold);
-        g_object_unref(cnew);
-      }
-
-      result = 0;
+      img->film_id = filmid;
+      if(newname) g_strlcpy(img->filename, newname, DT_MAX_FILENAME_LEN);
+      // write through to db and queue xmp write
+      dt_image_cache_write_release(img, DT_IMAGE_CACHE_SAFE);
     }
-    else
+    g_list_free(dup_list);
+    dup_list = NULL;
+
+    // finally, rename local copy if any
+    if(g_file_test(copysrcpath, G_FILE_TEST_EXISTS))
     {
+      // get new name
+      img = dt_image_cache_get(imgid, 'r');
+      if(img)
+      {
+        dt_image_choose_input_path(img, copydestpath, sizeof(copydestpath), TRUE);
+        dt_image_cache_read_release(img);
+      }
+
+      GFile *cold = g_file_new_for_path(copysrcpath);
+      GFile *cnew = g_file_new_for_path(copydestpath);
+
+      g_clear_error(&moveError);
+      moveStatus = g_file_move(cold, cnew, 0, NULL, NULL, NULL, &moveError);
+      if(!moveStatus)
+        fprintf(stderr, "[dt_image_rename] error moving local copy `%s' -> `%s'\n", copysrcpath, copydestpath);
+
+      // moveError is set only when the move failed
       if(g_error_matches(moveError, G_IO_ERROR, G_IO_ERROR_NOT_FOUND))
       {
-        dt_control_alert(_("File operation failed"), _("error moving file: file not found"), oldimg);
+        gchar *oldBasename = g_path_get_basename(copysrcpath);
+        dt_control_alert(_("File operation failed"), _("cannot access local copy"), oldBasename);
+        dt_free(oldBasename);
       }
-      // only display error message if newname is set (renaming and
-      // not moving) as when moving it can be the case where a
-      // duplicate is being moved, so only the .xmp are present but
-      // the original file may already have been moved.
-      else if(newname
-              && (g_error_matches(moveError, G_IO_ERROR, G_IO_ERROR_EXISTS)
-                  || g_error_matches(moveError, G_IO_ERROR, G_IO_ERROR_IS_DIRECTORY)))
+      else if(g_error_matches(moveError, G_IO_ERROR, G_IO_ERROR_EXISTS)
+              || g_error_matches(moveError, G_IO_ERROR, G_IO_ERROR_IS_DIRECTORY))
       {
-        gchar *item = g_strdup_printf("%s -> %s", oldimg, newimg);
-        dt_control_alert(_("File operation failed"), _("error moving file: file exists"), item);
-        dt_free(item);
+        gchar *newBasename = g_path_get_basename(copydestpath);
+        dt_control_alert(_("File operation failed"), _("cannot write local copy"), newBasename);
+        dt_free(newBasename);
       }
-      else if(newname)
+      else if(!moveStatus)
       {
-        gchar *item = g_strdup_printf("%s -> %s", oldimg, newimg);
-        dt_control_alert(_("File operation failed"), _("error moving file"), item);
+        gchar *oldBasename = g_path_get_basename(copysrcpath);
+        gchar *newBasename = g_path_get_basename(copydestpath);
+        gchar *item = g_strdup_printf("%s -> %s", oldBasename, newBasename);
+        dt_control_alert(_("File operation failed"), _("error moving local copy"), item);
         dt_free(item);
+        dt_free(oldBasename);
+        dt_free(newBasename);
       }
+
+      g_object_unref(cold);
+      g_object_unref(cnew);
     }
 
-    g_clear_error(&moveError);
-    g_object_unref(old);
-    g_object_unref(new);
+    result = 0;
   }
+  else
+  {
+    if(g_error_matches(moveError, G_IO_ERROR, G_IO_ERROR_NOT_FOUND))
+    {
+      dt_control_alert(_("File operation failed"), _("error moving file: file not found"), oldimg);
+    }
+    // only display error message if newname is set (renaming and
+    // not moving) as when moving it can be the case where a
+    // duplicate is being moved, so only the .xmp are present but
+    // the original file may already have been moved.
+    else if(newname
+            && (g_error_matches(moveError, G_IO_ERROR, G_IO_ERROR_EXISTS)
+                || g_error_matches(moveError, G_IO_ERROR, G_IO_ERROR_IS_DIRECTORY)))
+    {
+      gchar *item = g_strdup_printf("%s -> %s", oldimg, newimg);
+      dt_control_alert(_("File operation failed"), _("error moving file: file exists"), item);
+      dt_free(item);
+    }
+    else if(newname)
+    {
+      gchar *item = g_strdup_printf("%s -> %s", oldimg, newimg);
+      dt_control_alert(_("File operation failed"), _("error moving file"), item);
+      dt_free(item);
+    }
+  }
+
+  g_clear_error(&moveError);
+  g_object_unref(old);
+  g_object_unref(new);
 
   return result;
 }
