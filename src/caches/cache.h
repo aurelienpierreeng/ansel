@@ -101,7 +101,8 @@ static inline void dt_cache_set_cleanup_callback(dt_cache_t *cache, dt_cache_cle
   cache->cleanup_data = cleanup_data;
 }
 
-// returns a slot in the cache for this key (newly allocated if need be), locked according to mode (r, w)
+// returns a slot in the cache for this key (newly allocated if need be), locked according to mode (r, w),
+// or NULL when the key was not cached and the new slot's payload could not be allocated
 #define dt_cache_get(A, B, C)  dt_cache_get_with_caller(A, B, C, __FILE__, __LINE__)
 dt_cache_entry_t *dt_cache_get_with_caller(dt_cache_t *cache, const uint32_t key, char mode, const char *file, int line);
 // same but returns 0 if not allocated yet (both will block and wait for entry rw locks to be released)

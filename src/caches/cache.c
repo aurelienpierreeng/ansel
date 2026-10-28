@@ -228,13 +228,8 @@ restart:
 
   if(IS_NULL_PTR(entry->data))
   {
-    /* g_slice_free1(), not dt_free(): the entry came from g_slice_alloc() four lines up, and every
-     * other release in this file pairs with it (dt_cache_cleanup(), dt_cache_remove(),
-     * dt_cache_gc(), dt_cache_seed()). dt_free() is g_free, which is the same allocator only
-     * because g_slice has been a thin malloc wrapper since GLib 2.76 -- it was a genuine mismatch
-     * before that, and this was the one place in the file that did not pair. And the one-element
-     * GList allocated for the LRU has to go with it: the entry was never inserted, so nothing else
-     * will ever free it. */
+    /* The entry came from g_slice_alloc(), which before GLib 2.76 is not g_free()'s allocator. Its
+     * LRU cell goes with it: the entry was never inserted, so nothing else would free it. */
     g_list_free(entry->link);
     g_slice_free1(sizeof(*entry), entry);
     dt_pthread_mutex_unlock(&cache->lock);

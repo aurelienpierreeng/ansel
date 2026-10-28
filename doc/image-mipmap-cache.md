@@ -609,6 +609,44 @@ carries its final history. Any future caller of `dt_image_duplicate()` that will
 image's history afterward (a style, a batch edit, ...) should do the same rather than let the
 default immediate reload race its own follow-up write.
 
+## A cache entry that cannot be allocated
+
+*Measured 2026-10-28 on top of `0ba2521c6f`, by an `LD_PRELOAD` shim that fails `posix_memalign()`
+(where `dt_alloc_align()` ends) only while the stack holds a given allocate callback, both being
+exported from `libansel.so`: on the `ansel-cli` export of `tools/check_it_runs.sh`, and on
+`ansel-generate-cache --min-mip 2 -m 2` over the library that export leaves. Leaks counted by
+memcheck 3.22, which intercepts the allocation functions of every object, the shim's included,
+unless run with `--soname-synonyms=somalloc=nouserintercepts`.*
+
+`dt_cache_get()` answers NULL when the key was not cached and the allocate callback left
+`entry->data` NULL. The entry goes back to `g_slice_free1()`, its allocator, and its LRU cell
+with it: nothing else would free the cell, since the entry was never inserted (memcheck: 24 bytes
+definitely lost per failure while it stayed). A cached key never takes that path, so the demote
+re-gets — of an entry marked `_lock_demoting`, which `_cache_gc_locked()` and `dt_cache_remove()`
+skip — cannot answer NULL and do not check.
+
+**Mipmap cache.** `dt_mipmap_cache_allocate_dynamic()` leaves `entry->data` NULL when
+`dt_alloc_align()` fails. A blocking get then answers a NULL `buf->buf` with status `CACHE_FULL`:
+the export hands that status back, and `OK` with no buffer would read as a success there —
+`_init_8()` would then copy into the descriptor the output size the export sets only after its
+pipe ran (measured: the disk-cache write of that thumbnail fails on libjpeg's "Maximum supported
+image dimension is 65500 pixels").
+
+In an export, the first get to fail is `_dt_dev_mipmap_prefetch_full()`, through
+`dt_dev_load_image()`, whose failure the export does not check. One failure and the run goes on
+to fail in the pipe, `basebuffer` reading a 0x0 input: `PROCESSING_FAILED` (measured, `error 10`
+on the thumbnail). Two in a row and the export's own get fails: `CACHE_FULL` (`error 3`).
+`basebuffer` fails its run on a NULL buffer as well, which takes the entry being evicted after the
+export's get and not re-allocated (by reading: the shim cannot order that eviction).
+
+**Image cache.** `dt_image_cache_allocate()` returns early when `dt_alloc_align()` fails, and
+`dt_image_cache_get()` and `dt_image_cache_get_reload()` answer NULL. Not every caller checks: an
+import then crashes on `img->group_id` in `_image_import_internal()` (`common/image.c`), and about
+20 of the 100 calls outside `image_cache.c` dereference the answer untested (a grep heuristic: an
+assignment, then no NULL test or `dt_image_invalid()` in the next four lines). They are the same
+callers that a NULL for a vanished row reaches (see "A failed database read is not a missing
+image").
+
 ## Why a thumbnail is a skull, and how it says so
 
 *Found `8bef6908d9`, 2026-10-05, by reading every path that zeroes a thumbnail's size (#1531).*
@@ -626,6 +664,7 @@ lost there — stderr only got `could not process thumbnail!`. The causes, each 
 | `_generate_blocking`, `DT_MIPMAP_FULL` | every decoder failed | `dt_imageio_open()`'s reason: see "Which loader failure a skull names" |
 | `_generate_blocking`, `DT_MIPMAP_FULL` | no source any more: the file went after `_init_8`'s check, or the image left the image cache | `FILE_NOT_FOUND` |
 | `dt_imageio_open` | the path exists but is not a regular file | `FILE_NOT_FOUND` |
+| `dt_imageio_export_with_flags` | the full-size input's mipmap entry could not be allocated: see "A cache entry that cannot be allocated" | `CACHE_FULL` |
 | `dt_imageio_export_with_flags` | pipe init failed, or the pipe returned an error / no backbuf | `PROCESSING_FAILED` |
 | `dt_imageio_export_with_flags` | the pipe returned an error after the pixelpipe cache refused it memory | `CACHE_FULL` |
 | `dt_imageio_export_with_flags` | the pipe was stopped (`dt_dev_pixelpipe_process` returns the same `1` for a kill-switch stop as for a failure) | `ABORTED` |

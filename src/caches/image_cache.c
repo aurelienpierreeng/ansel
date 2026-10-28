@@ -235,6 +235,7 @@ void dt_image_cache_allocate(void *data, dt_cache_entry_t *entry)
   // dt_alloc_align: dt_image_t embeds dt_aligned_pixel_t members (alignof 64); see #1212.
   dt_image_t *img = (dt_image_t *)dt_alloc_align(sizeof(dt_image_t));
   entry->data = img;
+  if(IS_NULL_PTR(img)) return; // dt_cache_get() frees the entry and answers NULL
   dt_image_init(img);
   _image_cache_reload_from_db(img, entry->key, DT_SV_CREATE); // emits the create event
 
@@ -339,13 +340,8 @@ dt_image_t *dt_image_cache_get(const int32_t imgid, char mode)
 {
   dt_image_cache_t *cache = _image_cache;
   if(imgid <= 0) return NULL;
-  /* dt_cache_get() returns NULL when the entry's payload could not be allocated -- documented, and
-   * reached whenever dt_alloc_align() fails or an allocate callback bails. dt_image_cache_testget()
-   * has always checked, because NULL is its ordinary answer; the two blocking getters never did,
-   * because for them it is the rare path -- so an allocation failure was answered with a NULL
-   * dereference instead of a NULL return, on a machine that was already out of memory. */
   dt_cache_entry_t *entry = dt_cache_get(&cache->cache, (uint32_t)imgid, mode);
-  if(IS_NULL_PTR(entry)) return NULL;
+  if(IS_NULL_PTR(entry)) return NULL; // the payload could not be allocated
 
   ASAN_UNPOISON_MEMORY_REGION(entry->data, sizeof(dt_image_t));
   dt_image_t *img = (dt_image_t *)entry->data;
@@ -404,7 +400,7 @@ dt_image_t *dt_image_cache_get_reload(const int32_t imgid, char mode)
 
   // We must take a write lock to reload in-place, then demote to read if requested.
   dt_cache_entry_t *entry = dt_cache_get(&cache->cache, (uint32_t)imgid, 'w');
-  if(IS_NULL_PTR(entry)) return NULL;   // see dt_image_cache_get(): an allocation failure, not an absence
+  if(IS_NULL_PTR(entry)) return NULL; // the payload could not be allocated
 
   ASAN_UNPOISON_MEMORY_REGION(entry->data, sizeof(dt_image_t));
   dt_image_t *img = (dt_image_t *)entry->data;
@@ -424,12 +420,6 @@ dt_image_t *dt_image_cache_get_reload(const int32_t imgid, char mode)
     entry->_lock_demoting = 1;
     dt_cache_release(&cache->cache, entry);
     entry = dt_cache_get(&cache->cache, (uint32_t)imgid, 'r');
-    /* Defensive rather than reachable: _lock_demoting is set above, and both dt_cache_gc() and
-     * dt_cache_remove() skip an entry carrying it, so the re-get is guaranteed to find the entry it
-     * just released and never takes the allocating path. Checked anyway because the cost is one
-     * comparison and the alternative is a NULL dereference if that invariant ever moves. */
-    if(IS_NULL_PTR(entry)) return NULL;
-
     entry->_lock_demoting = 0;
     ASAN_UNPOISON_MEMORY_REGION(entry->data, sizeof(dt_image_t));
     img = (dt_image_t *)entry->data;

@@ -1297,16 +1297,14 @@ void dt_mipmap_cache_get_with_caller_and_shutdown(dt_mipmap_buffer_t *buf,
     // simple case: blocking get
     dt_cache_entry_t *entry =  dt_cache_get_with_caller(&_get_cache(cache, mip)->cache, key, mode, file, line);
 
-    /* NULL means the payload could not be allocated, and these are the biggest allocations in the
-     * application -- up to one full mip buffer each -- so this is the likeliest cache in the tree to
-     * hit it. It used to go straight on to the reads of entry->data below: an out-of-memory condition
-     * was answered with a NULL dereference. Report it the way every consumer of this function already
-     * understands, a NULL buf->buf, and let the caller decide. */
+    /* The payload could not be allocated: no buffer, and CACHE_FULL for the callers that pass the
+     * status on (the export), to whom an OK status with no buffer reads as a success. */
     if(IS_NULL_PTR(entry))
     {
       buf->cache_entry = NULL;
       _invalidate_buffer(buf);
-      fprintf(stderr, "[mipmap_cache] could not allocate a cache entry for image %d at mip size %d\n",
+      buf->status = DT_IMAGEIO_CACHE_FULL;
+      fprintf(stderr, "[mipmap_cache] could not allocate a cache entry for image %" PRId32 " at mip size %d\n",
               imgid, mip);
       return;
     }
