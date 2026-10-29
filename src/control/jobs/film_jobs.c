@@ -39,6 +39,7 @@
 #include "control/jobs/control_jobs.h"
 #include "common/collection.h"
 #include "common/film.h"
+#include "metadata/notify.h"
 #include <stdlib.h>
 #include "common/utility.h"
 #include "gui/application.h"
@@ -292,6 +293,7 @@ static void _film_import1(dt_job_t *job, dt_film_t *film, GList *images)
   // same directory, but for a recursive import spanning several sub-folders they can differ,
   // making it unpredictable which sub-folder ends up displayed.
   int32_t first_imgid = UNKNOWN_IMAGE;
+  gboolean tags_changed = FALSE;
   for(GList *image = images; image; image = g_list_next(image))
   {
     gchar *cdn = g_path_get_dirname((const gchar *)image->data);
@@ -321,7 +323,9 @@ static void _film_import1(dt_job_t *job, dt_film_t *film, GList *images)
     dt_free(cdn);
 
     /* import image */
-    imgid = dt_image_import(cfr->id, (const gchar *)image->data, FALSE);
+    gboolean image_tags_changed = FALSE;
+    imgid = dt_image_import_with_tags(cfr->id, (const gchar *)image->data, FALSE, &image_tags_changed);
+    tags_changed |= image_tags_changed;
     if(first_imgid <= UNKNOWN_IMAGE && imgid > UNKNOWN_IMAGE)
     {
       first_imgid = imgid;
@@ -366,6 +370,8 @@ static void _film_import1(dt_job_t *job, dt_film_t *film, GList *images)
   // does it too, which this legacy, separate import path does not share code with.
   if(all_imgs)
     dt_collection_update_query(dt_collection_get_global(), DT_COLLECTION_CHANGE_NEW_QUERY, DT_COLLECTION_PROP_UNDEF, NULL);
+
+  if(tags_changed) dt_metadata_tags_changed();
 
   //QUESTION: should this come after _apply_filmroll_gpx, since that can change geotags again?
   DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_GEOTAG_CHANGED, all_imgs, 0);

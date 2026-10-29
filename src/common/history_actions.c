@@ -17,6 +17,7 @@
 */
 
 #include "common/history_actions.h"
+#include "metadata/notify.h"
 #include "history/notify.h"
 
 #include "common/collection.h"
@@ -336,6 +337,7 @@ typedef struct dt_history_load_params_t
   gchar *filename;
   int history_only;
   const int64_t *write_timestamp;
+  dt_xmp_import_result_t result;
 } dt_history_load_params_t;
 
 static gboolean _history_load_and_apply_apply(const int32_t imgid, void *user_data)
@@ -348,7 +350,13 @@ static gboolean _history_load_and_apply_apply(const int32_t imgid, void *user_da
   hist->imgid = imgid;
   dt_history_snapshot_undo_create(hist->imgid, &hist->before, &hist->before_history_end);
 
-  if(dt_exif_xmp_read(img, params->filename, params->history_only, params->write_timestamp))
+  gboolean tags_changed = FALSE;
+  gboolean development_changed = FALSE;
+  const dt_xmp_import_result_t import_result = dt_exif_xmp_read_with_result(
+      img, params->filename, params->history_only, params->write_timestamp, &tags_changed,
+      &development_changed);
+  params->result = import_result;
+  if(import_result == DT_XMP_IMPORT_READ_ERROR || import_result == DT_XMP_IMPORT_PERSIST_ERROR)
   {
     dt_image_cache_write_release(img,
                                  // ugly but if not history_only => called from crawler - do not write the xmp
@@ -356,6 +364,15 @@ static gboolean _history_load_and_apply_apply(const int32_t imgid, void *user_da
     dt_history_snapshot_repository_clear(hist->before, hist->imgid);
     dt_free(hist);
     return FALSE;
+  }
+
+  if(import_result == DT_XMP_IMPORT_PARTIAL && !development_changed)
+  {
+    dt_image_cache_write_release(img, params->history_only ? DT_IMAGE_CACHE_SAFE : DT_IMAGE_CACHE_RELAXED);
+    dt_history_snapshot_repository_clear(hist->before, hist->imgid);
+    dt_free(hist);
+    if(tags_changed) dt_metadata_tags_changed();
+    return TRUE;
   }
 
   dt_history_snapshot_undo_create(hist->imgid, &hist->after, &hist->after_history_end);
@@ -373,27 +390,32 @@ static gboolean _history_load_and_apply_apply(const int32_t imgid, void *user_da
   // raised in _history_action_finalize_list(), but the pixels are not: reload metadata, invalidate
   // the mipmap and refresh the thumbnail (lighttable context, so refresh the filmstrip too).
   dt_image_history_changed(imgid, TRUE);
+  if(tags_changed) dt_metadata_tags_changed();
 
   return TRUE;
 }
 
 int dt_history_load_and_apply(const int32_t imgid, gchar *filename, int history_only)
 {
-  dt_history_load_params_t params = { .filename = filename, .history_only = history_only, .write_timestamp = NULL };
+  dt_history_load_params_t params = { .filename = filename, .history_only = history_only, .write_timestamp = NULL,
+                                      .result = DT_XMP_IMPORT_READ_ERROR };
   return _history_load_and_apply_apply(imgid, &params) ? 0 : 1;
 }
 
-int dt_history_load_and_apply_on_image(int32_t imgid, gchar *filename, int history_only,
-                                       const int64_t *write_timestamp)
+dt_xmp_import_result_t dt_history_load_and_apply_on_image(int32_t imgid, gchar *filename, int history_only,
+                                                           const int64_t *write_timestamp)
 {
   dt_history_load_params_t params = { .filename = filename, .history_only = history_only,
-                                      .write_timestamp = write_timestamp };
-  return _history_load_and_apply_apply(imgid, &params) ? 0 : 1;
+                                       .write_timestamp = write_timestamp,
+                                       .result = DT_XMP_IMPORT_READ_ERROR };
+  _history_load_and_apply_apply(imgid, &params);
+  return params.result;
 }
 
 int dt_history_load_and_apply_on_list(gchar *filename, const GList *list)
 {
-  dt_history_load_params_t params = { .filename = filename, .history_only = 1, .write_timestamp = NULL };
+  dt_history_load_params_t params = { .filename = filename, .history_only = 1, .write_timestamp = NULL,
+                                      .result = DT_XMP_IMPORT_READ_ERROR };
   const gboolean changed = _history_action_on_list(list, _history_load_and_apply_apply, &params);
   return changed ? 0 : 1;
 }

@@ -739,19 +739,28 @@ static void sync_xmp_to_db(GtkTreeModel *model,
   dt_control_crawler_gui_t *gui = (dt_control_crawler_gui_t *)user_data;
   dt_control_crawler_result_t entry = { 0 };
   _get_crawler_entry_from_model(model, iter, &entry);
-  const int error = dt_history_load_and_apply_on_image(entry.id, entry.xmp_path, 0, &entry.timestamp_xmp);
+  const dt_xmp_import_result_t result =
+    dt_history_load_and_apply_on_image(entry.id, entry.xmp_path, 0, &entry.timestamp_xmp);
 
-  if(error)
-  {
-    _log_synchronization(gui, _("ERROR: %s NOT synced XMP \342\206\222 DB"), entry.image_path);
-    _log_synchronization(gui, _("ERROR: cannot write the database."
-                                " the destination may be full, offline or read-only."),
-                         NULL);
-  }
-  else
+  if(result == DT_XMP_IMPORT_OK)
   {
     _append_row_to_remove(model, path, &gui->rows_to_remove);
     _log_synchronization(gui, _("SUCCESS: %s synced XMP \342\206\222 DB"), entry.image_path);
+  }
+  else if(result == DT_XMP_IMPORT_PARTIAL)
+  {
+    _log_synchronization(gui, _("PARTIAL: %s imported metadata but did not sync XMP \342\206\222 DB"),
+                         entry.image_path);
+  }
+  else
+  {
+    _log_synchronization(gui, _("ERROR: %s NOT synced XMP \342\206\222 DB"), entry.image_path);
+    _log_synchronization(gui,
+                         result == DT_XMP_IMPORT_READ_ERROR
+                           ? _("ERROR: cannot read the XMP sidecar.")
+                           : _("ERROR: cannot write the database."
+                               " the destination may be full, offline or read-only."),
+                         NULL);
   }
 
   _free_crawler_result(&entry);
@@ -794,28 +803,31 @@ static void sync_newest_to_oldest(GtkTreeModel *model,
   dt_control_crawler_gui_t *gui = (dt_control_crawler_gui_t *)user_data;
   dt_control_crawler_result_t entry = { 0 };
   _get_crawler_entry_from_model(model, iter, &entry);
-
-  if(!entry.timestamp_db_present)
-  {
-    _log_synchronization(gui, _("SKIPPED: %s has no database timestamp"), entry.image_path);
-    _free_crawler_result(&entry);
-    return;
-  }
-
+  const int64_t timestamp_db = entry.timestamp_db_present ? entry.timestamp_db : 0;
   int error = 0;
 
-  if(entry.timestamp_xmp > entry.timestamp_db)
+  if(entry.timestamp_xmp > timestamp_db)
   {
-    error = dt_history_load_and_apply_on_image(entry.id, entry.xmp_path, 0, &entry.timestamp_xmp);
-    if(error)
+    const dt_xmp_import_result_t result =
+      dt_history_load_and_apply_on_image(entry.id, entry.xmp_path, 0, &entry.timestamp_xmp);
+    error = result != DT_XMP_IMPORT_OK;
+    if(result == DT_XMP_IMPORT_PARTIAL)
+    {
+      _log_synchronization(gui,
+                           _("PARTIAL: %s imported metadata but did not sync new (XMP) \342\206\222 old (DB)"),
+                           entry.image_path);
+    }
+    else if(error)
     {
       _log_synchronization
         (gui,
          _("ERROR: %s NOT synced new (XMP) \342\206\222 old (DB)"), entry.image_path);
       _log_synchronization
         (gui,
-         _("ERROR: cannot write the database. the destination may be full,"
-           " offline or read-only."), NULL);
+         result == DT_XMP_IMPORT_READ_ERROR
+           ? _("ERROR: cannot read the XMP sidecar.")
+           : _("ERROR: cannot write the database. the destination may be full,"
+               " offline or read-only."), NULL);
     }
     else
     {
@@ -824,12 +836,12 @@ static void sync_newest_to_oldest(GtkTreeModel *model,
          _("SUCCESS: %s synced new (XMP) \342\206\222 old (DB)"), entry.image_path);
     }
   }
-  else if(entry.timestamp_xmp < entry.timestamp_db)
+  else if(entry.timestamp_xmp < timestamp_db)
   {
     // write the XMP and make sure it get the last modified timestamp of the db
     const dt_image_write_sidecar_result_t xres = dt_image_write_sidecar_file_forced(entry.id);
     error = (xres != DT_IMAGE_WRITE_SIDECAR_OK) ? 1 : 0;
-    if(!error) _set_modification_time(entry.xmp_path, entry.timestamp_db);
+    if(!error && entry.timestamp_db_present) _set_modification_time(entry.xmp_path, entry.timestamp_db);
 
     if(error)
     {
@@ -870,27 +882,30 @@ static void sync_oldest_to_newest(GtkTreeModel *model,
   dt_control_crawler_gui_t *gui = (dt_control_crawler_gui_t *)user_data;
   dt_control_crawler_result_t entry = { 0 };
   _get_crawler_entry_from_model(model, iter, &entry);
-
-  if(!entry.timestamp_db_present)
-  {
-    _log_synchronization(gui, _("SKIPPED: %s has no database timestamp"), entry.image_path);
-    _free_crawler_result(&entry);
-    return;
-  }
-
+  const int64_t timestamp_db = entry.timestamp_db_present ? entry.timestamp_db : 0;
   int error = 0;
 
-  if(entry.timestamp_xmp < entry.timestamp_db)
+  if(entry.timestamp_xmp < timestamp_db)
   {
-    error = dt_history_load_and_apply_on_image(entry.id, entry.xmp_path, 0, &entry.timestamp_xmp);
-    if(error)
+    const dt_xmp_import_result_t result =
+      dt_history_load_and_apply_on_image(entry.id, entry.xmp_path, 0, &entry.timestamp_xmp);
+    error = result != DT_XMP_IMPORT_OK;
+    if(result == DT_XMP_IMPORT_PARTIAL)
+    {
+      _log_synchronization(gui,
+                           _("PARTIAL: %s imported metadata but did not sync old (XMP) \342\206\222 new (DB)"),
+                           entry.image_path);
+    }
+    else if(error)
     {
       _log_synchronization(gui,
                            _("ERROR: %s NOT synced old (XMP) \342\206\222 new (DB)"),
                            entry.image_path);
-    _log_synchronization(gui,
-                         _("ERROR: cannot write the database."
-                           " the destination may be full, offline or read-only."), NULL);
+      _log_synchronization(gui,
+                           result == DT_XMP_IMPORT_READ_ERROR
+                             ? _("ERROR: cannot read the XMP sidecar.")
+                             : _("ERROR: cannot write the database."
+                                 " the destination may be full, offline or read-only."), NULL);
     }
     else
     {
@@ -899,12 +914,12 @@ static void sync_oldest_to_newest(GtkTreeModel *model,
                            entry.image_path);
     }
   }
-  else if(entry.timestamp_xmp > entry.timestamp_db)
+  else if(entry.timestamp_xmp > timestamp_db)
   {
     // WRITE DB in XMP
     const dt_image_write_sidecar_result_t xres = dt_image_write_sidecar_file_forced(entry.id);
     error = (xres != DT_IMAGE_WRITE_SIDECAR_OK) ? 1 : 0;
-    if(!error) _set_modification_time(entry.xmp_path, entry.timestamp_db);
+    if(!error && entry.timestamp_db_present) _set_modification_time(entry.xmp_path, entry.timestamp_db);
     if(error)
     {
       _log_synchronization(gui,
