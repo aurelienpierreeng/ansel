@@ -932,31 +932,24 @@ void gui_cleanup(dt_lib_module_t *self)
 
 void gui_reset(dt_lib_module_t *self)
 {
-  dt_database_start_transaction();
-
   GList *all_styles = dt_styles_get_list("");
 
-  if(IS_NULL_PTR(all_styles))
-  {
-    dt_database_release_transaction();
-    return;
-  }
+  if(IS_NULL_PTR(all_styles)) return;
 
   const gint styles_cnt = g_list_length(all_styles);
   const gboolean can_delete = _ask_before_delete_style(styles_cnt);
 
-  if(can_delete)
+  if(can_delete && dt_database_start_transaction())
   {
     for (const GList *result = all_styles; result; result = g_list_next(result))
     {
       dt_style_t *style = (dt_style_t *)result->data;
       dt_styles_delete_by_name_adv((char*)style->name, FALSE);
     }
-    DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_STYLE_CHANGED);
+    if(dt_database_release_transaction())
+      DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_STYLE_CHANGED);
   }
   g_list_free_full(all_styles, dt_style_free);
-  all_styles = NULL;
-  dt_database_release_transaction();
   _update(self);
 }
 
