@@ -1298,6 +1298,7 @@ static int32_t dt_control_refresh_exif_run(dt_job_t *job)
   snprintf(message, sizeof(message),
            ngettext("refreshing info for %d image", "refreshing info for %d images", total), total);
   dt_control_job_set_progress_message(job, message);
+  dt_control_alert_batch_begin();
   for(; t; t = g_list_next(t))
   {
     fraction += 1.0 / total;
@@ -1315,7 +1316,6 @@ static int32_t dt_control_refresh_exif_run(dt_job_t *job)
     dt_image_t *img = dt_image_cache_get(imgid, 'w');
     if(!IS_NULL_PTR(img))
     {
-      const dt_image_t original = *img;
       // Re-sync the file-derived classification flags (LDR/HDR/RAW/sRAW, mosaic, monochrome,
       // 4bayer, additional-DNG-tags, buffer-resolved) with the actual file, repairing entries
       // that were persisted with stale/corrupted flags in the DB. We must *clear* these bits
@@ -1329,18 +1329,31 @@ static int32_t dt_control_refresh_exif_run(dt_job_t *job)
                                         | DT_IMAGE_MOSAIC | DT_IMAGE_BUFFER_RESOLVED
                                         | DT_IMAGE_HAS_ADDITIONAL_DNG_TAGS;
       img->flags &= ~file_class_flags;
-      if(dt_exif_read_persisted(img, sourcefile))
+      const dt_exif_read_result_t result = dt_exif_read_persisted(img, sourcefile);
+      const char *alert_message = NULL;
+      switch(result)
       {
-        *img = original;
-        dt_control_log(_("failed to refresh embedded metadata for image %d"), imgid);
+        case DT_EXIF_READ_OK:
+          break;
+        case DT_EXIF_READ_PARTIAL:
+          alert_message = _("could only partially refresh the embedded metadata");
+          break;
+        case DT_EXIF_READ_ERROR:
+          alert_message = _("could not read the embedded metadata");
+          break;
+        case DT_EXIF_READ_PERSIST_ERROR:
+          alert_message = _("could not save the embedded metadata");
+          break;
       }
       dt_image_cache_write_release(img, DT_IMAGE_CACHE_SAFE);
+      if(alert_message) dt_control_alert(_("File operation failed"), alert_message, sourcefile);
     }
     else
       fprintf(stderr, "[dt_control_refresh_exif_run] couldn't dt_image_cache_get for imgid %i\n", imgid);
 
     DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_DEVELOP_IMAGE_CHANGED);
   }
+  dt_control_alert_batch_end();
   dt_collection_update_query(dt_collection_get_global(), DT_COLLECTION_CHANGE_RELOAD, DT_COLLECTION_PROP_UNDEF,
                              g_list_copy(params->index));
   DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_TAG_CHANGED);

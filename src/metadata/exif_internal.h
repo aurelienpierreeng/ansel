@@ -101,12 +101,22 @@ bool dt_exif_read_exif_tag(Exiv2::ExifData &exifData, Exiv2::ExifData::const_ite
  *
  * @details @p version is the Xmp.darktable.xmp_version of the packet, or -1 when the packet
  * did not come from us. @p exif_read says whether EXIF was already read for this image, so
- * that XMP is allowed to trump it. */
+ * that XMP is allowed to trump it. @p partial is an in/out aggregate and is only set to TRUE
+ * when this packet has a recoverable malformed field. */
 bool dt_exif_decode_xmp_data(dt_image_t *img, Exiv2::XmpData &xmpData, int version,
                               bool exif_read);
 
 bool dt_exif_apply_xmp_persistence(dt_image_t *img, Exiv2::XmpData &xmpData, int xmp_version,
-                                   bool replace_existing, bool *tags_changed);
+                                    bool replace_existing, bool *tags_changed, bool *partial);
+
+inline bool dt_exif_apply_xmp_persistence(dt_image_t *img, Exiv2::XmpData &xmpData,
+                                          const int xmp_version, const bool replace_existing,
+                                          bool *tags_changed)
+{
+  bool partial = false;
+  return dt_exif_apply_xmp_persistence(img, xmpData, xmp_version, replace_existing, tags_changed,
+                                       &partial);
+}
 
 #endif // DT_METADATA_EXIF_INTERNAL_H
 
