@@ -62,9 +62,12 @@ typedef struct dt_dev_history_item_t
   int multi_priority;
   char multi_name[128];
   GList *forms; // snapshot of dt_develop_t->forms
+  gboolean forms_snapshot; // forms is an explicit snapshot, including an intentionally empty one
+  gboolean mask_dependencies_invalid; // transient replay guard; never serialized
   int num; // num of history on database
 
   uint64_t hash; // module params hash.
+  uint64_t effective_hash; // hash of params plus the transient replay guard
 
   // Refcount, mirroring dt_masks_form_t: dev->history holds one reference per element. See
   // dt_dev_history_cow_touch(): before mutating an item in place (the "reuse previous entry"
@@ -175,6 +178,7 @@ void dt_dev_history_snapshot_release(dt_dev_history_snapshot_t *snapshot);
  * @param params_size  size of @p params in bytes (ignored if params is NULL).
  * @param blend_params blend params buffer (if NULL, uses `module->blend_params`).
  * @param forms        mask forms snapshot for this history item (ownership transferred; may be NULL).
+ * @param forms_snapshot TRUE when @p forms is an explicit snapshot, including an empty snapshot.
  * @return TRUE on success, FALSE on allocation failure/invalid args.
  */
 /**
@@ -197,8 +201,9 @@ void dt_dev_history_snapshot_release(dt_dev_history_snapshot_t *snapshot);
  */
 gboolean dt_dev_history_item_update_from_params(struct dt_develop_t *dev, dt_dev_history_item_t *hist,
                                                 struct dt_iop_module_t *module, gboolean enabled,
-                                                const void *params, const int32_t params_size,
-                                                const struct dt_develop_blend_params_t *blend_params, GList *forms);
+                                                 const void *params, const int32_t params_size,
+                                                 const struct dt_develop_blend_params_t *blend_params, GList *forms,
+                                                 gboolean forms_snapshot);
 
 /**
  * @brief Return the next available multi_priority for an operation.

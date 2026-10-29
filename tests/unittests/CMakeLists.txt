@@ -68,6 +68,7 @@ set(LIB_ANSEL_UNIT_TESTS
   test_xmp_tags
   test_dtpthread_recursive
   test_history_snapshot
+  test_mask_recovery_replay
   test_masks_raster_contract
   test_blend_mask_payload
   test_stroke_raster
@@ -171,6 +172,9 @@ target_sources(test_drawlayer_batch_raster PRIVATE
   ${CMAKE_SOURCE_DIR}/src/iop/drawlayer/brush.c
   ${CMAKE_SOURCE_DIR}/src/iop/drawlayer/paint.c)
 target_compile_definitions(test_import_jobs PRIVATE
+  ANSEL_TEST_SOURCE_DIR="${CMAKE_SOURCE_DIR}"
+   ANSEL_TEST_BINARY_DIR="${CMAKE_BINARY_DIR}")
+target_compile_definitions(test_mask_recovery_replay PRIVATE
   ANSEL_TEST_SOURCE_DIR="${CMAKE_SOURCE_DIR}"
   ANSEL_TEST_BINARY_DIR="${CMAKE_BINARY_DIR}")
 

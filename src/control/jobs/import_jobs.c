@@ -26,6 +26,7 @@
 #include "metadata/exif.h"
 #include "develop/history_merge.h"
 #include "metadata/metadata.h"
+#include "metadata/notify.h"
 #include "common/styles.h"
 #include "control/control.h"
 #include "common/film.h"
@@ -178,7 +179,8 @@ gboolean _copy_file(const char *filename, const char *dest_file_path)
  * @param img_path_to_db the file path to import
  * @return const int32_t
  */
-const int32_t _import_job(dt_control_import_t *data, gchar *img_path_to_db)
+const int32_t _import_job(const dt_control_import_t *const data, const gchar *const img_path_to_db,
+                          gboolean *tags_changed)
 {
   gchar *dirname = g_strdup(dt_util_path_get_dirname(img_path_to_db));
 
@@ -188,7 +190,7 @@ const int32_t _import_job(dt_control_import_t *data, gchar *img_path_to_db)
   // would otherwise raise it hundreds of times). Folder survey imports one or
   // a few files at a time, and Studio Capture needs that signal to know which
   // image to display as soon as it lands, so raise it for that case only.
-  const int32_t imgid = dt_image_import(filmid, img_path_to_db, data->folder_survey);
+  const int32_t imgid = dt_image_import_with_tags(filmid, img_path_to_db, data->folder_survey, tags_changed);
   dt_free(dirname);
   return imgid;
 }
@@ -403,8 +405,10 @@ void _write_xmp_id(const char *filename, int32_t imgid)
  * @param final_destination final borrowed copy destination, ignored without copy.
  * @return int32_t the imgid of the imported image (or -1 if import failed)
  */
-int32_t _import_image(const GList *img, dt_control_import_t *data, const char *final_destination, GList **discarded, int *xmps)
+int32_t _import_image(const GList *img, dt_control_import_t *data, const char *final_destination, GList **discarded,
+                      int *xmps, gboolean *tags_changed)
 {
+  if(tags_changed) *tags_changed = FALSE;
   const char *filename = (const char*) img->data;
 
   gchar img_path_to_db[DT_PATH_MAX] = { 0 };
@@ -426,7 +430,7 @@ int32_t _import_image(const GList *img, dt_control_import_t *data, const char *f
   }
 
   dt_control_alert_batch_begin();
-  const int32_t imgid = _import_job(data, img_path_to_db);
+  const int32_t imgid = _import_job(data, img_path_to_db, tags_changed);
   if(imgid <= 0)
   {
     dt_control_alert_batch_end();
@@ -434,7 +438,9 @@ int32_t _import_image(const GList *img, dt_control_import_t *data, const char *f
     return UNKNOWN_IMAGE;
   }
 
-  *xmps = dt_image_read_duplicates(imgid, img_path_to_db, FALSE);
+  GList *xmp_files = dt_image_find_xmps(img_path_to_db);
+  *xmps = g_list_length(xmp_files);
+  g_list_free_full(xmp_files, dt_free_gpointer);
   dt_control_alert_batch_end();
   dt_print(DT_DEBUG_IMPORT, "[Import] Found and imported %i XMP for %s.\n", *xmps, img_path_to_db);
   dt_print(DT_DEBUG_IMPORT, "[Import] successfully imported %s in DB at imgid %i\n", img_path_to_db, imgid);
@@ -505,6 +511,22 @@ static void _refresh_progress_counter(dt_job_t *job, const int elements, const i
   g_usleep(100);
 }
 
+/** Build one reserved copy destination while owning the temporary metadata image. */
+static gchar *_import_job_destination(dt_import_sequence_t *sequences, const char *filename,
+                                      dt_control_import_t *data, const gboolean needs_exif)
+{
+  const int capture_sequence = dt_import_sequence_assign(sequences, filename);
+  dt_image_t *expansion_image = dt_alloc_align(sizeof(dt_image_t));
+  if(IS_NULL_PTR(expansion_image)) return NULL;
+  dt_image_init(expansion_image);
+  if(needs_exif) dt_exif_read(expansion_image, filename);
+
+  const dt_import_destination_t request = { filename, expansion_image, data, capture_sequence };
+  gchar *destination = dt_import_sequence_destination(sequences, &request);
+  dt_free_align(expansion_image);
+  return destination;
+}
+
 static int32_t _control_import_job_run(dt_job_t *job)
 {
   dt_control_image_enumerator_t *params = (dt_control_image_enumerator_t *)dt_control_job_get_params(job);
@@ -515,6 +537,7 @@ static int32_t _control_import_job_run(dt_job_t *job)
   int32_t imgid = UNKNOWN_IMAGE;
   int32_t last_imgid = UNKNOWN_IMAGE;
   gint64 last_collection_refresh = 0;
+  gboolean tags_changed = FALSE;
   dt_import_sequence_t sequences = {
     .captures = g_hash_table_new_full(g_str_hash, g_str_equal, dt_free_gpointer, NULL),
     .destinations = g_hash_table_new_full(g_str_hash, g_str_equal, dt_free_gpointer, NULL),
@@ -524,15 +547,16 @@ static int32_t _control_import_job_run(dt_job_t *job)
   // automatic (folder survey) one never moves them: Studio Capture displays the capture itself,
   // from DT_SIGNAL_IMAGE_IMPORT, and the survey outlives its atelier. A requested one shows the
   // grid as images arrive, and opens the darkroom instead if it turns out to have imported one.
-  dt_collection_import_view_t first_image_policy = DT_COLLECTION_IMPORT_VIEW_GRID;
-  dt_collection_import_view_t single_image_policy = DT_COLLECTION_IMPORT_VIEW_IMAGE;
-  const char *no_image_message = _("No image imported!");
-  if(data->folder_survey)
-  {
-    first_image_policy = DT_COLLECTION_IMPORT_VIEW_KEEP;
-    single_image_policy = DT_COLLECTION_IMPORT_VIEW_KEEP;
-    no_image_message = _("Capture: No image imported!");
-  }
+  const dt_collection_import_view_t first_image_policy = data->folder_survey
+                                                            ? DT_COLLECTION_IMPORT_VIEW_KEEP
+                                                            : DT_COLLECTION_IMPORT_VIEW_GRID;
+  const dt_collection_import_view_t single_image_policy = data->folder_survey
+                                                             ? DT_COLLECTION_IMPORT_VIEW_KEEP
+                                                             : DT_COLLECTION_IMPORT_VIEW_IMAGE;
+  const char *const no_image_message = data->folder_survey ? _("Capture: No image imported!")
+                                                            : _("No image imported!");
+  const gboolean needs_exif = !IS_NULL_PTR(strstr(data->target_file_pattern, "$(EXIF"))
+                               || !IS_NULL_PTR(strstr(data->target_subfolder_pattern, "$(EXIF"));
 
   /**
    * @brief Reserve expanded copy destinations before any filesystem work.
@@ -548,35 +572,21 @@ static int32_t _control_import_job_run(dt_job_t *job)
   for(GList *img = g_list_first(data->imgs); img; img = g_list_next(img))
   {
     const char *filename = (const char *)img->data;
-    int capture_sequence = 0;
-    gboolean import_ready = !data->copy;
     gchar *destination = NULL;
-    dt_image_t *expansion_image = NULL;
     imgid = UNKNOWN_IMAGE;
 
     dt_print(DT_DEBUG_IMPORT, "[Import] starting import of image #%i...\n", index);
 
     _refresh_progress_counter(job, data->elements, index, data->folder_survey);
-    if(!data->copy) goto import_image;
-
-    capture_sequence = dt_import_sequence_assign(&sequences, filename);
-    expansion_image = dt_alloc_align(sizeof(dt_image_t));
-    if(IS_NULL_PTR(expansion_image)) goto complete_image;
-    dt_image_init(expansion_image);
-
-    if(!IS_NULL_PTR(strstr(data->target_file_pattern, "$(EXIF"))
-       || !IS_NULL_PTR(strstr(data->target_subfolder_pattern, "$(EXIF")))
-      dt_exif_read(expansion_image, filename);
-
-    const dt_import_destination_t request = { filename, expansion_image, data, capture_sequence };
-    destination = dt_import_sequence_destination(&sequences, &request);
-    import_ready = !IS_NULL_PTR(destination);
-
-import_image:
-    if(import_ready) imgid = _import_image(img, data, destination, &data->discarded, &xmps);
-complete_image:
+    if(data->copy) destination = _import_job_destination(&sequences, filename, data, needs_exif);
+    const gboolean import_ready = !data->copy || !IS_NULL_PTR(destination);
+    if(import_ready)
+    {
+      gboolean image_tags_changed = FALSE;
+      imgid = _import_image(img, data, destination, &data->discarded, &xmps, &image_tags_changed);
+      tags_changed |= image_tags_changed;
+    }
     dt_free(destination)
-    dt_free_align(expansion_image);
     if(!IS_NULL_PTR(data->file_imported))
       data->file_imported((const char *)img->data, imgid > UNKNOWN_IMAGE, data->callback_data);
 
@@ -614,6 +624,8 @@ complete_image:
   // Guarantee the final state is reflected even if the last few images landed inside the throttle window.
   dt_collection_update_query(dt_collection_get_global(), DT_COLLECTION_CHANGE_NEW_QUERY, DT_COLLECTION_PROP_UNDEF, NULL);
   dt_conf_set_int("ui_last/nb_imported", index);
+
+  if(!data->folder_survey && tags_changed) dt_metadata_tags_changed();
 
   // Don't open the picture in darkroom if more than 1 xmp (= duplicates) has been imported: the
   // single file then stands for several images in the DB and none of them is the obvious one to

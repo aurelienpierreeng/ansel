@@ -912,7 +912,7 @@ dt_masks_form_t *dt_masks_create_ext(dt_develop_t *dev, dt_masks_type_t type)
   return mask_form;
 }
 
-dt_masks_form_t *dt_masks_get_from_id_ext(GList *form_list, int form_id)
+dt_masks_form_t *dt_masks_get_from_id_ext(const GList *form_list, int form_id)
 {
   for(; form_list; form_list = g_list_next(form_list))
   {
@@ -933,6 +933,39 @@ dt_masks_form_t *dt_masks_get_from_id(dt_develop_t *develop, int form_id)
 dt_masks_form_t *dt_masks_get_from_id_in_pipe(const dt_dev_pixelpipe_t *pipe, int form_id)
 {
   return dt_masks_get_from_id_ext(pipe->forms, form_id);
+}
+
+static gboolean _form_is_usable(const GList *forms, const dt_masks_form_t *form, GHashTable *visiting,
+                                const guint depth)
+{
+  if(IS_NULL_PTR(form) || depth >= 64 || g_hash_table_contains(visiting, GINT_TO_POINTER(form->formid))) return FALSE;
+  if(!(form->type & DT_MASKS_GROUP)) return TRUE;
+
+  g_hash_table_add(visiting, GINT_TO_POINTER(form->formid));
+  for(const GList *member = form->points; !IS_NULL_PTR(member); member = g_list_next(member))
+  {
+    const dt_masks_form_group_t *group_member = (const dt_masks_form_group_t *)member->data;
+    const dt_masks_form_t *child = !IS_NULL_PTR(group_member)
+        ? dt_masks_get_from_id_ext(forms, group_member->formid) : NULL;
+    if(_form_is_usable(forms, child, visiting, depth + 1))
+    {
+      g_hash_table_remove(visiting, GINT_TO_POINTER(form->formid));
+      return TRUE;
+    }
+  }
+  g_hash_table_remove(visiting, GINT_TO_POINTER(form->formid));
+  return FALSE;
+}
+
+gboolean dt_masks_form_is_usable_ext(const GList *forms, const int id)
+{
+  dt_masks_form_t *form = dt_masks_get_from_id_ext(forms, id);
+  if(IS_NULL_PTR(form)) return FALSE;
+  GHashTable *visiting = g_hash_table_new(g_direct_hash, g_direct_equal);
+  if(IS_NULL_PTR(visiting)) return FALSE;
+  const gboolean usable = _form_is_usable(forms, form, visiting, 0);
+  g_hash_table_destroy(visiting);
+  return usable;
 }
 
 dt_iop_module_t *dt_masks_get_mask_manager(dt_develop_t *develop)
@@ -1026,10 +1059,30 @@ typedef struct _masks_read_ctx_t
   int previous_num;
 } _masks_read_ctx_t;
 
+static dt_dev_history_item_t *_masks_history_item_from_num(dt_develop_t *develop, const int num)
+{
+  for(GList *history_node = g_list_first(develop->history); history_node;
+      history_node = g_list_next(history_node))
+  {
+    dt_dev_history_item_t *history_entry = (dt_dev_history_item_t *)history_node->data;
+    if(history_entry->num == num) return history_entry;
+  }
+  return NULL;
+}
+
 static void _read_mask_row(void *user_data, const dt_history_repository_mask_row_t *row)
 {
   _masks_read_ctx_t *ctx = (_masks_read_ctx_t *)user_data;
   dt_develop_t *develop = ctx->develop;
+
+  if(row->form == 0 && row->mask_id == 0 && row->points_count == 0)
+  {
+    dt_dev_history_item_t *history_entry = _masks_history_item_from_num(develop, row->num);
+    if(IS_NULL_PTR(history_entry)) return;
+    history_entry->forms_snapshot = TRUE;
+    if(row->num < dt_dev_get_history_end_ext(develop)) ctx->last_history_item = history_entry;
+    return;
+  }
 
   const dt_masks_type_t mask_type = row->form;
   dt_masks_form_t *mask_form = dt_masks_create(mask_type);
@@ -1082,16 +1135,7 @@ static void _read_mask_row(void *user_data, const dt_history_repository_mask_row
     // if this is a new history entry let's find it
   if(ctx->previous_num != row->num)
   {
-    ctx->history_item = NULL;
-    for(GList *history_node = g_list_first(develop->history); history_node; history_node = g_list_next(history_node))
-    {
-      dt_dev_history_item_t *history_entry = (dt_dev_history_item_t *)(history_node->data);
-      if(history_entry->num == row->num)
-      {
-        ctx->history_item = history_entry;
-        break;
-      }
-    }
+    ctx->history_item = _masks_history_item_from_num(develop, row->num);
     ctx->previous_num = row->num;
   }
   // add the form to the history entry
@@ -1103,6 +1147,7 @@ static void _read_mask_row(void *user_data, const dt_history_repository_mask_row
   if(ctx->history_item)
   {
     ctx->history_item->forms = g_list_append(ctx->history_item->forms, mask_form);
+    ctx->history_item->forms_snapshot = TRUE;
   }
   else
     fprintf(stderr,
@@ -1454,7 +1499,7 @@ uint64_t dt_masks_group_get_hash_ext(uint64_t hash, GList *masks, dt_masks_form_
   return hash;
 }
 
-uint64_t dt_masks_form_get_own_hash(uint64_t hash, GList *masks, const dt_masks_form_t *mask_form)
+uint64_t dt_masks_form_get_own_hash(uint64_t hash, const GList *masks, const dt_masks_form_t *mask_form)
 {
   if(IS_NULL_PTR(mask_form)) return hash;
 

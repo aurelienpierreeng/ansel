@@ -30,11 +30,16 @@
 #include "testdb.h"
 
 #include "common/image.h"
+#include "common/undo.h"
 #include "common/xmp_sidecar.h"
+#include "database/database.h"
+#include "darktable.h"
 #include "metadata/exif.h"
+#include "metadata/notify.h"
 #include "metadata/tags.h"
 #include "test_xmp_fixture.h"
 
+#include <sqlite3.h>
 #include <string.h>
 
 #ifdef _WIN32
@@ -42,15 +47,26 @@
 #endif
 
 static dt_test_xmp_fixture_t fixture = { 0 };
+static int tag_change_count = 0;
 
 static int setup(void **state)
 {
-  return dt_test_xmp_fixture_setup(state, &fixture, "tags");
+  if(dt_test_xmp_fixture_setup(state, &fixture, "tags")) return -1;
+  darktable.undo = dt_undo_init();
+  return IS_NULL_PTR(darktable.undo) ? -1 : 0;
 }
 
 static int teardown(void **state)
 {
+  dt_metadata_set_tags_changed_handler(NULL);
+  dt_undo_cleanup(darktable.undo);
+  darktable.undo = NULL;
   return dt_test_xmp_fixture_teardown(state, &fixture);
+}
+
+static void record_tag_change(void)
+{
+  tag_change_count++;
 }
 
 static guint seed_tag(const char *name, const int32_t imgid)
@@ -74,6 +90,20 @@ static void assert_tag_attached(const char *name, const int32_t imgid, const gbo
   {
     if(tagid > 0) assert_false(dt_tag_repository_is_attached(tagid, imgid));
   }
+}
+
+static int64_t tag_position(const guint tagid, const int32_t imgid)
+{
+  sqlite3_stmt *statement = NULL;
+  assert_int_equal(sqlite3_prepare_v2(dt_database_get_sqlite3_global(),
+                                      "SELECT position FROM tagged_images WHERE tagid = ?1 AND imgid = ?2", -1,
+                                      &statement, NULL), SQLITE_OK);
+  assert_int_equal(sqlite3_bind_int(statement, 1, tagid), SQLITE_OK);
+  assert_int_equal(sqlite3_bind_int(statement, 2, imgid), SQLITE_OK);
+  assert_int_equal(sqlite3_step(statement), SQLITE_ROW);
+  const int64_t position = sqlite3_column_int64(statement, 0);
+  assert_int_equal(sqlite3_finalize(statement), SQLITE_OK);
+  return position;
 }
 
 static void test_full_sidecar_read_imports_tags_without_sidecar_writing(void **state)
@@ -198,20 +228,146 @@ static void test_embedded_read_overlays_without_wipe(void **state)
   assert_tag_attached("keepme2", image.id, TRUE);
 }
 
-static void test_overlong_keyword_rolls_back_tag_replacement(void **state)
+static void test_arbitrarily_long_keyword_replaces_existing_tag(void **state)
 {
   (void)state;
   dt_image_t image = dt_test_xmp_fixture_make_image("/testdb/xmp-tags", "overlong.raw");
   seed_tag("keepme3", image.id);
-  char *keyword = g_strnfill(1024, 'a');
+  char *keyword = g_strnfill(4096, 'a');
   char *properties = g_strdup_printf("<dc:subject><rdf:Bag><rdf:li>%s</rdf:li></rdf:Bag></dc:subject>", keyword);
   dt_test_xmp_fixture_write_packet(&fixture, properties);
 
-  assert_int_equal(dt_exif_xmp_read(&image, fixture.xmp_path, FALSE, NULL), 1);
-  assert_tag_attached("keepme3", image.id, TRUE);
+  assert_int_equal(dt_exif_xmp_read(&image, fixture.xmp_path, FALSE, NULL), 0);
+  assert_tag_attached(keyword, image.id, TRUE);
+  assert_tag_attached("keepme3", image.id, FALSE);
 
   dt_free(properties);
   dt_free(keyword);
+}
+
+static void test_tag_replacement_rolls_back_when_later_attachment_fails(void **state)
+{
+  (void)state;
+  dt_image_t image = dt_test_xmp_fixture_make_image("/testdb/xmp-tags", "rollback.raw");
+  seed_tag("keep", image.id);
+  guint rejected = 0;
+  assert_true(dt_tag_new("second", &rejected));
+  char *trigger = g_strdup_printf(
+      "CREATE TRIGGER reject_second_tag BEFORE INSERT ON tagged_images "
+      "WHEN NEW.tagid = %u BEGIN SELECT RAISE(ABORT, 'second tag rejected'); END", rejected);
+  assert_int_equal(sqlite3_exec(dt_database_get_sqlite3_global(), trigger, NULL, NULL, NULL), SQLITE_OK);
+  dt_test_xmp_fixture_write_packet(&fixture, "<dc:subject><rdf:Bag>"
+                                             "<rdf:li>first</rdf:li><rdf:li>second</rdf:li>"
+                                             "</rdf:Bag></dc:subject>");
+
+  assert_int_equal(dt_exif_xmp_read(&image, fixture.xmp_path, FALSE, NULL), DT_XMP_IMPORT_PERSIST_ERROR);
+  assert_tag_attached("keep", image.id, TRUE);
+  assert_tag_attached("first", image.id, FALSE);
+  assert_tag_attached("second", image.id, FALSE);
+
+  assert_int_equal(sqlite3_exec(dt_database_get_sqlite3_global(), "DROP TRIGGER reject_second_tag", NULL, NULL, NULL), SQLITE_OK);
+  dt_free(trigger);
+}
+
+static void test_batch_attachment_rolls_back_all_images_when_later_insert_fails(void **state)
+{
+  (void)state;
+  dt_image_t first = dt_test_xmp_fixture_make_image("/testdb/xmp-tags-batch", "first.raw");
+  dt_image_t second = dt_test_xmp_fixture_make_image("/testdb/xmp-tags-batch", "second.raw");
+  const guint existing = seed_tag("existing", first.id);
+  assert_true(dt_tag_attach(existing, second.id, FALSE, FALSE));
+  const int64_t first_position = tag_position(existing, first.id);
+  const int64_t second_position = tag_position(existing, second.id);
+  guint rejected = 0;
+  assert_true(dt_tag_new("rejected", &rejected));
+  char *trigger = g_strdup_printf(
+      "CREATE TRIGGER reject_later_batch_tag BEFORE INSERT ON tagged_images "
+      "WHEN NEW.tagid = %u AND NEW.imgid = %d BEGIN SELECT RAISE(ABORT, 'batch tag rejected'); END", rejected,
+      second.id);
+  assert_int_equal(sqlite3_exec(dt_database_get_sqlite3_global(), trigger, NULL, NULL, NULL), SQLITE_OK);
+  GList *images = g_list_append(NULL, GINT_TO_POINTER(first.id));
+  images = g_list_append(images, GINT_TO_POINTER(second.id));
+  tag_change_count = 0;
+  const int undo_count = dt_undo_list_length(dt_undo_get_global(), DT_UNDO_TAGS);
+  dt_metadata_set_tags_changed_handler(record_tag_change);
+
+  assert_false(dt_tag_attach_images(rejected, images, TRUE));
+  assert_true(dt_tag_repository_is_attached(existing, first.id));
+  assert_true(dt_tag_repository_is_attached(existing, second.id));
+  assert_false(dt_tag_repository_is_attached(rejected, first.id));
+  assert_false(dt_tag_repository_is_attached(rejected, second.id));
+  assert_true(tag_position(existing, first.id) == first_position);
+  assert_true(tag_position(existing, second.id) == second_position);
+  assert_int_equal(dt_undo_list_length(dt_undo_get_global(), DT_UNDO_TAGS), undo_count);
+  assert_int_equal(tag_change_count, 0);
+
+  g_list_free(images);
+  assert_int_equal(sqlite3_exec(dt_database_get_sqlite3_global(), "DROP TRIGGER reject_later_batch_tag", NULL, NULL, NULL), SQLITE_OK);
+  dt_free(trigger);
+}
+
+static void test_successful_batch_attachment_records_group_and_action_undo(void **state)
+{
+  (void)state;
+  dt_image_t first = dt_test_xmp_fixture_make_image("/testdb/xmp-tags-success", "first.raw");
+  dt_image_t second = dt_test_xmp_fixture_make_image("/testdb/xmp-tags-success", "second.raw");
+  guint tagid = 0;
+  assert_true(dt_tag_new("batch", &tagid));
+  GList *images = g_list_append(NULL, GINT_TO_POINTER(first.id));
+  images = g_list_append(images, GINT_TO_POINTER(second.id));
+  tag_change_count = 0;
+  const int undo_count = dt_undo_list_length(dt_undo_get_global(), DT_UNDO_TAGS);
+  dt_metadata_set_tags_changed_handler(record_tag_change);
+
+  assert_true(dt_tag_attach_images(tagid, images, TRUE));
+  assert_true(dt_tag_repository_is_attached(tagid, first.id));
+  assert_true(dt_tag_repository_is_attached(tagid, second.id));
+  assert_int_equal(dt_undo_list_length(dt_undo_get_global(), DT_UNDO_TAGS), undo_count + 3);
+  assert_int_equal(tag_change_count, 0);
+
+  g_list_free(images);
+}
+
+static void test_noop_batch_attachment_records_no_undo_or_notification(void **state)
+{
+  (void)state;
+  dt_image_t first = dt_test_xmp_fixture_make_image("/testdb/xmp-tags-noop", "first.raw");
+  dt_image_t second = dt_test_xmp_fixture_make_image("/testdb/xmp-tags-noop", "second.raw");
+  const guint tagid = seed_tag("already-attached", first.id);
+  assert_true(dt_tag_attach(tagid, second.id, FALSE, FALSE));
+  GList *images = g_list_append(NULL, GINT_TO_POINTER(first.id));
+  images = g_list_append(images, GINT_TO_POINTER(second.id));
+  tag_change_count = 0;
+  const int undo_count = dt_undo_list_length(dt_undo_get_global(), DT_UNDO_TAGS);
+  dt_metadata_set_tags_changed_handler(record_tag_change);
+
+  assert_false(dt_tag_attach_images(tagid, images, TRUE));
+  assert_int_equal(dt_undo_list_length(dt_undo_get_global(), DT_UNDO_TAGS), undo_count);
+  assert_int_equal(tag_change_count, 0);
+
+  g_list_free(images);
+}
+
+static void test_batch_attachment_rejects_undo_inside_caller_transaction(void **state)
+{
+  (void)state;
+  dt_image_t image = dt_test_xmp_fixture_make_image("/testdb/xmp-tags-nested", "nested.raw");
+  guint tagid = 0;
+  assert_true(dt_tag_new("nested-undo", &tagid));
+  GList *images = g_list_append(NULL, GINT_TO_POINTER(image.id));
+  tag_change_count = 0;
+  const int undo_count = dt_undo_list_length(dt_undo_get_global(), DT_UNDO_TAGS);
+  dt_metadata_set_tags_changed_handler(record_tag_change);
+  assert_true(dt_database_start_transaction());
+
+  assert_false(dt_tag_attach_images(tagid, images, TRUE));
+  assert_false(dt_tag_repository_is_attached(tagid, image.id));
+  assert_int_equal(dt_undo_list_length(dt_undo_get_global(), DT_UNDO_TAGS), undo_count);
+  assert_int_equal(tag_change_count, 0);
+  assert_true(dt_database_transaction_is_owned_by_current_thread());
+  assert_true(dt_database_release_transaction());
+
+  g_list_free(images);
 }
 
 static void test_sidecar_write_preserves_double_digit_structured_array_order(void **state)
@@ -260,7 +416,12 @@ int main(int argc, char *argv[])
     cmocka_unit_test(test_hierarchical_subject_takes_precedence),
     cmocka_unit_test(test_empty_hierarchical_subject_clears_user_tags),
     cmocka_unit_test(test_embedded_read_overlays_without_wipe),
-    cmocka_unit_test(test_overlong_keyword_rolls_back_tag_replacement),
+    cmocka_unit_test(test_arbitrarily_long_keyword_replaces_existing_tag),
+    cmocka_unit_test(test_tag_replacement_rolls_back_when_later_attachment_fails),
+    cmocka_unit_test(test_batch_attachment_rolls_back_all_images_when_later_insert_fails),
+    cmocka_unit_test(test_successful_batch_attachment_records_group_and_action_undo),
+    cmocka_unit_test(test_noop_batch_attachment_records_no_undo_or_notification),
+    cmocka_unit_test(test_batch_attachment_rejects_undo_inside_caller_transaction),
     cmocka_unit_test(test_sidecar_write_preserves_double_digit_structured_array_order),
   };
   return cmocka_run_group_tests(tests, setup, teardown);

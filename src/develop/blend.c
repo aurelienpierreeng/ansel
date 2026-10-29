@@ -1936,6 +1936,72 @@ dt_develop_blend_mask_id_status_t dt_develop_blend_read_mask_id(const void *para
   return DT_DEVELOP_BLEND_MASK_ID_READABLE;
 }
 
+dt_develop_blend_mask_id_status_t dt_develop_blend_read_mask_reference(
+    const void *params, const int length, const int version, dt_develop_blend_mask_reference_t *reference)
+{
+  uint32_t mask_id;
+  if(IS_NULL_PTR(reference)) return DT_DEVELOP_BLEND_MASK_ID_UNDECODABLE;
+  const dt_develop_blend_mask_id_status_t status = dt_develop_blend_read_mask_id(params, length, version, &mask_id);
+  if(status != DT_DEVELOP_BLEND_MASK_ID_READABLE) return status;
+
+  dt_develop_blend_mask_reference_t decoded = { 0 };
+  decoded.mask_id = mask_id;
+  if(version >= 5)
+    memcpy(&decoded.mask_mode, params, sizeof(decoded.mask_mode));
+  else
+    decoded.mask_mode = DEVELOP_MASK_ENABLED | DEVELOP_MASK_SHAPE;
+  if(version == 9)
+  {
+    memcpy(&decoded.mask_mode, (const uint8_t *)params + offsetof(dt_develop_blend_params9_t, mask_mode),
+           sizeof(decoded.mask_mode));
+    memcpy(decoded.raster_mask_source,
+           (const uint8_t *)params + offsetof(dt_develop_blend_params9_t, raster_mask_source),
+           sizeof(decoded.raster_mask_source));
+    memcpy(&decoded.raster_mask_instance,
+           (const uint8_t *)params + offsetof(dt_develop_blend_params9_t, raster_mask_instance),
+           sizeof(decoded.raster_mask_instance));
+    memcpy(&decoded.raster_mask_id,
+           (const uint8_t *)params + offsetof(dt_develop_blend_params9_t, raster_mask_id),
+           sizeof(decoded.raster_mask_id));
+  }
+  else if(version == 10)
+  {
+    memcpy(&decoded.mask_mode, (const uint8_t *)params + offsetof(dt_develop_blend_params10_t, mask_mode),
+           sizeof(decoded.mask_mode));
+    memcpy(decoded.raster_mask_source,
+           (const uint8_t *)params + offsetof(dt_develop_blend_params10_t, raster_mask_source),
+           sizeof(decoded.raster_mask_source));
+    memcpy(&decoded.raster_mask_instance,
+           (const uint8_t *)params + offsetof(dt_develop_blend_params10_t, raster_mask_instance),
+           sizeof(decoded.raster_mask_instance));
+    memcpy(&decoded.raster_mask_id,
+           (const uint8_t *)params + offsetof(dt_develop_blend_params10_t, raster_mask_id),
+           sizeof(decoded.raster_mask_id));
+  }
+  else if(version == 11)
+  {
+    memcpy(&decoded.mask_mode, (const uint8_t *)params + offsetof(dt_develop_blend_params_t, mask_mode),
+           sizeof(decoded.mask_mode));
+    memcpy(decoded.raster_mask_source,
+           (const uint8_t *)params + offsetof(dt_develop_blend_params_t, raster_mask_source),
+           sizeof(decoded.raster_mask_source));
+    memcpy(&decoded.raster_mask_instance,
+           (const uint8_t *)params + offsetof(dt_develop_blend_params_t, raster_mask_instance),
+           sizeof(decoded.raster_mask_instance));
+    memcpy(&decoded.raster_mask_id,
+           (const uint8_t *)params + offsetof(dt_develop_blend_params_t, raster_mask_id),
+           sizeof(decoded.raster_mask_id));
+  }
+  if((decoded.mask_mode & (DEVELOP_MASK_ENABLED | DEVELOP_MASK_RASTER))
+         == (DEVELOP_MASK_ENABLED | DEVELOP_MASK_RASTER)
+     && (decoded.raster_mask_source[0] == '\0'
+         || IS_NULL_PTR(memchr(decoded.raster_mask_source, '\0', sizeof(decoded.raster_mask_source)))
+         || decoded.raster_mask_instance < 0))
+    return DT_DEVELOP_BLEND_MASK_ID_UNDECODABLE;
+  *reference = decoded;
+  return status;
+}
+
 bool dt_develop_blend_clear_mask_id(void *params, const int length, const int version)
 {
   uint32_t mask_id;

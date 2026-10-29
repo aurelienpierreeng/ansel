@@ -161,7 +161,7 @@ static const char *_exif_get_exiv2_tag_type(const char *tagname)
   return NULL;
 }
 
-static gboolean read_xmp_timestamps(Exiv2::XmpData &xmpData, dt_image_t *img, const int xmp_version);
+static gboolean read_xmp_timestamps(Exiv2::XmpData &xmpData, dt_image_t *img, int xmp_version, bool *partial);
 
 // this array should contain all XmpBag and XmpSeq keys used by dt
 const char *dt_xmp_keys[]
@@ -665,11 +665,21 @@ typedef struct mask_entry_t
   int mask_num;
   int version;
   gboolean persist;
+  gboolean quarantined;
+  gboolean empty_snapshot;
+  gboolean incomplete;
+  gboolean usable;
   gboolean have_num, have_id, have_type, have_name, have_version, have_points, have_nb, have_src;
 
   /** Decode one mask property without changing the enclosing list's ownership. */
   int read_property(const char *property, const Exiv2::Xmpdatum &value);
 } mask_entry_t;
+
+gboolean mask_entry_has_complete_fields(const mask_entry_t *entry)
+{
+  return entry->have_num && entry->have_id && entry->have_type && entry->have_name && entry->have_version
+         && entry->have_points && entry->have_nb && entry->have_src;
+}
 
 void print_history_entry(history_entry_t *entry) __attribute__((unused));
 void print_history_entry(history_entry_t *entry)
@@ -1160,7 +1170,7 @@ int mask_entry_t::read_property(const char *property, const Exiv2::Xmpdatum &val
   else if(!strcmp(property, "darktable:mask_id"))
   {
     const long parsed_id = value.toLong();
-    if(parsed_id <= 0 || parsed_id > G_MAXINT) return 0;
+    if(parsed_id < 0 || parsed_id > G_MAXINT) return 0;
     mask_id = parsed_id;
     have_id = TRUE;
   }
@@ -1304,23 +1314,41 @@ const guint xmp_mask_max_depth = 64;
 gboolean validate_mask_entry(GHashTable *mask_entries, mask_entry_t *entry, const guint depth)
 {
   if(entry->validated) return TRUE;
-  if(entry->validating || depth >= xmp_mask_max_depth) return FALSE;
+  if(entry->validating || depth >= xmp_mask_max_depth)
+  {
+    entry->quarantined = TRUE;
+    return FALSE;
+  }
   entry->validating = TRUE;
+  entry->usable = !(entry->mask_type & DT_MASKS_GROUP);
   if(entry->mask_type & DT_MASKS_GROUP)
   {
     int *child_ids = NULL;
     if(!dt_masks_group_deserialize_child_ids(entry->mask_points, entry->mask_points_len,
-                                             entry->mask_nb, &child_ids))
+                                              entry->mask_nb, &child_ids))
+    {
+      entry->quarantined = TRUE;
+      entry->validating = FALSE;
       return FALSE;
+    }
 
     for(int i = 0; i < entry->mask_nb; i++)
     {
       auto *child = (mask_entry_t *)g_hash_table_lookup(mask_entries, &child_ids[i]);
-      if(IS_NULL_PTR(child) || !validate_mask_entry(mask_entries, child, depth + 1))
+      if(IS_NULL_PTR(child))
+      {
+        entry->incomplete = TRUE;
+        continue;
+      }
+      if(!validate_mask_entry(mask_entries, child, depth + 1))
       {
         dt_free_align(child_ids);
+        entry->quarantined = TRUE;
+        entry->validating = FALSE;
         return FALSE;
       }
+      if(child->incomplete) entry->incomplete = TRUE;
+      if(child->usable) entry->usable = TRUE;
     }
     dt_free_align(child_ids);
   }
@@ -1332,13 +1360,12 @@ gboolean validate_mask_entry(GHashTable *mask_entries, mask_entry_t *entry, cons
 typedef struct mask_validation_context_t
 {
   GHashTable *entries;
-  gboolean valid;
 } mask_validation_context_t;
 
 void validate_mask_entries(gpointer, gpointer value, gpointer user_data)
 {
   mask_validation_context_t *context = (mask_validation_context_t *)user_data;
-  if(context->valid) context->valid = validate_mask_entry(context->entries, (mask_entry_t *)value, 0);
+  validate_mask_entry(context->entries, (mask_entry_t *)value, 0);
 }
 
 void reset_mask_validation(gpointer, gpointer value, gpointer)
@@ -1346,6 +1373,8 @@ void reset_mask_validation(gpointer, gpointer value, gpointer)
   auto *entry = (mask_entry_t *)value;
   entry->validating = FALSE;
   entry->validated = FALSE;
+  entry->incomplete = FALSE;
+  entry->usable = FALSE;
 }
 
 gboolean add_mask_entries_to_db(int32_t imgid, GHashTable *mask_entries, int mask_id, const guint depth)
@@ -1356,7 +1385,7 @@ gboolean add_mask_entries_to_db(int32_t imgid, GHashTable *mask_entries, int mas
   // look for mask_id in the hash table
   mask_entry_t *entry = (mask_entry_t *)g_hash_table_lookup(mask_entries, &mask_id);
 
-  if(IS_NULL_PTR(entry)) return FALSE;
+  if(IS_NULL_PTR(entry)) return TRUE;
 
   // if it's a group: recurse into the children first
   if(entry->mask_type & DT_MASKS_GROUP)
@@ -1381,9 +1410,9 @@ gboolean add_mask_entries_to_db(int32_t imgid, GHashTable *mask_entries, int mas
 
 /**
  * Parsed development and legacy conversion state for one sidecar import.
- * The caller owns the transaction and image-cache write lock throughout. The
- * destructor releases parsed containers, and publish() copies staged properties only
- * after the caller has committed the database transaction.
+ * The caller owns the image-cache write lock. persist() owns every database
+ * transaction transition, the destructor releases parsed containers, and publish()
+ * copies staged properties only after persist() has committed the transaction.
  */
 struct xmp_development_t
 {
@@ -1395,11 +1424,12 @@ struct xmp_development_t
   gboolean has_staged_history_hash = FALSE;
   bool tags_changed = false;
   bool masks_recovered = false;
+  bool metadata_partial = false;
   const char *rejection_reason = "history-structure";
   GList *iop_order_list = NULL;
   GHashTable *mask_entries = NULL;
   GList *mask_entries_v3 = NULL;
-  GHashTable *omitted_mask_nums = nullptr;
+  GHashTable *empty_mask_snapshots = nullptr;
   GList *history_entries = NULL;
   xmp_history_error_t history_error = XMP_HISTORY_ERROR_NONE;
 
@@ -1407,6 +1437,7 @@ struct xmp_development_t
   int read_properties(Exiv2::XmpData &xmpData);
   GList *read_order(Exiv2::XmpData &xmpData);
   int validate_mask_history();
+  gboolean shape_mask_is_usable(int history_num, int mask_id) const;
   void sanitize_omitted_snapshot_blends();
   int validate_legacy_history();
   int read(Exiv2::Image &image);
@@ -1415,7 +1446,12 @@ struct xmp_development_t
   int restore_legacy_order();
   int write_history_end(Exiv2::XmpData &xmpData);
   int write(Exiv2::Image &image, dt_image_t *img, int history_only);
-  void publish(dt_image_t *img, int history_only, const char *filename) const;
+  dt_xmp_import_result_t persist_metadata(Exiv2::XmpData &xmpData, dt_image_t *img);
+  dt_xmp_import_result_t persist_development(Exiv2::Image &image, dt_image_t *img, int history_only,
+                                             const int64_t *write_timestamp);
+  dt_xmp_import_result_t persist(Exiv2::Image &image, dt_image_t *img, int history_only,
+                                 const int64_t *write_timestamp, int parsed);
+  void publish(dt_image_t *img, const char *filename) const;
 };
 
 /** Release all parsed containers owned by one sidecar import. */
@@ -1424,8 +1460,8 @@ xmp_development_t::~xmp_development_t()
   g_list_free_full(iop_order_list, dt_free_gpointer);
   g_list_free_full(history_entries, free_history_entry);
   g_list_free_full(mask_entries_v3, free_mask_entry);
+  g_clear_pointer(&empty_mask_snapshots, g_hash_table_destroy);
   g_clear_pointer(&mask_entries, g_hash_table_destroy);
-  g_clear_pointer(&omitted_mask_nums, g_hash_table_destroy);
 }
 
 /** Stage image properties without modifying the live cache entry. */
@@ -1434,12 +1470,6 @@ int xmp_development_t::read_properties(Exiv2::XmpData &xmpData)
   Exiv2::XmpData::iterator pos;
   if((pos = xmpData.findKey(Exiv2::XmpKey("Xmp.darktable.xmp_version"))) != xmpData.end())
     xmp_version = pos->toLong();
-
-  if(xmp_version < 0 || xmp_version > 5)
-  {
-    rejection_reason = "unsupported-version";
-    return 1;
-  }
 
   staged_image.flags &= ~DT_IMAGE_REMOVE;
   if((pos = xmpData.findKey(Exiv2::XmpKey("Xmp.darktable.raw_params"))) != xmpData.end())
@@ -1473,7 +1503,8 @@ int xmp_development_t::read_properties(Exiv2::XmpData &xmpData)
     }
     dt_free(decoded);
   }
-  return read_xmp_timestamps(xmpData, &staged_image, xmp_version) ? 0 : 1;
+  read_xmp_timestamps(xmpData, &staged_image, xmp_version, &metadata_partial);
+  return 0;
 }
 
 /** Restore the serialized order or the format version's default order. */
@@ -1509,15 +1540,19 @@ GList *xmp_development_t::read_order(Exiv2::XmpData &xmpData)
 int xmp_development_t::validate_mask_history()
 {
   GHashTable *entries_by_num = g_hash_table_new(g_direct_hash, g_direct_equal);
-  omitted_mask_nums = g_hash_table_new(g_direct_hash, g_direct_equal);
+  empty_mask_snapshots = g_hash_table_new(g_direct_hash, g_direct_equal);
   for(GList *iter = mask_entries_v3; !IS_NULL_PTR(iter); iter = g_list_next(iter))
   {
     auto *entry = (mask_entry_t *)iter->data;
-    if(!(entry->have_num && entry->have_id && entry->have_type && entry->have_name && entry->have_version
-         && entry->have_points && entry->have_nb && entry->have_src))
+    entry->empty_snapshot = mask_entry_has_complete_fields(entry) && entry->mask_id == 0 && entry->mask_type == 0
+                            && entry->mask_name[0] == '\0' && entry->mask_version == 0
+                            && entry->mask_points_len == 0 && entry->mask_nb == 0 && entry->mask_src_len == 0;
+    if(entry->empty_snapshot) continue;
+    if(const gboolean complete = mask_entry_has_complete_fields(entry);
+       !complete || entry->mask_id <= 0 || entry->mask_type <= 0)
     {
       masks_recovered = true;
-      if(entry->have_num) g_hash_table_add(omitted_mask_nums, GINT_TO_POINTER(entry->mask_num));
+      entry->quarantined = TRUE;
       continue;
     }
     auto *entries = (GHashTable *)g_hash_table_lookup(entries_by_num, GINT_TO_POINTER(entry->mask_num));
@@ -1529,7 +1564,9 @@ int xmp_development_t::validate_mask_history()
     if(g_hash_table_contains(entries, &entry->mask_id))
     {
       masks_recovered = true;
-      g_hash_table_add(omitted_mask_nums, GINT_TO_POINTER(entry->mask_num));
+      entry->quarantined = TRUE;
+      auto *duplicate = (mask_entry_t *)g_hash_table_lookup(entries, &entry->mask_id);
+      duplicate->quarantined = TRUE;
     }
     g_hash_table_insert(entries, &entry->mask_id, entry);
   }
@@ -1539,44 +1576,106 @@ int xmp_development_t::validate_mask_history()
   g_hash_table_iter_init(&iter, entries_by_num);
   while(g_hash_table_iter_next(&iter, &snapshot_num, &entries))
   {
-    if(g_hash_table_contains(omitted_mask_nums, snapshot_num)) continue;
-    mask_validation_context_t context = { .entries = (GHashTable *)entries, .valid = TRUE };
+    mask_validation_context_t context = { .entries = (GHashTable *)entries };
     g_hash_table_foreach(context.entries, validate_mask_entries, &context);
-    if(!context.valid)
-    {
-      masks_recovered = true;
-      g_hash_table_add(omitted_mask_nums, snapshot_num);
-    }
   }
   g_hash_table_iter_init(&iter, entries_by_num);
   while(g_hash_table_iter_next(&iter, nullptr, &entries)) g_hash_table_destroy((GHashTable *)entries);
   g_hash_table_destroy(entries_by_num);
+  GHashTable *retained_mask_snapshots = g_hash_table_new(g_direct_hash, g_direct_equal);
   for(GList *entry_iter = mask_entries_v3; !IS_NULL_PTR(entry_iter); entry_iter = g_list_next(entry_iter))
   {
     auto *entry = (mask_entry_t *)entry_iter->data;
-    entry->persist = entry->have_num && entry->have_id && entry->have_type && entry->have_name
-                     && entry->have_version && entry->have_points && entry->have_nb && entry->have_src
-                     && !g_hash_table_contains(omitted_mask_nums, GINT_TO_POINTER(entry->mask_num));
+    const gboolean complete = mask_entry_has_complete_fields(entry);
+    entry->persist = !entry->empty_snapshot && complete && !entry->quarantined;
+    if(entry->quarantined || entry->incomplete) masks_recovered = true;
+    if(entry->persist) g_hash_table_add(retained_mask_snapshots, GINT_TO_POINTER(entry->mask_num));
   }
+  for(GList *entry_iter = mask_entries_v3; !IS_NULL_PTR(entry_iter); entry_iter = g_list_next(entry_iter))
+  {
+    const auto *entry = (const mask_entry_t *)entry_iter->data;
+    if(entry->empty_snapshot
+       || (entry->quarantined
+           && !g_hash_table_contains(retained_mask_snapshots, GINT_TO_POINTER(entry->mask_num))))
+      g_hash_table_add(empty_mask_snapshots, GINT_TO_POINTER(entry->mask_num));
+  }
+  g_hash_table_destroy(retained_mask_snapshots);
   return 0;
+}
+
+/** Resolve one shape reference against the newest mask snapshot visible to a history step. */
+gboolean xmp_development_t::shape_mask_is_usable(const int history_num, const int mask_id) const
+{
+  int snapshot_num = -1;
+  gboolean usable = FALSE;
+  for(GList *mask_iter = mask_entries_v3; !IS_NULL_PTR(mask_iter); mask_iter = g_list_next(mask_iter))
+  {
+    const auto *mask = (const mask_entry_t *)mask_iter->data;
+    if(mask->mask_num > history_num || mask->mask_num < snapshot_num) continue;
+    if(mask->mask_num > snapshot_num)
+    {
+      snapshot_num = mask->mask_num;
+      usable = FALSE;
+    }
+    if(mask->persist && mask->usable && mask->mask_id == mask_id) usable = TRUE;
+  }
+
+  GHashTableIter snapshot_iter;
+  gpointer snapshot_key;
+  g_hash_table_iter_init(&snapshot_iter, empty_mask_snapshots);
+  while(g_hash_table_iter_next(&snapshot_iter, &snapshot_key, nullptr))
+  {
+    const auto candidate = GPOINTER_TO_INT(snapshot_key);
+    if(candidate <= history_num && candidate > snapshot_num)
+    {
+      snapshot_num = candidate;
+      usable = FALSE;
+    }
+  }
+  return usable;
 }
 
 void xmp_development_t::sanitize_omitted_snapshot_blends()
 {
-  if(IS_NULL_PTR(omitted_mask_nums) || g_hash_table_size(omitted_mask_nums) == 0) return;
+  GHashTable *operations = g_hash_table_new_full(g_str_hash, g_str_equal, dt_free_gpointer, nullptr);
   for(GList *iter = history_entries; !IS_NULL_PTR(iter); iter = g_list_next(iter))
   {
     auto *entry = (history_entry_t *)iter->data;
-    if(!g_hash_table_contains(omitted_mask_nums, GINT_TO_POINTER(entry->num))
-       || IS_NULL_PTR(entry->blendop_params))
+    dt_develop_blend_mask_reference_t reference;
+    dt_develop_blend_mask_id_status_t reference_status = DT_DEVELOP_BLEND_MASK_ID_ABSENT;
+    if(!IS_NULL_PTR(entry->blendop_params))
+      reference_status = dt_develop_blend_read_mask_reference(entry->blendop_params, entry->blendop_params_len,
+                                                               entry->blendop_version, &reference);
+    if(reference_status != DT_DEVELOP_BLEND_MASK_ID_READABLE)
+    {
+      if(reference_status == DT_DEVELOP_BLEND_MASK_ID_UNDECODABLE) entry->enabled = 0;
+      char *operation_key = g_strdup_printf("%s:%d", entry->operation, entry->multi_priority);
+      g_hash_table_replace(operations, operation_key, entry);
       continue;
-    uint32_t mask_id = 0;
-    if(dt_develop_blend_read_mask_id(entry->blendop_params, entry->blendop_params_len,
-                                     entry->blendop_version, &mask_id)
-       == DT_DEVELOP_BLEND_MASK_ID_READABLE)
-      dt_develop_blend_clear_mask_id(entry->blendop_params, entry->blendop_params_len,
-                                     entry->blendop_version);
+    }
+
+    if(const gboolean shape_mask_enabled =
+           (reference.mask_mode & (DEVELOP_MASK_ENABLED | DEVELOP_MASK_SHAPE))
+             == (DEVELOP_MASK_ENABLED | DEVELOP_MASK_SHAPE)
+           && reference.mask_id != 0;
+       shape_mask_enabled && !shape_mask_is_usable(entry->num, reference.mask_id))
+      entry->enabled = 0;
+
+    if(const gboolean raster_mask_enabled =
+           (reference.mask_mode & (DEVELOP_MASK_ENABLED | DEVELOP_MASK_RASTER))
+             == (DEVELOP_MASK_ENABLED | DEVELOP_MASK_RASTER);
+       raster_mask_enabled)
+    {
+      char *source_key = g_strdup_printf("%s:%d", reference.raster_mask_source,
+                                         reference.raster_mask_instance);
+      const auto *source = (const history_entry_t *)g_hash_table_lookup(operations, source_key);
+      dt_free(source_key);
+      if(IS_NULL_PTR(source) || !source->enabled) entry->enabled = 0;
+    }
+    char *operation_key = g_strdup_printf("%s:%d", entry->operation, entry->multi_priority);
+    g_hash_table_replace(operations, operation_key, entry);
   }
+  g_hash_table_destroy(operations);
 }
 
 /** Parse and validate the development before the caller opens its transaction. */
@@ -1584,6 +1683,11 @@ int xmp_development_t::read(Exiv2::Image &image)
 {
   Exiv2::XmpData &xmpData = image.xmpData();
   if(read_properties(xmpData)) return 1;
+  if(xmp_version < 0 || xmp_version > 5)
+  {
+    rejection_reason = "unsupported-version";
+    return 2;
+  }
   iop_order_list = read_order(xmpData);
 
   gboolean masks_valid = TRUE;
@@ -1604,7 +1708,12 @@ int xmp_development_t::read(Exiv2::Image &image)
       rejection_reason = "mask-structure";
       return 1;
     }
-    masks_valid = validate_mask_history() == 0;
+    const int mask_validation = validate_mask_history();
+    if(mask_validation)
+    {
+      rejection_reason = "mask-snapshot";
+      return mask_validation == 2 ? 3 : 1;
+    }
   }
   if(!masks_valid)
   {
@@ -1641,23 +1750,36 @@ int xmp_development_t::read(Exiv2::Image &image)
 int xmp_development_t::validate_legacy_history()
 {
   if(xmp_version >= 3) return 0;
+  g_hash_table_foreach(mask_entries, reset_mask_validation, nullptr);
+  GHashTableIter mask_iter;
+  gpointer value;
+  g_hash_table_iter_init(&mask_iter, mask_entries);
+  while(g_hash_table_iter_next(&mask_iter, nullptr, &value))
+  {
+    auto *mask = (mask_entry_t *)value;
+    validate_mask_entry(mask_entries, mask, 0);
+    if(mask->incomplete) masks_recovered = true;
+  }
   for(GList *iter = history_entries; !IS_NULL_PTR(iter); iter = g_list_next(iter))
   {
-    const auto *entry = (const history_entry_t *)iter->data;
-    uint32_t mask_id = 0;
+    auto *entry = (history_entry_t *)iter->data;
     if(IS_NULL_PTR(dt_ioppr_get_iop_order_link(iop_order_list, entry->operation, -1))
        && !dt_deprecated(entry->operation))
       return 1;
     if(IS_NULL_PTR(entry->blendop_params)) continue;
-    if(dt_develop_blend_read_mask_id(entry->blendop_params, entry->blendop_params_len,
-                                     entry->blendop_version, &mask_id)
-       != DT_DEVELOP_BLEND_MASK_ID_READABLE || mask_id == 0)
+    dt_develop_blend_mask_reference_t reference;
+    if(dt_develop_blend_read_mask_reference(entry->blendop_params, entry->blendop_params_len,
+                                              entry->blendop_version, &reference)
+       != DT_DEVELOP_BLEND_MASK_ID_READABLE
+       || (reference.mask_mode & (DEVELOP_MASK_ENABLED | DEVELOP_MASK_SHAPE))
+              != (DEVELOP_MASK_ENABLED | DEVELOP_MASK_SHAPE)
+       || reference.mask_id == 0)
       continue;
-    g_hash_table_foreach(mask_entries, reset_mask_validation, nullptr);
-    auto *root = (mask_entry_t *)g_hash_table_lookup(mask_entries, &mask_id);
-    if(IS_NULL_PTR(root) || !validate_mask_entry(mask_entries, root, 0))
-      dt_develop_blend_clear_mask_id(entry->blendop_params, entry->blendop_params_len,
-                                     entry->blendop_version);
+    auto *root = (mask_entry_t *)g_hash_table_lookup(mask_entries, &reference.mask_id);
+    if(IS_NULL_PTR(root) || !validate_mask_entry(mask_entries, root, 0) || !root->usable)
+      entry->enabled = 0;
+    else if(root->incomplete)
+      masks_recovered = true;
   }
   return 0;
 }
@@ -1672,6 +1794,12 @@ int xmp_development_t::write_masks()
     auto *entry = (mask_entry_t *)iter->data;
     if(entry->persist && !add_mask_entry_to_db(staged_image.id, entry)) return 1;
   }
+  GHashTableIter snapshot_iter;
+  gpointer snapshot_num;
+  g_hash_table_iter_init(&snapshot_iter, empty_mask_snapshots);
+  while(g_hash_table_iter_next(&snapshot_iter, &snapshot_num, nullptr))
+    if(!dt_history_repository_write_mask_item(staged_image.id, GPOINTER_TO_INT(snapshot_num), 0, 0, "", 0,
+                                              nullptr, 0, 0, nullptr, 0)) return 1;
   return 0;
 }
 
@@ -1688,8 +1816,9 @@ int xmp_development_t::write_history()
       uint32_t mask_id = 0;
       if(dt_develop_blend_read_mask_id(entry->blendop_params, entry->blendop_params_len,
                                        entry->blendop_version, &mask_id)
-         == DT_DEVELOP_BLEND_MASK_ID_READABLE
-         && !add_mask_entries_to_db(staged_image.id, mask_entries, mask_id, 0)) return 1;
+          == DT_DEVELOP_BLEND_MASK_ID_READABLE
+          && g_hash_table_lookup(mask_entries, &mask_id)
+          && !add_mask_entries_to_db(staged_image.id, mask_entries, mask_id, 0)) return 1;
     }
 
     if(!dt_history_repository_write_item(staged_image.id, db_num, entry->operation,
@@ -1700,6 +1829,17 @@ int xmp_development_t::write_history()
                                         !IS_NULL_PTR(entry->multi_name) ? entry->multi_name : ""))
       return 1;
     num++;
+  }
+  if(xmp_version < 3)
+  {
+    GHashTableIter mask_iter;
+    gpointer value;
+    g_hash_table_iter_init(&mask_iter, mask_entries);
+    while(g_hash_table_iter_next(&mask_iter, nullptr, &value))
+    {
+      auto *mask = (mask_entry_t *)value;
+      if(!(mask->mask_type & DT_MASKS_CLONE) && !add_mask_entry_to_db(staged_image.id, mask)) return 1;
+    }
   }
   return 0;
 }
@@ -1779,12 +1919,14 @@ int xmp_development_t::write_history_end(Exiv2::XmpData &xmpData)
 int xmp_development_t::write(Exiv2::Image &image, dt_image_t *img, const int history_only)
 {
   Exiv2::XmpData &xmpData = image.xmpData();
+  bool persistence_partial = false;
   if(const bool is_a_dt_xmp = !IS_NULL_PTR(strstr(image.xmpPacket().c_str(),
-                                                "xmlns:darktable=\"http://darktable.sf.net/\""));
-     !history_only && !dt_exif_apply_xmp_persistence(img, xmpData,
-                                                      is_a_dt_xmp ? xmp_version : -1, true,
-                                                      &tags_changed))
+                                                 "xmlns:darktable=\"http://darktable.sf.net/\""));
+      !history_only && !dt_exif_apply_xmp_persistence(img, xmpData,
+                                                       is_a_dt_xmp ? xmp_version : -1, true,
+                                                       &tags_changed, &persistence_partial))
     return 1;
+  metadata_partial = metadata_partial || persistence_partial;
   if(!dt_history_repository_delete_masks_history(img->id)) return 1;
   if(!dt_history_repository_delete_history(img->id))
     return 1;
@@ -1794,8 +1936,87 @@ int xmp_development_t::write(Exiv2::Image &image, dt_image_t *img, const int his
   return 0;
 }
 
+/** Persist the metadata subset accepted from a sidecar with unsupported development data. */
+dt_xmp_import_result_t xmp_development_t::persist_metadata(Exiv2::XmpData &xmpData, dt_image_t *img)
+{
+  bool persistence_partial = false;
+  if(!dt_exif_apply_xmp_persistence(img, xmpData, -1, true, &tags_changed, &persistence_partial))
+  {
+    rejection_reason = "write-failure";
+    return DT_XMP_IMPORT_PERSIST_ERROR;
+  }
+  metadata_partial = metadata_partial || persistence_partial;
+  return DT_XMP_IMPORT_PARTIAL;
+}
+
+/** Persist development data and classify recoverable metadata or mask omissions. */
+dt_xmp_import_result_t xmp_development_t::persist_development(Exiv2::Image &image, dt_image_t *img,
+                                                              const int history_only,
+                                                              const int64_t *write_timestamp)
+{
+  const gboolean timestamp_writable = !masks_recovered && !metadata_partial
+                                       && !IS_NULL_PTR(write_timestamp);
+  gboolean write_failed = write(image, img, history_only);
+  if(!write_failed && timestamp_writable)
+    write_failed = !dt_image_repository_set_write_timestamp(img->id, *write_timestamp);
+  if(write_failed)
+  {
+    rejection_reason = "write-failure";
+    return DT_XMP_IMPORT_PERSIST_ERROR;
+  }
+  if(masks_recovered || metadata_partial) return DT_XMP_IMPORT_PARTIAL;
+  return DT_XMP_IMPORT_OK;
+}
+
+/** Persist one parsed sidecar and leave no database transaction owned by the caller. */
+dt_xmp_import_result_t xmp_development_t::persist(Exiv2::Image &image, dt_image_t *img,
+                                                  const int history_only,
+                                                  const int64_t *write_timestamp,
+                                                  const int parsed)
+{
+  const bool persistence_only = parsed == 2 || parsed == 3;
+  if(persistence_only && history_only) return DT_XMP_IMPORT_PARTIAL;
+  if(!dt_database_start_transaction())
+  {
+    rejection_reason = "transaction-start";
+    return DT_XMP_IMPORT_PERSIST_ERROR;
+  }
+
+  gboolean transaction_started = TRUE;
+  dt_xmp_import_result_t result = DT_XMP_IMPORT_READ_ERROR;
+  try
+  {
+    if(persistence_only)
+      result = persist_metadata(image.xmpData(), img);
+    else
+      result = persist_development(image, img, history_only, write_timestamp);
+
+    if(result < DT_XMP_IMPORT_READ_ERROR)
+    {
+      transaction_started = !dt_database_release_transaction();
+      if(transaction_started)
+      {
+        rejection_reason = "commit-failure";
+        result = DT_XMP_IMPORT_PERSIST_ERROR;
+      }
+    }
+  }
+  catch(const Exiv2::AnyError &)
+  {
+    result = DT_XMP_IMPORT_READ_ERROR;
+  }
+  catch(const std::bad_alloc &)
+  {
+    result = DT_XMP_IMPORT_READ_ERROR;
+  }
+
+  if(transaction_started && dt_database_transaction_is_owned_by_current_thread())
+    dt_database_rollback_transaction();
+  return result;
+}
+
 /** Publish committed sidecar properties to the caller's image-cache entry. */
-void xmp_development_t::publish(dt_image_t *img, const int history_only, const char *filename) const
+void xmp_development_t::publish(dt_image_t *img, const char *filename) const
 {
   img->legacy_flip = staged_image.legacy_flip;
   const uint32_t imported_flag_mask = DT_IMAGE_REMOVE | DT_IMAGE_NO_LEGACY_PRESETS
@@ -1805,7 +2026,6 @@ void xmp_development_t::publish(dt_image_t *img, const int history_only, const c
   img->export_timestamp = staged_image.export_timestamp;
   img->print_timestamp = staged_image.print_timestamp;
   if(has_staged_history_hash) img->history_hash = staged_image.history_hash;
-  if(!history_only && tags_changed) dt_metadata_tags_changed();
   if(!masks_recovered) return;
 
   char *basename = g_path_get_basename(filename);
@@ -1824,70 +2044,81 @@ static int _xmp_reject(const char *filename, const char *reason)
   return 1;
 }
 
-/**
- * Import under the caller's image-cache write lock. All transaction transitions,
- * cache publication and parsed-container teardown remain in this function so an
- * ordinary failure and an Exiv2 exception share the same rollback boundary.
- */
-int dt_exif_xmp_read(dt_image_t *img, const char *filename, const int history_only,
-                     const int64_t *write_timestamp)
+/** Import one sidecar under the caller's image-cache write lock. */
+dt_xmp_import_result_t dt_exif_xmp_read_with_result(dt_image_t *img, const char *filename,
+                                                    const int history_only,
+                                                    const int64_t *write_timestamp, gboolean *tags_changed,
+                                                    gboolean *development_changed)
 {
-  if(IS_NULL_PTR(img) || IS_NULL_PTR(filename)) return 1;
+  if(!IS_NULL_PTR(tags_changed)) *tags_changed = FALSE;
+  if(!IS_NULL_PTR(development_changed)) *development_changed = FALSE;
+  if(IS_NULL_PTR(img) || IS_NULL_PTR(filename)) return DT_XMP_IMPORT_READ_ERROR;
   const size_t filename_len = strlen(filename);
   if(filename_len >= 4 && !strcmp(filename + filename_len - 4, ".pfm"))
-    return _xmp_reject(filename, "unsupported-version");
+    return DT_XMP_IMPORT_READ_ERROR;
+  if(!g_file_test(filename, G_FILE_TEST_EXISTS)) return DT_XMP_IMPORT_READ_ERROR;
   if(dt_database_transaction_is_owned_by_current_thread())
-    return _xmp_reject(filename, "transaction-start");
+    return DT_XMP_IMPORT_PERSIST_ERROR;
 
   const dt_image_t original = *img;
   xmp_development_t development = {};
   development.staged_image = original;
-  gboolean transaction_started = FALSE;
-  int result = 1;
-  const char *rejection_reason = "metadata-open";
   try
   {
     std::unique_ptr<Exiv2::Image> image(Exiv2::ImageFactory::open(WIDEN(filename)));
-    if(IS_NULL_PTR(image.get())) goto cleanup;
+    if(IS_NULL_PTR(image.get()))
+    {
+      *img = original;
+      _xmp_reject(filename, "metadata-open");
+      return DT_XMP_IMPORT_READ_ERROR;
+    }
     image->readMetadata();
-    if(development.read(*image))
+    const int parsed = development.read(*image);
+    if(parsed != 0 && parsed != 2 && parsed != 3)
     {
-      rejection_reason = development.rejection_reason;
-      goto cleanup;
+      *img = original;
+      _xmp_reject(filename, development.rejection_reason);
+      return DT_XMP_IMPORT_READ_ERROR;
     }
-    transaction_started = dt_database_start_transaction();
-    if(!transaction_started)
+    development.rejection_reason = "metadata-open";
+    const dt_xmp_import_result_t result = development.persist(*image, img, history_only,
+                                                               write_timestamp, parsed);
+    if(result >= DT_XMP_IMPORT_READ_ERROR)
     {
-      rejection_reason = "transaction-start";
-      goto cleanup;
+      *img = original;
+      _xmp_reject(filename, development.rejection_reason);
+      return result;
     }
-    if(development.write(*image, img, history_only)
-       || (!IS_NULL_PTR(write_timestamp) && !dt_image_repository_set_write_timestamp(img->id, *write_timestamp)))
+    if(parsed == 2 || parsed == 3)
     {
-      rejection_reason = "write-failure";
-      goto cleanup;
+      if(!IS_NULL_PTR(tags_changed)) *tags_changed = development.tags_changed;
+      return DT_XMP_IMPORT_PARTIAL;
     }
-    result = dt_database_release_transaction() ? 0 : 1;
-    transaction_started = result != 0;
-    if(result) rejection_reason = "commit-failure";
+    development.publish(img, filename);
+    if(!IS_NULL_PTR(tags_changed)) *tags_changed = development.tags_changed;
+    if(!IS_NULL_PTR(development_changed)) *development_changed = TRUE;
+    return result;
   }
   catch(const std::exception &)
   {
-    result = 1;
-  }
-
-cleanup:
-  if(transaction_started && dt_database_transaction_is_owned_by_current_thread())
-  {
-    dt_database_rollback_transaction();
-  }
-  if(result)
-  {
+    if(dt_database_transaction_is_owned_by_current_thread()) dt_database_rollback_transaction();
     *img = original;
-    _xmp_reject(filename, rejection_reason);
+    _xmp_reject(filename, "metadata-open");
+    return DT_XMP_IMPORT_READ_ERROR;
   }
-  else development.publish(img, history_only, filename);
-  return result;
+}
+
+dt_xmp_import_result_t dt_exif_xmp_read_with_tags(dt_image_t *img, const char *filename,
+                                                  const int history_only,
+                                                  const int64_t *write_timestamp, gboolean *tags_changed)
+{
+  return dt_exif_xmp_read_with_result(img, filename, history_only, write_timestamp, tags_changed, nullptr);
+}
+
+dt_xmp_import_result_t dt_exif_xmp_read(dt_image_t *img, const char *filename, const int history_only,
+                                        const int64_t *write_timestamp)
+{
+  return dt_exif_xmp_read_with_tags(img, filename, history_only, write_timestamp, nullptr);
 }
 
 // add history metadata to XmpData
@@ -2044,7 +2275,7 @@ GTimeSpan _convert_unix_to_gtimespan(const time_t unix)
 }
 
 // read timestamps from XmpData
-static gboolean read_xmp_timestamps(Exiv2::XmpData &xmpData, dt_image_t *img, const int xmp_version)
+static gboolean read_xmp_timestamps(Exiv2::XmpData &xmpData, dt_image_t *img, const int xmp_version, bool *partial)
 {
   static const char *keys[] =
   {
@@ -2067,18 +2298,32 @@ static gboolean read_xmp_timestamps(Exiv2::XmpData &xmpData, dt_image_t *img, co
 
     const std::string value = pos->toString();
     gint64 timestamp = 0;
-    if(!g_ascii_string_to_signed(value.c_str(), 10, G_MININT64, G_MAXINT64, &timestamp, NULL)) return FALSE;
+    if(!g_ascii_string_to_signed(value.c_str(), 10, G_MININT64, G_MAXINT64, &timestamp, nullptr))
+    {
+      if(!IS_NULL_PTR(partial)) *partial = true;
+      continue;
+    }
 
     if(xmp_version >= 5)
-      *timestamps[i] = timestamp;
-    else if(timestamp >= 1)
     {
-      const time_t unix_timestamp = (time_t)timestamp;
-      if((gint64)unix_timestamp != timestamp) return FALSE;
-      const GTimeSpan converted_timestamp = _convert_unix_to_gtimespan(unix_timestamp);
-      if(converted_timestamp == 0) return FALSE;
-      *timestamps[i] = converted_timestamp;
+      *timestamps[i] = timestamp;
+      continue;
     }
+    if(timestamp < 1) continue;
+
+    const time_t unix_timestamp = (time_t)timestamp;
+    if((gint64)unix_timestamp != timestamp)
+    {
+      if(!IS_NULL_PTR(partial)) *partial = true;
+      continue;
+    }
+    const GTimeSpan converted_timestamp = _convert_unix_to_gtimespan(unix_timestamp);
+    if(converted_timestamp == 0)
+    {
+      if(!IS_NULL_PTR(partial)) *partial = true;
+      continue;
+    }
+    *timestamps[i] = converted_timestamp;
   }
   return TRUE;
 }
