@@ -4803,34 +4803,22 @@ gchar *dt_database_get_most_recent_snap(const char* db_filename)
 
 // Nested transactions support
 //
-// NOTE: the nested support is actually not activated (see || TRUE below). This current
-//       implementation is just a refactoring of the previous code using:
-//          - dt_database_start_transaction()
-//          - dt_database_release_transaction()
-//          - dt_database_rollback_transaction()
-//
-//       With this refactoring we can count and check for nested transaction and unmatched
-//       transaction routines. And it has been done to help further implementation for
-//       proper threading and nested transaction support.
-//
 gboolean dt_database_start_transaction_debug(void)
 {
   const dt_database_t *const db = _db;
   gpointer const owner = g_thread_self();
   const int batch_level = dt_atomic_get_int(&_trx_batch_level);
-  if(batch_level > 0)
+  const gboolean batch_owned = batch_level > 0 && g_atomic_pointer_get(&_trx_batch_owner) == owner;
+  if(batch_owned || g_atomic_pointer_get(&_trx_owner) == owner)
   {
-    // If a batch transaction is active on this thread, suppress nested BEGIN/COMMIT
-    // to avoid per-module transaction overhead during presets initialization.
-    if(g_atomic_pointer_get(&_trx_batch_owner) == owner)
+    const int trxid = dt_atomic_get_int(&_trxid);
+    char sql[64] = { 0 };
+    g_snprintf(sql, sizeof(sql), "SAVEPOINT trx%d", trxid);
+    if(sqlite3_exec(db->handle, sql, NULL, NULL, NULL) != SQLITE_OK)
     {
-      dt_atomic_add_int(&_trxid, 1);
-      return TRUE;
+      fprintf(stderr, "sqlite3 error: %s\n", sqlite3_errmsg(db->handle));
+      return FALSE;
     }
-  }
-
-  if(g_atomic_pointer_get(&_trx_owner) == owner)
-  {
     dt_atomic_add_int(&_trxid, 1);
     return TRUE;
   }
@@ -4862,6 +4850,18 @@ gboolean dt_database_transaction_is_owned_by_current_thread(void)
   return g_atomic_pointer_get(&_trx_owner) == owner || g_atomic_pointer_get(&_trx_batch_owner) == owner;
 }
 
+void dt_database_lock(void)
+{
+  sqlite3_mutex *const mutex = sqlite3_db_mutex(_db->handle);
+  if(!IS_NULL_PTR(mutex)) sqlite3_mutex_enter(mutex);
+}
+
+void dt_database_unlock(void)
+{
+  sqlite3_mutex *const mutex = sqlite3_db_mutex(_db->handle);
+  if(!IS_NULL_PTR(mutex)) sqlite3_mutex_leave(mutex);
+}
+
 gboolean dt_database_release_transaction_debug(void)
 {
   const dt_database_t *const db = _db;
@@ -4871,9 +4871,17 @@ gboolean dt_database_release_transaction_debug(void)
   {
     if(g_atomic_pointer_get(&_trx_batch_owner) == owner)
     {
-      if(dt_atomic_get_int(&_trxid) <= 0)
+      const int trxid = dt_atomic_get_int(&_trxid);
+      if(trxid <= 0)
       {
         fprintf(stderr, "[dt_database_release_transaction] COMMIT outside a transaction\n");
+        return FALSE;
+      }
+      char sql[64] = { 0 };
+      g_snprintf(sql, sizeof(sql), "RELEASE SAVEPOINT trx%d", trxid - 1);
+      if(sqlite3_exec(db->handle, sql, NULL, NULL, NULL) != SQLITE_OK)
+      {
+        fprintf(stderr, "sqlite3 error: %s\n", sqlite3_errmsg(db->handle));
         return FALSE;
       }
       dt_atomic_sub_int(&_trxid, 1);
@@ -4893,8 +4901,6 @@ gboolean dt_database_release_transaction_debug(void)
     fprintf(stderr, "[dt_database_release_transaction] COMMIT outside a transaction\n");
     return FALSE;
   }
-  dt_atomic_sub_int(&_trxid, 1);
-
   if(trxid == 1)
   {
     const gboolean committed = sqlite3_exec(db->handle, "COMMIT TRANSACTION", NULL, NULL, NULL) == SQLITE_OK;
@@ -4909,16 +4915,18 @@ gboolean dt_database_release_transaction_debug(void)
     dt_pthread_rwlock_unlock(&_db_lock);
     return committed;
   }
-#ifdef USE_NESTED_TRANSACTIONS
   else
   {
     char SQLTRX[64] = { 0 };
     g_snprintf(SQLTRX, sizeof(SQLTRX), "RELEASE SAVEPOINT trx%d", trxid - 1);
-    return sqlite3_exec(db->handle, SQLTRX, NULL, NULL, NULL) == SQLITE_OK;
+    if(sqlite3_exec(db->handle, SQLTRX, NULL, NULL, NULL) != SQLITE_OK)
+    {
+      fprintf(stderr, "sqlite3 error: %s\n", sqlite3_errmsg(db->handle));
+      return FALSE;
+    }
+    dt_atomic_sub_int(&_trxid, 1);
+    return TRUE;
   }
-#endif
-
-  return TRUE;
 }
 
 void dt_database_rollback_transaction(void)
@@ -4931,7 +4939,34 @@ void dt_database_rollback_transaction(void)
     return;
   }
 
-  DT_DEBUG_SQLITE3_EXEC(db->handle, "ROLLBACK TRANSACTION", NULL, NULL, NULL);
+  const int trxid = dt_atomic_get_int(&_trxid);
+  if(trxid > 1 || (g_atomic_pointer_get(&_trx_batch_owner) == owner && trxid > 0))
+  {
+    char sql[64] = { 0 };
+    g_snprintf(sql, sizeof(sql), "ROLLBACK TO SAVEPOINT trx%d", trxid - 1);
+    if(sqlite3_exec(db->handle, sql, NULL, NULL, NULL) != SQLITE_OK)
+    {
+      fprintf(stderr, "sqlite3 error: %s\n", sqlite3_errmsg(db->handle));
+      return;
+    }
+    g_snprintf(sql, sizeof(sql), "RELEASE SAVEPOINT trx%d", trxid - 1);
+    if(sqlite3_exec(db->handle, sql, NULL, NULL, NULL) != SQLITE_OK)
+      fprintf(stderr, "sqlite3 error: %s\n", sqlite3_errmsg(db->handle));
+    dt_atomic_sub_int(&_trxid, 1);
+    if(_trx_batch_is_nested && g_atomic_pointer_get(&_trx_batch_owner) == owner && trxid == 2)
+    {
+      dt_atomic_set_int(&_trx_batch_level, 0);
+      g_atomic_pointer_set(&_trx_batch_owner, NULL);
+      _trx_batch_is_nested = FALSE;
+    }
+    return;
+  }
+
+  if(sqlite3_exec(db->handle, "ROLLBACK TRANSACTION", NULL, NULL, NULL) != SQLITE_OK)
+  {
+    fprintf(stderr, "sqlite3 error: %s\n", sqlite3_errmsg(db->handle));
+    return;
+  }
   dt_atomic_set_int(&_trxid, 0);
   dt_atomic_set_int(&_trx_batch_level, 0);
   g_atomic_pointer_set(&_trx_owner, NULL);
@@ -4952,6 +4987,15 @@ void dt_database_begin_transaction_batch(void)
   }
   if(g_atomic_pointer_get(&_trx_owner) == owner)
   {
+    const int trxid = dt_atomic_get_int(&_trxid);
+    char sql[64] = { 0 };
+    g_snprintf(sql, sizeof(sql), "SAVEPOINT trx%d", trxid);
+    if(sqlite3_exec(db->handle, sql, NULL, NULL, NULL) != SQLITE_OK)
+    {
+      fprintf(stderr, "sqlite3 error: %s\n", sqlite3_errmsg(db->handle));
+      return;
+    }
+    dt_atomic_add_int(&_trxid, 1);
     dt_atomic_set_int(&_trx_batch_level, 1);
     g_atomic_pointer_set(&_trx_batch_owner, owner);
     _trx_batch_is_nested = TRUE;
@@ -4989,32 +5033,47 @@ void dt_database_end_transaction_batch(void)
     return;
   }
 
-  const int level = dt_atomic_sub_int(&_trx_batch_level, 1);
+  const int level = dt_atomic_get_int(&_trx_batch_level);
   if(level <= 0)
   {
     _db_print("[dt_database_end_transaction_batch] COMMIT outside a batch transaction\n");
     return;
   }
 
-  if(level == 1)
+  if(level > 1)
   {
-    if(_trx_batch_is_nested)
-    {
-      g_atomic_pointer_set(&_trx_batch_owner, NULL);
-      _trx_batch_is_nested = FALSE;
-      return;
-    }
-    if(sqlite3_exec(db->handle, "COMMIT TRANSACTION", NULL, NULL, NULL) != SQLITE_OK)
+    dt_atomic_sub_int(&_trx_batch_level, 1);
+    return;
+  }
+
+  if(_trx_batch_is_nested)
+  {
+    const int trxid = dt_atomic_get_int(&_trxid);
+    char sql[64] = { 0 };
+    g_snprintf(sql, sizeof(sql), "RELEASE SAVEPOINT trx%d", trxid - 1);
+    if(sqlite3_exec(db->handle, sql, NULL, NULL, NULL) != SQLITE_OK)
     {
       fprintf(stderr, "sqlite3 error: %s\n", sqlite3_errmsg(db->handle));
-      sqlite3_exec(db->handle, "ROLLBACK TRANSACTION", NULL, NULL, NULL);
+      return;
     }
-    dt_atomic_set_int(&_trxid, 0);
-    g_atomic_pointer_set(&_trx_owner, NULL);
+    dt_atomic_sub_int(&_trxid, 1);
+    dt_atomic_set_int(&_trx_batch_level, 0);
     g_atomic_pointer_set(&_trx_batch_owner, NULL);
-    sqlite3_mutex_leave(sqlite3_db_mutex(db->handle));
-    dt_pthread_rwlock_unlock(&_db_lock);
+    _trx_batch_is_nested = FALSE;
+    return;
   }
+
+  if(sqlite3_exec(db->handle, "COMMIT TRANSACTION", NULL, NULL, NULL) != SQLITE_OK)
+  {
+    fprintf(stderr, "sqlite3 error: %s\n", sqlite3_errmsg(db->handle));
+    sqlite3_exec(db->handle, "ROLLBACK TRANSACTION", NULL, NULL, NULL);
+  }
+  dt_atomic_set_int(&_trxid, 0);
+  dt_atomic_set_int(&_trx_batch_level, 0);
+  g_atomic_pointer_set(&_trx_owner, NULL);
+  g_atomic_pointer_set(&_trx_batch_owner, NULL);
+  sqlite3_mutex_leave(sqlite3_db_mutex(db->handle));
+  dt_pthread_rwlock_unlock(&_db_lock);
 }
 
 // clang-format off

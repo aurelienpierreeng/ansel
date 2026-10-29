@@ -38,17 +38,16 @@ extern "C" {
  *  new image's history.
  *
  *  The hot statements (the per-image read/write cycle) are prepared once, cached, and used
- *  only under this file's statement mutex; `dt_history_repository_cleanup()` finalises them,
+ *  only while the database connection is locked; `dt_history_repository_cleanup()` finalises them,
  *  which the connection must be able to do before it closes. The rest prepare and finalise
  *  per call. Rows never leave as a `sqlite3_stmt` -- the foreach families decode each row
  *  into scalars and hand those to a callback.
  *
  *  @warning dt_history_repository_foreach_row() and
  *  dt_history_repository_foreach_auto_preset_row() step a CACHED statement and therefore
- *  hold the statement mutex across every callback invocation. The mutex is not recursive:
- *  a callback that calls back into this repository deadlocks its own thread. Today's
- *  callbacks only decode; keep it that way, or move those two walks to per-call statements
- *  first.
+ *  pass borrowed SQLite row data to callbacks. The data remains valid only until the callback
+ *  returns. Cached-statement callbacks must not re-enter database or transaction APIs while that
+ *  data is live.
  */
 
 /* ---------------------------------------------------------------------------------------------
