@@ -32,9 +32,8 @@
  * needs a row read or written; this file holds every `sqlite3_*` call and the prepared
  * statements behind them, and knows nothing about caching, refcounting or eviction.
  *
- * @warning The statement cache below is process-wide and guarded by one mutex, so the calls
- * here serialise against each other. That is inherited behaviour, not a new constraint: the
- * cache took the same mutex around the same statements before the split.
+ * @warning The statement cache below is process-wide and guarded by the database connection
+ * mutex, so the calls here serialise against each other.
  */
 
 #ifndef DT_DATABASE_IMAGE_REPOSITORY_H

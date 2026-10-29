@@ -288,6 +288,9 @@ void dt_database_begin_transaction_batch(void);
 void dt_database_end_transaction_batch(void);
 /** Whether the calling thread owns an active transaction or transaction batch. */
 gboolean dt_database_transaction_is_owned_by_current_thread(void);
+/** Serialize access to the global SQLite connection and cached statements. */
+void dt_database_lock(void);
+void dt_database_unlock(void);
 
 #define dt_database_start_transaction() DT_DEBUG_TRACE_WRAPPER_RESULT_NO_ARGS(DT_DEBUG_SQL, dt_database_start_transaction_debug)
 #define dt_database_release_transaction() DT_DEBUG_TRACE_WRAPPER_RESULT_NO_ARGS(DT_DEBUG_SQL, dt_database_release_transaction_debug)
