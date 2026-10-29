@@ -27,6 +27,7 @@ extern "C"
 #include "common/image.h"
 #include "common/datetime.h"
 #include "common/variables.h"
+#include "database/database.h"
 #include "database/image_repository.h"
 #include "database/tag_repository.h"
 #include "darktable.h"
@@ -42,9 +43,12 @@ extern "C" gboolean dt_test_exif_start_transaction(void);
 extern "C" gboolean dt_test_exif_release_transaction(void);
 extern "C" void dt_test_exif_rollback_transaction(void);
 extern "C" void dt_test_exif_unix_to_img(dt_image_t *img, const time_t *datetime);
-extern "C" int dt_test_exif_read_persisted(dt_image_t *img, const char *path);
+extern "C" dt_exif_read_result_t dt_test_exif_read_persisted(dt_image_t *img, const char *path);
+extern "C" dt_exif_read_result_t dt_test_exif_read_persisted_with_tags(dt_image_t *img, const char *path,
+                                                                          gboolean *tags_changed);
 extern "C" bool dt_test_exif_apply_xmp_persistence(dt_image_t *img, Exiv2::XmpData &xmpData,
-                                                     int version, bool replace_existing, bool *tags_changed);
+                                                      int version, bool replace_existing, bool *tags_changed,
+                                                      bool *partial);
 
 #define dt_database_start_transaction_debug dt_test_exif_start_transaction
 #define dt_database_release_transaction_debug dt_test_exif_release_transaction
@@ -61,6 +65,7 @@ extern "C" bool dt_test_exif_apply_xmp_persistence(dt_image_t *img, Exiv2::XmpDa
 #define dt_exif_read_from_blob dt_test_exif_read_from_blob
 #define dt_exif_get_thumbnail dt_test_exif_get_thumbnail
 #define dt_exif_read dt_test_exif_read
+#define dt_exif_read_persisted_with_tags dt_test_exif_read_persisted_with_tags
 #define dt_exif_read_persisted dt_test_exif_read_persisted
 #define dt_exif_write_blob dt_test_exif_write_blob
 #define dt_exif_get_color_space dt_test_exif_get_color_space
@@ -113,7 +118,7 @@ struct dt_test_exif_fixture_t
   int32_t film_id;
   dt_test_exif_transaction_t transaction;
   int notification_calls;
-  int persisted_read_result;
+  dt_exif_read_result_t persisted_read_result;
   GMutex coordination_mutex;
   GCond coordination_condition;
   gboolean reader_reached_datetime;
@@ -362,7 +367,7 @@ static gpointer write_unrelated_image(gpointer user_data)
 static gpointer read_scratch_image(gpointer user_data)
 {
   auto *image = (dt_image_t *)user_data;
-  assert_int_equal(dt_test_exif_read(image, test_context().path), 0);
+  assert_int_equal(dt_test_exif_read(image, test_context().path), DT_EXIF_READ_OK);
   return nullptr;
 }
 
@@ -387,7 +392,7 @@ static int setup_fixture()
   fixture.transaction.rollback_calls = 0;
   fixture.transaction.commit_failure_rollback_calls = 0;
   fixture.notification_calls = 0;
-  fixture.persisted_read_result = -1;
+  fixture.persisted_read_result = DT_EXIF_READ_ERROR;
   fixture.coordinate_transaction = FALSE;
   fixture.transaction_event_count = 0;
   fixture.reader_reached_datetime = FALSE;
@@ -517,6 +522,12 @@ static void write_persisted_fixture_metadata(const char *subject)
   image->writeMetadata();
 }
 
+static int count_tag_attachment(void *count, int, char **, char **)
+{
+  (*(int *)count)++;
+  return 0;
+}
+
 static void assert_isolated_transaction_events()
 { // NOSONAR
   auto &fixture = test_context();
@@ -533,8 +544,10 @@ static void assert_failed_isolated_read(const dt_image_t *image, const dt_image_
   GList *creator = dt_metadata_get(image->id, "Xmp.dc.creator", nullptr);
   GList *description = dt_metadata_get(image->id, "Xmp.dc.description", nullptr);
   GList *rights = dt_metadata_get(image->id, "Xmp.dc.rights", nullptr);
-  assert_memory_equal(image, original, sizeof(*image));
-  assert_int_equal(fixture.persisted_read_result, 1);
+  assert_int_equal(image->id, original->id);
+  assert_string_equal(image->exif_maker, "AnselFixture");
+  assert_string_equal(image->exif_model, "Scratch");
+  assert_int_equal(fixture.persisted_read_result, DT_EXIF_READ_PERSIST_ERROR);
   assert_null(creator);
   assert_null(description);
   assert_null(rights);
@@ -549,11 +562,12 @@ static void test_persisted_read_rolls_back_begin_failure()
 {
   auto &fixture = test_context();
   dt_image_t image = persisted_image();
-  const dt_image_t original = image;
   fixture.transaction.start_outcome = dt_test_exif_transaction_outcome_t::DT_TEST_EXIF_TRANSACTION_FAIL;
 
-  assert_int_equal(dt_test_exif_read_persisted(&image, fixture.path), 1);
-  assert_memory_equal(&image, &original, sizeof(image));
+  assert_int_equal(dt_test_exif_read_persisted(&image, fixture.path), DT_EXIF_READ_PERSIST_ERROR);
+  assert_int_equal(image.id, fixture.image_id);
+  assert_string_equal(image.exif_maker, "AnselFixture");
+  assert_string_equal(image.exif_model, "Scratch");
   assert_int_equal(dt_tag_repository_find_by_name("contract-keyword"), 0);
   assert_int_equal(fixture.notification_calls, 0);
   assert_int_equal(fixture.transaction.rollback_calls, 0);
@@ -566,7 +580,7 @@ static void test_persisted_read_rejects_stale_image_before_transaction()
   image.id += 1000;
   const dt_image_t original = image;
 
-  assert_int_equal(dt_test_exif_read_persisted(&image, fixture.path), 1);
+  assert_int_equal(dt_test_exif_read_persisted(&image, fixture.path), DT_EXIF_READ_PERSIST_ERROR);
   assert_memory_equal(&image, &original, sizeof(image));
   assert_int_equal(fixture.transaction.start_calls, 0);
   assert_int_equal(fixture.transaction.release_calls, 0);
@@ -593,7 +607,7 @@ static void test_persisted_read_rejects_outer_transaction()
     assert_true(dt_database_start_transaction_debug());
     assert_true(dt_database_start_transaction_debug());
     assert_true(dt_metadata_set_import(image.id, "Xmp.dc.description", "outer-sentinel"));
-    const int result = dt_test_exif_read_persisted(&image, fixture.path);
+    const dt_exif_read_result_t result = dt_test_exif_read_persisted(&image, fixture.path);
     const gboolean owned_after_read = dt_database_transaction_is_owned_by_current_thread();
     gboolean nested_release = FALSE;
     gboolean owned_after_release = FALSE;
@@ -610,7 +624,7 @@ static void test_persisted_read_rejects_outer_transaction()
     const gboolean sentinel_preserved = !IS_NULL_PTR(description)
                                        && !g_strcmp0((const char *)description->data, "outer-sentinel");
     g_list_free_full(description, dt_free_gpointer);
-    assert_int_equal(result, 1);
+    assert_int_equal(result, DT_EXIF_READ_PERSIST_ERROR);
     assert_memory_equal(&image, &original, sizeof(image));
     assert_true(owned_after_read);
     assert_true(nested_release);
@@ -625,15 +639,16 @@ static void test_persisted_read_rejects_outer_transaction()
   }
 }
 
-static void test_persisted_read_rolls_back_commit_failure()
+static void test_persisted_read_keeps_decoded_camera_fields_after_late_metadata_failure()
 {
   auto &fixture = test_context();
+  write_persisted_fixture_metadata("contract-keyword");
   dt_image_t image = persisted_image();
-  const dt_image_t original = image;
   fixture.transaction.release_outcome = dt_test_exif_transaction_outcome_t::DT_TEST_EXIF_TRANSACTION_FAIL;
 
-  assert_int_equal(dt_test_exif_read_persisted(&image, fixture.path), 1);
-  assert_memory_equal(&image, &original, sizeof(image));
+  assert_int_equal(dt_test_exif_read_persisted(&image, fixture.path), DT_EXIF_READ_PERSIST_ERROR);
+  assert_string_equal(image.exif_maker, "AnselFixture");
+  assert_string_equal(image.exif_model, "Scratch");
   assert_int_equal(dt_tag_repository_find_by_name("contract-keyword"), 0);
   assert_int_equal(fixture.notification_calls, 0);
   assert_int_equal(fixture.transaction.rollback_calls, 0);
@@ -641,24 +656,33 @@ static void test_persisted_read_rolls_back_commit_failure()
   assert_false(dt_database_transaction_is_owned_by_current_thread());
 }
 
-static void test_persisted_read_rolls_back_tag_persistence_failure()
+static void test_persisted_read_keeps_decoded_camera_fields_after_tag_persistence_failure()
 {
   auto &fixture = test_context();
   std::unique_ptr<Exiv2::Image> fixture_image(Exiv2::ImageFactory::open(fixture.path));
   assert_non_null(fixture_image.get());
   fixture_image->readMetadata();
-  fixture_image->xmpData()["Xmp.dc.subject"] = std::string(1024, 'x');
+  guint rejected_tag = 0;
+  assert_true(dt_tag_new("rejected-tag", &rejected_tag));
+  fixture_image->xmpData()["Xmp.dc.subject"] = "rejected-tag";
   fixture_image->writeMetadata();
+  char *trigger = g_strdup_printf(
+      "CREATE TRIGGER reject_persisted_tag BEFORE INSERT ON tagged_images "
+      "WHEN NEW.tagid = %u BEGIN SELECT RAISE(ABORT, 'persisted tag rejected'); END", rejected_tag);
+  assert_int_equal(sqlite3_exec(dt_database_get_sqlite3_global(), trigger, nullptr, nullptr, nullptr), SQLITE_OK);
 
   dt_image_t image = persisted_image();
-  const dt_image_t original = image;
 
-  assert_int_equal(dt_test_exif_read_persisted(&image, fixture.path), 1);
-  assert_memory_equal(&image, &original, sizeof(image));
+  assert_int_equal(dt_test_exif_read_persisted(&image, fixture.path), DT_EXIF_READ_PERSIST_ERROR);
+  assert_string_equal(image.exif_maker, "AnselFixture");
+  assert_string_equal(image.exif_model, "Scratch");
   assert_int_equal(dt_tag_repository_find_by_name("contract-keyword"), 0);
+  assert_false(dt_tag_repository_is_attached(rejected_tag, image.id));
   assert_int_equal(fixture.notification_calls, 0);
   assert_int_equal(fixture.transaction.rollback_calls, 1);
   assert_false(dt_database_transaction_is_owned_by_current_thread());
+  assert_int_equal(sqlite3_exec(dt_database_get_sqlite3_global(), "DROP TRIGGER reject_persisted_tag", nullptr, nullptr, nullptr), SQLITE_OK);
+  dt_free(trigger);
 }
 
 static void test_persisted_read_commits_keyword()
@@ -666,11 +690,135 @@ static void test_persisted_read_commits_keyword()
   auto &fixture = test_context();
   dt_image_t image = persisted_image();
 
-  assert_int_equal(dt_test_exif_read_persisted(&image, fixture.path), 0);
+  assert_int_equal(dt_test_exif_read_persisted(&image, fixture.path), DT_EXIF_READ_OK);
   const guint tagid = dt_tag_repository_find_by_name("contract-keyword");
   assert_true(tagid > 0);
   assert_true(dt_tag_repository_is_attached(tagid, image.id));
-  assert_int_equal(fixture.notification_calls, 1);
+  assert_int_equal(fixture.notification_calls, 0);
+}
+
+static void test_persisted_read_keeps_default_usercrop_tag_on_second_read()
+{
+  auto &fixture = test_context();
+  std::unique_ptr<Exiv2::Image> fixture_image(Exiv2::ImageFactory::open(fixture.path));
+  assert_non_null(fixture_image.get());
+  fixture_image->readMetadata();
+  fixture_image->exifData()["Exif.Image.0xc7b5"] = "1/10 1/5 9/10 4/5";
+  fixture_image->writeMetadata();
+  dt_image_t image = persisted_image();
+  Exiv2::Blob blob;
+  Exiv2::ExifParser::encode(blob, Exiv2::bigEndian, fixture_image->exifData());
+
+  assert_int_equal(dt_test_exif_read_from_blob(&image, blob.data(), blob.size()), 0);
+  assert_int_equal(dt_test_exif_read_persisted(&image, fixture.path), DT_EXIF_READ_OK);
+  assert_int_equal(dt_test_exif_read_persisted(&image, fixture.path), DT_EXIF_READ_OK);
+
+  const guint tagid = dt_tag_repository_find_by_name("darktable|mode|exif-crop");
+  int attachment_count = 0;
+  char *sql = g_strdup_printf("SELECT 1 FROM tagged_images WHERE tagid = %u AND imgid = %d", tagid, image.id);
+  assert_true(tagid > 0);
+  assert_true(dt_tag_repository_is_attached(tagid, image.id));
+  assert_int_equal(sqlite3_exec(dt_database_get_sqlite3_global(), sql, count_tag_attachment, &attachment_count,
+                               nullptr), SQLITE_OK);
+  assert_int_equal(attachment_count, 1);
+  assert_true(image.usercrop_status == DT_IMAGE_USERCROP_VALID);
+  assert_float_equal(image.usercrop[0], 0.1, 1e-6);
+  assert_float_equal(image.usercrop[1], 0.2, 1e-6);
+  assert_float_equal(image.usercrop[2], 0.9, 1e-6);
+  assert_float_equal(image.usercrop[3], 0.8, 1e-6);
+  dt_free(sql);
+}
+
+static void test_additional_tags_replaces_owned_gain_maps_on_every_read()
+{
+  auto &fixture = test_context();
+  std::array<uint8_t, 100> opcode_list = {};
+  const std::array<uint32_t, 15> values = { GUINT32_TO_BE(1), GUINT32_TO_BE(9), GUINT32_TO_BE(1), GUINT32_TO_BE(0),
+                                             GUINT32_TO_BE(80), GUINT32_TO_BE(0), GUINT32_TO_BE(0), GUINT32_TO_BE(1),
+                                             GUINT32_TO_BE(1), GUINT32_TO_BE(1), GUINT32_TO_BE(1), GUINT32_TO_BE(1),
+                                             GUINT32_TO_BE(1), GUINT32_TO_BE(1), GUINT32_TO_BE(1) };
+  for(size_t i = 0; i < values.size(); i++)
+    memcpy(opcode_list.data() + 4 * i, &values[i], sizeof(values[i]));
+  const uint64_t one_double = GUINT64_TO_BE(UINT64_C(0x3ff0000000000000));
+  const auto one = GUINT32_TO_BE(1);
+  const auto one_float = GUINT32_TO_BE(0x3f800000);
+  memcpy(opcode_list.data() + 60, &one_double, sizeof(one_double));
+  memcpy(opcode_list.data() + 68, &one_double, sizeof(one_double));
+  memcpy(opcode_list.data() + 76, &one_double, sizeof(one_double));
+  memcpy(opcode_list.data() + 84, &one_double, sizeof(one_double));
+  memcpy(opcode_list.data() + 92, &one, sizeof(one));
+  memcpy(opcode_list.data() + 96, &one_float, sizeof(one_float));
+  std::unique_ptr<Exiv2::Image> fixture_image(Exiv2::ImageFactory::open(fixture.path));
+  assert_non_null(fixture_image.get());
+  fixture_image->readMetadata();
+  Exiv2::DataValue opcode_value(opcode_list.data(), opcode_list.size());
+  fixture_image->exifData().add(Exiv2::ExifKey("Exif.Image.OpcodeList2"), &opcode_value);
+  fixture_image->writeMetadata();
+  dt_image_t image;
+  dt_image_init(&image);
+  image.dng_gain_maps = g_list_append(nullptr, g_malloc0(sizeof(dt_dng_gain_map_t)));
+
+  dt_test_exif_img_check_additional_tags(&image, fixture.path);
+  GList *first = image.dng_gain_maps;
+  assert_int_equal(g_list_length(first), 1);
+  assert_non_null(first->data);
+  assert_int_equal(((dt_dng_gain_map_t *)first->data)->map_gain_count, 1);
+  assert_float_equal(((dt_dng_gain_map_t *)first->data)->map_gain[0], 1.0, 1e-6);
+
+  dt_test_exif_img_check_additional_tags(&image, fixture.path);
+  assert_int_equal(g_list_length(image.dng_gain_maps), 1);
+  assert_non_null(image.dng_gain_maps->data);
+  assert_int_equal(((dt_dng_gain_map_t *)image.dng_gain_maps->data)->map_gain_count, 1);
+  assert_float_equal(((dt_dng_gain_map_t *)image.dng_gain_maps->data)->map_gain[0], 1.0, 1e-6);
+
+  g_list_free_full(image.dng_gain_maps, dt_free_gpointer);
+}
+
+static void test_persisted_read_does_not_store_xmp_fields_after_commit_rollback()
+{
+  auto &fixture = test_context();
+  std::unique_ptr<Exiv2::Image> fixture_image(Exiv2::ImageFactory::open(fixture.path));
+  assert_non_null(fixture_image.get());
+  fixture_image->readMetadata();
+  fixture_image->exifData()["Exif.Photo.ExposureTime"] = Exiv2::URational(1, 125);
+  fixture_image->xmpData()["Xmp.xmp.Rating"] = "5";
+  fixture_image->xmpData()["Xmp.xmp.Label"] = "Red";
+  fixture_image->xmpData()["Xmp.exif.GPSLatitude"] = "45,30.0N";
+  fixture_image->xmpData()["Xmp.exif.GPSLongitude"] = "10,0.0E";
+  fixture_image->writeMetadata();
+  dt_image_t image;
+  dt_image_init(&image);
+  assert_true(dt_image_repository_load(fixture.image_id, &image));
+  dt_image_set_xmp_rating(&image, 1);
+  image.color_labels = 1 << DT_COLORLABELS_GREEN;
+  image.group_id = image.id;
+  image.geoloc.latitude = -1.0;
+  image.geoloc.longitude = -2.0;
+  dt_image_repository_store(&image);
+  dt_image_t baseline;
+  dt_image_init(&baseline);
+  assert_true(dt_image_repository_load(image.id, &baseline));
+  assert_int_equal(dt_image_get_xmp_rating(&baseline), 1);
+  assert_int_equal(baseline.color_labels, 1 << DT_COLORLABELS_GREEN);
+  assert_float_equal(baseline.geoloc.latitude, -1.0, 1e-6);
+  assert_float_equal(baseline.geoloc.longitude, -2.0, 1e-6);
+  fixture.transaction.release_outcome = dt_test_exif_transaction_outcome_t::DT_TEST_EXIF_TRANSACTION_FAIL;
+
+  assert_int_equal(dt_test_exif_read_persisted(&image, fixture.path), DT_EXIF_READ_PERSIST_ERROR);
+  assert_string_equal(image.exif_maker, "AnselFixture");
+  assert_float_equal(image.exif_exposure, 1.0 / 125.0, 1e-6);
+  assert_int_equal(dt_image_get_xmp_rating(&image), 1);
+  assert_int_equal(image.color_labels, 1 << DT_COLORLABELS_GREEN);
+  assert_float_equal(image.geoloc.latitude, -1.0, 1e-6);
+  assert_float_equal(image.geoloc.longitude, -2.0, 1e-6);
+  dt_image_repository_store(&image);
+  dt_image_t reloaded;
+  dt_image_init(&reloaded);
+  assert_true(dt_image_repository_load(image.id, &reloaded));
+  assert_int_equal(dt_image_get_xmp_rating(&reloaded), 1);
+  assert_int_equal(reloaded.color_labels, 1 << DT_COLORLABELS_GREEN);
+  assert_float_equal(reloaded.geoloc.latitude, -1.0, 1e-6);
+  assert_float_equal(reloaded.geoloc.longitude, -2.0, 1e-6);
 }
 
 static void test_persisted_read_commits_isolated_mutations()
@@ -699,7 +847,7 @@ static void test_persisted_read_commits_isolated_mutations()
   assert_true(dt_tag_repository_is_attached(tagid, image.id));
   assert_string_equal(image.exif_maker, "AnselFixture");
   assert_string_equal(image.exif_model, "Scratch");
-  assert_int_equal(fixture.persisted_read_result, 0);
+  assert_int_equal(fixture.persisted_read_result, DT_EXIF_READ_OK);
   assert_isolated_transaction_events();
   assert_true(dt_image_repository_find_by_film_and_filename(fixture.film_id, "unrelated-101.jpg")
               > UNKNOWN_IMAGE);
@@ -714,8 +862,13 @@ static void test_persisted_read_commits_isolated_mutations()
 static void test_persisted_read_rolls_back_isolated_partial_mutations()
 {
   auto &fixture = test_context();
-  const std::string oversized_subject(1024, 'x');
-  write_persisted_fixture_metadata(oversized_subject.c_str());
+  guint rejected_tag = 0;
+  assert_true(dt_tag_new("isolated-failure", &rejected_tag));
+  write_persisted_fixture_metadata("isolated-failure");
+  char *trigger = g_strdup_printf(
+      "CREATE TRIGGER reject_isolated_tag BEFORE INSERT ON tagged_images "
+      "WHEN NEW.tagid = %u BEGIN SELECT RAISE(ABORT, 'isolated tag rejected'); END", rejected_tag);
+  assert_int_equal(sqlite3_exec(dt_database_get_sqlite3_global(), trigger, nullptr, nullptr, nullptr), SQLITE_OK);
 
   fixture.coordinate_transaction = TRUE;
   dt_image_t image = persisted_image();
@@ -728,6 +881,10 @@ static void test_persisted_read_rolls_back_isolated_partial_mutations()
   assert_failed_isolated_read(&image, &original, 102);
   assert_int_equal(fixture.transaction.rollback_calls, 1);
   assert_int_equal(fixture.transaction.commit_failure_rollback_calls, 0);
+  assert_false(dt_tag_repository_is_attached(rejected_tag, image.id));
+  assert_int_equal(sqlite3_exec(dt_database_get_sqlite3_global(), "DROP TRIGGER reject_isolated_tag", nullptr,
+                                nullptr, nullptr), SQLITE_OK);
+  dt_free(trigger);
   fixture.coordinate_transaction = FALSE;
 }
 
@@ -765,7 +922,7 @@ static void test_persisted_read_imports_exif_only_metadata()
   fixture_image->writeMetadata();
 
   dt_image_t image = persisted_image();
-  assert_int_equal(dt_test_exif_read_persisted(&image, fixture.path), 0);
+  assert_int_equal(dt_test_exif_read_persisted(&image, fixture.path), DT_EXIF_READ_OK);
 
   GList *creator = dt_metadata_get(image.id, "Xmp.dc.creator", nullptr);
   GList *description = dt_metadata_get(image.id, "Xmp.dc.description", nullptr);
@@ -793,7 +950,7 @@ static void test_persisted_read_rolls_back_exif_only_metadata()
 
   dt_image_t image = persisted_image();
   fixture.transaction.release_outcome = dt_test_exif_transaction_outcome_t::DT_TEST_EXIF_TRANSACTION_FAIL;
-  assert_int_equal(dt_test_exif_read_persisted(&image, fixture.path), 1);
+  assert_int_equal(dt_test_exif_read_persisted(&image, fixture.path), DT_EXIF_READ_PERSIST_ERROR);
   GList *creator = dt_metadata_get(image.id, "Xmp.dc.creator", nullptr);
   assert_null(creator);
   assert_int_equal(fixture.transaction.rollback_calls, 0);
@@ -812,11 +969,11 @@ static void test_persisted_read_notifies_for_metadata_only_xmp()
   fixture_image->writeMetadata();
 
   dt_image_t image = persisted_image();
-  assert_int_equal(dt_test_exif_read_persisted(&image, fixture.path), 0);
+  assert_int_equal(dt_test_exif_read_persisted(&image, fixture.path), DT_EXIF_READ_OK);
   GList *description = dt_metadata_get(image.id, "Xmp.dc.description", nullptr);
   assert_non_null(description);
   assert_string_equal((const char *)description->data, "metadata-only");
-  assert_int_equal(fixture.notification_calls, 1);
+  assert_int_equal(fixture.notification_calls, 0);
   g_list_free_full(description, dt_free_gpointer);
 }
 
@@ -832,11 +989,11 @@ static void test_persisted_read_notifies_for_iptc_caption_only()
   fixture_image->writeMetadata();
 
   dt_image_t image = persisted_image();
-  assert_int_equal(dt_test_exif_read_persisted(&image, fixture.path), 0);
+  assert_int_equal(dt_test_exif_read_persisted(&image, fixture.path), DT_EXIF_READ_OK);
   GList *description = dt_metadata_get(image.id, "Xmp.dc.description", nullptr);
   assert_non_null(description);
   assert_string_equal((const char *)description->data, "iptc-caption-only");
-  assert_int_equal(fixture.notification_calls, 1);
+  assert_int_equal(fixture.notification_calls, 0);
   g_list_free_full(description, dt_free_gpointer);
 }
 
@@ -847,10 +1004,12 @@ static void test_xmp_persistence_marks_metadata_replacement()
   assert_true(dt_metadata_set_import(image.id, "Xmp.dc.description", "existing"));
   Exiv2::XmpData xmp_data;
   bool tags_changed = false;
+  bool partial = false;
 
   assert_true(dt_test_exif_start_transaction());
-  assert_true(dt_test_exif_apply_xmp_persistence(&image, xmp_data, -1, true, &tags_changed));
-  assert_true(tags_changed);
+  assert_true(dt_test_exif_apply_xmp_persistence(&image, xmp_data, -1, true, &tags_changed, &partial));
+  assert_false(tags_changed);
+  assert_false(partial);
   assert_true(dt_test_exif_release_transaction());
   GList *description = dt_metadata_get(image.id, "Xmp.dc.description", nullptr);
   assert_null(description);
@@ -863,7 +1022,7 @@ static void test_generic_read_keeps_scratch_fields_without_persistence()
   dt_image_t image;
   dt_image_init(&image);
 
-  assert_int_equal(dt_test_exif_read(&image, fixture.path), 0);
+  assert_int_equal(dt_test_exif_read(&image, fixture.path), DT_EXIF_READ_OK);
   assert_string_equal(image.exif_maker, "AnselFixture");
   assert_string_equal(image.exif_model, "Scratch");
   std::array<char, DT_DATETIME_EXIF_LENGTH> datetime = {};
@@ -889,7 +1048,7 @@ static void test_generic_read_keeps_persisted_image_database_free()
   auto &fixture = test_context();
   dt_image_t image = persisted_image();
 
-  assert_int_equal(dt_test_exif_read(&image, fixture.path), 0);
+  assert_int_equal(dt_test_exif_read(&image, fixture.path), DT_EXIF_READ_OK);
   assert_string_equal(image.exif_maker, "AnselFixture");
   assert_int_equal(fixture.transaction.start_calls, 0);
   assert_int_equal(fixture.transaction.release_calls, 0);
@@ -913,7 +1072,7 @@ static void test_generic_read_keeps_iptc_and_xmp_image_fields()
 
   dt_image_t image;
   dt_image_init(&image);
-  assert_int_equal(dt_test_exif_read(&image, fixture.path), 0);
+  assert_int_equal(dt_test_exif_read(&image, fixture.path), DT_EXIF_READ_OK);
   std::array<char, DT_DATETIME_EXIF_LENGTH> datetime = {};
   assert_true(dt_datetime_img_to_exif(datetime.data(), datetime.size(), &image));
   assert_memory_equal(datetime.data(), "2011", 4);
@@ -990,7 +1149,7 @@ static void assert_pfm_fallbacks_survive_failed_read(const char *path_template,
   dt_image_init(&expected);
   dt_datetime_unix_to_img(&expected, &timestamp);
   fixture.unlink_after_datetime_path = remove_after_stat ? path : nullptr;
-  assert_int_equal(dt_test_exif_read(&image, path), 1);
+  assert_int_equal(dt_test_exif_read(&image, path), DT_EXIF_READ_PARTIAL);
   assert_null(fixture.unlink_after_datetime_path);
   assert_int_equal(g_file_test(path, G_FILE_TEST_EXISTS), !remove_after_stat);
   assert_true(image.flags & DT_IMAGE_HDR);
@@ -1011,6 +1170,23 @@ static void test_generic_read_retains_fallbacks_when_file_disappears_after_stat(
 {
   assert_pfm_fallbacks_survive_failed_read("ansel-test-exif-unlink-XXXXXX.pfm",
                                            dt_test_exif_file_lifetime_t::REMOVE_AFTER_STAT);
+}
+
+static void test_generic_read_keeps_exif_rating_when_xmp_rating_is_malformed()
+{
+  auto &fixture = test_context();
+  std::unique_ptr<Exiv2::Image> fixture_image(Exiv2::ImageFactory::open(fixture.path));
+  assert_non_null(fixture_image.get());
+  fixture_image->readMetadata();
+  fixture_image->exifData()["Exif.Image.Rating"] = uint16_t(4);
+  fixture_image->xmpData()["Xmp.xmp.Rating"] = "not-a-number";
+  fixture_image->writeMetadata();
+
+  dt_image_t image;
+  dt_image_init(&image);
+
+  assert_int_equal(dt_test_exif_read(&image, fixture.path), DT_EXIF_READ_PARTIAL);
+  assert_int_equal(dt_image_get_xmp_rating(&image), 4);
 }
 
 static void test_scratch_exif_preserves_camera_fields()
@@ -1038,7 +1214,8 @@ static void test_scratch_exif_preserves_camera_fields()
   data["Exif.Image.ColorMatrix1"] = "1/1 0/1 0/1 0/1 1/1 0/1 0/1 0/1 1/1";
   data["Exif.Image.CalibrationIlluminant1"] = uint16_t(DT_LS_D65);
 
-  assert_true(_exif_decode_exif_data(&image, data, false));
+  bool partial = false;
+  assert_true(_exif_decode_exif_data(&image, data, false, &partial));
   assert_float_equal(image.exif_exposure, 1.0 / 125.0, 1e-6);
   assert_float_equal(image.exif_aperture, 4.0, 1e-6);
   assert_float_equal(image.exif_iso, 200.0, 1e-6);
@@ -1076,7 +1253,7 @@ int main(int argc, char *argv[])
   if(!IS_NULL_PTR(source)) g_object_unref(source);
   dt_free(cameras);
   if(copied) dt_loc_init_datadir(nullptr, fixture.rawspeed_datadir);
-  const std::array<CMUnitTest, 22> tests = { {
+  const std::array<CMUnitTest, 26> tests = { {
       cmocka_unit_test_setup_teardown(run_cmocka_test<test_no_argument_integer_result_is_logged_then_called_once>,
                                       run_cmocka_fixture<setup_fixture>, run_cmocka_fixture<teardown_fixture>),
       cmocka_unit_test_setup_teardown(run_cmocka_test<test_scratch_exif_preserves_camera_fields>,
@@ -1087,12 +1264,21 @@ int main(int argc, char *argv[])
                                       run_cmocka_fixture<setup_fixture>, run_cmocka_fixture<teardown_fixture>),
       cmocka_unit_test_setup_teardown(run_cmocka_test<test_persisted_read_rejects_outer_transaction>,
                                       run_cmocka_fixture<setup_fixture>, run_cmocka_fixture<teardown_fixture>),
-      cmocka_unit_test_setup_teardown(run_cmocka_test<test_persisted_read_rolls_back_commit_failure>,
+       cmocka_unit_test_setup_teardown(run_cmocka_test<test_persisted_read_keeps_decoded_camera_fields_after_late_metadata_failure>,
                                       run_cmocka_fixture<setup_fixture>, run_cmocka_fixture<teardown_fixture>),
-      cmocka_unit_test_setup_teardown(run_cmocka_test<test_persisted_read_rolls_back_tag_persistence_failure>,
+       cmocka_unit_test_setup_teardown(run_cmocka_test<test_persisted_read_keeps_decoded_camera_fields_after_tag_persistence_failure>,
                                       run_cmocka_fixture<setup_fixture>, run_cmocka_fixture<teardown_fixture>),
-      cmocka_unit_test_setup_teardown(run_cmocka_test<test_persisted_read_commits_keyword>,
-                                      run_cmocka_fixture<setup_fixture>, run_cmocka_fixture<teardown_fixture>),
+       cmocka_unit_test_setup_teardown(run_cmocka_test<test_persisted_read_commits_keyword>,
+                                       run_cmocka_fixture<setup_fixture>, run_cmocka_fixture<teardown_fixture>),
+       cmocka_unit_test_setup_teardown(
+           run_cmocka_test<test_persisted_read_keeps_default_usercrop_tag_on_second_read>,
+           run_cmocka_fixture<setup_fixture>, run_cmocka_fixture<teardown_fixture>),
+       cmocka_unit_test_setup_teardown(
+           run_cmocka_test<test_additional_tags_replaces_owned_gain_maps_on_every_read>,
+           run_cmocka_fixture<setup_fixture>, run_cmocka_fixture<teardown_fixture>),
+       cmocka_unit_test_setup_teardown(
+           run_cmocka_test<test_persisted_read_does_not_store_xmp_fields_after_commit_rollback>,
+           run_cmocka_fixture<setup_fixture>, run_cmocka_fixture<teardown_fixture>),
       cmocka_unit_test_setup_teardown(run_cmocka_test<test_persisted_read_commits_isolated_mutations>,
                                       run_cmocka_fixture<setup_fixture>, run_cmocka_fixture<teardown_fixture>),
       cmocka_unit_test_setup_teardown(
@@ -1121,10 +1307,13 @@ int main(int argc, char *argv[])
                                       run_cmocka_fixture<setup_fixture>, run_cmocka_fixture<teardown_fixture>),
       cmocka_unit_test_setup_teardown(run_cmocka_test<test_generic_read_retains_pfm_fallbacks>,
                                       run_cmocka_fixture<setup_fixture>, run_cmocka_fixture<teardown_fixture>),
-      cmocka_unit_test_setup_teardown(
-          run_cmocka_test<test_generic_read_retains_fallbacks_when_file_disappears_after_stat>,
-          run_cmocka_fixture<setup_fixture>, run_cmocka_fixture<teardown_fixture>),
-  } };
+       cmocka_unit_test_setup_teardown(
+           run_cmocka_test<test_generic_read_retains_fallbacks_when_file_disappears_after_stat>,
+           run_cmocka_fixture<setup_fixture>, run_cmocka_fixture<teardown_fixture>),
+       cmocka_unit_test_setup_teardown(
+           run_cmocka_test<test_generic_read_keeps_exif_rating_when_xmp_rating_is_malformed>,
+           run_cmocka_fixture<setup_fixture>, run_cmocka_fixture<teardown_fixture>),
+   } };
 
   const int result
       = copied ? _cmocka_run_group_tests("exif_read_contract", tests.data(), tests.size(), nullptr, nullptr) : 1;
