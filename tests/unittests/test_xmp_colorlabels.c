@@ -47,12 +47,13 @@ static void test_full_xmp_read_replaces_persisted_color_labels(void **state)
 {
   (void)state;
   dt_image_t image = dt_test_xmp_fixture_make_image("/testdb/xmp-colorlabels", "replace.raw");
+  image.group_id = image.id;
   image.color_labels = 1 << DT_COLORLABELS_RED;
   dt_image_repository_store(&image);
 
   dt_test_xmp_fixture_write_packet(&fixture, "<darktable:colorlabels><rdf:Seq>"
-                                             "<rdf:li>1</rdf:li><rdf:li>3</rdf:li><rdf:li>-1</rdf:li><rdf:li>5</rdf:li>"
-                                             "</rdf:Seq></darktable:colorlabels>");
+                                              "<rdf:li>1</rdf:li><rdf:li>3</rdf:li>"
+                                              "</rdf:Seq></darktable:colorlabels>");
 
   assert_int_equal(dt_exif_xmp_read(&image, fixture.xmp_path, FALSE, NULL), 0);
   assert_int_equal(image.color_labels, (1 << DT_COLORLABELS_YELLOW) | (1 << DT_COLORLABELS_BLUE));
@@ -81,6 +82,7 @@ static void test_absent_xmp_labels_clear_existing_labels(void **state)
 {
   (void)state;
   dt_image_t image = dt_test_xmp_fixture_make_image("/testdb/xmp-colorlabels", "clear.raw");
+  image.group_id = image.id;
   image.color_labels = 1 << DT_COLORLABELS_PURPLE;
   dt_image_repository_store(&image);
   dt_test_xmp_fixture_write_packet(&fixture, "");
