@@ -631,20 +631,58 @@ gchar *dt_util_elevation_str(float elevation)
 
 double dt_util_gps_string_to_number(const gchar *input)
 {
-  double res = NAN;
-  gchar dir = toupper(input[strlen(input) - 1]);
-  gchar **list = g_strsplit(input, ",", 0);
-  if(list)
+  if(IS_NULL_PTR(input)) return NAN;
+  gchar *text = g_strdup(input);
+  if(IS_NULL_PTR(text)) return NAN;
+  gchar *trimmed = g_strstrip(text);
+  const size_t length = strlen(trimmed);
+  if(length < 2)
   {
-    if(list[2] == NULL) // format DDD,MM.mm{N|S}
-      res = g_ascii_strtoll(list[0], NULL, 10) + (g_ascii_strtod(list[1], NULL) / 60.0);
-    else if(list[3] == NULL) // format DDD,MM,SS{N|S}
-      res = g_ascii_strtoll(list[0], NULL, 10) + (g_ascii_strtoll(list[1], NULL, 10) / 60.0)
-            + (g_ascii_strtoll(list[2], NULL, 10) / 3600.0);
-    if(dir == 'S' || dir == 'W') res *= -1.0;
+    dt_free(text);
+    return NAN;
   }
-  g_strfreev(list);
-  return res;
+  const gchar direction = g_ascii_toupper(trimmed[length - 1]);
+  if(direction != 'N' && direction != 'S' && direction != 'E' && direction != 'W')
+  {
+    dt_free(text);
+    return NAN;
+  }
+  trimmed[length - 1] = '\0';
+  gchar **tokens = g_strsplit(trimmed, ",", 0);
+  guint count = 0;
+  while(tokens[count]) count++;
+  if(count != 2 && count != 3)
+  {
+    g_strfreev(tokens);
+    dt_free(text);
+    return NAN;
+  }
+  double values[3] = { 0.0, 0.0, 0.0 };
+  for(guint i = 0; i < count; i++)
+  {
+    const gchar *token = g_strstrip(tokens[i]);
+    gchar *end = NULL;
+    values[i] = g_ascii_strtod(token, &end);
+    if(end == token || *end != '\0' || !isfinite(values[i]))
+    {
+      g_strfreev(tokens);
+      dt_free(text);
+      return NAN;
+    }
+  }
+  g_strfreev(tokens);
+  const double limit = (direction == 'N' || direction == 'S') ? 90.0 : 180.0;
+  if(values[0] < 0.0 || values[0] > limit || values[1] < 0.0 || values[1] >= 60.0
+     || values[2] < 0.0 || values[2] >= 60.0
+     || (values[0] == limit && (values[1] != 0.0 || values[2] != 0.0)))
+  {
+    dt_free(text);
+    return NAN;
+  }
+  double result = values[0] + values[1] / 60.0 + values[2] / 3600.0;
+  if(direction == 'S' || direction == 'W') result *= -1.0;
+  dt_free(text);
+  return result;
 }
 
 gboolean dt_util_gps_rationale_to_number(const double r0_1, const double r0_2, const double r1_1,
