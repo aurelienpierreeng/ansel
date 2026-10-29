@@ -352,6 +352,16 @@ typedef enum dt_develop_blend_mask_id_status_t
   DT_DEVELOP_BLEND_MASK_ID_UNDECODABLE /**< The version or payload length is not an exact layout. */
 } dt_develop_blend_mask_id_status_t;
 
+/** Serializable mask dependencies exposed by an exact blend payload layout. */
+typedef struct dt_develop_blend_mask_reference_t
+{
+  uint32_t mask_mode;
+  uint32_t mask_id;
+  dt_dev_operation_t raster_mask_source;
+  int raster_mask_instance;
+  int raster_mask_id;
+} dt_develop_blend_mask_reference_t;
+
 /**
  * @brief Read a mask reference from one serialized blend payload without changing it.
  *
@@ -369,7 +379,11 @@ typedef enum dt_develop_blend_mask_id_status_t
 dt_develop_blend_mask_id_status_t dt_develop_blend_read_mask_id(const void *params,
                                                                  int length,
                                                                  int version,
-                                                                 uint32_t *mask_id);
+                                                                  uint32_t *mask_id);
+
+/** Read drawn and raster dependencies without migrating or changing a serialized payload. */
+dt_develop_blend_mask_id_status_t dt_develop_blend_read_mask_reference(
+    const void *params, int length, int version, dt_develop_blend_mask_reference_t *reference);
 
 /**
  * @brief Clear exactly the serialized mask_id bytes of a readable blend payload.

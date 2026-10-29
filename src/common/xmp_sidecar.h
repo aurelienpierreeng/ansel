@@ -65,9 +65,29 @@ int dt_exif_xmp_attach_export(const int32_t imgid, const char *filename, void *m
 /** get the xmp blob for imgid. */
 char *dt_exif_xmp_read_string(const int32_t imgid);
 
+/** Result of an XMP import. Partial commits descriptive metadata without replacing development. */
+typedef enum dt_xmp_import_result_t
+{
+  DT_XMP_IMPORT_OK = 0,
+  DT_XMP_IMPORT_PARTIAL,
+  DT_XMP_IMPORT_READ_ERROR,
+  DT_XMP_IMPORT_PERSIST_ERROR
+} dt_xmp_import_result_t;
+
 /** Read an XMP sidecar and optionally update the image write timestamp in its transaction. */
-int dt_exif_xmp_read(dt_image_t *img, const char *filename, const int history_only,
-                     const int64_t *write_timestamp);
+dt_xmp_import_result_t dt_exif_xmp_read(dt_image_t *img, const char *filename, const int history_only,
+                                        const int64_t *write_timestamp);
+
+/** Read a sidecar and report whether committed tag state changed. The function never signals. */
+dt_xmp_import_result_t dt_exif_xmp_read_with_tags(dt_image_t *img, const char *filename,
+                                                  const int history_only,
+                                                  const int64_t *write_timestamp,
+                                                  gboolean *tags_changed);
+
+/** Read a sidecar and report committed metadata and development changes independently. */
+dt_xmp_import_result_t dt_exif_xmp_read_with_result(dt_image_t *img, const char *filename,
+                                                    int history_only, const int64_t *write_timestamp,
+                                                    gboolean *tags_changed, gboolean *development_changed);
 
 #ifdef __cplusplus
 }
