@@ -160,6 +160,9 @@ static void _pop_undo(gpointer user_data, dt_undo_type_t type, dt_undo_data_t da
   if(type == DT_UNDO_TAGS)
   {
     gboolean changed = FALSE;
+    GList *changed_images = NULL;
+    if(!dt_database_start_transaction()) return;
+
     for(GList *list = (GList *)data; list; list = g_list_next(list))
     {
       dt_undo_tags_t *undotags = (dt_undo_tags_t *)list->data;
@@ -168,12 +171,29 @@ static void _pop_undo(gpointer user_data, dt_undo_type_t type, dt_undo_data_t da
       GList *after = (action == DT_ACTION_UNDO) ? undotags->before : undotags->after;
       if(_pop_undo_execute(undotags->imgid, before, after))
       {
-        *imgs = g_list_prepend(*imgs, GINT_TO_POINTER(undotags->imgid));
+        changed_images = g_list_prepend(changed_images, GINT_TO_POINTER(undotags->imgid));
         changed = TRUE;
+      }
+      else
+      {
+        dt_database_rollback_transaction();
+        g_list_free(changed_images);
+        return;
       }
     }
 
-    if(changed) dt_metadata_tags_changed();
+    if(!dt_database_release_transaction())
+    {
+      g_list_free(changed_images);
+      return;
+    }
+    if(changed)
+    {
+      *imgs = g_list_concat(*imgs, changed_images);
+      dt_metadata_tags_changed();
+    }
+    else
+      g_list_free(changed_images);
   }
 }
 
@@ -346,14 +366,23 @@ typedef enum dt_tag_actions_t
 static GList *_tag_get_tags(const int32_t imgid, const dt_tag_type_t type);
 
 static gboolean _tag_execute(const GList *tags, const GList *imgs, GList **undo, const gboolean undo_on,
-                             const gint action)
+                              const gint action)
 {
   gboolean res = FALSE;
+  GList *pending_undo = NULL;
+  if(undo_on && dt_database_transaction_is_owned_by_current_thread()) return FALSE;
+  if(!dt_database_start_transaction()) return FALSE;
+
   for(const GList *images = imgs; images; images = g_list_next(images))
   {
     const int32_t image_id = GPOINTER_TO_INT(images->data);
     dt_undo_tags_t *undotags = (dt_undo_tags_t *)malloc(sizeof(dt_undo_tags_t));
-    if(IS_NULL_PTR(undotags)) return FALSE;
+    if(IS_NULL_PTR(undotags))
+    {
+      dt_database_rollback_transaction();
+      _tags_undo_data_free(pending_undo);
+      return FALSE;
+    }
     undotags->imgid = image_id;
     undotags->before = _tag_get_tags(image_id, DT_TAG_TYPE_ALL);
     switch(action)
@@ -385,13 +414,22 @@ static gboolean _tag_execute(const GList *tags, const GList *imgs, GList **undo,
     if(!_pop_undo_execute(image_id, undotags->before, undotags->after))
     {
       _undo_tags_free(undotags);
+      dt_database_rollback_transaction();
+      _tags_undo_data_free(pending_undo);
       return FALSE;
     }
     if(undo_on)
-      *undo = g_list_append(*undo, undotags);
+      pending_undo = g_list_append(pending_undo, undotags);
     else
       _undo_tags_free(undotags);
   }
+
+  if(!dt_database_release_transaction())
+  {
+    _tags_undo_data_free(pending_undo);
+    return FALSE;
+  }
+  if(undo_on) *undo = g_list_concat(*undo, pending_undo);
   return res;
 }
 
@@ -402,17 +440,18 @@ gboolean dt_tag_attach_images(const guint tagid, const GList *img, const gboolea
   GList *tags = NULL;
 
   tags = g_list_prepend(tags, GINT_TO_POINTER(tagid));
-  if(undo_on) dt_undo_start_group(dt_undo_get_global(), DT_UNDO_TAGS);
-
   const gboolean res = _tag_execute(tags, img, &undo, undo_on, DT_TA_ATTACH);
 
   g_list_free(tags);
   tags = NULL;
-  if(undo_on)
+  if(undo_on && res)
   {
+    dt_undo_start_group(dt_undo_get_global(), DT_UNDO_TAGS);
     dt_undo_record(dt_undo_get_global(), NULL, DT_UNDO_TAGS, undo, _pop_undo, _tags_undo_data_free);
     dt_undo_end_group(dt_undo_get_global());
   }
+  else if(undo_on)
+    _tags_undo_data_free(undo);
 
   return res;
 }
@@ -444,15 +483,16 @@ gboolean dt_tag_set_tags(const GList *tags, const GList *img, const gboolean ign
   if(img)
   {
     GList *undo = NULL;
-    if(undo_on) dt_undo_start_group(dt_undo_get_global(), DT_UNDO_TAGS);
-
     const gboolean res = _tag_execute(tags, img, &undo, undo_on,
                                       clear_on ? ignore_dt_tags ? DT_TA_SET : DT_TA_SET_ALL : DT_TA_ATTACH);
-    if(undo_on)
+    if(undo_on && res)
     {
+      dt_undo_start_group(dt_undo_get_global(), DT_UNDO_TAGS);
       dt_undo_record(dt_undo_get_global(), NULL, DT_UNDO_TAGS, undo, _pop_undo, _tags_undo_data_free);
       dt_undo_end_group(dt_undo_get_global());
     }
+    else if(undo_on)
+      _tags_undo_data_free(undo);
     return res;
   }
   return FALSE;
@@ -460,6 +500,8 @@ gboolean dt_tag_set_tags(const GList *tags, const GList *img, const gboolean ign
 
 gboolean dt_tag_attach_string_list(const gchar *tags, const GList *img, const gboolean undo_on)
 {
+  if(undo_on && dt_database_transaction_is_owned_by_current_thread()) return FALSE;
+
   // tags may not exist yet
   // undo only undoes the tags attachments. it doesn't remove created tags.
   gchar **tokens = g_strsplit(tags, ",", 0);
@@ -485,15 +527,16 @@ gboolean dt_tag_attach_string_list(const gchar *tags, const GList *img, const gb
     if(img)
     {
       GList *undo = NULL;
-      if(undo_on) dt_undo_start_group(dt_undo_get_global(), DT_UNDO_TAGS);
-
       res = _tag_execute(tagl, img, &undo, undo_on, DT_TA_ATTACH);
 
-      if(undo_on)
+      if(undo_on && res)
       {
+        dt_undo_start_group(dt_undo_get_global(), DT_UNDO_TAGS);
         dt_undo_record(dt_undo_get_global(), NULL, DT_UNDO_TAGS, undo, _pop_undo, _tags_undo_data_free);
         dt_undo_end_group(dt_undo_get_global());
       }
+      else if(undo_on)
+        _tags_undo_data_free(undo);
     }
     g_list_free(tagl);
     tagl = NULL;
@@ -509,17 +552,18 @@ gboolean dt_tag_detach_images(const guint tagid, const GList *img, const gboolea
     GList *tags = NULL;
     tags = g_list_prepend(tags, GINT_TO_POINTER(tagid));
     GList *undo = NULL;
-    if(undo_on) dt_undo_start_group(dt_undo_get_global(), DT_UNDO_TAGS);
-
     const gboolean res = _tag_execute(tags, img, &undo, undo_on, DT_TA_DETACH);
 
     g_list_free(tags);
     tags = NULL;
-    if(undo_on)
+    if(undo_on && res)
     {
+      dt_undo_start_group(dt_undo_get_global(), DT_UNDO_TAGS);
       dt_undo_record(dt_undo_get_global(), NULL, DT_UNDO_TAGS, undo, _pop_undo, _tags_undo_data_free);
       dt_undo_end_group(dt_undo_get_global());
     }
+    else if(undo_on)
+      _tags_undo_data_free(undo);
     return res;
   }
   return FALSE;
