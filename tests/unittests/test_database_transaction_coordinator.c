@@ -12,7 +12,11 @@
 
 #include <dlfcn.h>
 #include <pthread.h>
+#include <signal.h>
 #include <string.h>
+#include <sys/wait.h>
+#include <time.h>
+#include <unistd.h>
 
 #ifdef _WIN32
 #include "win/main_wrapper.h"
@@ -20,11 +24,17 @@
 
 static gboolean fail_begin = FALSE;
 static gboolean fail_commit = FALSE;
+static gboolean fail_savepoint_release = FALSE;
 static gboolean fail_module_order_delete = FALSE;
 static gboolean unavailable_mutex = FALSE;
 static int rollback_count = 0;
 static int connection_mutex_depth = 0;
 static gboolean invalid_mutex_lifetime = FALSE;
+static gboolean coordinate_repository_read = FALSE;
+static pthread_t coordinating_reader;
+static pthread_mutex_t coordination_mutex = PTHREAD_MUTEX_INITIALIZER;
+static pthread_cond_t coordination_condition = PTHREAD_COND_INITIALIZER;
+static gboolean reader_reached_connection = FALSE;
 
 typedef int (*sqlite3_exec_t)(sqlite3 *, const char *, sqlite3_callback, void *, char **);
 typedef int (*sqlite3_step_t)(sqlite3_stmt *);
@@ -43,6 +53,7 @@ int sqlite3_exec(sqlite3 *db, const char *sql, sqlite3_callback callback, void *
     invalid_mutex_lifetime = invalid_mutex_lifetime || connection_mutex_depth != 1;
   if(!strcmp(sql, "BEGIN TRANSACTION") && fail_begin) return SQLITE_ERROR;
   if(!strcmp(sql, "COMMIT TRANSACTION") && fail_commit) return SQLITE_ERROR;
+  if(fail_savepoint_release && g_str_has_prefix(sql, "RELEASE SAVEPOINT trx")) return SQLITE_ERROR;
   if(!strcmp(sql, "ROLLBACK TRANSACTION")) rollback_count++;
   return real_sqlite3_exec(db, sql, callback, data, error);
 }
@@ -65,8 +76,19 @@ sqlite3_mutex *sqlite3_db_mutex(sqlite3 *db)
 void sqlite3_mutex_enter(sqlite3_mutex *mutex)
 {
   if(IS_NULL_PTR(real_sqlite3_mutex_enter)) real_sqlite3_mutex_enter = (sqlite3_mutex_t)dlsym(RTLD_NEXT, "sqlite3_mutex_enter");
-  connection_mutex_depth++;
+  if(coordinate_repository_read && pthread_equal(pthread_self(), coordinating_reader)
+     && mutex == real_sqlite3_db_mutex(dt_database_get_sqlite3_global()))
+  {
+    pthread_mutex_lock(&coordination_mutex);
+    if(!reader_reached_connection)
+    {
+      reader_reached_connection = TRUE;
+      pthread_cond_signal(&coordination_condition);
+    }
+    pthread_mutex_unlock(&coordination_mutex);
+  }
   real_sqlite3_mutex_enter(mutex);
+  connection_mutex_depth++;
 }
 
 void sqlite3_mutex_leave(sqlite3_mutex *mutex)
@@ -80,11 +102,14 @@ static void reset_faults(void)
 {
   fail_begin = FALSE;
   fail_commit = FALSE;
+  fail_savepoint_release = FALSE;
   fail_module_order_delete = FALSE;
   unavailable_mutex = FALSE;
   rollback_count = 0;
   connection_mutex_depth = 0;
   invalid_mutex_lifetime = FALSE;
+  coordinate_repository_read = FALSE;
+  reader_reached_connection = FALSE;
 }
 
 static int coordinator_setup(void **state)
@@ -274,6 +299,132 @@ static void test_same_thread_nesting_and_batch(void **state)
   assert_fresh_transaction();
 }
 
+static void test_nested_rollback_preserves_outer_transaction(void **state)
+{
+  (void)state;
+  const int32_t film = testdb_make_film("/testdb/nested-savepoint");
+  const int32_t outer_image = testdb_make_image(film, "outer.raw");
+  const int32_t nested_image = testdb_make_image(film, "nested.raw");
+  const int64_t original_nested_timestamp = dt_image_repository_get_write_timestamp(nested_image);
+
+  assert_true(dt_database_start_transaction());
+  assert_true(dt_image_repository_set_write_timestamp(outer_image, 101));
+  assert_true(dt_database_start_transaction());
+  assert_true(dt_image_repository_set_write_timestamp(nested_image, 202));
+  dt_database_rollback_transaction();
+
+  assert_true(dt_database_transaction_is_owned_by_current_thread());
+  assert_int_equal(dt_image_repository_get_write_timestamp(outer_image), 101);
+  assert_int_equal(dt_image_repository_get_write_timestamp(nested_image), original_nested_timestamp);
+
+  assert_true(dt_database_start_transaction());
+  assert_true(dt_image_repository_set_write_timestamp(nested_image, 303));
+  assert_true(dt_database_release_transaction());
+  assert_true(dt_database_release_transaction());
+
+  assert_int_equal(dt_image_repository_get_write_timestamp(outer_image), 101);
+  assert_int_equal(dt_image_repository_get_write_timestamp(nested_image), 303);
+  assert_fresh_transaction();
+}
+
+static void test_nested_batch_release_failure_allows_retry(void **state)
+{
+  (void)state;
+  reset_faults();
+  assert_true(dt_database_start_transaction());
+  dt_database_begin_transaction_batch();
+  fail_savepoint_release = TRUE;
+
+  dt_database_end_transaction_batch();
+  assert_true(dt_database_transaction_is_owned_by_current_thread());
+
+  fail_savepoint_release = FALSE;
+  dt_database_end_transaction_batch();
+  assert_true(dt_database_transaction_is_owned_by_current_thread());
+  assert_true(dt_database_release_transaction());
+  assert_fresh_transaction();
+}
+
+static void test_nested_batch_release_failure_allows_rollback(void **state)
+{
+  (void)state;
+  reset_faults();
+  assert_true(dt_database_start_transaction());
+  dt_database_begin_transaction_batch();
+  fail_savepoint_release = TRUE;
+
+  dt_database_end_transaction_batch();
+  assert_true(dt_database_transaction_is_owned_by_current_thread());
+
+  dt_database_rollback_transaction();
+  assert_true(dt_database_transaction_is_owned_by_current_thread());
+  fail_savepoint_release = FALSE;
+  assert_true(dt_database_release_transaction());
+  assert_fresh_transaction();
+}
+
+typedef struct concurrent_access_t
+{
+  int32_t image;
+  gboolean read_finished;
+} concurrent_access_t;
+
+static void *read_while_transaction_owns_connection(void *user_data)
+{
+  concurrent_access_t *access = user_data;
+  coordinating_reader = pthread_self();
+  dt_image_repository_get_write_timestamp(access->image);
+  access->read_finished = TRUE;
+  return NULL;
+}
+
+static int run_transaction_owner_repository_read_race(void)
+{
+  const int32_t film = testdb_make_film("/testdb/repository-read-transaction-race");
+  concurrent_access_t access = { .image = testdb_make_image(film, "race.raw"), .read_finished = FALSE };
+  pthread_t reader;
+  dt_image_repository_get_write_timestamp(access.image);
+  if(!dt_database_start_transaction()) return 1;
+  coordinate_repository_read = TRUE;
+  if(pthread_create(&reader, NULL, read_while_transaction_owns_connection, &access) != 0) return 1;
+
+  pthread_mutex_lock(&coordination_mutex);
+  while(!reader_reached_connection)
+    pthread_cond_wait(&coordination_condition, &coordination_mutex);
+  pthread_mutex_unlock(&coordination_mutex);
+
+  dt_image_repository_get_write_timestamp(access.image);
+  if(!dt_database_release_transaction()) return 1;
+  if(pthread_join(reader, NULL) != 0) return 1;
+  return access.read_finished ? 0 : 1;
+}
+
+static void test_transaction_owner_and_repository_reader_do_not_deadlock(void **state)
+{
+  (void)state;
+  const pid_t child = fork();
+  assert_true(child >= 0);
+  if(child == 0) _exit(run_transaction_owner_repository_read_race());
+
+  int status = 0;
+  for(int attempt = 0; attempt < 100; attempt++)
+  {
+    const pid_t result = waitpid(child, &status, WNOHANG);
+    if(result == child)
+    {
+      assert_true(WIFEXITED(status));
+      assert_int_equal(WEXITSTATUS(status), 0);
+      return;
+    }
+    assert_int_equal(result, 0);
+    const struct timespec delay = { .tv_sec = 0, .tv_nsec = 10000000 };
+    nanosleep(&delay, NULL);
+  }
+  kill(child, SIGKILL);
+  waitpid(child, &status, 0);
+  fail_msg("transaction owner and repository reader did not complete within one second");
+}
+
 typedef struct transaction_barrier_t
 {
   pthread_mutex_t mutex;
@@ -339,6 +490,10 @@ int main(int argc, char *argv[])
     cmocka_unit_test(test_history_delete_rolls_back_partial_failure),
     cmocka_unit_test(test_batch_commit_failure_rolls_back_once),
     cmocka_unit_test(test_same_thread_nesting_and_batch),
+    cmocka_unit_test(test_nested_rollback_preserves_outer_transaction),
+    cmocka_unit_test(test_nested_batch_release_failure_allows_retry),
+    cmocka_unit_test(test_nested_batch_release_failure_allows_rollback),
+    cmocka_unit_test(test_transaction_owner_and_repository_reader_do_not_deadlock),
     cmocka_unit_test(test_non_owner_transitions_preserve_owner),
   };
   return cmocka_run_group_tests(tests, coordinator_setup, testdb_teardown);

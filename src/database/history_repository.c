@@ -28,15 +28,8 @@
 #include "database/history_repository.h"
 #include "database/database.h"
 #include "database/sql_debug.h"
-#include "system/dtpthread.h"
 #include "system/macros.h"
 #include "system/mem_alloc.h"
-
-// Every statement below is prepared on first use and kept until dt_history_repository_cleanup().
-// One mutex covers all of them: a cached sqlite3_stmt carries its own bindings and its own row
-// cursor, so two threads stepping the same statement would interleave both.
-
-
 
 static sqlite3_stmt *_history_check_module_exists_stmt = NULL;
 static sqlite3_stmt *_history_count_items_stmt = NULL;
@@ -61,18 +54,6 @@ static sqlite3_stmt *_module_order_select_version_stmt = NULL;
 static sqlite3_stmt *_module_order_insert_stmt = NULL;
 static sqlite3_stmt *_module_order_update_list_stmt = NULL;
 static sqlite3_stmt *_module_order_update_null_stmt = NULL;
-static dt_pthread_mutex_t _history_stmt_mutex;
-static gsize _history_stmt_mutex_inited = 0;
-
-static inline void _history_stmt_mutex_ensure(void)
-{
-  if(g_once_init_enter(&_history_stmt_mutex_inited))
-  {
-    dt_pthread_mutex_init(&_history_stmt_mutex, NULL);
-    g_once_init_leave(&_history_stmt_mutex_inited, 1);
-  }
-}
-
 static dt_history_repository_row_t _history_repository_row_from_stmt(sqlite3_stmt *stmt,
                                                                      const char *preset_name)
 {
@@ -98,8 +79,7 @@ int32_t dt_history_repository_get_end(const int32_t imgid)
   if(imgid <= 0) return 0;
 
   int32_t end = 0;
-  _history_stmt_mutex_ensure();
-  dt_pthread_mutex_lock(&_history_stmt_mutex);
+  dt_database_lock();
   if(!_history_get_end_stmt)
   {
     DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
@@ -112,7 +92,7 @@ int32_t dt_history_repository_get_end(const int32_t imgid)
   DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, imgid);
   if(sqlite3_step(stmt) == SQLITE_ROW && sqlite3_column_type(stmt, 0) != SQLITE_NULL)
     end = sqlite3_column_int(stmt, 0);
-  dt_pthread_mutex_unlock(&_history_stmt_mutex);
+  dt_database_unlock();
 
   return end;
 }
@@ -121,8 +101,7 @@ gboolean dt_history_repository_set_end(const int32_t imgid, const int32_t histor
 {
   if(imgid <= 0) return FALSE;
 
-  _history_stmt_mutex_ensure();
-  dt_pthread_mutex_lock(&_history_stmt_mutex);
+  dt_database_lock();
   if(!_history_set_end_stmt)
   {
     DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
@@ -135,7 +114,7 @@ gboolean dt_history_repository_set_end(const int32_t imgid, const int32_t histor
   DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, history_end);
   DT_DEBUG_SQLITE3_BIND_INT(stmt, 2, imgid);
   const gboolean ok = (sqlite3_step(stmt) == SQLITE_DONE);
-  dt_pthread_mutex_unlock(&_history_stmt_mutex);
+  dt_database_unlock();
   return ok;
 }
 
@@ -144,8 +123,7 @@ int32_t dt_history_repository_get_next_num(const int32_t imgid)
   if(imgid <= 0) return 0;
 
   int32_t next_num = 0;
-  _history_stmt_mutex_ensure();
-  dt_pthread_mutex_lock(&_history_stmt_mutex);
+  dt_database_lock();
   if(!_history_get_next_num_stmt)
   {
     // clang-format off
@@ -161,7 +139,7 @@ int32_t dt_history_repository_get_next_num(const int32_t imgid)
   DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, imgid);
   if(sqlite3_step(stmt) == SQLITE_ROW)
     next_num = sqlite3_column_int(stmt, 0);
-  dt_pthread_mutex_unlock(&_history_stmt_mutex);
+  dt_database_unlock();
   return next_num;
 }
 
@@ -169,8 +147,7 @@ gboolean dt_history_repository_shift_nums(const int32_t imgid, const int delta)
 {
   if(imgid <= 0 || delta == 0) return TRUE;
 
-  _history_stmt_mutex_ensure();
-  dt_pthread_mutex_lock(&_history_stmt_mutex);
+  dt_database_lock();
   if(!_history_shift_history_nums_stmt)
   {
     DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
@@ -183,7 +160,7 @@ gboolean dt_history_repository_shift_nums(const int32_t imgid, const int delta)
   DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, imgid);
   DT_DEBUG_SQLITE3_BIND_INT(stmt, 2, delta);
   const gboolean ok = (sqlite3_step(stmt) == SQLITE_DONE);
-  dt_pthread_mutex_unlock(&_history_stmt_mutex);
+  dt_database_unlock();
   return ok;
 }
 
@@ -196,8 +173,7 @@ gboolean dt_history_repository_write_item(const int32_t imgid, const int num, co
 
   gboolean ok = TRUE;
 
-  _history_stmt_mutex_ensure();
-  dt_pthread_mutex_lock(&_history_stmt_mutex);
+  dt_database_lock();
 
   if(!_history_select_num_stmt)
     DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
@@ -246,7 +222,7 @@ gboolean dt_history_repository_write_item(const int32_t imgid, const int num, co
   DT_DEBUG_SQLITE3_BIND_TEXT(stmt, 10, multi_name ? multi_name : "", -1, SQLITE_TRANSIENT);
   ok &= (sqlite3_step(stmt) == SQLITE_DONE);
 
-  dt_pthread_mutex_unlock(&_history_stmt_mutex);
+  dt_database_unlock();
   return ok;
 }
 
@@ -254,8 +230,7 @@ gboolean dt_history_repository_delete_history(const int32_t imgid)
 {
   if(imgid <= 0) return FALSE;
 
-  _history_stmt_mutex_ensure();
-  dt_pthread_mutex_lock(&_history_stmt_mutex);
+  dt_database_lock();
   if(!_history_delete_history_stmt)
     DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
                                 "DELETE FROM main.history WHERE imgid = ?1", -1,
@@ -265,7 +240,7 @@ gboolean dt_history_repository_delete_history(const int32_t imgid)
   sqlite3_clear_bindings(stmt);
   DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, imgid);
   const gboolean ok = (sqlite3_step(stmt) == SQLITE_DONE);
-  dt_pthread_mutex_unlock(&_history_stmt_mutex);
+  dt_database_unlock();
   return ok;
 }
 
@@ -273,8 +248,7 @@ gboolean dt_history_repository_delete_masks_history(const int32_t imgid)
 {
   if(imgid <= 0) return FALSE;
 
-  _history_stmt_mutex_ensure();
-  dt_pthread_mutex_lock(&_history_stmt_mutex);
+  dt_database_lock();
   if(!_history_delete_masks_stmt)
     DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
                                 "DELETE FROM main.masks_history WHERE imgid = ?1", -1,
@@ -284,7 +258,7 @@ gboolean dt_history_repository_delete_masks_history(const int32_t imgid)
   sqlite3_clear_bindings(stmt);
   DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, imgid);
   const gboolean ok = (sqlite3_step(stmt) == SQLITE_DONE);
-  dt_pthread_mutex_unlock(&_history_stmt_mutex);
+  dt_database_unlock();
   return ok;
 }
 
@@ -301,8 +275,7 @@ void dt_history_repository_foreach_row(const int32_t imgid, dt_history_repositor
 {
   if(imgid <= 0 || IS_NULL_PTR(cb)) return;
 
-  _history_stmt_mutex_ensure();
-  dt_pthread_mutex_lock(&_history_stmt_mutex);
+  dt_database_lock();
   if(!_history_select_history_stmt)
   {
     // clang-format off
@@ -328,7 +301,7 @@ void dt_history_repository_foreach_row(const int32_t imgid, dt_history_repositor
     cb(user_data, &row);
   }
 
-  dt_pthread_mutex_unlock(&_history_stmt_mutex);
+  dt_database_unlock();
 }
 
 void dt_history_repository_foreach_auto_preset_row(const int32_t imgid, const dt_image_t *image,
@@ -338,8 +311,7 @@ void dt_history_repository_foreach_auto_preset_row(const int32_t imgid, const dt
 {
   if(imgid <= 0 || IS_NULL_PTR(image) || !workflow_preset || IS_NULL_PTR(cb)) return;
 
-  _history_stmt_mutex_ensure();
-  dt_pthread_mutex_lock(&_history_stmt_mutex);
+  dt_database_lock();
 
   const gboolean use_modern_presets = (image->flags & DT_IMAGE_NO_LEGACY_PRESETS);
   sqlite3_stmt **stmt_ptr = use_modern_presets ? &_history_auto_presets_stmt : &_history_auto_presets_legacy_stmt;
@@ -394,7 +366,7 @@ void dt_history_repository_foreach_auto_preset_row(const int32_t imgid, const dt
     cb(user_data, &row);
   }
 
-  dt_pthread_mutex_unlock(&_history_stmt_mutex);
+  dt_database_unlock();
 }
 
 gboolean dt_history_repository_get_autoapply_ioporder_params(const int32_t imgid, const dt_image_t *image,
@@ -405,8 +377,7 @@ gboolean dt_history_repository_get_autoapply_ioporder_params(const int32_t imgid
   *params = NULL;
   *params_len = 0;
 
-  _history_stmt_mutex_ensure();
-  dt_pthread_mutex_lock(&_history_stmt_mutex);
+  dt_database_lock();
 
   if(!_history_auto_ioporder_stmt)
   {
@@ -457,7 +428,7 @@ gboolean dt_history_repository_get_autoapply_ioporder_params(const int32_t imgid
     }
   }
 
-  dt_pthread_mutex_unlock(&_history_stmt_mutex);
+  dt_database_unlock();
   return ok;
 }
 
@@ -465,8 +436,7 @@ int dt_history_repository_count_items(const int32_t imgid)
 {
   int found_it = 0;
 
-  _history_stmt_mutex_ensure();
-  dt_pthread_mutex_lock(&_history_stmt_mutex);
+  dt_database_lock();
   if(IS_NULL_PTR(_history_count_items_stmt))
   {
     DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
@@ -480,7 +450,7 @@ int dt_history_repository_count_items(const int32_t imgid)
   if(sqlite3_step(stmt) == SQLITE_ROW)
     found_it = sqlite3_column_int(stmt, 0);
 
-  dt_pthread_mutex_unlock(&_history_stmt_mutex);
+  dt_database_unlock();
 
   return found_it;
 }
@@ -528,8 +498,7 @@ gboolean dt_history_repository_get_last_enabled_params(const int32_t imgid, cons
 gboolean dt_history_repository_module_exists(const int32_t imgid, const char *operation)
 {
   gboolean result = FALSE;
-  _history_stmt_mutex_ensure();
-  dt_pthread_mutex_lock(&_history_stmt_mutex);
+  dt_database_lock();
   if(!_history_check_module_exists_stmt)
   {
     // clang-format off
@@ -547,7 +516,7 @@ gboolean dt_history_repository_module_exists(const int32_t imgid, const char *op
   DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, imgid);
   DT_DEBUG_SQLITE3_BIND_TEXT(stmt, 2, operation, -1, SQLITE_TRANSIENT);
   if (sqlite3_step(stmt) == SQLITE_ROW) result = TRUE;
-  dt_pthread_mutex_unlock(&_history_stmt_mutex);
+  dt_database_unlock();
 
   return result;
 }
@@ -814,8 +783,7 @@ gboolean dt_history_repository_get_module_order_version(const int32_t imgid, int
 {
   if(imgid <= 0 || IS_NULL_PTR(version)) return FALSE;
 
-  _history_stmt_mutex_ensure();
-  dt_pthread_mutex_lock(&_history_stmt_mutex);
+  dt_database_lock();
   if(!_module_order_select_version_stmt)
   {
     DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
@@ -828,7 +796,7 @@ gboolean dt_history_repository_get_module_order_version(const int32_t imgid, int
   DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, imgid);
   const gboolean found = (sqlite3_step(stmt) == SQLITE_ROW);
   if(found) *version = sqlite3_column_int(stmt, 0);
-  dt_pthread_mutex_unlock(&_history_stmt_mutex);
+  dt_database_unlock();
 
   return found;
 }
@@ -847,8 +815,7 @@ gboolean dt_history_repository_get_module_order(const int32_t imgid, dt_module_o
   row->iop_list = NULL;
   if(imgid <= 0) return FALSE;
 
-  _history_stmt_mutex_ensure();
-  dt_pthread_mutex_lock(&_history_stmt_mutex);
+  dt_database_lock();
   if(!_module_order_select_stmt)
   {
     // clang-format off
@@ -874,7 +841,7 @@ gboolean dt_history_repository_get_module_order(const int32_t imgid, dt_module_o
       if(buf) row->iop_list = g_strdup(buf);
     }
   }
-  dt_pthread_mutex_unlock(&_history_stmt_mutex);
+  dt_database_unlock();
 
   return found;
 }
@@ -900,8 +867,7 @@ gboolean dt_history_repository_set_module_order(const int32_t imgid, const int v
 {
   if(imgid <= 0) return FALSE;
 
-  _history_stmt_mutex_ensure();
-  dt_pthread_mutex_lock(&_history_stmt_mutex);
+  dt_database_lock();
 
   if(!_module_order_insert_stmt)
   {
@@ -952,14 +918,13 @@ gboolean dt_history_repository_set_module_order(const int32_t imgid, const int v
     ok = (sqlite3_step(stmt) == SQLITE_DONE);
   }
 
-  dt_pthread_mutex_unlock(&_history_stmt_mutex);
+  dt_database_unlock();
   return ok;
 }
 
 void dt_history_repository_cleanup(void)
 {
-  _history_stmt_mutex_ensure();
-  dt_pthread_mutex_lock(&_history_stmt_mutex);
+  dt_database_lock();
   if(_module_order_select_stmt)
   {
     sqlite3_finalize(_module_order_select_stmt);
@@ -1060,7 +1025,7 @@ void dt_history_repository_cleanup(void)
     sqlite3_finalize(_history_auto_ioporder_stmt);
     _history_auto_ioporder_stmt = NULL;
   }
-  dt_pthread_mutex_unlock(&_history_stmt_mutex);
+  dt_database_unlock();
 }
 
 // clang-format off
