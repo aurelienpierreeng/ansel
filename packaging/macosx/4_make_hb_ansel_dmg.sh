@@ -3,6 +3,7 @@
 #   Copyright (C) 2023 lologor.
 #   Copyright (C) 2024 jakehl.
 #   Copyright (C) 2025 Miguel Moquillon.
+#   Copyright (C) 2026 Guillaume Stutin.
 #   
 #   Ansel is free software: you can redistribute it and/or modify
 #   it under the terms of the GNU General Public License as published by
@@ -29,7 +30,7 @@ PROGN=Ansel
 
 # Go to directory of script
 scriptDir=$(cd "$(dirname "$0")" && pwd)
-buildDir="${scriptDir}/../../install"
+buildDir="${INSTALL_PREFIX:-${scriptDir}/../../install}"
 cd "$buildDir"/
 
 device=""

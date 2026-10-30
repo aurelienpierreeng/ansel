@@ -19,7 +19,7 @@
 #   Copyright (C) 2021 Jonas Trümper.
 #   Copyright (C) 2021 Vincent THOMAS.
 #   Copyright (C) 2022-2023, 2025-2026 Aurélien PIERRE.
-#   Copyright (C) 2023, 2025 Guillaume Stutin.
+#   Copyright (C) 2023, 2025-2026 Guillaume Stutin.
 #   Copyright (C) 2025 Hubert Figuière.
 #   
 #   darktable is free software: you can redistribute it and/or modify
@@ -43,6 +43,7 @@ set -e
 
 DT_SRC_DIR=$(dirname "$0")
 DT_SRC_DIR=$(cd "$DT_SRC_DIR" && pwd -P)
+PLATFORM=$(uname -s)
 
 
 # ---------------------------------------------------------------------------
@@ -63,6 +64,11 @@ MAKE_TASKS=-1
 ADDRESS_SANITIZER=0
 CC_COMPILER="gcc"
 CXX_COMPILER="g++"
+if [ "$PLATFORM" = "Darwin" ]; then
+	# Xcode's gcc and g++ are clang under a borrowed name: ask for it the way CI does.
+	CC_COMPILER="cc"
+	CXX_COMPILER="c++"
+fi
 DO_CLEAN_BUILD=0
 DO_CLEAN_INSTALL=0
 MANIFEST_FILE="$BUILD_DIR/install_manifest.txt"
@@ -217,6 +223,8 @@ Build:
    --build-generator <string> Build tool
                               (default: Ninja)
    --build-package            Build a binary package with only generic optimizations, for portability.
+                              With --install on macOS, also make Ansel.app and its DMG in the install
+                              tree, which then defaults to $DT_SRC_DIR/install and cannot use --sudo.
                               (default: disabled)
 
 -j --jobs <integer>           Number of tasks
@@ -225,10 +233,10 @@ Build:
    --asan                     Enable address sanitizer options
                               (default: disabled)
 
-   --cccompiler               C Compiler (default: gcc)
+   --cccompiler               C Compiler (default: gcc, cc on macOS)
                               (alternative: clang)
 
-   --cxxcompiler              C++ Compiler (default: g++)
+   --cxxcompiler              C++ Compiler (default: g++, c++ on macOS)
                               (alternative: clang++)
 
 Actual actions:
@@ -281,7 +289,8 @@ log()
 		critical) prefix="[\x1b[31;01mCRITICAL\x1b[0m] " ;;
 	esac
 
-	echo -e "$2" |sed -e "s/^/$prefix/"
+	# Expanded here: BSD sed would print \x1b literally.
+	echo -e "$2" |sed -e "s/^/$(printf '%b' "$prefix")/"
 }
 
 num_cpu()
@@ -428,6 +437,12 @@ else
 	CPU_ARCHITECTURE="Intel"
 fi
 
+# Target the running system, unless MACOSX_DEPLOYMENT_TARGET says otherwise: CMake reads that
+# variable by itself, and CI sets it.
+if [ "$PLATFORM" = "Darwin" ] && [ -z "${MACOSX_DEPLOYMENT_TARGET:-}" ]; then
+	CMAKE_MORE_OPTIONS="${CMAKE_MORE_OPTIONS} -DCMAKE_OSX_DEPLOYMENT_TARGET=$(sw_vers -productVersion)"
+fi
+
 # ---------------------------------------------------------------------------
 # Generic package or customized build ?
 # ---------------------------------------------------------------------------
@@ -437,11 +452,27 @@ TARGET="install"
 
 if [ $BUILD_PACKAGE -eq 1 ];
 then
-	if [[ "$(uname -s)" =~ MINGW|MSYS|CYGWIN ]];
+	if [[ "$PLATFORM" =~ MINGW|MSYS|CYGWIN ]];
 	then
 		TARGET="package"
 	else
 		CMAKE_MORE_OPTIONS="${CMAKE_MORE_OPTIONS} -DBINARY_PACKAGE_BUILD=ON"
+	fi
+
+	if [ "$PLATFORM" = "Darwin" ];
+	then
+		TARGET="bundle"
+		# The .app and the DMG are written beside the install tree, and the DMG step drives the
+		# Finder: both need a tree this user owns, which /opt/ansel is not.
+		if [ -n "$SUDO" ]; then
+			log err "--sudo cannot make a macOS package: drop it, and give --prefix a directory you own"
+			exit 1
+		fi
+		if [ "$INSTALL_PREFIX" = "$INSTALL_PREFIX_DEFAULT" ]; then
+			INSTALL_PREFIX="$DT_SRC_DIR/install"
+		fi
+		# What .ci/ci-script-mac.sh and 2_build_hb_ansel_custom.sh set beyond the defaults.
+		CMAKE_MORE_OPTIONS="${CMAKE_MORE_OPTIONS} -DRAWSPEED_ENABLE_LTO=ON -DBUILD_CMSTEST=OFF"
 	fi
 else
 	CMAKE_MORE_OPTIONS="${CMAKE_MORE_OPTIONS} -DBINARY_PACKAGE_BUILD=OFF"
@@ -526,6 +557,12 @@ if [ "$TARGET" = "install" ]; then
 	# leaves whatever it recompiles root-owned, poisoning the build directory
 	# for every later non-sudo build.
 	cmd_install="${SUDO}cmake --install \"$BUILD_DIR\""
+elif [ "$TARGET" = "bundle" ]; then
+	# The nightly's steps in the nightly's order: a bundle failing its check never becomes a DMG.
+	cmd_install="cmake --install \"$BUILD_DIR\""
+	for step in packaging/macosx/3_make_hb_ansel_package.sh tools/check_macos_bundle.sh packaging/macosx/4_make_hb_ansel_dmg.sh; do
+		cmd_install="$cmd_install && INSTALL_PREFIX=\"$INSTALL_PREFIX\" \"$DT_SRC_DIR/$step\""
+	done
 else
 	# BUILD_PACKAGE builds ("package"/"package_source" targets) are a real build-system target (cpack),
 	# not a plain install: keep the previous form.
@@ -582,6 +619,12 @@ fi
 # install the binaries
 eval "$cmd_install"
 
+# The install tree of a macOS package only feeds the bundle: linking to it would leave commands
+# depending on a build directory, and 3_make_hb_ansel_package.sh updates Lensfun for the bundle.
+if [ "$TARGET" = "bundle" ]; then
+	exit 0
+fi
+
 # install the desktop launcher and system-wide command
 if [ $DO_INSTALL ] ; then
 	# Put the freshly installed binaries on PATH under their plain names. A symlink
@@ -614,7 +657,9 @@ if [ $DO_INSTALL ] ; then
 		fi
 	done
 
-	if [ -f "$INSTALL_PREFIX/share/applications/photos.ansel.Ansel.desktop" ]; then
+	# Not on macOS: /usr/share is on the read-only system volume, for root too, and nothing there
+	# reads a .desktop file.
+	if [ "$PLATFORM" != "Darwin" ] && [ -f "$INSTALL_PREFIX/share/applications/photos.ansel.Ansel.desktop" ]; then
 		[ ! -d "/usr/share/applications/" ] && $SUDO mkdir -p /usr/share/applications/
 		$SUDO ln -sfn "$INSTALL_PREFIX"/share/applications/photos.ansel.Ansel.desktop /usr/share/applications/ansel.desktop
 	fi

@@ -5,6 +5,7 @@
 #   Copyright (C) 2024 jakehl.
 #   Copyright (C) 2025 Miguel Moquillon.
 #   Copyright (C) 2025 Sidney Markowitz.
+#   Copyright (C) 2026 Guillaume Stutin.
 #   
 #   Ansel is free software: you can redistribute it and/or modify
 #   it under the terms of the GNU General Public License as published by
@@ -34,7 +35,8 @@ scriptDir=$(dirname "$0")
 cd "$scriptDir"/
 
 # Define base variables
-buildDir="../../install"
+# build.sh sets INSTALL_PREFIX, as the nightly does; tools/check_macos_bundle.sh reads it too.
+buildDir="${INSTALL_PREFIX:-../../install}"
 dtPackageDir="$buildDir"/package
 dtAppName="Ansel"
 dtWorkingDir="$dtPackageDir"/"$dtAppName".app

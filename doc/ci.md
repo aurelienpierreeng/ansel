@@ -115,6 +115,40 @@ Not run, and why:
   which only `manualrun.yml` sets, on runner images GitHub has retired. It also reruns failed tests
   and takes the rerun's status, so a test that fails once and then passes would read as green.
 
+## macOS: the Release cell builds through `build.sh`
+
+*Established 2026-10-30, on top of `11fe9d529a`, without a Mac: see the last paragraph.*
+
+The two Debug cells go through `.ci/ci-script.sh`. The Release cell runs
+`build.sh --install --sudo --skip-lensfun`, so what someone types on a Mac is built, installed and
+smoke-tested on each pull request, by the `/bin/bash` 3.2 and the BSD tools a Mac has. `--sudo` is
+for `/usr/local/bin`, where `--install` links `ansel` and `ansel-cli`. `--skip-lensfun` keeps the
+network out of the cell, and `lensfun-update-data` exits 1 when it finds nothing newer.
+
+Where `build.sh` differs on macOS:
+
+- **The compilers default to `cc` and `c++`**, as in both macOS workflows.
+- **The deployment target is the running system**, unless `MACOSX_DEPLOYMENT_TARGET` is set, which
+  CMake reads by itself.
+- **`--install` leaves `/usr/share/applications` alone.** `/usr/share` is on the read-only system
+  volume, for root too, and `set -e` would stop the script there, after the install.
+- **`--build-package --install` makes the package**, as it does on Windows: the install, then
+  `3_make_hb_ansel_package.sh`, `check_macos_bundle.sh` and `4_make_hb_ansel_dmg.sh`, in the
+  nightly's order. Those read the install tree from `INSTALL_PREFIX`. They write beside it and the
+  last one drives the Finder, so the tree defaults to `install/` in the sources rather than
+  `/opt/ansel`, `--sudo` is refused before anything is built, and nothing is linked in
+  `/usr/local/bin`.
+
+The CI does not run that last path through `build.sh`: the nightly calls the same three scripts
+itself, with the Sentry upload between the build and the bundle.
+
+Measured on Linux only, under bash 5.2, with `uname`, `sudo`, `cmake`, `ln` and the Apple tools
+replaced by shims and `/usr/share` refusing writes: the script reaches its end where it stopped on
+`/usr/share/applications` before, the failing bundle check leaves no DMG, and the real `3_` and
+`4_` give the same 94-file tree with and without `INSTALL_PREFIX`. On real Linux, `--skip-config`
+prints the same commands as before for five option sets. Nothing here has run on a Mac, bash 3.2
+and BSD `sed` included, until this cell does: re-date this section when it has.
+
 ## MSYS2: one stalled mirror fails the Windows dependency step
 
 Measured 2026-10-15 against `22b2e62997`. Of the last 40 failed `win-nightly.yml` runs, three
