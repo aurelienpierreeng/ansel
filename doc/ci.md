@@ -117,7 +117,7 @@ Not run, and why:
 
 ## macOS: the Release cell builds through `build.sh`
 
-*Established 2026-10-30, on top of `11fe9d529a`, without a Mac: see the last paragraph.*
+*Established 2026-10-30, on top of `11fe9d529a`, then run on a Mac the same day on `db893eef9f`.*
 
 The two Debug cells go through `.ci/ci-script.sh`. The Release cell runs
 `build.sh --install --sudo --skip-lensfun`, so what someone types on a Mac is built, installed and
@@ -148,8 +148,12 @@ Measured on Linux only, under bash 5.2, with `uname`, `sudo`, `cmake`, `ln` and 
 replaced by shims and `/usr/share` refusing writes: the script reaches its end where it stopped on
 `/usr/share/applications` before, the failing bundle check leaves no DMG, and the real `3_` and
 `4_` give the same 94-file tree with and without `INSTALL_PREFIX`. On real Linux, `--skip-config`
-prints the same commands as before for five option sets. Nothing here has run on a Mac, bash 3.2
-and BSD `sed` included, until this cell does: re-date this section when it has.
+prints the same commands as before for five option sets.
+
+Measured on a Mac: run 41135192327, on a `macos-15` arm64 runner with AppleClang 17. `build.sh`
+built, installed and reached its end, past the `/usr/local/bin` links, and `ansel-cli` exported.
+Still not run on a Mac: `--build-package` through `build.sh`, and `log()`, which that cell never
+calls, so its BSD `sed` path is unmeasured.
 
 ## MSYS2: one stalled mirror fails the Windows dependency step
 
