@@ -137,7 +137,9 @@ Where `build.sh` differs on macOS:
   nightly's order. Those read the install tree from `INSTALL_PREFIX`. They write beside it and the
   last one drives the Finder, so the tree defaults to `install/` in the sources rather than
   `/opt/ansel`, `--sudo` is refused before anything is built, and nothing is linked in
-  `/usr/local/bin`.
+  `/usr/local/bin`. A relative `--prefix` is anchored on the current directory first: CMake would
+  read it from the build directory, where `build.sh` runs it (measured with CMake 3.28), `3_` from
+  its own, and `check_macos_bundle.sh` and `4_` from the caller's.
 
 The CI does not run that last path through `build.sh`: the nightly calls the same three scripts
 itself, with the Sentry upload between the build and the bundle.
