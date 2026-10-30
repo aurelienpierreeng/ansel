@@ -142,6 +142,10 @@ typedef struct dt_thumbtable_layout_ops_t
 
   // Nullable. Select the image about to be opened by a Return/activate key (grid only).
   void (*pre_activate)(dt_thumbtable_t *table, int32_t imgid);
+
+  // Nullable. Update the selection after an arrow/Page/Home/End move has put the keyboard
+  // cursor on `imgid` at `rowid`; `event` carries the modifiers (grid only).
+  void (*on_keyboard_move)(dt_thumbtable_t *table, GdkEventKey *event, int rowid, int32_t imgid);
 } dt_thumbtable_layout_ops_t;
 
 

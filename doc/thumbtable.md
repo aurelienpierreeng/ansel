@@ -112,6 +112,7 @@ instance via `dt_thumbtable_grid_ops()` / `dt_thumbtable_filmstrip_ops()`; the e
 | `grab_focus` *(nullable)*    | Grab keyboard focus for the content widget | grabs focus | — |
 | `handle_key` *(nullable)*    | Consume a mode-specific navigation/selection key | Up/Down + space selection | — |
 | `pre_activate` *(nullable)*  | Select an image before a Return/activate | select single | — |
+| `on_keyboard_move` *(nullable)* | Update the selection after an arrow/Page/Home/End move | plain: select single; Shift: extend; Ctrl: none | — |
 
 Nullable ops are only meaningful in one mode; the engine null-checks before dispatching. All other
 ops must be provided by both frontends.
@@ -235,6 +236,43 @@ Left/Right/Page/Home/End navigation and Return/activate. The engine first offers
 `ops->handle_key` (the filemanager consumes Up/Down row navigation and space selection; the
 filmstrip has none), then handles the shared keys itself, delegating the pre-activate selection to
 `ops->pre_activate`.
+
+**A move updates the selection by its modifiers** (established 2026-10-27 against `36f000a889`,
+from reading the code; not yet exercised in the GUI). Every arrow/Page/Home/End step lands in
+`dt_thumbtable_move_in_grid()`, which moves the keyboard cursor (`dt_thumbtable_dispatch_over`)
+and then hands the modifiers to `ops->on_keyboard_move`. The grid follows the usual file-manager
+convention:
+
+| Keys | Selection |
+|---|---|
+| Arrow / Page / Home / End | only the image moved to |
+| Shift + those keys | extended to the image moved to (`dt_thumbtable_select_range()`) |
+| Ctrl + those keys | unchanged: the cursor moves alone, and Ctrl+Space then adds or removes the image |
+| Space / Ctrl+Space / Shift+Space | unchanged by this: select one / toggle / extend, at the cursor (`ops->handle_key`) |
+
+Ctrl moving the cursor alone is what keeps keyboard multi-selection possible. A first version
+(`b2e7b56bbe`) selected the moved-to image on every move whatever the modifiers, and its follow-up
+(`36f000a889`) made Ctrl+move *toggle* it: either way every image the cursor crossed changed state,
+so two images that are not next to each other could not be selected without the ones between.
+The filmstrip leaves `on_keyboard_move` NULL: it highlights the active image, not the selection
+(#954).
+
+**Shift+move only ever grows the selection.** `dt_thumbtable_select_range()` extends from the outer
+bounds of the current selection rather than from a fixed anchor image, so moving back the other way
+does not shrink it, and with nothing selected it does nothing. This is kept deliberately: the same
+function serves Shift+click (`thumbnail.c`) and Shift+Space, and an anchor would change all three
+together.
+
+Ctrl+Up/Down do not collide with module-control focus: `modulegroups.c` binds them through
+`dt_accels_new_darkroom_locked_action()` and the module only loads in the darkroom
+(`views()` returns `darkroom`).
+
+**Not measured: the cost of a plain move.** Each select-single is a `DELETE` plus an `INSERT` on
+`main.selected_images` and two `DT_SIGNAL_SELECTION_CHANGED` emissions (clear, then select), and a
+held arrow key repeats that on every auto-repeat step. Nine places connect to the signal (counted
+with `git grep` for `DT_SIGNAL_SELECTION_CHANGED` connects): the thumbtable itself, the disk
+storage, and the export, geotagging, metadata, metadata_view, styles, tagging and map modules. On
+a large library with the tagging module expanded, that is the case to time.
 
 ## Extending
 

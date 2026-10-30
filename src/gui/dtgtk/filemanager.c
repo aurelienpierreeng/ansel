@@ -324,6 +324,20 @@ static void _grid_pre_activate(dt_thumbtable_t *table, int32_t imgid)
   dt_selection_select_single(dt_selection_get_global(), imgid);
 }
 
+static void _grid_on_keyboard_move(dt_thumbtable_t *table, GdkEventKey *event, int rowid, int32_t imgid)
+{
+  // File-manager convention: a plain move selects the image it lands on, Shift extends the
+  // selection to it, and Ctrl moves the cursor alone so that Ctrl+Space can then toggle the
+  // image -- which is how a selection of images that are not next to each other is built
+  // from the keyboard.
+  if(dt_modifier_is(event->state, DT_PRIMARY_MASK))
+    return;
+  else if(dt_modifier_is(event->state, GDK_SHIFT_MASK))
+    dt_thumbtable_select_range(table, rowid);
+  else
+    dt_selection_select_single(dt_selection_get_global(), imgid);
+}
+
 
 // --- Vtable -----------------------------------------------------------------------------------
 
@@ -350,6 +364,7 @@ const dt_thumbtable_layout_ops_t *dt_thumbtable_grid_ops(void)
     .grab_focus = _grid_grab_focus,
     .handle_key = _grid_handle_key,
     .pre_activate = _grid_pre_activate,
+    .on_keyboard_move = _grid_on_keyboard_move,
   };
   return &ops;
 }
