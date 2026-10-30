@@ -76,16 +76,23 @@ typedef enum _doc_screenshot_select_t
  * COL_TARGET is a G_TYPE_OBJECT, not a pointer: the store then references the widget it
  * holds, which is what keeps the row valid when a view change destroys the modules of the
  * view being left under an open window. A destroyed widget is merely unmapped afterwards,
- * and _save_widget_as_image() reports it as "cannot be drawn".
+ * and _save_target_as_image() reports it as "cannot be drawn".
  *
  * A NULL target below the top level marks a lazy-expansion placeholder -- see _append_row().
+ *
+ * COL_ROW is what makes a row of a GtkTreeView capturable: such a row is no widget, only
+ * cells its view paints, so the panel row keeps the view as its target and the item as a
+ * GtkTreeRowReference -- which follows the item through insertions and removals, and holds the
+ * model alive, so it can be checked against the model the view shows at capture time.
  */
 typedef enum _doc_screenshot_column_t
 {
   COL_CHECKED = 0, ///< the capture check box
   COL_LABEL,       ///< displayed name, also the key into the widget-to-page map
   COL_PAGE,        ///< illustration this widget stands for, from the map. "" when unmapped
-  COL_TARGET,      ///< widget this row captures. NULL on a section header and on a placeholder
+  COL_TARGET,      ///< widget this row captures, or the tree view drawing the item COL_ROW names.
+                   ///< NULL on a section header and on a placeholder
+  COL_ROW,         ///< the tree view item this row captures. NULL when it captures a whole widget
   COL_CAPTURABLE,  ///< there is a target, so a check box is worth showing at all
   COL_ENABLED,     ///< the target is currently displayed. Always TRUE on a section header
   COL_COUNT
@@ -212,8 +219,10 @@ static int _write_surface(cairo_surface_t *surface, const char *filename)
  * children included, at its current allocation, so the file holds exactly what the user
  * sees -- occluded or not.
  *
- * The main window's background is painted first because containers mostly declare no
- * background of their own: without it every gap between children comes out transparent.
+ * The background of the window holding the widget is painted first because containers mostly
+ * declare no background of their own: without it every gap between children comes out
+ * transparent. The holding window, not the main one: a widget of the shape manager's panel
+ * sits on that panel's background.
  *
  * Note this deliberately does NOT call gtk_widget_show_all() on the widget first. That is
  * the right move for a widget built offscreen and never displayed; here every target is a
@@ -221,26 +230,26 @@ static int _write_surface(cairo_surface_t *surface, const char *filename)
  * the application deliberately hides -- collapsed module bodies, conditional buttons, mask
  * indicators -- and would not undo itself once the screenshot is taken.
  *
- * @param widget the widget to draw. Must be mapped: an unmapped one has no meaningful
- *               allocation, and a widget destroyed since the row was built is unmapped.
- * @return the surface, caller-owned, or NULL when the widget cannot be drawn.
+ * @param widget the widget to draw, already known to be mapped.
+ * @param area   the part of it to keep, in the widget's own coordinates: its whole allocation
+ *               for a widget, one row's band for a tree view item.
+ * @return the surface, caller-owned.
  */
-static cairo_surface_t *_render_widget(GtkWidget *widget)
+static cairo_surface_t *_render_area(GtkWidget *widget, const GdkRectangle *area)
 {
-  GtkAllocation alloc;
-  gtk_widget_get_allocation(widget, &alloc);
-  if(!gtk_widget_get_mapped(widget) || alloc.width < 1 || alloc.height < 1) return NULL;
-
   // GTK reports the allocation in logical pixels: carry the monitor's integer scale factor
   // so the capture stays as sharp as the on-screen rendering on a HiDPI screen.
   const int scale = gtk_widget_get_scale_factor(widget);
   cairo_surface_t *surface
-      = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, alloc.width * scale, alloc.height * scale);
+      = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, area->width * scale, area->height * scale);
   cairo_t *cr = cairo_create(surface);
   cairo_scale(cr, (double)scale, (double)scale);
 
-  gtk_render_background(gtk_widget_get_style_context(dt_gui_main_window()), cr, 0., 0., (double)alloc.width,
-                        (double)alloc.height);
+  gtk_render_background(gtk_widget_get_style_context(gtk_widget_get_toplevel(widget)), cr, 0., 0.,
+                        (double)area->width, (double)area->height);
+  // The whole widget is drawn and the surface keeps only the area: a tree view paints its
+  // rows from its own draw handler, and there is no drawing one of them on its own.
+  cairo_translate(cr, (double)-area->x, (double)-area->y);
   gtk_widget_draw(widget, cr);
   cairo_destroy(cr);
 
@@ -248,13 +257,80 @@ static cairo_surface_t *_render_widget(GtkWidget *widget)
 }
 
 
-/** Render one widget into an image file, creating the intermediate directories.
+/** Where one item of a tree view is drawn, in the view's own widget coordinates.
  *
- * @return 0 on success, 1 if the widget cannot be drawn, 2 if the file cannot be written.
+ * The row is the view's whole width, as the view paints it, selection highlight included.
+ *
+ * @return FALSE when the item is not wholly on screen right now: the view is not mapped, it no
+ *         longer shows the model the reference was taken in (a list rebuilt into a new store),
+ *         an ancestor item is collapsed, or the item is scrolled out of sight, even partly --
+ *         a row cut in half is not an illustration.
  */
-static int _save_widget_as_image(GtkWidget *widget, const char *filename)
+static gboolean _tree_row_area(GtkTreeView *view, GtkTreeRowReference *row, GdkRectangle *area)
 {
-  cairo_surface_t *surface = _render_widget(widget);
+  if(!gtk_widget_get_mapped(GTK_WIDGET(view)) || !gtk_tree_row_reference_valid(row)
+     || gtk_tree_row_reference_get_model(row) != gtk_tree_view_get_model(view))
+    return FALSE;
+
+  // A NULL column leaves x and width at 0, and a collapsed ancestor leaves the height at 0:
+  // the item is then not part of what the view lays out at all.
+  GtkTreePath *path = gtk_tree_row_reference_get_path(row);
+  GdkRectangle cell;
+  gtk_tree_view_get_background_area(view, path, NULL, &cell);
+  gtk_tree_path_free(path);
+  if(cell.height < 1) return FALSE;
+
+  GdkRectangle visible;
+  gtk_tree_view_get_visible_rect(view, &visible);
+  int unused = 0;
+  int tree_y = 0;
+  gtk_tree_view_convert_bin_window_to_tree_coords(view, 0, cell.y, &unused, &tree_y);
+  if(tree_y < visible.y || tree_y + cell.height > visible.y + visible.height) return FALSE;
+
+  // Widget coordinates are what gtk_widget_draw() paints in: below the column headers.
+  int widget_y = 0;
+  gtk_tree_view_convert_bin_window_to_widget_coords(view, 0, cell.y, &unused, &widget_y);
+  *area = (GdkRectangle){ .x = 0,
+                          .y = widget_y,
+                          .width = gtk_widget_get_allocated_width(GTK_WIDGET(view)),
+                          .height = cell.height };
+  return area->width > 0;
+}
+
+
+/** Draw what one row of the panel stands for into an offscreen surface.
+ *
+ * @param target the widget, or the tree view drawing @p row. Must be mapped: an unmapped one
+ *               has no meaningful allocation, and a widget destroyed since the row was built
+ *               is unmapped.
+ * @param row    the tree view item to draw, or NULL to draw the whole widget.
+ * @return the surface, caller-owned, or NULL when the target is not displayed right now.
+ */
+static cairo_surface_t *_render_target(GtkWidget *target, GtkTreeRowReference *row)
+{
+  GdkRectangle area = { 0 };
+  if(!IS_NULL_PTR(row))
+  {
+    if(!_tree_row_area(GTK_TREE_VIEW(target), row, &area)) return NULL;
+  }
+  else
+  {
+    gtk_widget_get_allocation(target, &area);
+    area.x = area.y = 0;
+    if(!gtk_widget_get_mapped(target) || area.width < 1 || area.height < 1) return NULL;
+  }
+
+  return _render_area(target, &area);
+}
+
+
+/** Render one target into an image file, creating the intermediate directories.
+ *
+ * @return 0 on success, 1 if the target cannot be drawn, 2 if the file cannot be written.
+ */
+static int _save_target_as_image(GtkWidget *target, GtkTreeRowReference *row, const char *filename)
+{
+  cairo_surface_t *surface = _render_target(target, row);
   if(IS_NULL_PTR(surface)) return 1;
 
   // A mapped path points into the documentation tree, whose folders need not exist yet.
@@ -285,9 +361,12 @@ static gboolean _widget_has_text(GtkWidget *widget)
 {
   // Widgets that own text, plus the custom drawing surfaces that paint their own and say
   // nothing about it through any API -- bauhaus controls among them, whose numeric value
-  // carries a localised decimal separator even when their label is empty.
+  // carries a localised decimal separator even when their label is empty -- and the cell
+  // views, which paint their text from renderers and own no label to find. An item of a tree
+  // view has that view as its target, so it is covered by the same test.
   if(DT_IS_BAUHAUS_WIDGET(widget) || GTK_IS_ENTRY(widget) || GTK_IS_TEXT_VIEW(widget)
-     || GTK_IS_DRAWING_AREA(widget))
+     || GTK_IS_DRAWING_AREA(widget) || GTK_IS_TREE_VIEW(widget) || GTK_IS_ICON_VIEW(widget)
+     || GTK_IS_CELL_VIEW(widget))
     return TRUE;
 
   if(GTK_IS_LABEL(widget)) return gtk_label_get_text(GTK_LABEL(widget))[0] != '\0';
@@ -460,6 +539,18 @@ static gchar *_widget_label(GtkWidget *widget, const int index)
 }
 
 
+/** Give @p parent a single row with no target -- which is what gives the tree view its
+ * expander arrow -- for _on_row_expanded() to swap for the real children the first time it is
+ * opened. */
+static void _append_placeholder(GtkTreeIter *parent)
+{
+  GtkTreeIter placeholder;
+  gtk_tree_store_append(_g.store, &placeholder, parent);
+  gtk_tree_store_set(_g.store, &placeholder, COL_CHECKED, FALSE, COL_LABEL, "…", COL_PAGE, "", COL_TARGET, NULL,
+                     COL_CAPTURABLE, FALSE, COL_ENABLED, FALSE, -1);
+}
+
+
 /** Append one capturable row under @p parent, and make it expandable if the widget has
  * children of its own.
  *
@@ -492,15 +583,116 @@ static void _append_row(GtkTreeIter *parent, GtkWidget *target, const char *labe
 
   if(!GTK_IS_CONTAINER(inner)) return;
 
+  // A tree view unfolds into its items as well as into its toolkit children, which are rarely
+  // more than an editing entry -- see _append_tree_rows().
   GList *children = gtk_container_get_children(GTK_CONTAINER(inner));
-  if(!IS_NULL_PTR(children))
-  {
-    GtkTreeIter placeholder;
-    gtk_tree_store_append(_g.store, &placeholder, &iter);
-    gtk_tree_store_set(_g.store, &placeholder, COL_CHECKED, FALSE, COL_LABEL, "…", COL_PAGE, "", COL_TARGET,
-                       NULL, COL_CAPTURABLE, FALSE, COL_ENABLED, FALSE, -1);
-  }
+  GtkTreeModel *items = GTK_IS_TREE_VIEW(inner) ? gtk_tree_view_get_model(GTK_TREE_VIEW(inner)) : NULL;
+  if(!IS_NULL_PTR(children) || (!IS_NULL_PTR(items) && gtk_tree_model_iter_n_children(items, NULL) > 0))
+    _append_placeholder(&iter);
   g_list_free(children);
+}
+
+
+/** The text one item of a tree view shows, as the view itself would draw it.
+ *
+ * Read from the renderers rather than from the model: a model column may hold an id, a
+ * pointer or a sort key, and what a cell displays often comes from a cell data function. The
+ * renderers are loaded with this item first, the way the view loads them before painting a
+ * row -- between two draws they hold whichever row was painted last.
+ *
+ * @return a newly allocated string, "" when no visible text cell shows anything.
+ */
+static gchar *_tree_row_text(GtkTreeView *view, GtkTreeModel *model, GtkTreeIter *item)
+{
+  GString *text = g_string_new(NULL);
+  const gint columns = gtk_tree_view_get_n_columns(view);
+  for(gint c = 0; c < columns; c++)
+  {
+    GtkTreeViewColumn *column = gtk_tree_view_get_column(view, c);
+    if(!gtk_tree_view_column_get_visible(column)) continue;
+
+    gtk_tree_view_column_cell_set_cell_data(column, model, item, FALSE, FALSE);
+    GList *cells = gtk_cell_layout_get_cells(GTK_CELL_LAYOUT(column));
+    for(GList *cell = cells; cell; cell = g_list_next(cell))
+    {
+      GtkCellRenderer *renderer = GTK_CELL_RENDERER(cell->data);
+      if(!GTK_IS_CELL_RENDERER_TEXT(renderer) || !gtk_cell_renderer_get_visible(renderer)) continue;
+
+      gchar *value = NULL;
+      g_object_get(renderer, "text", &value, NULL);
+      if(!IS_NULL_PTR(value) && value[0] != '\0')
+      {
+        if(text->len) g_string_append(text, " | ");
+        g_string_append(text, value);
+      }
+      dt_free(value);
+    }
+    g_list_free(cells);
+  }
+
+  // A label is one line of the panel and one line of the map.
+  g_strdelimit(text->str, "\n\r\t", ' ');
+  return g_string_free(text, FALSE);
+}
+
+
+/** Append one tree view item under @p parent, and make it expandable if it has children of
+ * its own. The row captures the item's band of its view -- see _tree_row_area(). */
+static void _append_tree_row(GtkTreeIter *parent, GtkTreeView *view, GtkTreeModel *model, GtkTreeIter *item,
+                             const int index)
+{
+  // Text first, then what it is, like any other row -- which also keeps an item reading
+  // "Exposure" from taking the key of the module of that name in the map and the selection.
+  gchar *text = _tree_row_text(view, model, item);
+  gchar *label = text[0] != '\0' ? g_strdup_printf("%s (%s row)", text, G_OBJECT_TYPE_NAME(view))
+                                 : g_strdup_printf("%s row #%d", G_OBJECT_TYPE_NAME(view), index);
+  dt_free(text);
+  const char *page = (const char *)g_hash_table_lookup(_g.pages, label);
+
+  GtkTreePath *path = gtk_tree_model_get_path(model, item);
+  GtkTreeRowReference *row = gtk_tree_row_reference_new(model, path);
+  gtk_tree_path_free(path);
+  GdkRectangle area;
+
+  GtkTreeIter iter;
+  gtk_tree_store_append(_g.store, &iter, parent);
+  gtk_tree_store_set(_g.store, &iter, COL_CHECKED, g_hash_table_contains(_g.selected, label), COL_LABEL, label,
+                     COL_PAGE, IS_NULL_PTR(page) ? "" : page, COL_TARGET, view, COL_ROW, row, COL_CAPTURABLE,
+                     TRUE, COL_ENABLED, _tree_row_area(view, row, &area), -1);
+  gtk_tree_row_reference_free(row); // the store holds its own copy
+  dt_free(label);
+
+  if(gtk_tree_model_iter_has_child(model, item)) _append_placeholder(&iter);
+}
+
+
+/** Append the items of @p view under @p parent: the model's top level when @p under is NULL,
+ * else the children of that item.
+ *
+ * Lists nothing when the view now shows another model than the one @p under was taken in:
+ * that panel row is stale, and a refresh rebuilds it from the model on screen. All the items
+ * of a level are listed, displayed or not, like the widgets are; only the levels someone
+ * unfolds are ever built.
+ */
+static void _append_tree_rows(GtkTreeIter *parent, GtkTreeView *view, GtkTreeRowReference *under)
+{
+  GtkTreeModel *model = gtk_tree_view_get_model(view);
+  if(IS_NULL_PTR(model)) return;
+
+  GtkTreeIter item;
+  gboolean more = FALSE;
+  if(IS_NULL_PTR(under))
+    more = gtk_tree_model_get_iter_first(model, &item);
+  else if(gtk_tree_row_reference_valid(under) && gtk_tree_row_reference_get_model(under) == model)
+  {
+    GtkTreePath *path = gtk_tree_row_reference_get_path(under);
+    GtkTreeIter owner;
+    more = gtk_tree_model_get_iter(model, &owner, path) && gtk_tree_model_iter_children(model, &item, &owner);
+    gtk_tree_path_free(path);
+  }
+
+  for(int index = 1; more; index++, more = gtk_tree_model_iter_next(model, &item))
+    _append_tree_row(parent, view, model, &item, index);
 }
 
 
@@ -561,12 +753,25 @@ static void _on_row_expanded(GtkTreeView *view, GtkTreeIter *iter, GtkTreePath *
   }
 
   GObject *target = NULL;
-  gtk_tree_model_get(model, iter, COL_TARGET, &target, -1);
-  GList *children = gtk_container_get_children(GTK_CONTAINER(_unwrap(GTK_WIDGET(target))));
-  int index = 1;
-  for(GList *item = children; item; item = g_list_next(item), index++)
-    _append_row(iter, GTK_WIDGET(item->data), NULL, index);
-  g_list_free(children);
+  GtkTreeRowReference *row = NULL;
+  gtk_tree_model_get(model, iter, COL_TARGET, &target, COL_ROW, &row, -1);
+  if(!IS_NULL_PTR(row))
+  {
+    // A tree view item: what unfolds under it belongs to the model, not to the toolkit.
+    _append_tree_rows(iter, GTK_TREE_VIEW(target), row);
+    gtk_tree_row_reference_free(row);
+  }
+  else
+  {
+    GtkWidget *inner = _unwrap(GTK_WIDGET(target));
+    GList *children = gtk_container_get_children(GTK_CONTAINER(inner));
+    int index = 1;
+    for(GList *item = children; item; item = g_list_next(item), index++)
+      _append_row(iter, GTK_WIDGET(item->data), NULL, index);
+    g_list_free(children);
+
+    if(GTK_IS_TREE_VIEW(inner)) _append_tree_rows(iter, GTK_TREE_VIEW(inner), NULL);
+  }
   g_object_unref(target);
 
   // Dropped last, so the row is never momentarily childless -- which would collapse the
@@ -674,10 +879,58 @@ static gboolean _find_row(const char *chain, GtkTreeIter *found)
 }
 
 
+/** Is this toplevel one of the application's own windows, worth a row of its own?
+ *
+ * The main window has its row already, and this panel has no business in its own captures.
+ * Beyond those two, what a manual illustrates is a window a user opens and reads a title on:
+ * - a GTK_WINDOW_POPUP is a menu, a tooltip or a combo list, and dies with the gesture that
+ *   opened it;
+ * - an untitled toplevel is plumbing -- the splash screen, the tagging module's floating entry;
+ * - a window transient for this panel is this panel's own, the folder chooser's dialog.
+ */
+static gboolean _is_application_window(GtkWindow *window)
+{
+  const char *title = gtk_window_get_title(window);
+  return GTK_WIDGET(window) != dt_gui_main_window() && GTK_WIDGET(window) != _g.window
+         && gtk_window_get_window_type(window) == GTK_WINDOW_TOPLEVEL && !IS_NULL_PTR(title)
+         && title[0] != '\0' && gtk_window_get_transient_for(window) != GTK_WINDOW(_g.window);
+}
+
+
+static gint _compare_window_titles(gconstpointer a, gconstpointer b)
+{
+  return g_utf8_collate(gtk_window_get_title(GTK_WINDOW(a)), gtk_window_get_title(GTK_WINDOW(b)));
+}
+
+
+/** The application's windows other than the main one: the shape manager, the module order
+ * graph, the tag manager, the event supervisor...
+ *
+ * Found by asking GTK for every toplevel rather than by naming them: they belong to modules
+ * several layers above gui/, and a window added later must show up without this panel
+ * learning about it. A window built once and hidden on close -- the shape manager, the tag
+ * manager -- is listed all along and greyed out while closed; one built on demand appears
+ * from the first refresh after it is opened.
+ *
+ * @return the windows sorted by title, since GTK enumerates them in no defined order. The
+ *         list is the caller's, the windows are not referenced.
+ */
+static GList *_application_windows(void)
+{
+  GList *toplevels = gtk_window_list_toplevels();
+  GList *windows = NULL;
+  for(GList *item = toplevels; item; item = g_list_next(item))
+    if(_is_application_window(GTK_WINDOW(item->data))) windows = g_list_prepend(windows, item->data);
+  g_list_free(toplevels);
+
+  return g_list_sort(windows, _compare_window_titles);
+}
+
+
 /** Rebuild the tree from the application's own registries, against the current destination.
  *
  * The top level is the handful of entry points a manual actually starts from -- the module
- * lists, the panels, the window -- and everything below is the live widget tree, reached by
+ * lists, the panels, the windows -- and everything below is the live widget tree, reached by
  * drilling down. Both routes name a module identically because _widget_label() consults the
  * same map, built here.
  *
@@ -738,9 +991,20 @@ static void _populate(GtkWidget *widget, gpointer user_data)
   _append_row(&section, ui->panels[DT_UI_PANEL_BOTTOM], NULL, 0);
   _append_row(&section, dt_ui_center_base(ui), NULL, 0);
 
-  // Last: the whole window, from which everything else is reachable.
-  _append_section(_("Window"), &section);
+  // Last: the whole main window, from which everything above is reachable, then the windows
+  // it opens, which nothing above reaches. A window is named by its title, and named before
+  // use like the panels are.
+  _append_section(_("Windows"), &section);
   _append_row(&section, dt_gui_main_window(), _("Main window"), 0);
+
+  GList *windows = _application_windows();
+  for(GList *item = windows; item; item = g_list_next(item))
+  {
+    GtkWidget *window = GTK_WIDGET(item->data);
+    g_hash_table_insert(_g.names, window, g_strdup(gtk_window_get_title(GTK_WINDOW(window))));
+    _append_row(&section, window, NULL, 0);
+  }
+  g_list_free(windows);
 
   // Unfold what was unfolded. _find_row() expands each chain's ancestors on its way down, so
   // the order these come back in does not matter; a chain that no longer resolves -- its
@@ -789,14 +1053,16 @@ static void _on_row_selected(GtkTreeSelection *selection, gpointer user_data)
   if(!gtk_tree_selection_get_selected(selection, &model, &iter)) return;
 
   GObject *target = NULL;
-  gtk_tree_model_get(model, &iter, COL_TARGET, &target, -1);
+  GtkTreeRowReference *row = NULL;
+  gtk_tree_model_get(model, &iter, COL_TARGET, &target, COL_ROW, &row, -1);
   if(IS_NULL_PTR(target)) return; // a section header, or a placeholder not yet unfolded
 
-  cairo_surface_t *surface = _render_widget(GTK_WIDGET(target));
+  cairo_surface_t *surface = _render_target(GTK_WIDGET(target), row);
+  gtk_tree_row_reference_free(row);
+  g_object_unref(target);
   if(IS_NULL_PTR(surface))
   {
     gtk_label_set_text(GTK_LABEL(_g.geometry), _("not displayed right now"));
-    g_object_unref(target);
     return;
   }
 
@@ -816,8 +1082,6 @@ static void _on_row_selected(GtkTreeSelection *selection, gpointer user_data)
   gchar *size = g_strdup_printf(_("%d x %d px"), width, height);
   gtk_label_set_text(GTK_LABEL(_g.geometry), size);
   dt_free(size);
-
-  g_object_unref(target);
 }
 
 
@@ -899,8 +1163,9 @@ static gboolean _capture_row(GtkTreeModel *model, GtkTreePath *path, GtkTreeIter
   gchar *label = NULL;
   gchar *page = NULL;
   GObject *target = NULL;
+  GtkTreeRowReference *row = NULL;
   gtk_tree_model_get(model, iter, COL_CHECKED, &checked, COL_LABEL, &label, COL_PAGE, &page, COL_TARGET,
-                     &target, -1);
+                     &target, COL_ROW, &row, -1);
 
   if(checked && !IS_NULL_PTR(target))
   {
@@ -933,7 +1198,7 @@ static gboolean _capture_row(GtkTreeModel *model, GtkTreePath *path, GtkTreeIter
     // screen is pending, not broken -- a remembered selection spans both views, and only one
     // of them is up at a time.
     gchar *file = g_build_filename(capture->folder, relative, NULL);
-    const int result = _save_widget_as_image(GTK_WIDGET(target), file);
+    const int result = _save_target_as_image(GTK_WIDGET(target), row, file);
     if(result == 1)
       capture->skipped++;
     else if(result)
@@ -947,6 +1212,7 @@ static gboolean _capture_row(GtkTreeModel *model, GtkTreePath *path, GtkTreeIter
 
   dt_free(page);
   dt_free(label);
+  gtk_tree_row_reference_free(row);
   if(!IS_NULL_PTR(target)) g_object_unref(target);
   return FALSE; // walk the whole model
 }
@@ -1059,7 +1325,7 @@ void dt_gui_doc_screenshot_window_show(void)
   // row reads as a single line however deep it sits; the second shows what the map binds it
   // to, which is the difference between a stray capture and a documentation update.
   _g.store = gtk_tree_store_new(COL_COUNT, G_TYPE_BOOLEAN, G_TYPE_STRING, G_TYPE_STRING, G_TYPE_OBJECT,
-                                G_TYPE_BOOLEAN, G_TYPE_BOOLEAN);
+                                GTK_TYPE_TREE_ROW_REFERENCE, G_TYPE_BOOLEAN, G_TYPE_BOOLEAN);
   _g.view = gtk_tree_view_new_with_model(GTK_TREE_MODEL(_g.store));
   g_object_unref(_g.store); // the view owns the model from here on
   gtk_tree_view_set_headers_visible(GTK_TREE_VIEW(_g.view), TRUE);

@@ -86,7 +86,13 @@ typedef float dt_boundingbox_t[4];  //(x,y) of upperleft, then (x,y) of lowerrig
 extern "C" {
 #endif
 
-/** return value of image io functions. */
+/**
+ * @brief Return value of image io functions: loading, exporting, and making a thumbnail.
+ *
+ * @details The thumbnail cache keeps the value that left a thumbnail empty, and the GUI paints it
+ * over the skull it draws instead (#1531), so every failure a user can meet gets its own value.
+ * Appending is safe: nothing switches on this enum, and no value of it is ever written to disk.
+ */
 typedef enum dt_imageio_retval_t
 {
   DT_IMAGEIO_OK = 0,         // all good :)
@@ -97,7 +103,10 @@ typedef enum dt_imageio_retval_t
   DT_IMAGEIO_UNSUPPORTED_FEATURE, // format supported but uses unsupported feature
   DT_IMAGEIO_UNSUPPORTED_CAMERA,  // camera model not supported by loader
   DT_IMAGEIO_LOAD_FAILED,         // internal loader failure
-  DT_IMAGEIO_IOERROR              // I/O error while reading file
+  DT_IMAGEIO_IOERROR,             // I/O error while reading or writing a file
+  DT_IMAGEIO_NO_EMBEDDED_THUMBNAIL, // only the embedded thumbnail may be used, and none could be read
+  DT_IMAGEIO_PROCESSING_FAILED,   // the pixelpipe produced no output
+  DT_IMAGEIO_ABORTED              // the pixelpipe was stopped before it produced an output
 } dt_imageio_retval_t;
 
 typedef enum

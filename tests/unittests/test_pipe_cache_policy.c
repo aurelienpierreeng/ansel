@@ -37,6 +37,10 @@
 #include <stdint.h>
 #include <cmocka.h>
 
+#ifdef _WIN32
+#include "win/main_wrapper.h"
+#endif
+
 /** A GPU-capable node with no reason of its own to want host data. */
 static dt_dev_pipe_cache_policy_inputs_t _gpu_node_with_no_needs(void)
 {
@@ -74,27 +78,67 @@ static void _gpu_node_requires_nothing_on_its_own(void **state)
 }
 
 /**
- * THE REGRESSION. An enabled, GPU-capable node that needs no host input of its own must PASS
- * THROUGH a requirement inherited from further downstream, not replace it.
+ * THE REGRESSION, restated. An enabled, GPU-capable node that needs no host input of its own
+ * must NOT hand a downstream requirement further upstream.
  *
- * This was an `=' rather than an `||'. Toggling on a GPU module with no host needs of its own
- * (iop/rawoverexposed.c: NO_HISTORY_STACK, GPU-capable, no GUI or histogram reason) erased the
- * TRUE that a CPU-only module further downstream (dither) had correctly established. colorout
- * then skipped its GPU-to-host readback, and dither read the stale bytes left in the cacheline's
- * previous life -- every hash and ROI in the chain individually correct.
+ * This assertion is the opposite of the one it replaces, and deliberately so. The requirement
+ * being carried is "the node that CONSUMES my output reads it from RAM". That is a fact about
+ * one edge of the graph; the node before me publishes to a consumer of its own and knows
+ * nothing about mine. Carrying it made the flag monotone, and since the seal seeds the walk
+ * with TRUE for the displayed final output, EVERY enabled node inherited it: measured on a
+ * painting stroke, 152 MB and 68.1 ms of a 113.8 ms frame spent copying module outputs to RAM,
+ * of which only the last node's 11.7 MB was ever read from RAM by anything.
+ *
+ * The defect the transitive version was written for is real but lives elsewhere: a node whose
+ * requirement turns back ON can be handed a cacheline whose host copy was never refreshed
+ * while the requirement was off. `_seal_opencl_cache_policy()` invalidates the line on that
+ * edge. Keeping every host copy fresh forever also prevented it, at the cost above.
  */
-static void _gpu_node_propagates_an_inherited_requirement(void **state)
+static void _a_gpu_node_does_not_relay_its_consumers_requirement(void **state)
 {
   (void)state;
   dt_dev_pipe_cache_policy_inputs_t in = _gpu_node_with_no_needs();
 
-  gboolean upstream = FALSE;
+  gboolean upstream = TRUE;
   const gboolean own = dt_dev_pipe_cache_policy_decide(&in, TRUE, &upstream);
 
-  // The inherited requirement reaches this node's own output ...
+  // The consumer's requirement still reaches THIS node's output: that consumer reads it.
   assert_true(own);
-  // ... AND keeps travelling to the node before it. An `=' here would make this FALSE.
+  // ... and stops there. The node before this one publishes to this node, which is on GPU.
+  assert_false(upstream);
+}
+
+/**
+ * A CPU-only node still makes the node before it publish, which is the whole point of the
+ * one hop. This is the case the transitive version existed to protect and the lean one must
+ * keep protecting.
+ */
+static void _a_cpu_node_still_makes_its_producer_publish(void **state)
+{
+  (void)state;
+  dt_dev_pipe_cache_policy_inputs_t in = { 0 }; // supports_opencl = FALSE
+
+  gboolean upstream = FALSE;
+  dt_dev_pipe_cache_policy_decide(&in, FALSE, &upstream);
   assert_true(upstream);
+}
+
+/**
+ * The lean rule, stated whole: a GPU node nothing on the host reads must cache NOTHING.
+ *
+ * Caching an OpenCL module's output to RAM is justified by exactly two things -- the module
+ * being expensive enough that code or the user pinned it, and its output being read from RAM
+ * by a histogram, a colour picker or a Cairo surface. A node with neither, whose consumer is
+ * also on the GPU, hands its output to nobody on the CPU and must keep it on the device.
+ */
+static void _a_gpu_node_nothing_reads_from_ram_caches_nothing(void **state)
+{
+  (void)state;
+  dt_dev_pipe_cache_policy_inputs_t in = _gpu_node_with_no_needs();
+
+  gboolean upstream = TRUE;
+  assert_false(dt_dev_pipe_cache_policy_decide(&in, FALSE, &upstream));
+  assert_false(upstream);
 }
 
 /** Each of the five own-input reasons must raise the upstream requirement by itself. */
@@ -152,15 +196,96 @@ static void _null_upstream_pointer_is_allowed(void **state)
   assert_true(dt_dev_pipe_cache_policy_decide(&in, FALSE, NULL));
 }
 
-int main(void)
+/**
+ * @brief Walk a chain of nodes the way `_seal_opencl_cache_policy()` does, last to first.
+ *
+ * The policy is a per-node decision, but what it MEANS is a property of the chain: the seal
+ * threads one flag backwards through every enabled node. The per-node tests above cannot see
+ * that, and the defect they missed lived entirely in the composition -- a requirement that was
+ * correct for one node became, by being relayed, a requirement for every node before it. So
+ * these run the walk.
+ *
+ * `out[]` receives each node's cache_output_on_ram, indexed as `nodes[]` is.
+ */
+static void _walk(const dt_dev_pipe_cache_policy_inputs_t *nodes, gboolean *out, const int count,
+                  const gboolean display_reads_the_last_output)
+{
+  gboolean carried = display_reads_the_last_output;
+  for(int i = count - 1; i >= 0; i--)
+    out[i] = dt_dev_pipe_cache_policy_decide(&nodes[i], carried, &carried);
+}
+
+/**
+ * The darkroom case, and the one that was costing 152 MB a frame: every module on the GPU,
+ * the last one's output displayed from host memory by Cairo. Exactly one node may cache.
+ */
+static void _only_the_displayed_output_is_cached_in_a_gpu_chain(void **state)
+{
+  (void)state;
+  dt_dev_pipe_cache_policy_inputs_t nodes[4];
+  for(int i = 0; i < 4; i++) nodes[i] = _gpu_node_with_no_needs();
+
+  gboolean cached[4] = { FALSE };
+  _walk(nodes, cached, 4, TRUE);
+
+  assert_true(cached[3]);   // the displayed output
+  assert_false(cached[2]);  // ... and nothing else. Relayed, these were all TRUE.
+  assert_false(cached[1]);
+  assert_false(cached[0]);
+}
+
+/**
+ * A CPU-only node in the middle publishes its producer and NOTHING further. This is the shape
+ * the transitive version was written for (colorout -> rawoverexposed -> dither): the producer
+ * must publish, and the nodes before it must not have to.
+ */
+static void _a_cpu_node_publishes_its_producer_and_no_further(void **state)
+{
+  (void)state;
+  dt_dev_pipe_cache_policy_inputs_t nodes[4];
+  for(int i = 0; i < 4; i++) nodes[i] = _gpu_node_with_no_needs();
+  nodes[2].supports_opencl = FALSE;   // CPU-only: reads its input from RAM
+
+  gboolean cached[4] = { FALSE };
+  _walk(nodes, cached, 4, TRUE);
+
+  assert_true(cached[3]);   // displayed
+  /* The CPU node's OWN flag is FALSE, and that is correct rather than an oversight: the flag
+   * asks for a device->host COPY of a module's output, and a module that ran on the CPU has
+   * already written its output in host memory. There is nothing to copy. (Asserting TRUE here
+   * is what this test caught on its first run.) */
+  assert_false(cached[2]);
+  assert_true(cached[1]);   // its PRODUCER must publish -- this is the one that matters
+  assert_false(cached[0]);  // and the requirement stops there
+}
+
+/** With nothing displayed and nothing on the CPU, the chain caches nothing at all. */
+static void _a_pure_gpu_chain_nobody_reads_caches_nothing(void **state)
+{
+  (void)state;
+  dt_dev_pipe_cache_policy_inputs_t nodes[3];
+  for(int i = 0; i < 3; i++) nodes[i] = _gpu_node_with_no_needs();
+
+  gboolean cached[3] = { FALSE };
+  _walk(nodes, cached, 3, FALSE);
+
+  for(int i = 0; i < 3; i++) assert_false(cached[i]);
+}
+
+int main(int argc, char *argv[])
 {
   const struct CMUnitTest tests[] = {
     cmocka_unit_test(_cpu_only_node_needs_its_input_on_host),
     cmocka_unit_test(_gpu_node_requires_nothing_on_its_own),
-    cmocka_unit_test(_gpu_node_propagates_an_inherited_requirement),
+    cmocka_unit_test(_a_gpu_node_does_not_relay_its_consumers_requirement),
+    cmocka_unit_test(_a_cpu_node_still_makes_its_producer_publish),
+    cmocka_unit_test(_a_gpu_node_nothing_reads_from_ram_caches_nothing),
     cmocka_unit_test(_each_own_input_reason_raises_upstream),
     cmocka_unit_test(_each_own_output_reason_raises_own),
     cmocka_unit_test(_null_upstream_pointer_is_allowed),
+    cmocka_unit_test(_only_the_displayed_output_is_cached_in_a_gpu_chain),
+    cmocka_unit_test(_a_cpu_node_publishes_its_producer_and_no_further),
+    cmocka_unit_test(_a_pure_gpu_chain_nobody_reads_caches_nothing),
   };
 
   return cmocka_run_group_tests(tests, NULL, NULL);

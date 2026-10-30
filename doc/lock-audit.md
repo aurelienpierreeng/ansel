@@ -1,5 +1,7 @@
 # Lock audit
 
+> **First checked 2026-09-29.** This file was mechanically checked against `8f4638a04e` on 2026-09-29 — every `file:line` citation resolved, every backticked symbol looked up in the tree, every OPEN/planned status claim tested, and every gate or baseline number it quotes compared with `tools/check_module_boundaries.sh` and `tools/include_baseline.txt`. **No per-claim semantic read was done**: a citation that resolves can still describe the wrong thing, so this is a floor, not a verification. Nothing was found wrong by those checks.
+
 *Audited 2026-08-27, against the pinned submodules.*
 
 Every mutex and rwlock in `src/`, what it protects, and whether the reason still holds.
@@ -142,7 +144,7 @@ could not substitute for any of them:
 | `iop/lens.c` | modifier construction | **lock deleted** — LensSerious is stateless |
 
 **A correction worth recording**, because it was nearly missed: `global_mutexes.h` listed
-`iop/lens.cc` among its consumers, and that file no longer exists. It is tempting to read
+`iop/lens.c` among its consumers, and that file no longer exists. It is tempting to read
 that as a stale reference to a dead consumer. It was not — the file was RENAMED to
 `iop/lens.c` in the LensSerious migration and still took the lock in four places. The header
 was under-listing a live consumer, not over-listing a dead one. A missing filename is not

@@ -70,6 +70,8 @@ static inline void _reset_piece_cache_entry(dt_dev_pixelpipe_iop_t *piece)
 
   memset(&piece->cache_entry, 0, sizeof(piece->cache_entry));
   piece->cache_entry.hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
+  memset(&piece->cache_entry_prev, 0, sizeof(piece->cache_entry_prev));
+  piece->cache_entry_prev.hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
 }
 
 void dt_dev_pixelpipe_debug_dump_module_io(dt_dev_pixelpipe_t *pipe, dt_iop_module_t *module, const char *stage,

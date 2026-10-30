@@ -8,6 +8,7 @@
     Copyright (C) 2020 Pascal Obry.
     Copyright (C) 2022 Martin Bařinka.
     Copyright (C) 2025 Aurélien PIERRE.
+    Copyright (C) 2026 Guillaume Stutin.
     
     darktable is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -29,16 +30,15 @@
 #include <glib.h>
 #include <stdint.h>
 
-/** util to get the group ID of any image */
-int32_t dt_grouping_get_image_group(const int32_t image_id);
-
 /** add an image to a group */
 void dt_grouping_add_to_group(int32_t group_id, int32_t image_id);
 
-/** remove an image from a group. returns the new group_id of the other images. */
+/** remove an image from a group. returns the new group_id of the other images, or -1 when nothing
+ * changed: the image was alone, or could not be read. */
 int dt_grouping_remove_from_group(int32_t image_id);
 
-/** make an image the representative of the group it is in. returns the new group_id. */
+/** make an image the representative of the group it is in. returns the new group_id, or -1 when the
+ * image could not be read. A member that cannot be read moves to the new group with the others. */
 int dt_grouping_change_representative(int32_t image_id);
 
 /** get images of the group */

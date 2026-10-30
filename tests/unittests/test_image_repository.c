@@ -1,6 +1,7 @@
 /*
     This file is part of Ansel,
     Copyright (C) 2026 Aurélien PIERRE.
+    Copyright (C) 2026 Guillaume Stutin.
 
     Ansel is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -25,7 +26,15 @@
  */
 
 #include "testdb.h"
+#include "common/image.h"
+#include "system/mem_alloc.h"
 
+#include <glib/gstdio.h>
+#include <sqlite3.h>
+
+#ifdef _WIN32
+#include "win/main_wrapper.h"
+#endif
 
 // an arbitrary flag bit with no side meaning in these tests
 #define TEST_FLAG 2048
@@ -67,6 +76,53 @@ static void test_flag_among_multi_image(void **state)
   g_list_free(all);
 }
 
+/* dt_image_repository_set_flags_masked() writes the mask's bits and nothing else.
+ *
+ * The XMP crawler reads an image's whole `flags` word, then lists a directory -- a
+ * filesystem round-trip -- before deciding what to write back. Anything the user changes in
+ * that window (a star rating, a colour label) shares the word, so the crawl must write only
+ * the two bits it owns. This pins that. */
+static void test_set_flags_masked_leaves_other_bits(void **state)
+{
+  (void)state;
+  const int32_t film = testdb_make_film("/testdb/masked");
+  assert_true(film > 0);
+  const int32_t img = testdb_make_image(film, "masked.raw");
+  assert_true(img > 0);
+
+  // two bits the write will own, and one standing in for the rating the user sets meanwhile
+  const int owned_a = 1 << 4;
+  const int owned_b = 1 << 5;
+  const int mask = owned_a | owned_b;
+
+  GList *one = g_list_append(NULL, GINT_TO_POINTER(img));
+
+  // start with owned_a set and owned_b clear, plus the unrelated bit
+  assert_true(dt_image_repository_set_flag_among(one, owned_a | TEST_FLAG));
+
+  // the crawl's write: clear owned_a, set owned_b, say nothing about the rest
+  assert_true(dt_image_repository_set_flags_masked(img, mask, owned_b));
+
+  GList *got = dt_image_repository_get_ids_with_flag_among(one, owned_b);
+  assert_int_equal(g_list_length(got), 1);
+  g_list_free(got);
+
+  assert_null(dt_image_repository_get_ids_with_flag_among(one, owned_a));
+
+  // the bit outside the mask survived -- this is the whole point
+  got = dt_image_repository_get_ids_with_flag_among(one, TEST_FLAG);
+  assert_int_equal(g_list_length(got), 1);
+  g_list_free(got);
+
+  // an empty mask writes nothing and says so, rather than clearing the word
+  assert_false(dt_image_repository_set_flags_masked(img, 0, 0));
+  got = dt_image_repository_get_ids_with_flag_among(one, TEST_FLAG);
+  assert_int_equal(g_list_length(got), 1);
+  g_list_free(got);
+
+  g_list_free(one);
+}
+
 static void test_full_paths(void **state)
 {
   (void)state;
@@ -78,8 +134,13 @@ static void test_full_paths(void **state)
   GList *ids = g_list_append(g_list_append(NULL, GINT_TO_POINTER(a)), GINT_TO_POINTER(b));
   GList *paths = dt_image_repository_get_full_paths(ids);
   assert_int_equal(g_list_length(paths), 2);
-  assert_string_equal((const char *)paths->data, "/testdb/paths/a.raw");
-  assert_string_equal((const char *)paths->next->data, "/testdb/paths/b.raw");
+  // the repository joins folder and file with the platform's separator, whatever the folder uses
+  gchar *expected_a = g_strconcat("/testdb/paths", G_DIR_SEPARATOR_S, "a.raw", NULL);
+  gchar *expected_b = g_strconcat("/testdb/paths", G_DIR_SEPARATOR_S, "b.raw", NULL);
+  assert_string_equal((const char *)paths->data, expected_a);
+  assert_string_equal((const char *)paths->next->data, expected_b);
+  dt_free(expected_a);
+  dt_free(expected_b);
   g_list_free_full(paths, g_free);
   g_list_free(ids);
 }
@@ -157,15 +218,143 @@ static void test_count_distinct_fields(void **state)
   assert_null(dt_image_repository_count_distinct_fields(NULL));
 }
 
-int main(void)
+static gboolean _count_two_rows(const int32_t imgid, const int64_t write_timestamp,
+                                const int version, const char *image_path, const int flags,
+                                void *user_data)
+{
+  (void)imgid;
+  (void)write_timestamp;
+  (void)version;
+  (void)image_path;
+  (void)flags;
+  int *seen = (int *)user_data;
+  (*seen)++;
+  return *seen < 2; // refuse the second row
+}
+
+/* The walk ends at the first row the callback refuses. That is how the XMP crawler stops when
+ * Ansel quits; a walk that went on regardless would hold the quit up until the last image. */
+static void test_foreach_with_path_stops_when_asked(void **state)
+{
+  (void)state;
+  const int32_t film = testdb_make_film("/testdb/walk");
+  assert_true(film > 0);
+  assert_true(testdb_make_image(film, "w0.raw") > 0);
+  assert_true(testdb_make_image(film, "w1.raw") > 0);
+  assert_true(testdb_make_image(film, "w2.raw") > 0);
+
+  int seen = 0;
+  dt_image_repository_foreach_with_path(_count_two_rows, &seen);
+  assert_int_equal(seen, 2);
+}
+
+/* A row that is not there -- what the lighttable reads just after a removal -- marks the struct
+ * invalid. The struct starts out looking loaded, as dt_image_cache_get_reload() hands it over
+ * (in place, with no dt_image_init()): starting from UNKNOWN_IMAGE, the test would pass without
+ * the write. */
+static void test_load_marks_an_absent_image_invalid(void **state __attribute__((unused)))
+{
+  const int32_t film = testdb_make_film("/testdb/absentfilm");
+  assert_true(film > 0);
+  const int32_t id = testdb_make_image(film, "present.raw");
+  assert_true(id > 0);
+
+  dt_image_t img;
+  dt_image_init(&img);
+  img.id = id;
+
+  assert_false(dt_image_repository_load(id + 10000, &img));
+  assert_int_equal(img.id, UNKNOWN_IMAGE);
+}
+
+/* The test below needs a library on disk: in memory, every connection has a database of its own,
+ * and no other connection can lock it. */
+static gchar *_dir = NULL;
+static gchar *_library = NULL;
+
+static int _file_setup(void **state __attribute__((unused)))
+{
+  _dir = g_dir_make_tmp("ansel_test_image_repository_XXXXXX", NULL);
+  if(IS_NULL_PTR(_dir)) return -1;
+  _library = g_build_filename(_dir, "library.db", NULL);
+  const dt_database_params_t params = { .alternative = _library,
+                                        .library = NULL,
+                                        .load_data = FALSE,
+                                        .has_gui = FALSE,
+                                        .verbose = FALSE };
+  return dt_database_open(&params) == DT_DATABASE_OPEN_OK ? 0 : -1;
+}
+
+static int _file_teardown(void **state)
+{
+  testdb_teardown(state);
+  /* The library, and the empty backup marker dt_database_open() leaves beside it. The marker is
+   * read-only, which Windows will not delete. */
+  GDir *d = g_dir_open(_dir, 0, NULL);
+  if(!IS_NULL_PTR(d))
+  {
+    const char *name = NULL;
+    while((name = g_dir_read_name(d)))
+    {
+      gchar *path = g_build_filename(_dir, name, NULL);
+      g_chmod(path, 0600);
+      g_remove(path);
+      dt_free(path);
+    }
+    g_dir_close(d);
+  }
+  g_rmdir(_dir);
+  dt_free(_library);
+  dt_free(_dir);
+  return 0;
+}
+
+/* A read that fails leaves the struct as it was: the image may well exist, and invalidating an
+ * entry that dt_image_cache_get_reload() reloads in place would hide it for as long as it stays
+ * cached. The failure is the one another program causes: a second connection, standing in for
+ * it, holds the library's EXCLUSIVE lock, and the read gets SQLITE_BUSY. */
+static void test_load_failure_leaves_the_image_untouched(void **state __attribute__((unused)))
+{
+  const int32_t film = testdb_make_film("/testdb/lockedfilm");
+  assert_true(film > 0);
+  const int32_t id = testdb_make_image(film, "locked.raw");
+  assert_true(id > 0);
+
+  sqlite3 *other = NULL;
+  assert_int_equal(sqlite3_open(_library, &other), SQLITE_OK);
+  assert_int_equal(sqlite3_exec(other, "BEGIN EXCLUSIVE", NULL, NULL, NULL), SQLITE_OK);
+
+  dt_image_t img;
+  dt_image_init(&img);
+  img.id = id;
+  img.width = 4242;
+  const gboolean found = dt_image_repository_load(id, &img);
+
+  // released before asserting, so that a failure does not leave the file locked for the teardown
+  sqlite3_exec(other, "ROLLBACK", NULL, NULL, NULL);
+  sqlite3_close(other);
+
+  assert_false(found);
+  assert_int_equal(img.id, id);
+  assert_int_equal(img.width, 4242);
+}
+
+int main(int argc, char *argv[])
 {
   const struct CMUnitTest tests[] = {
     cmocka_unit_test(test_flag_among_multi_image),
+    cmocka_unit_test(test_set_flags_masked_leaves_other_bits),
     cmocka_unit_test(test_full_paths),
     cmocka_unit_test(test_id_range),
     cmocka_unit_test(test_write_timestamp_is_64bit),
     cmocka_unit_test(test_group_member_rows),
     cmocka_unit_test(test_count_distinct_fields),
+    cmocka_unit_test(test_foreach_with_path_stops_when_asked),
+    cmocka_unit_test(test_load_marks_an_absent_image_invalid),
   };
-  return cmocka_run_group_tests(tests, testdb_setup, testdb_teardown);
+  const struct CMUnitTest on_disk[] = {
+    cmocka_unit_test(test_load_failure_leaves_the_image_untouched),
+  };
+  const int failed = cmocka_run_group_tests(tests, testdb_setup, testdb_teardown);
+  return failed + cmocka_run_group_tests(on_disk, _file_setup, _file_teardown);
 }

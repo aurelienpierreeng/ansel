@@ -30,6 +30,7 @@ set(ANSEL_WIDGETS_SOURCES
   resetlabel.c
   scroll_wrap.c
   sidepanel.c
+  stroke_raster.c
   thumbnail_btn.c
   togglebutton.c
   widget_settings.c

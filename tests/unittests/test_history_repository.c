@@ -22,6 +22,10 @@
 
 #include "testdb.h"
 
+#ifdef _WIN32
+#include "win/main_wrapper.h"
+#endif
+
 
 static const unsigned char params_a[] = { 0xde, 0xad, 0xbe, 0xef, 0x01 };
 static const unsigned char params_b[] = { 0xca, 0xfe, 0xba, 0xbe };
@@ -145,7 +149,7 @@ static void test_foreach_active_module(void **state)
   assert_string_equal(c.op, "exposure");
 }
 
-int main(void)
+int main(int argc, char *argv[])
 {
   const struct CMUnitTest tests[] = {
     cmocka_unit_test(test_module_order_absent_vs_zero),

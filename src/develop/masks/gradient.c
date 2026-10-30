@@ -1170,7 +1170,7 @@ static dt_masks_raster_result_t _gradient_get_points_border(dt_develop_t *dev, d
   return DT_MASKS_RASTER_OK;
 }
 
-static dt_masks_raster_result_t _gradient_get_area(const dt_iop_module_t *const module, dt_dev_pixelpipe_t *pipe,
+static dt_masks_raster_result_t _gradient_get_area(const dt_iop_module_t *const module, const dt_dev_pixelpipe_t *pipe,
                               const dt_dev_pixelpipe_iop_t *const piece,
                               dt_masks_form_t *const form,
                               int *width, int *height, int *posx, int *posy)
@@ -1216,7 +1216,7 @@ static inline float dt_gradient_lookup(const float *lut, const float i)
   return lut[bin1] * f + lut[bin0] * (1.0f - f);
 }
 
-static dt_masks_raster_result_t _gradient_get_mask(const dt_iop_module_t *const module, dt_dev_pixelpipe_t *pipe,
+static dt_masks_raster_result_t _gradient_get_mask(const dt_iop_module_t *const module, const dt_dev_pixelpipe_t *pipe,
                               const dt_dev_pixelpipe_iop_t *const piece,
                               dt_masks_form_t *const form,
                               float **buffer, int *width, int *height, int *posx, int *posy)
@@ -1336,7 +1336,7 @@ static dt_masks_raster_result_t _gradient_get_mask(const dt_iop_module_t *const 
 }
 
 
-static dt_masks_raster_result_t _gradient_get_mask_roi(const dt_iop_module_t *const module, dt_dev_pixelpipe_t *pipe,
+static dt_masks_raster_result_t _gradient_get_mask_roi(const dt_iop_module_t *const module, const dt_dev_pixelpipe_t *pipe,
                                   const dt_dev_pixelpipe_iop_t *const piece,
                                   dt_masks_form_t *const form, const dt_iop_roi_t *roi, float *buffer,
                                   dt_iop_roi_t *touched)

@@ -2,6 +2,8 @@
 
 [TOC]
 
+> **First checked 2026-09-29.** This file was mechanically checked against `8f4638a04e` on 2026-09-29 — every `file:line` citation resolved, every backticked symbol looked up in the tree, every OPEN/planned status claim tested, and every gate or baseline number it quotes compared with `tools/check_module_boundaries.sh` and `tools/include_baseline.txt`. **No per-claim semantic read was done**: a citation that resolves can still describe the wrong thing, so this is a floor, not a verification. Nothing was found wrong by those checks.
+
 ## What is Sentry, in one paragraph
 
 [Sentry](https://sentry.io) is a hosted *error and crash monitoring* service. An application
@@ -72,13 +74,13 @@ All of this lives in `src/common/sentry.c` / `sentry.h`. The public API is three
 | Function | When | What it does |
 |---|---|---|
 | `dt_sentry_init(have_gui)` | end of `dt_init()` | honors `sentry/enabled`, then `sentry_init()` |
-| `dt_sentry_shutdown()` | start of `dt_cleanup()` | records the clean session, flushes, `sentry_close()` |
+| `dt_sentry_shutdown()` | end of `dt_cleanup()`, just before `dt_conf_cleanup()` | records the clean session, flushes, `sentry_close()` |
 | `dt_sentry_backtrace_captured()` | from the signal handler | tells the local gdb fallback to stand down |
 
 ### Consent (opt-in)
 
 Consent is gathered **once**, by a single dialog shared with usage analytics, implemented in
-`src/common/privacy_consent.c` (`dt_privacy_ask_consent()`). On the **very first launch** with a GUI
+`src/gui/privacy_consent.c` (`dt_privacy_ask_consent()`). On the **very first launch** with a GUI
 it shows one checkbox per built-in data flow ("Send crash reports" and "Share anonymous usage
 statistics") plus a link to the user-facing
 [Data privacy](https://ansel.photos/en/data-privacy/) page, then writes the per-feature toggles.
@@ -281,6 +283,73 @@ Tip: run with `-d control` to see `[sentry] crash reporting initialized` and con
 active. The local crash database is at `~/.cache/ansel/sentry-native/`; a pending `*.envelope` there
 means a captured crash that has not been uploaded yet (it will be, on the next launch).
 
+## Getting a log out of a Windows user {#windows-log}
+
+> **Established 2026-09-30 against `aac2ee1321`.**
+
+`ansel.exe` is linked as a GUI-subsystem binary: it owns no console, so everything written to
+stdout or stderr is discarded unless the caller arranged otherwise. `main()`
+(`src/apps/ansel/main.c`) therefore redirects both into
+
+```
+%LOCALAPPDATA%\cache\ansel\ansel-log.txt
+```
+
+**A plain run does write that file.** That matters because for a long time we assumed no log
+existed on Windows at all, and asked users for `-d` runs that produced strictly less:
+
+- **`-d` used to cancel the redirection.** The flag list that skips it is for arguments that print
+  one thing and exit (`--help`, `-h`, `/?`, `--version`); `-d` and `--debug` were in it, so the
+  flags that *produce* output sent every channel nowhere — no console, no file (#1472). They are
+  out of that list now and must not go back in.
+- **The file used to live where Windows deletes it and a user cannot find it.** It was under
+  `g_get_user_cache_dir()`, which on Windows is `FOLDERID_InternetCache` — the shell folder still
+  labelled "Temporary Internet Files". Storage Sense empties it, whenever it runs, of every file
+  not written in the last week or so — so the log of a user who has not opened Ansel for a week
+  is gone — and it is Hidden and System, so Explorer does not show it even with hidden files
+  shown (#1473). Both the log and the thumbnail disk cache were affected; the measurement is in
+  [`image-mipmap-cache.md`](image-mipmap-cache.md).
+
+So, to triage a Windows report:
+
+1. Ask for `%LOCALAPPDATA%\cache\ansel\ansel-log.txt` from a **normal** run. Pasting that path
+   into Explorer works; browsing to it does not, the folder chain being hidden.
+2. For a debug run, `-d` alone is now enough. A caller who wants the output on a handle of their
+   own can still redirect — `ansel.exe -d cache -d memory > C:\ansel.txt 2>&1` — because the
+   redirection stands down as soon as stdout or stderr is a file or a pipe.
+3. The file is opened `"a"` and is never rotated, so it spans sessions. Ask for the tail, or for
+   the size first.
+
+A build without #1493 has neither fix: for those, the log is under
+`%LOCALAPPDATA%\Microsoft\Windows\INetCache\ansel\`, if Windows has not removed it yet, and a
+`-d` run has no output anywhere.
+
+## Reading a Windows crash report {#windows-crash-report}
+
+> **Established 2026-10-16 against `0baeb88ed8`.**
+
+A crash on Windows writes an `ansel_bt_*.txt` report through DrMingw (`exchndl.dll`): the version,
+the faulting address, one line per frame as `module!symbol+offset`, then every loaded module with
+its address range. `libansel.dll` carries its symbol table, so the frames are named, but there are
+no line numbers. To find the instruction:
+
+1. Download the Windows installer of the reported version from the nightly releases. Its name spells
+   the report's `~g` as `.g`:
+   `gh release download nightly-YYYY-MM -R aurelienpierreeng/ansel -p 'ansel-0.0.0+5261.g0baeb88ed8-win64.exe'`.
+   `7z x` extracts it as is; take `bin/libansel.dll`. It is the same build when the module's
+   address range in the report spans exactly its `SizeOfImage` (`llvm-objdump -p`).
+2. The faulting address minus the module's start address is the RVA, and the instruction sits at
+   `ImageBase + RVA` (`ImageBase` is `0x180000000` for `libansel.dll`). `llvm-nm` prints symbols
+   at those same addresses; `llvm-objdump -t` prints them relative to `.text`, 0x1000 lower.
+3. `llvm-objdump -d --no-show-raw-insn --disassemble-symbols=<symbol>` and find the address. The
+   arguments arrive in `rcx`, `rdx`, `r8`, `r9` (Windows x64); a struct field is identified by its
+   displacement, checked against the struct with `offsetof`.
+
+**`Reading from location FFFFFFFFFFFFFFFF` is not a read at -1.** The processor raised a
+general-protection fault, which carries no address, and Windows prints -1 for it. A misaligned
+`movaps`/`movapd` causes one — the case measured on `0baeb88ed8`, in
+[`iop-notes.md`](iop-notes.md) under colorbalancergb — and so does a pointer that is not canonical.
+
 ## Fetching and fixing an issue
 
 To turn a Sentry issue into a fix without clicking through the web UI, use
@@ -352,7 +421,7 @@ independently of this script.
 | `src/external/CMakeLists.txt` | builds the submodule (inproc, static) |
 | `src/CMakeLists.txt` | links `sentry`, defines `HAVE_SENTRY` / `SENTRY_DSN` |
 | `src/common/sentry.c` / `.h` | init/shutdown, context, sessions, `on_crash` gdb attach |
-| `src/common/privacy_consent.c` / `.h` | the shared first-launch consent dialog (crash + analytics) |
+| `src/gui/privacy_consent.c` / `.h` | the shared first-launch consent dialog (crash + analytics) |
 | `src/common/system_signal_handling.c` | local gdb fallback; defers to Sentry when it captured |
 | `src/darktable.c` | calls `dt_sentry_init()` / `dt_sentry_shutdown()` |
 | `data/anselconfig.xml.in` / `.dtd`, `tools/generate_prefs.xsl` | the `sentry/enabled` preference |
@@ -360,3 +429,15 @@ independently of this script.
 | `tools/sentry-fetch-issue.sh` | pull an issue's backtrace + attachments locally to fix it |
 | `.github/workflows/sentry-triage.yml` | manual CI triage: fetch backtrace, artifact, auto-open a GitHub issue |
 | `.github/workflows/{lin,mac,win}-nightly.yml` | call the upload script with the CI secret |
+
+---
+
+## Quick reference (carried from CLAUDE.md)
+
+*Found `22f623c0be`, 2026-06-25. Verified against `42eca0e8fe`, 2026-09-29.*
+
+**Sentry crash issues:** `tools/sentry-fetch-issue.sh <issue-id|url>` pulls a Sentry issue's
+backtrace locally (writes `summary.txt`, `event.json`, attachments). The region host is
+`https://de.sentry.io` (EU data residency) — `sentry.io`/`us.sentry.io` give 403/401.
+Reading issues needs a **User Auth Token** (not the org token used for symbol upload).
+See `doc/sentry.md` for setup details.

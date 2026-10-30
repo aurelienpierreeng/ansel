@@ -9,7 +9,7 @@
 #   Copyright (C) 2021 Simon Frei.
 #   Copyright (C) 2022 Apfelkraut.
 #   Copyright (C) 2022 naveen.
-#   Copyright (C) 2025 Guillaume Stutin.
+#   Copyright (C) 2025-2026 Guillaume Stutin.
 #   Copyright (C) 2025 Miguel Moquillon.
 #   
 #   darktable is free software: you can redistribute it and/or modify
@@ -50,20 +50,15 @@ on:
         - "data/watermarks/**"
         - "**.md"
         - "**.yml"
+  # NO paths-ignore here, deliberately. "CI Gate" below is a required status check,
+  # and GitHub leaves a required check that never REPORTS permanently pending -- a
+  # workflow skipped by path filtering reports nothing, so every documentation-only
+  # pull request would become unmergeable. The filtering therefore moved down into
+  # the `changes` job: the workflow always starts, the build legs still skip, and the
+  # gate always reports. Do not reintroduce paths-ignore on this trigger.
   pull_request:
     branches:
       - master
-    paths-ignore:
-        - "po/**"
-        - "packaging/**"
-        - "data/latex/**"
-        - "data/lua/**"
-        - "data/pixmaps/**"
-        - "data/pswp/**"
-        - "data/style/**"
-        - "data/themes/**"
-        - "data/watermarks/**"
-        - "**.md"
   workflow_dispatch:
 
 
@@ -71,8 +66,73 @@ permissions:
   contents: read
 
 jobs:
+  # Decides whether anything worth building changed. This is the workflow-level
+  # paths-ignore that used to sit on the pull_request trigger, moved into a job so
+  # that "CI Gate" can always report. Cheap: one ubuntu runner, one API call, no
+  # checkout.
+  #
+  # Two entries from the old list are deliberately NOT carried over, because CI
+  # itself consumes them and ignoring them meant a change to a real build input ran
+  # no build at all:
+  #   packaging/**      -- holds install-deps-{ubuntu,macos,windows-msys2}.sh, which
+  #                        the jobs below execute, and a CMake subdirectory the build
+  #                        descends into (CMakeLists.txt:846 add_subdirectory(packaging)).
+  #   data/pixmaps/**   -- holds 256x256/ansel.png, the input image every "Check if it
+  #                        runs" smoke test in this file exports.
+  changes:
+    name: Changed paths
+    runs-on: ubuntu-latest
+    # The top-level grant is `contents: read`; listing a pull request's files is under
+    # the pull-requests scope, so ask for it here rather than widening it for every job.
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      build: ${{ steps.filter.outputs.build }}
+    steps:
+      - name: Decide whether to build
+        id: filter
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT: ${{ github.event_name }}
+          REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          # Anything that is not a pull request already passed the push trigger's own
+          # paths-ignore, so there is nothing left to filter.
+          if [ "${EVENT}" != "pull_request" ]; then
+            echo "build=true" >> "$GITHUB_OUTPUT"
+            echo "event is ${EVENT}, not a pull request: building."
+            exit 0
+          fi
+
+          files="$(gh api "repos/${REPO}/pulls/${PR}/files" --paginate --jq '.[].filename')"
+          if [ -z "${files}" ]; then
+            # A pull request with no files is not something to reason about; build.
+            echo "build=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          build=false
+          while IFS= read -r f; do
+            [ -n "${f}" ] || continue
+            case "${f}" in
+              po/*|data/latex/*|data/lua/*|data/pswp/*|data/style/*|data/themes/*|data/watermarks/*) ;;
+              *.md) ;;
+              *) echo "  needs a build because of: ${f}"; build=true; break ;;
+            esac
+          done <<< "${files}"
+
+          echo "build=${build}" >> "$GITHUB_OUTPUT"
+          if [ "${build}" = "false" ]; then
+            echo "only ignored paths changed; skipping the build legs."
+          fi
+
   Linux:
     name: Linux.${{ matrix.os.code }}.${{ matrix.compiler.compiler }}.${{ matrix.target }}.${{ matrix.btype }}.${{ matrix.generator }}
+    needs: changes
+    if: needs.changes.outputs.build == 'true'
     runs-on: ${{ matrix.os.label }}
     strategy:
       fail-fast: true
@@ -183,6 +243,10 @@ jobs:
           # prepends cancel, so the public function returns the opposite order to the single
           # loop it replaced -- with identical SQL, a clean build and green CI. Twice now.
           python3 "${SRC_DIR}/tools/check_list_order.py" "${SRC_DIR}/src"
+          # `#pragma once` in place of an include guard. The two behave identically at the
+          # preprocessor level, but `#pragma once` silently makes a cyclic include graph
+          # compile -- which is how three cycles lived here unnoticed for years.
+          python3 "${SRC_DIR}/tools/pragma_once_to_guards.py" --verify
       - name: Check for includes added inside a conditional block
         # Pull requests only: it compares against the base branch. An include placed inside a
         # platform #ifdef compiles wherever that macro is set and fails everywhere else, which
@@ -211,6 +275,16 @@ jobs:
           cd "${SRC_DIR}"
           git fetch --no-tags --depth=1 origin "${{ github.base_ref }}"
           ./tools/check_unused_includes.sh --changed "origin/${{ github.base_ref }}"
+      - name: Run unit tests
+        # Debug only: that is where CMakeLists.txt builds the suite by default, with the cmocka
+        # install-deps-ubuntu.sh installs; Release builds none. --no-tests=error turns a suite that
+        # was not built into a failure instead of an empty pass. The GTK tests need a display, and
+        # without one test_tagging_completion reports itself skipped: xvfb-run gives them one.
+        # (The `skiptest` target name refers to ci-script.sh's own ctest call, not to this step.)
+        if: ${{ matrix.btype == 'Debug' }}
+        run: |
+          sudo apt-get install -y xvfb
+          xvfb-run -a ctest --test-dir "${BUILD_DIR}" --output-on-failure --no-tests=error
       - name: Upload ansel backtrace
         if: always()
         uses: actions/upload-artifact@v4
@@ -227,6 +301,8 @@ jobs:
 
   Win64:
     name: Win64.${{ matrix.msystem }}.${{ matrix.compiler.compiler }}.${{ matrix.target }}.${{ matrix.btype }}.${{ matrix.generator }}
+    needs: changes
+    if: needs.changes.outputs.build == 'true'
     runs-on: windows-latest
     strategy:
       fail-fast: true
@@ -339,9 +415,22 @@ jobs:
             exit 1
           fi
           test -s "${probe}/out.png"
+      - name: Run unit tests
+        # Debug only, as on Linux: that is where CMakeLists.txt builds the suite by default, with
+        # the cmocka install-deps-windows-msys2.sh installs; Release builds none. --no-tests=error
+        # turns a suite that was not built into a failure instead of an empty pass. No xvfb here:
+        # GTK draws through Win32, and if gtk_init_check() still fails, test_tagging_completion
+        # reports itself skipped. The MSYS2 DLLs resolve through the shell's PATH, libansel.dll is
+        # copied beside the tests. masks_geometry runs too: its intermittent Windows failure is a
+        # difference against the baseline PNGs, and CI has no baselines to compare (doc/ci.md).
+        if: ${{ matrix.btype == 'Debug' }}
+        run: |
+          ctest --test-dir "${BUILD_DIR}" --output-on-failure --no-tests=error
 
   macOS:
     name: macOS.${{ matrix.compiler.compiler }}.${{ matrix.build.xcode }}.${{ matrix.target }}.${{ matrix.btype }}.${{ matrix.generator }}
+    needs: changes
+    if: needs.changes.outputs.build == 'true'
     runs-on: ${{ matrix.build.os }}
     strategy:
       fail-fast: true
@@ -410,3 +499,48 @@ jobs:
                  --conf worker_threads=4 -t 4 \
                  --conf plugins/lighttable/export/force_lcms2=FALSE \
                  --conf plugins/lighttable/export/iccintent=0
+
+  # The single required status check. Everything above can change shape -- the matrix
+  # names embed their matrix values, so requiring those directly means any matrix edit
+  # silently removes a required check and the protection quietly lapses. This job's
+  # name is stable, so it is the one to require.
+  #
+  # `if: always()` is what makes it report even when the legs were skipped or a leg
+  # failed and fail-fast cancelled its siblings. A skipped leg is a PASS here: that is
+  # the documentation-only case the `changes` job exists to produce. A cancelled one is
+  # a FAILURE, because that is what fail-fast does to healthy siblings when a real
+  # failure occurs -- treating it as neutral is how a red matrix reads as mergeable.
+  ci-gate:
+    name: CI Gate
+    needs: [changes, Linux, Win64, macOS]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require every build leg to have succeeded or been skipped
+        env:
+          CHANGES: ${{ needs.changes.result }}
+          LINUX: ${{ needs.Linux.result }}
+          WIN64: ${{ needs.Win64.result }}
+          MACOS: ${{ needs.macOS.result }}
+        run: |
+          set -euo pipefail
+          echo "changes: ${CHANGES}"
+          echo "Linux:   ${LINUX}"
+          echo "Win64:   ${WIN64}"
+          echo "macOS:   ${MACOS}"
+
+          if [ "${CHANGES}" != "success" ]; then
+            echo "::error::the changes job reported '${CHANGES}'; cannot tell whether a build was owed."
+            exit 1
+          fi
+
+          rc=0
+          for leg in "Linux:${LINUX}" "Win64:${WIN64}" "macOS:${MACOS}"; do
+            name="${leg%%:*}"
+            result="${leg#*:}"
+            case "${result}" in
+              success|skipped) ;;
+              *) echo "::error::${name} reported '${result}'."; rc=1 ;;
+            esac
+          done
+          exit "${rc}"

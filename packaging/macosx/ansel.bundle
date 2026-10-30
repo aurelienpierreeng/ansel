@@ -16,6 +16,8 @@
        one binary here that links liblensfun, so listing it is also what pulls that dylib
        into the bundle; the application itself does not link it and does not need it. -->
   <binary dest="${bundle}/Contents/MacOS/">${prefix:dt}/bin/ansel-lens-db-update</binary>
+  <!-- Built, like ansel-cltest above, only where OpenCL was found. -->
+  <binary dest="${bundle}/Contents/MacOS/">${prefix:dt}/bin/ansel-nn-parity</binary>
   <binary dest="${bundle}/Contents/MacOS/">${prefix:dt}/bin/ansel-rs-identify</binary>
   <binary dest="${bundle}/Contents/MacOS/">${prefix:dt}/libexec/ansel/tools/ansel-curve-tool</binary>
   <binary dest="${bundle}/Contents/MacOS/">${prefix:dt}/libexec/ansel/tools/ansel-noiseprofile</binary>

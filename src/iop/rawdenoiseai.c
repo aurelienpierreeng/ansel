@@ -487,9 +487,22 @@ static void _nn_arena_free(void *p)
   dt_pixelpipe_cache_free_align(p);
 }
 
+/* The pipe whose process() is running on this thread, for the executor's
+ * cancel hook: a forward outlives the pipe's interest in it as soon as the
+ * history changes (module switched off, slider moved), and the pipe's kill
+ * switch is otherwise only read once the module returns. Thread-local for the
+ * same reason as _nn_region. */
+static __thread const dt_dev_pixelpipe_t *_nn_pipe = NULL;
+
+static int _nn_cancelled(void)
+{
+  return dt_dev_pixelpipe_has_shutdown(_nn_pipe);
+}
+
 void init_global(dt_iop_module_so_t *module)
 {
   dt_nn_set_allocator(_nn_arena_alloc, _nn_arena_free);
+  dt_nn_set_cancel(_nn_cancelled);
   dt_iop_rawdenoiseai_global_data_t *gd = calloc(1, sizeof(dt_iop_rawdenoiseai_global_data_t));
   dt_pthread_mutex_init(&gd->lock, NULL);
 #ifdef HAVE_OPENCL
@@ -514,6 +527,7 @@ void cleanup_global(dt_iop_module_so_t *module)
   // the hooks point into this module's code: leaving them set after dlclose
   // would leave the core library with dangling function pointers
   dt_nn_set_allocator(NULL, NULL);
+  dt_nn_set_cancel(NULL);
   dt_iop_rawdenoiseai_global_data_t *gd = (dt_iop_rawdenoiseai_global_data_t *)module->data;
   if(gd)
   {
@@ -1324,6 +1338,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
     return 1;
   }
   _nn_region = &region;
+  _nn_pipe = pipe;
   float *const nn_in = _region_alloc(&region, plane * in_ch * sizeof(float), 0);
   float *const nn_out = _region_alloc(&region, plane * sizeof(float), 0);
   // by construction these cannot fail: the region was sized for them
@@ -1362,18 +1377,21 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
   if(!rc) rc = dt_nn_unet_apply_stage(model, 0, nn_in, nn_out, pw, ph, 0);
   if(!rc) _k_residual(nn_in, nn_out, nn_out, plane);
   if(!rc) rc = _apply_low_band_anchor(nn_in, nn_out, pw, ph, dt_nn_model_anchor(model));
-  if(rc)
+  // a cancelled forward falls through both branches: the pipe no longer wants
+  // this output and discards it on our error, so there is nothing to log or write
+  if(rc && rc != DT_NN_CANCELLED)
   {
     dt_print(DT_DEBUG_ALWAYS, "[rawdenoiseai] inference failed (%d) on %dx%d tile, scratch %.1f MB\n", rc, pw, ph,
              dt_nn_unet_scratch_bytes(model, pw, ph) / 1048576.0);
     dt_iop_image_copy_by_size(ovoid, ivoid, width, height, 1);
   }
-  else
+  else if(!rc)
   {
     _k_blend_crop(in, nn_out, out, width, height, pw, d->strength);
   }
 
   _nn_region = NULL;
+  _nn_pipe = NULL;
   dt_pixelpipe_cache_free_align(region.base);
   return rc;
 }
@@ -1382,8 +1400,9 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
 /* GPU path. Step for step the same procedure as process(), each _k_* function
  * there having the kernel of the same name here; the whole tile runs
  * dev_in -> dev_out with no mid-tile host round-trip, since command-queue syncs
- * dominate GPU cost. Returns FALSE on any failure so the pipeline falls back
- * to CPU. */
+ * dominate GPU cost, except for the cancel checks between U-Net levels.
+ * Returns FALSE on any failure so the pipeline falls back to CPU, or aborts
+ * when the failure is the pipe's killswitch. */
 int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_iop_t *piece,
                cl_mem dev_in, cl_mem dev_out)
 {
@@ -1394,6 +1413,7 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
   const int devid = pipe->devid;
 
   if(!model || !gd || !gd->nn_cl || !(d->strength > 0.0f)) return FALSE;
+  _nn_pipe = pipe;
 
   const int width = roi->width, height = roi->height;
   // pre-shifted for the kernel's tile-local Bayer branch, exactly as in process()
@@ -1539,6 +1559,9 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
 
   // 3. fine pass (raw noise) + residual -> denoised plane
   err = dt_nn_unet_apply_stage_cl(model, 0, gd->nn_cl, devid, dev_planes, dev_noise, pw, ph);
+  // a cancelled forward fails the tile like any error, and the pipeline does
+  // not fall back to CPU for a run it abandoned
+  if(err == DT_NN_CANCELLED) goto cleanup;
   if(err != CL_SUCCESS)
   {
     dt_print(DT_DEBUG_OPENCL, "[rawdenoiseai] GPU inference failed on %dx%d tile, falling back to CPU\n", pw, ph);
@@ -1682,6 +1705,7 @@ cleanup:
   if(dev_cden) dt_opencl_release_mem_object(dev_cden);
   for(int k = 0; k < 11; k++)
     if(grids[k]) dt_opencl_release_mem_object(grids[k]);
+  _nn_pipe = NULL;
   return success;
 }
 #endif // HAVE_OPENCL

@@ -4402,10 +4402,20 @@ msgstr ""
 msgid "unknown/invalid"
 msgstr ""
 
-#: ../src/common/colorlabels.c:336
+#: ../src/metadata/colorlabels.c:267
 #, c-format
 msgid "Color label set to %s for %i image(s)"
 msgstr ""
+
+#: ../src/metadata/colorlabels.c:270
+#, c-format
+msgid "Color label %s removed for %i image(s)"
+msgstr "Eticheta de culoare %s eliminată de la %i imagine(i)"
+
+#: ../src/metadata/colorlabels.c:265
+#, c-format
+msgid "Color labels removed for %i image(s)"
+msgstr "Etichetele de culoare eliminate de la %i imagine(i)"
 
 #: ../src/common/colorspaces.c:1691
 #, fuzzy
@@ -4585,7 +4595,7 @@ msgstr ""
 msgid "printing on `%s' cancelled"
 msgstr ""
 
-#: ../src/common/cups_print.c:584
+#: ../src/common/cups_print.c:586
 #, c-format
 msgid "error while printing `%s' on `%s'"
 msgstr ""
@@ -4637,7 +4647,7 @@ msgstr ""
 msgid "[MEMORY CONFIGURATION] Worker threads: %i\n"
 msgstr ""
 
-#: ../src/common/darktable.c:1744
+#: ../src/darktable.c:2541
 msgid ""
 "CRITICAL WARNING: Ansel will not be able to use the RAM you allocated it.\n"
 "Review your memory settings or add more RAM to your system."
@@ -5278,46 +5288,46 @@ msgstr ""
 msgid "Image %s is already in library and will not be re-imported.\n"
 msgstr ""
 
-#: ../src/common/image.c:2119
+#: ../src/common/image.c:2137
 #, c-format
 msgid "cannot access local copy `%s'"
 msgstr "nu pot accesa copia locala `%s'"
 
-#: ../src/common/image.c:2126
+#: ../src/common/image.c:2144
 #, fuzzy, c-format
 msgid "cannot write local copy `%s'"
 msgstr "nu pot accesa copia locala `%s'"
 
-#: ../src/common/image.c:2133
+#: ../src/common/image.c:2151
 #, c-format
 msgid "error moving local copy `%s' -> `%s'"
 msgstr ""
 
-#: ../src/common/image.c:2149
+#: ../src/common/image.c:2167
 #, c-format
 msgid "error moving `%s': file not found"
 msgstr ""
 
-#: ../src/common/image.c:2159
+#: ../src/common/image.c:2177
 #, c-format
 msgid "error moving `%s' -> `%s': file exists"
 msgstr ""
 
-#: ../src/common/image.c:2163
+#: ../src/common/image.c:2181
 #, fuzzy, c-format
 msgid "error moving `%s' -> `%s'"
 msgstr "eroare la încărcarea fișierului '%s'"
 
-#: ../src/common/image.c:2473
+#: ../src/common/image.c:2321
 msgid "cannot create local copy when the original file is not accessible."
 msgstr ""
 "nu pot creaa o copie locala, atat timp cat originalul nu este disponibil."
 
-#: ../src/common/image.c:2487
+#: ../src/common/image.c:2335
 msgid "cannot create local copy."
 msgstr "nu pot crea copia locala"
 
-#: ../src/common/image.c:2563 ../src/control/jobs/control_jobs.c:800
+#: ../src/common/image.c:2391 ../src/control/jobs/control_jobs.c:780
 #, fuzzy
 msgid "cannot remove local copy when the original file is not accessible."
 msgstr ""
@@ -5414,7 +5424,7 @@ msgstr ""
 msgid "webp"
 msgstr ""
 
-#: ../src/common/imageio.c:792
+#: ../src/imageio/imageio_core.c:593
 #, c-format
 msgid "cannot find the style '%s' to apply during export."
 msgstr ""
@@ -5530,9 +5540,8 @@ msgstr ""
 #: ../src/develop/masks/masks_gui.c:454 ../src/iop/ashift.c:5344
 #: ../src/iop/crop.c:1028 ../src/iop/drawlayer.c:1308
 #: ../src/iop/drawlayer.c:1964 ../src/iop/drawlayer.c:2506
-#, fuzzy
 msgid "Cancel"
-msgstr "anulează"
+msgstr "Anulează"
 
 #: ../src/common/import.c:1054
 #, fuzzy
@@ -6069,7 +6078,7 @@ msgstr ""
 msgid "synchronization log"
 msgstr ""
 
-#: ../src/control/jobs/control_jobs.c:195
+#: ../src/control/jobs/control_jobs.c:191
 msgid "failed to create film roll for destination directory, aborting move.."
 msgstr ""
 
@@ -6413,7 +6422,7 @@ msgstr "contrast local"
 msgid "refresh exif"
 msgstr "reîmprospătează lista de albume"
 
-#: ../src/control/jobs/control_jobs.c:1953
+#: ../src/control/jobs/control_jobs.c:1941
 #, c-format
 msgid "failed to get parameters from storage module `%s', aborting export.."
 msgstr ""
@@ -6500,7 +6509,7 @@ msgid ""
 "The target may be full or read-only.\n"
 msgstr ""
 
-#: ../src/control/jobs/import_jobs.c:371
+#: ../src/control/jobs/import_jobs.c:430
 #, c-format
 msgid "Error importing file in collection: %s"
 msgstr ""
@@ -6550,21 +6559,21 @@ msgstr "format de fișier"
 msgid "import"
 msgstr "importă"
 
-#: ../src/develop/blend.c:405
+#: ../src/develop/blend.c:460
 msgid "detail mask blending error"
 msgstr ""
 
-#: ../src/develop/blend.c:685 ../src/develop/blend.c:1131
+#: ../src/develop/blend.c:761 ../src/develop/blend.c:1210
 #, c-format
 msgid "skipped blending in module '%s': roi's do not match"
 msgstr ""
 
-#: ../src/develop/blend.c:711 ../src/develop/blend.c:750
-#: ../src/develop/blend.c:1162
+#: ../src/develop/blend.c:787 ../src/develop/blend.c:826
+#: ../src/develop/blend.c:1241
 msgid "could not allocate buffer for blending"
 msgstr ""
 
-#: ../src/develop/blend.c:1073
+#: ../src/develop/blend.c:1152
 msgid "detail mask CL blending problem"
 msgstr ""
 
@@ -6891,7 +6900,7 @@ msgstr ""
 #: ../src/develop/blend_gui.c:1749
 #, c-format
 msgid "Already in '%s'"
-msgstr ""
+msgstr "Deja în '%s'"
 
 #: ../src/develop/blend_gui.c:2082 ../src/develop/blend_gui.c:2381
 #: ../src/iop/drawlayer.c:1965
@@ -6920,9 +6929,8 @@ msgid "Attach shapes"
 msgstr "formă"
 
 #: ../src/develop/blend_gui.c:2280 ../src/develop/masks/masks_gui.c:783
-#, fuzzy
 msgid "Operation"
-msgstr "saturație"
+msgstr "Operație"
 
 #: ../src/develop/blend_gui.c:2285 ../src/develop/masks/masks_gui.c:788
 msgid "Invert"
@@ -6931,24 +6939,22 @@ msgstr ""
 #: ../src/develop/blend_gui.c:2296 ../src/develop/masks/masks_gui.c:791
 #: ../src/libs/masks.c:1097
 msgid "Union"
-msgstr ""
+msgstr "Uniune"
 
 #: ../src/develop/blend_gui.c:2304 ../src/develop/masks/masks_gui.c:793
 #: ../src/libs/masks.c:1100
-#, fuzzy
 msgid "Intersection"
-msgstr "inversează selecţia"
+msgstr "Intersecție"
 
 #: ../src/develop/blend_gui.c:2312 ../src/develop/masks/masks_gui.c:795
 #: ../src/libs/masks.c:1103
 msgid "Difference"
-msgstr ""
+msgstr "Diferență"
 
 #: ../src/develop/blend_gui.c:2320 ../src/develop/masks/masks_gui.c:797
 #: ../src/libs/masks.c:1106
-#, fuzzy
 msgid "Exclusion"
-msgstr "exclude imagini"
+msgstr "Excludere"
 
 #: ../src/develop/blend_gui.c:2330
 #, fuzzy
@@ -6975,7 +6981,7 @@ msgstr ""
 msgid ""
 "Detach this shape from the mask. The shape is kept and stays available for "
 "reuse."
-msgstr ""
+msgstr "Detașează această formă de mască. Forma este păstrată și rămâne disponibilă pentru reutilizare."
 
 #: ../src/develop/blend_gui.c:2516
 msgid ""
@@ -7237,7 +7243,7 @@ msgid "no mask used"
 msgstr ""
 
 #: ../src/develop/blend_gui.c:3689
-msgid "Edit current module mask name"
+msgid "Edit current module's group name"
 msgstr ""
 
 #. buttons for mask polarity and edit mode
@@ -7620,28 +7626,28 @@ msgid_plural "%s have been imported"
 msgstr[0] ""
 msgstr[1] ""
 
-#: ../src/develop/pixelpipe_cache.c:1508 ../src/develop/pixelpipe_cache.c:1633
+#: ../src/caches/pixelpipe_cache.c:166
 #, c-format
 msgid ""
 "The pipeline cache is full while allocating `%s` (module `%s`). Either your "
 "RAM settings are too frugal or your RAM is too small."
 msgstr ""
 
-#: ../src/develop/pixelpipe_cache.c:1511 ../src/develop/pixelpipe_cache.c:1635
+#: ../src/caches/pixelpipe_cache.c:170
 #, c-format
 msgid ""
 "The pipeline cache is full while allocating `%s`. Either your RAM settings "
 "are too frugal or your RAM is too small."
 msgstr ""
 
-#: ../src/develop/pixelpipe_cache.c:1514 ../src/develop/pixelpipe_cache.c:1637
+#: ../src/caches/pixelpipe_cache.c:174
 #, c-format
 msgid ""
 "The pipeline cache is full while processing module `%s`. Either your RAM "
 "settings are too frugal or your RAM is too small."
 msgstr ""
 
-#: ../src/develop/pixelpipe_cache.c:1517 ../src/develop/pixelpipe_cache.c:1639
+#: ../src/caches/pixelpipe_cache.c:177
 msgid ""
 "The pipeline cache is full. Either your RAM settings are too frugal or your "
 "RAM is too small."
@@ -7852,9 +7858,8 @@ msgid ""
 msgstr ""
 
 #: ../src/develop/masks/masks_gui.c:452 ../src/libs/masks.c:1133
-#, fuzzy
 msgid "Delete shape"
-msgstr "șterge această presetare"
+msgstr "Șterge forma"
 
 #: ../src/develop/masks/masks_gui.c:453
 msgid "Keep unused shape"
@@ -7924,14 +7929,13 @@ msgstr "opacitate"
 
 #: ../src/develop/masks/masks_gui.c:805 ../src/dtgtk/thumbtable.c:2187
 #: ../src/libs/masks.c:1111 ../src/views/darkroom.c:2037
-#, fuzzy
 msgid "Move up"
-msgstr "elimină"
+msgstr "Mută în sus"
 
 #: ../src/develop/masks/masks_gui.c:807 ../src/dtgtk/thumbtable.c:2191
 #: ../src/libs/masks.c:1114 ../src/views/darkroom.c:2052
 msgid "Move down"
-msgstr ""
+msgstr "Mută în jos"
 
 #: ../src/develop/masks/masks_gui.c:816
 #, fuzzy
@@ -7945,7 +7949,7 @@ msgstr "șterge"
 
 #: ../src/develop/masks/masks_gui.c:829 ../src/libs/masks.c:1146
 msgid "Remove shape from mask"
-msgstr ""
+msgstr "Elimină forma din mască"
 
 #: ../src/develop/masks/masks.c:1515
 #, c-format
@@ -8064,7 +8068,7 @@ msgid ""
 "session!"
 msgstr ""
 
-#: ../src/develop/tiling.c:823 ../src/develop/tiling.c:1140
+#: ../src/develop/tiling.c:478 ../src/develop/tiling.c:810
 #, c-format
 msgid "tiling failed for module '%s'. output might be garbled."
 msgstr ""
@@ -9046,7 +9050,7 @@ msgctxt "preferences"
 msgid "export..."
 msgstr "exportă"
 
-#: ../src/gui/preferences.c:1173
+#: ../src/gui/preferences.c:1215
 #, c-format
 msgid "failed to import preset %s"
 msgstr ""
@@ -10324,9 +10328,9 @@ msgstr ""
 msgid "invalid border size, using 0"
 msgstr ""
 
-#: ../src/imageio/format/pdf.c:207 ../src/imageio/storage/disk.c:360
-#: ../src/imageio/storage/gallery.c:387 ../src/imageio/storage/gallery.c:427
-#: ../src/imageio/storage/piwigo.c:1044 ../src/imageio/storage/example.c:156
+#: ../src/imageio/format/pdf.c:212 ../src/imageio/storage/disk.c:456
+#: ../src/imageio/storage/gallery.c:390 ../src/imageio/storage/gallery.c:431
+#: ../src/imageio/storage/example.c:156
 #, fuzzy, c-format
 msgid "could not export to file `%s'!"
 msgstr "nu s-a putut creea directorul `%s'!"
@@ -10603,12 +10607,12 @@ msgstr "suprascrie"
 msgid "skip"
 msgstr ""
 
-#: ../src/imageio/storage/disk.c:309 ../src/imageio/storage/gallery.c:301
+#: ../src/imageio/storage/disk.c:403 ../src/imageio/storage/gallery.c:304
 #, c-format
 msgid "could not create directory `%s'!"
 msgstr "nu s-a putut creea directorul `%s'!"
 
-#: ../src/imageio/storage/disk.c:316
+#: ../src/imageio/storage/disk.c:410
 #, fuzzy, c-format
 msgid "could not write to directory `%s'!"
 msgstr "nu s-a putut creea directorul `%s'!"
@@ -10839,7 +10843,7 @@ msgstr "nu s-a putut creea directorul `%s'!"
 msgid "Last modified: %s"
 msgstr ""
 
-#: ../src/libs/textnotes.c:1965
+#: ../src/libs/textnotes.c:1842
 #, c-format
 msgid "failed to save text notes to %s: %s"
 msgstr ""
@@ -10959,9 +10963,8 @@ msgid "vertical"
 msgstr "centrare pe verticală"
 
 #: ../src/iop/ashift.c:5773 ../src/iop/crop.c:1257
-#, fuzzy
 msgid "Apply"
-msgstr "aplică"
+msgstr "Aplică"
 
 #: ../src/iop/ashift.c:5773 ../src/iop/crop.c:1257
 msgid "Apply changes"
@@ -13614,21 +13617,21 @@ msgid ""
 "RGB!"
 msgstr ""
 
-#: ../src/iop/colorin.c:1170
+#: ../src/iop/colorin.c:826
 #, c-format
 msgid "`%s' color matrix not found!"
 msgstr ""
 
-#: ../src/iop/colorin.c:1262
+#: ../src/iop/colorin.c:882
 msgid "input profile could not be generated!"
 msgstr ""
 
-#: ../src/iop/colorin.c:1367
+#: ../src/iop/colorin.c:863
 #, fuzzy
 msgid "unsupported input profile has been replaced by linear Rec709 RGB!"
 msgstr "profilul de ieșire nesuportat a fost înlocuit de sRGB!"
 
-#: ../src/iop/colorin.c:1514
+#: ../src/iop/colorin.c:971
 #, c-format
 msgid "The color profile `%s' referenced as input profile has not been found."
 msgstr ""
@@ -13748,17 +13751,17 @@ msgstr ""
 msgid "non-linear, RGB or Lab, display-referred"
 msgstr ""
 
-#: ../src/iop/colorout.c:642
+#: ../src/iop/colorout.c:518
 #, fuzzy
 msgid "missing output profile has been replaced by sRGB!"
 msgstr "profilul de ieșire nesuportat a fost înlocuit de sRGB!"
 
-#: ../src/iop/colorout.c:676
+#: ../src/iop/colorout.c:550
 #, fuzzy
 msgid "missing softproof profile has been replaced by sRGB!"
 msgstr "profilul de ieșire nesuportat a fost înlocuit de sRGB!"
 
-#: ../src/iop/colorout.c:735
+#: ../src/iop/colorout.c:574
 msgid "unsupported output profile has been replaced by sRGB!"
 msgstr "profilul de ieșire nesuportat a fost înlocuit de sRGB!"
 
@@ -13777,7 +13780,7 @@ msgstr "corecţie de culoare"
 msgid "recover clipped highlights by propagating surrounding colors"
 msgstr ""
 
-#: ../src/iop/colorreconstruction.c:619
+#: ../src/iop/colorreconstruction.c:624
 msgid "module `color reconstruction' failed"
 msgstr ""
 
@@ -14030,7 +14033,7 @@ msgstr ""
 msgid "[dual demosaic_cl] internal problem"
 msgstr ""
 
-#: ../src/iop/demosaic.c:2202
+#: ../src/iop/demosaic.c:2299
 #, c-format
 msgid "`%s' color matrix not found for 4bayer image!"
 msgstr ""
@@ -15522,7 +15525,7 @@ msgid ""
 "only works for raw images."
 msgstr ""
 
-#: ../src/iop/invert.c:112 ../src/iop/invert.c:327
+#: ../src/iop/invert.c:117 ../src/iop/invert.c:367
 #, c-format
 msgid "`%s' color matrix not found for 4bayer image"
 msgstr ""
@@ -17241,12 +17244,12 @@ msgstr "balans de alb"
 msgid "scale raw RGB channels to balance white and help demosaicing"
 msgstr ""
 
-#: ../src/iop/temperature.c:1086
+#: ../src/iop/temperature.c:1174
 #, c-format
 msgid "`%s' color matrix not found for image"
 msgstr ""
 
-#: ../src/iop/temperature.c:1120
+#: ../src/iop/temperature.c:1208
 #, c-format
 msgid "failed to read camera white balance information from `%s'!"
 msgstr ""
@@ -19248,13 +19251,13 @@ msgid "<i>Blending is not available for the <b>%s</b> module.</i>"
 msgstr ""
 
 #: ../src/libs/masks.c:331
-#, fuzzy, c-format
+#, c-format
 msgid "Mask #%d"
-msgstr "cale"
+msgstr "Masca #%d"
 
 #: ../src/libs/masks.c:995 ../src/libs/masks.c:1024
 msgid "Add new shape ..."
-msgstr ""
+msgstr "Adaugă o formă nouă..."
 
 #: ../src/libs/masks.c:1028
 msgid "Add brush"
@@ -19277,27 +19280,28 @@ msgid "Add gradient"
 msgstr ""
 
 #: ../src/libs/masks.c:1073
-msgid "Add shape ..."
-msgstr ""
+msgid "Attach shape ..."
+msgstr "atașează forma..."
 
 #: ../src/libs/masks.c:1083
-msgid "Group the forms"
-msgstr ""
+msgid "New group from selection"
+msgstr "grup nou din selecție"
+
+#: ../src/libs/shape_manager.c
+msgid "Attach to the group"
+msgstr "atașează la grup"
 
 #: ../src/libs/masks.c:1091
-#, fuzzy
 msgid "Invert shape"
-msgstr "inversează selecţia"
+msgstr "Inversează forma"
 
 #: ../src/libs/masks.c:1123
-#, fuzzy
 msgid "Duplicate shape"
-msgstr "șterge această presetare"
+msgstr "Duplică forma"
 
 #: ../src/libs/masks.c:1139
-#, fuzzy
 msgid "Delete mask"
-msgstr "şterge tag?"
+msgstr "Șterge masca"
 
 #: ../src/libs/masks.c:1151
 #, fuzzy
@@ -19740,7 +19744,7 @@ msgstr "setări"
 msgid "processing `%s' for `%s'"
 msgstr "editează `%s' pentru modulul `%s'"
 
-#: ../src/libs/print_settings.c:382
+#: ../src/libs/print_settings.c:395
 #, c-format
 msgid "cannot open printer profile `%s'"
 msgstr ""
@@ -19750,12 +19754,12 @@ msgstr ""
 msgid "error getting output profile for image %d"
 msgstr ""
 
-#: ../src/libs/print_settings.c:400
+#: ../src/libs/print_settings.c:413
 #, c-format
 msgid "cannot apply printer profile `%s'"
 msgstr ""
 
-#: ../src/libs/print_settings.c:552
+#: ../src/libs/print_settings.c:565
 msgid "failed to create temporary pdf for printing"
 msgstr ""
 
@@ -20534,7 +20538,7 @@ msgstr "scop"
 
 #: ../src/libs/tools/filter.c:122
 msgid "group"
-msgstr ""
+msgstr "grup"
 
 #: ../src/libs/tools/filter.c:139
 #, fuzzy
@@ -20737,15 +20741,15 @@ msgstr ""
 msgid "soft proof"
 msgstr "profil softproof"
 
-#: ../src/views/darkroom.c:1276
+#: ../src/views/darkroom.c:1232
 msgid "Could not load the image source data."
 msgstr ""
 
-#: ../src/views/darkroom.c:1279
+#: ../src/views/darkroom.c:1235
 msgid "Could not read image information from the database."
 msgstr ""
 
-#: ../src/views/darkroom.c:1282
+#: ../src/views/darkroom.c:1238
 msgid "We could not load the image."
 msgstr ""
 
@@ -21376,7 +21380,7 @@ msgid ""
 "%s.\n"
 msgstr ""
 
-#: ../src/develop/pixelpipe_raster_masks.c:61
+#: ../src/develop/pixelpipe_raster_masks.c:66
 #, c-format
 msgid ""
 "The %s module is trying to reuse a mask from a module but it can't be "
@@ -21385,7 +21389,7 @@ msgid ""
 "%s"
 msgstr ""
 
-#: ../src/develop/pixelpipe_raster_masks.c:74
+#: ../src/develop/pixelpipe_raster_masks.c:79
 #, c-format
 msgid ""
 "The `%s` module is trying to reuse a mask from disabled module `%s`.\n"
@@ -21564,7 +21568,7 @@ msgid "failed to commit drawing stroke before renaming"
 msgstr ""
 
 #: ../src/iop/drawlayer.c:2012 ../src/iop/drawlayer/layers.c:191
-#: ../src/iop/drawlayer/runtime.c:788
+#: ../src/iop/drawlayer/runtime.c:761
 msgid "failed to write drawing layer sidecar"
 msgstr ""
 
@@ -21950,7 +21954,7 @@ msgstr ""
 msgid "failed to start drawing worker"
 msgstr ""
 
-#: ../src/iop/drawlayer/worker.c:1506
+#: ../src/iop/drawlayer/worker.c:1677
 msgid "drawing worker queue is full, stroke aborted"
 msgstr ""
 
@@ -21982,6 +21986,85 @@ msgstr ""
 #: ../src/iop/splittoningrgb.c:1289
 msgid "sample average luminance from an area to set this keyframe"
 msgstr ""
+
+#: ../src/libs/shape_manager.c
+msgid "All shapes"
+msgstr "Toate formele"
+
+#: ../src/libs/shape_manager.c
+#, c-format
+msgid "Attach this to the mask '%s'."
+msgstr "Atașează la masca '%s'."
+
+#: ../src/libs/shape_manager.c
+msgid "Delete unused shapes"
+msgstr "Șterge formele neutilizate"
+
+#: ../src/libs/shape_manager.c
+msgid "Every shape and group drawn on this image, including the masks modules already use -- pick any of them up to reuse."
+msgstr "Toate formele și grupurile desenate pe această imagine, inclusiv măștile pe care modulele le folosesc deja -- alegeți oricare pentru a o reutiliza."
+
+#: ../src/libs/shape_manager.c
+#, c-format
+msgid "Manage which modules use this %s. A mask is created for the ticked ones that have none, and shared between them."
+msgstr "Gestionați ce module folosesc acest/această %s. Pentru modulele bifate care nu au o mască se creează una, partajată între ele."
+
+#: ../src/libs/shape_manager.c
+msgid "Module groups"
+msgstr "Grupuri de module"
+
+#: ../src/libs/shape_manager.c
+#, c-format
+msgid "Modules using this %s"
+msgstr "Module care folosesc acest/această %s"
+
+#: ../src/libs/shape_manager.c
+msgid "No module in the pipeline can carry a drawn mask."
+msgstr "Niciun modul din flux nu poate purta o mască desenată."
+
+#: ../src/libs/shape_manager.c
+msgid "Open shape manager..."
+msgstr "Deschide managerul de forme..."
+
+#: ../src/libs/shape_manager.c
+msgid "Permanently delete this shape. It is detached from every mask and removed from the list of available shapes."
+msgstr "Șterge definitiv această formă. Este detașată de toate măștile și eliminată din lista formelor disponibile."
+
+#: ../src/libs/shape_manager.c
+msgid "Select a mask in the module groups list to attach this shape to it."
+msgstr "Selectați o mască în lista grupurilor de module pentru a atașa această formă la ea."
+
+#: ../src/libs/shape_manager.c
+msgid "Shape Manager"
+msgstr "Manager de forme"
+
+#: ../src/libs/shape_manager.c
+#, c-format
+msgid "The mask '%s' already uses every shape of this group."
+msgstr "Masca '%s' folosește deja toate formele acestui grup."
+
+#: ../src/libs/shape_manager.c
+msgid "The masks modules actually render, and the shapes each one is made of."
+msgstr "Măștile pe care modulele le aplică efectiv și formele din care este alcătuită fiecare."
+
+#: ../src/libs/shape_manager.c
+#, c-format
+msgid "This group cannot be added to the mask '%s': it already contains it."
+msgstr "Acest grup nu poate fi adăugat la masca '%s': o conține deja."
+
+#: ../src/libs/shape_manager.c
+#, c-format
+msgid "This is already part of the mask '%s'."
+msgstr "Aceasta face deja parte din masca '%s'."
+
+#: ../src/libs/shape_manager.c
+msgid "this is the module's own mask"
+msgstr "aceasta este masca proprie a modulului"
+
+#: ../src/libs/shape_manager.c
+#, c-format
+msgid "Tick the modules that should use the %s '%s', untick the ones that should stop."
+msgstr "Bifați modulele care trebuie să folosească %s '%s' și debifați-le pe cele care nu trebuie să o mai facă."
 
 #, fuzzy
 #~ msgid "Wire shapes"

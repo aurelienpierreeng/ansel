@@ -33,6 +33,7 @@
     Copyright (C) 2021 Ralf Brown.
     Copyright (C) 2022 Martin Bařinka.
     Copyright (C) 2023 Ricky Moon.
+    Copyright (C) 2026 Guillaume Stutin.
     
     darktable is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -324,7 +325,8 @@ static void _filename_lock_init(void)
 }
 
 int store(dt_imageio_module_storage_t *self, dt_imageio_module_data_t *sdata, const int32_t imgid,
-          dt_imageio_module_format_t *format, dt_imageio_module_data_t *fdata, const int num, const int total,
+          dt_imageio_module_format_t *format, dt_imageio_module_data_t *fdata, const double scale_factor,
+          const int num, const int total,
           const gboolean high_quality, const gboolean export_masks,
           dt_colorspaces_color_profile_type_t icc_type, const gchar *icc_filename, dt_iop_color_intent_t icc_intent,
           dt_export_metadata_t *metadata)
@@ -398,15 +400,13 @@ try_again:
 
     if(g_mkdir_with_parents(output_dir, 0755))
     {
-      fprintf(stderr, "[imageio_storage_disk] could not create directory: `%s'!\n", output_dir);
-      dt_control_log(_("could not create directory `%s'!"), output_dir);
+      dt_control_alert(_("Export failed"), _("could not create directory!"), output_dir);
       fail = TRUE;
       goto failed;
     }
     if(g_access(output_dir, W_OK | X_OK) != 0)
     {
-      fprintf(stderr, "[imageio_storage_disk] could not write to directory: `%s'!\n", output_dir);
-      dt_control_log(_("could not write to directory `%s'!"), output_dir);
+      dt_control_alert(_("Export failed"), _("could not write to directory!"), output_dir);
       fail = TRUE;
       goto failed;
     }
@@ -448,11 +448,10 @@ try_again:
   if(fail) return 1;
 
   /* export image to file */
-  if(dt_imageio_export(imgid, filename, format, fdata, TRUE, TRUE, export_masks, icc_type,
+  if(dt_imageio_export(imgid, filename, format, fdata, scale_factor, TRUE, TRUE, export_masks, icc_type,
                        icc_filename, icc_intent, self, sdata, num, total, metadata) != 0)
   {
-    fprintf(stderr, "[imageio_storage_disk] could not export to file: `%s'!\n", filename);
-    dt_control_log(_("could not export to file `%s'!"), filename);
+    dt_control_alert(_("Export failed"), _("could not export to file!"), filename);
     return 1;
   }
 

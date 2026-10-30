@@ -1,5 +1,7 @@
 # Include hygiene: findings and roadmap
 
+> **First checked 2026-09-29.** This file was mechanically checked against `8f4638a04e` on 2026-09-29 — every `file:line` citation resolved, every backticked symbol looked up in the tree, every OPEN/planned status claim tested, and every gate or baseline number it quotes compared with `tools/check_module_boundaries.sh` and `tools/include_baseline.txt`. **No per-claim semantic read was done**: a citation that resolves can still describe the wrong thing, so this is a floor, not a verification. One symbol name corrected (`dt_film_confirm_rmdir_handler_t`). `dt_iop_throttled_history_update` is absent from the tree because this file records deleting it, which is correct.
+
 This file records what the include diagnostics measure, so follow-up work can be planned and
 split without re-deriving it. Sections headed **Done** describe work that has landed, kept
 for the traps it left behind rather than as a changelog; everything else is backlog.
@@ -18,7 +20,7 @@ translation units, 0 cycles, 206 layering violations.
 | `tools/include_unused.py` | candidate unneeded `#include`s, static pass over the whole tree |
 | `tools/include_unused.py --verify` | confirms candidates by actually recompiling without them |
 | `tools/include_report.py` | one self-contained HTML page: rankings, blast radius, inversion heat-map, SVG charts, no dependencies |
-| `tools/pragma_once_to_guards.py --verify` | fails if `#pragma once` reappears |
+| `tools/pragma_once_to_guards.py --verify` | fails if `#pragma once` reappears, over every header spelling (`.h`, `.hh`, `.hpp`, `.hxx`); runs in CI |
 | `tools/symbol_coupling.py` | what actually *links* between modules, per object file — see §6 |
 | `tools/header_consumers.py` | per includer of a header: what it takes from it vs. what it only forwards |
 | `tools/decl_def_audit.py` | declarations whose definition sits outside the matching `.c` — see §16.1 |
@@ -459,7 +461,7 @@ by how much of `common/` it removes.
 |---|---|---|---:|---|
 | 1 | `src/metadata/` | tags, ratings, colorlabels, grouping, gpx, exif.cc, metadata, dng_opcode | 10097 | all still in `common/` |
 | 2 | `src/database/` | database, sqliteicu, legacy_presets (+ the `DT_DEBUG_SQLITE3_*` macros in `common/debug.h`) | 6634 | all still in `common/` |
-| 3 | `src/caches/` | cache (the core), image_cache, mipmap_cache | 3322 | core + 2 of 3 in `common/`; `develop/pixelpipe_cache.{c,h}` is the third and stays where it is |
+| 3 | `src/caches/` | cache (the core), image_cache, mipmap_cache | 3322 | core + 2 of 3 in `common/`; `develop/pixelpipe_cache.{c,h}` is the third and was to stay where it was — **it moved too** (`c889e94dc6`/`157ac60b8f`), so `src/caches/` holds all four, plus `pixelpipe_cache_wait.{c,h}` since T5 |
 | 4 | `src/math/` | curve_tools (1D interpolation) | 902 | still in `common/` |
 | 5 | `src/views/` | cups_print — used by the print view | 813 | 5 include sites: `views/print.c`, `views/view.h`, `libs/print_settings.c`, `control/jobs/control_jobs.h`, `common/printing.h` |
 | — | `src/system/` | resource_limits, dtpthread | 926 | **done** for `resource_limits.{c,h}` and `dtpthread.h`; `common/dtpthread.c` has not followed |
@@ -669,7 +671,7 @@ declarations moved to `history_merge.h`; the GUI half includes that.
 | `_hm_warn_missing_raster_producers()` | 1 |
 | `_hm_show_toposort_cycle_popup()` | 1 |
 
-Each took the handler-slot pattern already used by `dt_film_confirm_rmdir_handler`,
+Each took the handler-slot pattern already used by `dt_film_confirm_rmdir_handler_t`,
 `dt_folder_survey_confirm_import_handler_t` and `dt_database_prompt_handler_t`. Note the
 shapes differ: the report popup and the two warnings are one-way notifications (`void`,
 no-op with no handler), while `_hm_ask_user_constraints_choice()` returns a

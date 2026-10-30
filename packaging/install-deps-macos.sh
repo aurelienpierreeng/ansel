@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 #   This file is part of the Ansel project.
 #   Copyright (C) 2026 Aurélien PIERRE.
+#   Copyright (C) 2026 Guillaume Stutin.
 #   
 #   Ansel is free software: you can redistribute it and/or modify
 #   it under the terms of the GNU General Public License as published by
@@ -66,6 +67,40 @@ HB_PACKAGES=(
   webp
 )
 
+# llvm comes as a bottle on arm64 (seconds) and is built from source on Intel macOS, where
+# Homebrew publishes no bottles any more: about four hours, of a CI job's six. All it buys is
+# test-compilation of the OpenCL kernels at build time -- CMakeLists.txt's
+# TESTBUILD_OPENCL_PROGRAMS, which turns itself off with a warning when LLVM is absent -- and
+# the arm64 CI does that on every commit. So Intel does without it, and mac-nightly.yml passes
+# -DTESTBUILD_OPENCL_PROGRAMS=OFF there to say so rather than lean on the fallback.
+#
+# Since rust 1.99.0 (homebrew-core, 2026-10-01) this skip saves nothing: rust now builds
+# against this same llvm instead of llvm@22, and librsvg pulls rust in, so llvm is installed
+# anyway -- from the keg cache, which is the load-bearing fix. The skip stays only so that the
+# day rust moves to a versioned llvm again, ours is not built on top of it.
+# See doc/nightly-distribution.md.
+#
+# subversion is installed first, on its own. Homebrew fetches every download before building
+# anything, and builds with network access denied; netpbm (graphviz -> vala -> libsoup, which
+# has no Intel bottle since 3.8.0) is fetched with svn, so a fetch attempted before svn exists
+# is deferred into the sandboxed build and fails there on DNS. Nightlies of 2026-10-01 and 02.
+#
+# Then llvm's patches are seeded into brew's download cache: one of them is a GitHub compare diff
+# that GitHub now serves with a checksum the formula rejects, which the same sandbox turns into a
+# DNS failure. tools/brew_seed_patches.sh has the measurement and the reasoning.
+if [ "$(uname -s)" = "Darwin" ] && [ "$(uname -m)" = "x86_64" ]; then
+  brew install subversion
+  "$(dirname "$0")/../tools/brew_seed_patches.sh" llvm
+  echo "Intel macOS: skipping llvm, a ~4 h source build here. It only enables OpenCL kernel"
+  echo "test-compilation, which the arm64 CI performs on every commit."
+  _kept=()
+  for _pkg in "${HB_PACKAGES[@]}"; do
+    [ "${_pkg}" = "llvm" ] || _kept+=("${_pkg}")
+  done
+  HB_PACKAGES=("${_kept[@]}")
+  unset _kept _pkg
+fi
+
 brew_install_status=0
 if brew install "${HB_PACKAGES[@]}"; then
   :
@@ -85,7 +120,8 @@ done
 
 if (( ${#missing_packages[@]} > 0 )); then
   printf 'Missing Homebrew packages after install: %s\n' "${missing_packages[*]}" >&2
-  exit "${brew_install_status:-1}"
+  # Not brew's status: it is 0 when brew reported success and a package is missing anyway.
+  exit 1
 fi
 
 if (( brew_install_status != 0 )); then

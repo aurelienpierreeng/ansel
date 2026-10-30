@@ -1,6 +1,7 @@
 /*
     This file is part of Ansel,
     Copyright (C) 2026 Aurélien PIERRE.
+    Copyright (C) 2026 Guillaume Stutin.
     
     Ansel is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -151,13 +152,17 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
 
 error:
   fprintf(stderr, "[detailmask process] couldn't write detail mask\n");
+  // Flagged while still held and before the write lock goes, so the release removes it.
   if(created && !IS_NULL_PTR(entry))
-    dt_dev_pixelpipe_cache_wrlock_entry(FALSE, entry);
-  dt_dev_clear_rawdetail_mask(mutable_pipe);
-  if(!IS_NULL_PTR(entry))
   {
-    if(created) dt_dev_pixelpipe_cache_remove(TRUE, entry);
+    dt_dev_pixelpipe_cache_flag_auto_destroy(entry);
+    dt_dev_pixelpipe_cache_wrlock_entry(FALSE, entry);
   }
+  // The reference is the pipe's once it records the mask's hash, and still ours before that.
+  if(mutable_pipe->rawdetail_mask_hash == mask_hash)
+    dt_dev_clear_rawdetail_mask(mutable_pipe);
+  else if(!IS_NULL_PTR(entry))
+    dt_dev_pixelpipe_cache_ref_count_entry(FALSE, entry);
   dt_pixelpipe_cache_free_align(tmp);
   return 1;
 }
@@ -245,13 +250,17 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
 
 error:
   fprintf(stderr, "[detailmask process_cl] couldn't write detail mask: %i\n", err);
+  // Flagged while still held and before the write lock goes, so the release removes it.
   if(created && !IS_NULL_PTR(entry))
-    dt_dev_pixelpipe_cache_wrlock_entry(FALSE, entry);
-  dt_dev_clear_rawdetail_mask(mutable_pipe);
-  if(!IS_NULL_PTR(entry))
   {
-    if(created) dt_dev_pixelpipe_cache_remove(TRUE, entry);
+    dt_dev_pixelpipe_cache_flag_auto_destroy(entry);
+    dt_dev_pixelpipe_cache_wrlock_entry(FALSE, entry);
   }
+  // The reference is the pipe's once it records the mask's hash, and still ours before that.
+  if(mutable_pipe->rawdetail_mask_hash == mask_hash)
+    dt_dev_clear_rawdetail_mask(mutable_pipe);
+  else if(!IS_NULL_PTR(entry))
+    dt_dev_pixelpipe_cache_ref_count_entry(FALSE, entry);
   dt_opencl_release_mem_object(detail);
   dt_opencl_release_mem_object(mask_dev);
   return FALSE;

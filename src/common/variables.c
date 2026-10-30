@@ -31,7 +31,7 @@
     Copyright (C) 2021-2022 Ralf Brown.
     Copyright (C) 2022-2026 Aurélien PIERRE.
     Copyright (C) 2022 Martin Bařinka.
-    Copyright (C) 2023-2025 Guillaume Stutin.
+    Copyright (C) 2023-2026 Guillaume Stutin.
     Copyright (C) 2023 Luca Zulberti.
     
     darktable is free software: you can redistribute it and/or modify
@@ -168,8 +168,8 @@ static void _init_expansion(dt_variables_params_t *params, gboolean iterate)
 
   if(params->filename)
   {
-    params->data->file_ext = (g_strrstr(params->filename, ".") + 1);
-    if(params->data->file_ext == (gchar *)1) params->data->file_ext = params->filename + strlen(params->filename);
+    params->data->file_ext = dt_util_path_get_extension(params->filename);
+    if(IS_NULL_PTR(params->data->file_ext)) params->data->file_ext = params->filename + strlen(params->filename);
     params->data->file_datetime = dt_util_get_file_datetime(params->filename);
   }
   else
@@ -549,9 +549,13 @@ static gboolean _expand_image_and_version(dt_variables_params_t *params, char **
     gchar buffer[1024];
     const dt_image_t *img = params->img ? (dt_image_t *)params->img
                                         : dt_image_cache_get(params->imgid, 'r');
-    dt_image_print_exif(img, buffer, sizeof(buffer));
+    // an image that cannot be read expands to nothing, as its other fields do
+    if(!IS_NULL_PTR(img))
+    {
+      dt_image_print_exif(img, buffer, sizeof(buffer));
+      result = g_strdup(buffer);
+    }
     if(IS_NULL_PTR(params->img)) dt_image_cache_read_release(img);
-    result = g_strdup(buffer);
   }
   else if(_has_prefix(variable, "VERSION.NAME") || _has_prefix(variable, "VERSION_NAME"))
   {
@@ -661,9 +665,14 @@ static gboolean _expand_file_and_folder(dt_variables_params_t *params, char **va
   {
     if(params->filename)
     {
-      result = g_path_get_basename(params->filename);
-      char *dot = g_strrstr(result, ".");
-      if(dot) *dot = '\0';
+      const char *basename = strrchr(params->filename, '/');
+      const char *windows_basename = strrchr(params->filename, '\\');
+      if(IS_NULL_PTR(basename) || (!IS_NULL_PTR(windows_basename) && windows_basename > basename))
+        basename = windows_basename;
+      basename = !IS_NULL_PTR(basename) ? basename + 1 : params->filename;
+
+      const char *extension = dt_util_path_get_extension(params->filename);
+      result = !IS_NULL_PTR(extension) ? g_strndup(basename, extension - basename - 1) : g_strdup(basename);
     }
   }
   else if(_has_prefix(variable, "FILE.EXTENSION") || _has_prefix(variable, "FILE_EXTENSION"))

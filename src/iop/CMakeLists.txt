@@ -88,6 +88,7 @@ macro(add_iop _lib _src)
             --present ${_present}
             --fill ${_fill}
             --cc ${CMAKE_C_COMPILER}
+            --cxx ${CMAKE_CXX_COMPILER}
             --sources ${_scan_sources}
             --
               "-I$<JOIN:$<TARGET_PROPERTY:${_lib},INCLUDE_DIRECTORIES>,;-I>"
@@ -219,7 +220,7 @@ add_iop(splittoningrgb "splittoningrgb.c")
 add_iop(colorprimaries "colorprimaries.c")
 add_iop(colorbalancergb "colorbalancergb.c")
 add_iop(colorequal "colorequal.c")
-add_iop(drawlayer "drawlayer.c" "drawlayer/brush.c" "drawlayer/cache.c" "drawlayer/io.c" "drawlayer/paint.c" "drawlayer/runtime.c" "drawlayer/widgets.c" DEFAULT_VISIBLE)
+add_iop(drawlayer "drawlayer.c" "drawlayer/brush.c" "drawlayer/cache.c" "drawlayer/io.c" "drawlayer/paint.c" "drawlayer/runtime.c" "drawlayer/conf.c" "drawlayer/coordinates.c" "drawlayer/layers.c" "drawlayer/widgets.c" "drawlayer/worker.c" DEFAULT_VISIBLE)
 add_iop(cacorrectrgb "cacorrectrgb.c")
 add_iop(diffuse "diffuse.c")
 add_iop(blurs "blurs.c")

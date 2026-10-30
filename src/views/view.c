@@ -54,7 +54,7 @@
     Copyright (C) 2022 Nicolas Auffray.
     Copyright (C) 2022 Sakari Kapanen.
     Copyright (C) 2023 Maurizio Paglia.
-    Copyright (C) 2025 Guillaume Stutin.
+    Copyright (C) 2025-2026 Guillaume Stutin.
     
     darktable is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -84,7 +84,10 @@
 #include "common/undo.h"
 #include "common/usermanual_url.h"
 #include "common/conf.h"
+#include "common/image.h"
+#include "common/paths.h"   // DT_PATH_MAX
 #include "control/control.h"
+#include "control/user_message.h"
 #include "develop/develop.h"
 #include "develop/supervisor.h"
 #include "widgets/expander.h"
@@ -96,7 +99,9 @@
 #endif
 
 #include <glib.h>
+#include <glib/gi18n.h>
 #include <math.h>
+#include <pango/pangocairo.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -439,6 +444,12 @@ const char *dt_view_manager_name(dt_view_manager_t *vm)
     return vm->current_view->name(vm->current_view);
   else
     return vm->current_view->module_name;
+}
+
+uint32_t dt_view_manager_current_flags(const dt_view_manager_t *vm)
+{
+  if(IS_NULL_PTR(vm) || IS_NULL_PTR(vm->current_view) || IS_NULL_PTR(vm->current_view->flags)) return 0;
+  return vm->current_view->flags();
 }
 
 void dt_view_manager_expose(dt_view_manager_t *vm, cairo_t *cr, int32_t width, int32_t height,
@@ -1036,6 +1047,24 @@ void dt_cairo_sharpen_surface_rgb24(cairo_surface_t *surface)
   cairo_surface_mark_dirty(surface);
 }
 
+/* What is painted over a skull thumbnail, indexed by the dt_imageio_retval_t the mipmap cache
+ * kept for it. The skull alone only says that the thumbnail failed; the why is what a bug report
+ * needs (#1531). */
+static const char *const _skull_labels[] = {
+  [DT_IMAGEIO_OK] = "",
+  [DT_IMAGEIO_FILE_NOT_FOUND] = N_("File not found"),
+  [DT_IMAGEIO_FILE_CORRUPTED] = N_("Corrupted file"),
+  [DT_IMAGEIO_CACHE_FULL] = N_("Out of RAM"),
+  [DT_IMAGEIO_UNSUPPORTED_FORMAT] = N_("Unsupported format"),
+  [DT_IMAGEIO_UNSUPPORTED_FEATURE] = N_("Unsupported feature"),
+  [DT_IMAGEIO_UNSUPPORTED_CAMERA] = N_("Unsupported camera"),
+  [DT_IMAGEIO_LOAD_FAILED] = N_("Loading error"),
+  [DT_IMAGEIO_IOERROR] = N_("I/O error"),
+  [DT_IMAGEIO_NO_EMBEDDED_THUMBNAIL] = N_("No embedded thumbnail"),
+  [DT_IMAGEIO_PROCESSING_FAILED] = N_("Processing error"),
+  [DT_IMAGEIO_ABORTED] = N_("Aborted"),
+};
+
 static dt_view_surface_value_t _view_image_get_surface_internal(int32_t imgid, int width, int height,
                                                                 cairo_surface_t **surface, int zoom,
                                                                 dt_atomic_int *shutdown)
@@ -1061,6 +1090,7 @@ static dt_view_surface_value_t _view_image_get_surface_internal(int32_t imgid, i
   else
   {
     const dt_image_t *image = dt_image_cache_get(imgid, 'r');
+    if(IS_NULL_PTR(image)) return DT_VIEW_SURFACE_KO;
     const int full_width = image->width;
     const int full_height = image->height;
     dt_image_cache_read_release(image);
@@ -1090,6 +1120,19 @@ static dt_view_surface_value_t _view_image_get_surface_internal(int32_t imgid, i
   dt_mipmap_cache_get_with_shutdown(&buf, imgid, mip, DT_MIPMAP_BLOCKING, 'r', shutdown);
   const int buf_wd = buf.width;
   const int buf_ht = buf.height;
+  const dt_imageio_retval_t status = buf.status;
+
+  /* The thumbnail's own entry could not be allocated just now: the skull below says so on the
+   * thumbnail, the window says what to do about it. */
+  if(IS_NULL_PTR(buf.cache_entry) && status == DT_IMAGEIO_CACHE_FULL)
+  {
+    char path[DT_PATH_MAX] = { 0 };
+    dt_image_full_path(imgid, path, sizeof(path), NULL, __FUNCTION__);
+    dt_control_alert_once(_("Not enough memory"),
+                          _("Not enough memory to display the thumbnail.\n"
+                            "Close other applications or add more RAM to your system."),
+                          path[0] ? path : NULL);
+  }
 
   // if we don't get buffer, no image is available at the moment
   if(IS_NULL_PTR(buf.buf))
@@ -1166,6 +1209,40 @@ static dt_view_surface_value_t _view_image_get_surface_internal(int32_t imgid, i
 
   cairo_paint(cr);
   cairo_surface_destroy(tmp_surface);
+
+  // Skull: write why across its bottom, in a band so it stays legible on small thumbnails.
+  if(buf_wd <= 8 && buf_ht <= 8 && status != DT_IMAGEIO_OK)
+  {
+    cairo_identity_matrix(cr);
+    PangoLayout *layout = pango_cairo_create_layout(cr);
+    // Not the bauhaus font: a theme reload frees it from the GUI thread while this runs in a worker.
+    PangoFontDescription *desc = pango_font_description_from_string("sans bold");
+    pango_font_description_set_absolute_size(desc, DT_UI_SCALE_DEVICE(12) * PANGO_SCALE);
+    pango_layout_set_font_description(layout, desc);
+    pango_font_description_free(desc);
+    pango_layout_set_text(layout, _(_skull_labels[status]), -1);
+    pango_layout_set_width(layout, img_width * PANGO_SCALE);
+    pango_layout_set_alignment(layout, PANGO_ALIGN_CENTER);
+    pango_layout_set_ellipsize(layout, PANGO_ELLIPSIZE_END);
+
+    /* As many lines as half the thumbnail holds, which keeps the skull's eyes clear; Pango ellipsizes
+     * the last. WORD_CHAR: PANGO_WRAP_WORD lets a word wider than the thumbnail overflow both edges. */
+    pango_layout_set_wrap(layout, PANGO_WRAP_WORD_CHAR);
+    pango_layout_set_height(layout, img_height / 2 * PANGO_SCALE);
+
+    int text_h = 0;
+    pango_layout_get_pixel_size(layout, NULL, &text_h);
+    // at least the skull's bottom row, which is black already
+    const double band_h = MAX(img_height / 8., text_h + DT_UI_SCALE_DEVICE(4));
+    cairo_rectangle(cr, 0., img_height - band_h, img_width, band_h);
+    cairo_set_source_rgba(cr, 0., 0., 0., 0.7);
+    cairo_fill(cr);
+    cairo_set_source_rgb(cr, 1., 1., 1.);
+    cairo_move_to(cr, 0., img_height - (band_h + text_h) / 2.);
+    pango_cairo_show_layout(cr, layout);
+    g_object_unref(layout);
+  }
+
   cairo_destroy(cr);
 
   /* The async/shared surface path returns pixel-sized Cairo image surfaces.

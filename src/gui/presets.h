@@ -74,11 +74,11 @@ void dt_gui_presets_init();
 void dt_gui_presets_cleanup();
 gboolean dt_gui_presets_autogen_enabled();
 
-/** add or replace a generic (i.e. non-exif specific) preset for this operation. */
+/** add or replace a generic (i.e. non-exif specific) preset for this operation. Its blending
+ * color space is the module's default one, resolved when the module's presets are loaded. */
 void dt_gui_presets_add_generic(const char *name, dt_dev_operation_t op, const int32_t version,
                                 const void *params, const int32_t params_size,
-                                const int32_t enabled,
-                                const dt_develop_blend_colorspace_t blend_cst);
+                                const int32_t enabled);
 
 /** same as add_generic but also supply blendop parameters for the presets. */
 void dt_gui_presets_add_with_blendop(

@@ -11,6 +11,7 @@
     Copyright (C) 2022 Hanno Schwalm.
     Copyright (C) 2022 Martin Bařinka.
     Copyright (C) 2023, 2025-2026 Aurélien PIERRE.
+    Copyright (C) 2026 Guillaume Stutin.
     
     darktable is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -99,34 +100,58 @@ gboolean dt_dev_pixelpipe_cache_init(size_t max_memory, const gboolean verbose,
  * dt_dev_pixelpipe_cache_init() succeeds, or after its cleanup, ask this rather than testing
  * a handle they should not hold. */
 gboolean dt_dev_pixelpipe_cache_is_ready(void);
+
+/** @brief Release everything dt_dev_pixelpipe_cache_init() created, the instance included.
+ * Only after a successful init; dt_dev_pixelpipe_cache_is_ready() answers FALSE afterwards. */
 void dt_dev_pixelpipe_cache_cleanup(void);
+
+// What one pipeline-cache entry holds on one OpenCL device, for the GUI memory view.
+typedef struct dt_pixel_cache_stats_device_t
+{
+  int cl_count;    // OpenCL buffers of the entry on the device
+  size_t cl_bytes; // their vRAM bytes
+} dt_pixel_cache_stats_device_t;
 
 // One pipeline-cache entry, for the GUI memory view.
 typedef struct dt_pixel_cache_stats_entry_t
 {
-  uint64_t hash;
-  size_t size;       // host (RAM) bytes
+  uint64_t hash;     // an allocation's is its address: no event names it
+  size_t size;       // bytes counted against the cache budget, whether a host buffer holds them or not
+  /* Not a line but a buffer of dt_pixelpipe_cache_alloc_align_*(): a module's working buffer for one
+   * run, or what something keeps there for longer (a lookup table, a state struct). */
+  gboolean allocation;
+  int64_t age_us;    // since the cache last touched it: a line's last use, an allocation's allocation
+  size_t host_bytes; // bytes of the host (RAM) buffer: 0 for a line kept on the device only
+  int host_stale;    // the host buffer still holds the pixels of a hash the line no longer answers to
   int refcount;
   int hits;
   int cl_count;      // number of OpenCL device buffers attached to this entry
   size_t cl_bytes;   // their total vRAM bytes (0 without OpenCL)
+  // The same, device by device: dt_opencl_get_num_devices() of them, or NULL without any.
+  dt_pixel_cache_stats_device_t *devices;
   char name[64];
 } dt_pixel_cache_stats_entry_t;
 
 // Current/max bytes used by the pipeline cache (host RAM).
 void dt_dev_pixelpipe_cache_get_usage(size_t *current, size_t *max);
 
+// The budget the cache was created with. Kernel memory pressure lowers the budget allocations
+// evict down to, which dt_dev_pixelpipe_cache_get_usage() reports; this one never moves.
+size_t dt_dev_pixelpipe_cache_get_max_memory(void);
+
+/** What an allocation made now could get, in bytes, by the rules that grant or refuse it: the
+ *  room the plan and the system's available RAM over the pressure floor leave, counting what
+ *  eviction can take back -- lines nobody holds, and of the system's share only their host RAM.
+ *  Tile planners size working sets against it. */
+size_t dt_dev_pixelpipe_cache_get_available(void);
+
 /* Largest contiguous free run in the arena (bytes): the real upper bound on
  * what an allocation — and, transitively, a tiled module's working set — can
  * get, as opposed to the byte headroom max - current. */
 size_t dt_pixelpipe_cache_get_largest_free_run(void);
 
-// Total device memory across enabled OpenCL devices (0 if OpenCL is off/absent),
-// for the vRAM usage bar's denominator.
-size_t dt_dev_pixelpipe_cache_get_vram_total(void);
-
-// Snapshot of all live entries (newly-allocated GArray of
-// dt_pixel_cache_stats_entry_t; free with g_array_free()).
+// Snapshot of all live entries, the lines then the allocations (newly-allocated GArray of
+// dt_pixel_cache_stats_entry_t; free with g_array_free(), which frees each entry's `devices` too).
 GArray *dt_dev_pixelpipe_cache_get_entries_stats(void);
 
 /* Public for by-value snapshots in pipeline pieces (for example realtime
@@ -158,7 +183,7 @@ typedef struct dt_pixel_cache_entry_t
                               // doc/pipeline-cache.md §8.
   dt_atomic_int refcount;   // reference count for the cache entry, to avoid freeing it while still in use
   dt_pthread_rwlock_t lock; // read/write lock to avoid threads conflicts
-  gboolean auto_destroy;    // TRUE for auto-destruction the next time it's used. Used for short-lived entries (transient states).
+  gboolean auto_destroy;    // disposable: the release of its last reference removes it. See dt_dev_pixelpipe_cache_flag_auto_destroy().
   gboolean external_alloc;  // TRUE for external buffers tracked in the cache
   /* Number of ASYNCHRONOUS REUSES of this entry: how many times a lookup found content someone
    * else had already published, in another run or another pipe. The intra-run producer->consumer
@@ -170,6 +195,10 @@ typedef struct dt_pixel_cache_entry_t
   dt_dev_pixelpipe_cache_t *cache; // reference to parent cache object
   GList *cl_mem_list;       // reusable OpenCL pinned buffers tied to this entry
   dt_pthread_mutex_t cl_mem_lock;
+  /* TRUE while `data` holds the pixels of a hash this entry no longer answers to: set when a
+   * writable acquisition rekeys the entry in place, cleared once the host buffer is rewritten for
+   * the new hash (dt_dev_pixelpipe_cache_flag_host_written(), or a device->host copy). */
+  dt_atomic_int host_stale;
 } dt_pixel_cache_entry_t;
 
 /**
@@ -179,6 +208,34 @@ typedef struct dt_pixel_cache_entry_t
  * @return const char* Previous module name.
  */
 const char *dt_pixelpipe_cache_set_current_module(const char *module);
+
+/**
+ * @brief Set the image the current module runs on, for the message that reports a refused
+ * allocation (thread-local).
+ *
+ * @details
+ * The image comes as text its caller wrote, as the module comes as its name: the cache prints it,
+ * and knows nothing of images. The pointer is kept, not copied.
+ *
+ * @param image The image as it should read, which must outlive the setting, or NULL to clear.
+ * @return const char* Previous image.
+ */
+const char *dt_pixelpipe_cache_set_current_image(const char *image);
+
+/**
+ * @brief Count the allocations the cache refused to the calling thread for lack of memory
+ * (thread-local).
+ *
+ * @details
+ * A refusal is a NULL returned because memory ran short: the cache's budget was spent with every
+ * line in use, the arena had no free run long enough, or the system had no RAM left. The count
+ * only goes up. A caller that reads it before and after a pixelpipe run learns whether that run
+ * was refused memory: the pipe runs on its caller's thread. Allocations made on other threads,
+ * such as OpenMP workers, are not counted here.
+ *
+ * @return uint32_t Refusals so far on this thread.
+ */
+uint32_t dt_pixelpipe_cache_get_alloc_refusals(void);
 
 /**
  * @brief Get an internal reference to the cache entry matching hash.
@@ -238,17 +295,22 @@ int dt_dev_pixelpipe_cache_get(const uint64_t hash, const size_t size,
  *
  * The cache then resolves how to provide that writable line:
  * - if an entry already exists at `hash`, that hash is already published and must not be overwritten.
- *   The caller must exact-hit it instead of recomputing,
+ *   The caller must exact-hit it instead of recomputing. The entry is returned with its refcount
+ *   incremented, under the same hold of the cache lock as the lookup, and without a lock of its own:
+ *   its producer may still be writing it,
  * - else, if `allow_rekey_reuse` is TRUE and `reuse_hint` still points to a live cacheline with the right size,
- *   that old cacheline is rekeyed to `hash`, write-locked, and returned,
+ *   that old cacheline is rekeyed to `hash`, write-locked, and returned. Its host buffer still holds the
+ *   previous hash's pixels, so it reports none until the caller calls
+ *   `dt_dev_pixelpipe_cache_flag_host_written()`,
  * - else, a new cacheline is created.
  *
- * In all successful cases:
+ * When the entry is created or rekeyed:
  * - the returned entry refcount is incremented,
  * - the returned entry is write-locked,
  * - and `alloc` may materialize the host buffer if requested.
  *
- * The caller must later release the write lock and refcount from the same control flow.
+ * The caller must later release the refcount, and the write lock when it holds one, from the same
+ * control flow.
  *
  * @param cache Pixelpipe cache.
  * @param hash Target output hash for the module output.
@@ -259,7 +321,8 @@ int dt_dev_pixelpipe_cache_get(const uint64_t hash, const size_t size,
  * @param allow_rekey_reuse Whether the cache may reuse the piece-local cached output line by rekeying it.
  * @param reuse_hint Snapshot of the previously attached piece cacheline metadata, or NULL.
  * @param[out] data Returned host pointer when available.
- * @param[out] entry Returned cache entry.
+ * @param[out] entry Returned cache entry, referenced for every status except
+ *        `DT_DEV_PIXELPIPE_CACHE_WRITABLE_ERROR`.
  * @return dt_dev_pixelpipe_cache_writable_status_t `DT_DEV_PIXELPIPE_CACHE_WRITABLE_CREATED`
  *         when creating a new entry, `DT_DEV_PIXELPIPE_CACHE_WRITABLE_REKEYED` when rekeying
  *         `reuse_hint`, `DT_DEV_PIXELPIPE_CACHE_WRITABLE_EXACT_HIT` when a published entry already
@@ -271,6 +334,7 @@ dt_dev_pixelpipe_cache_get_writable(const uint64_t hash,
                                     const size_t size, const char *name, const int id,
                                     const gboolean alloc, const gboolean allow_rekey_reuse,
                                     const struct dt_pixel_cache_entry_t *reuse_hint,
+                                    const struct dt_pixel_cache_entry_t *reuse_hint_prev,
                                     void **data,
                                     struct dt_pixel_cache_entry_t **entry);
 
@@ -587,8 +651,33 @@ gboolean dt_dev_pixelpipe_cache_ref_host_entry_by_hash(const uint64_t hash,
                                                        void **data,
                                                        struct dt_pixel_cache_entry_t **entry);
 
-/** Peek the host data pointer of a cache entry without allocating. */
+/**
+ * @brief Peek the host pixels a cache entry holds for its current hash, without allocating.
+ *
+ * @return NULL when the entry has no host buffer, and also when its host buffer still holds the
+ * pixels of the hash it was rekeyed from (see dt_pixel_cache_entry_t.host_stale). A consumer
+ * treats both alike: the pixels, if any, are on the device and must be copied back first.
+ */
 void *dt_pixel_cache_entry_get_data(struct dt_pixel_cache_entry_t *entry);
+
+/**
+ * @brief The host buffer of a cache entry, whatever hash its content describes.
+ *
+ * @details For the producer holding the write lock from dt_dev_pixelpipe_cache_get_writable()
+ * only: a rekeyed entry's buffer is about to be overwritten, and it still backs the pinned
+ * OpenCL image of an output that is not copied back to RAM. Everyone else reads pixels through
+ * dt_pixel_cache_entry_get_data().
+ */
+void *dt_pixel_cache_entry_get_buffer(struct dt_pixel_cache_entry_t *entry);
+
+/**
+ * @brief Record that the host buffer of @p entry now holds the pixels of its current hash.
+ *
+ * @details Called by the producer before it releases the write lock, when it wrote the host
+ * buffer or copied its device output back into it. Without it, an entry rekeyed in place keeps
+ * reporting no host pixels (dt_pixel_cache_entry_get_data() returns NULL).
+ */
+void dt_dev_pixelpipe_cache_flag_host_written(struct dt_pixel_cache_entry_t *entry);
 
 /**
  * @brief Peek the size (in bytes) reserved for the host buffer of a cache entry.
@@ -599,7 +688,7 @@ void *dt_pixel_cache_entry_get_data(struct dt_pixel_cache_entry_t *entry);
  *
  * This accessor is intentionally "peek-only": it does not allocate and it does not change ownership.
  */
-size_t dt_pixel_cache_entry_get_size(struct dt_pixel_cache_entry_t *entry);
+size_t dt_pixel_cache_entry_get_size(const struct dt_pixel_cache_entry_t *entry);
 
 	                    
 /**
@@ -707,18 +796,6 @@ void dt_dev_pixelpipe_cache_flush_clmem(const int devid);
 void dt_dev_pixelpipe_cache_flush_clmem_for_pipe(const int devid);
 
 
-/**
- * @brief Arbitrarily remove the cache entry matching hash. Entries
- * having a reference count > 0 (inter-thread locked) or being having their read/write lock
- * locked will be ignored. If force is TRUE, we ignore reference count, but not locks.
- *
- * @param cache
- * @param force
- */
-int dt_dev_pixelpipe_cache_remove(const gboolean force,
-                                  struct dt_pixel_cache_entry_t *entry);
-
-
 /** print out cache lines/hashes (debug). */
 void dt_dev_pixelpipe_cache_print(void);
 
@@ -728,14 +805,15 @@ void dt_dev_pixelpipe_cache_print(void);
 int dt_dev_pixel_pipe_cache_remove_lru(void);
 
 /**
- * @brief Increase/Decrease the reference count on the cache line as to prevent
- * LRU item removal. This function should be called within a read/write lock-protected
- * section to avoid changing an entry while or after it is deleted in parallel.
+ * @brief Take or release one reference on a cache line. A referenced line is never evicted, rekeyed
+ * or removed.
  *
- * WARNING: cache entries whose reference count is greater than 0 will never be deleted from cache.
+ * Releasing the last reference of a line flagged with dt_dev_pixelpipe_cache_flag_auto_destroy()
+ * removes it, in the same hold of the cache lock. After its release, the caller may not name the
+ * entry again: any thread's eviction can free it from then on.
  *
- * @param cache
- * @param lock TRUE to lock, FALSE to unlock
+ * @param lock TRUE to take a reference, FALSE to release one
+ * @param entry The cache line
  */
 void dt_dev_pixelpipe_cache_ref_count_entry(gboolean lock,
                                             struct dt_pixel_cache_entry_t *entry);
@@ -762,27 +840,16 @@ void dt_dev_pixelpipe_cache_rdlock_entry(gboolean lock,
 
 
 /**
- * @brief Flag the cache entry as "auto_destroy". This is useful for short-lived/disposable
- * cache entries, that won't be needed in the future. These will be freed out of the typical LRU, aged-based
- * garbage collection. The thread that tagged this entry as "auto_destroy" is responsible for freeing it
- * as soon as it is done with it, using `dt_dev_pixelpipe_cache_auto_destroy_apply()`.
- * If not manually freed this way, the entry will be caught using the generic LRU garbage collection.
+ * @brief Flag a cache line as disposable (`auto_destroy`), for short-lived lines nothing will need
+ * again: the release of its last reference removes it, out of the LRU's age-based collection.
  *
- * @param cache
+ * This is how a holder drops a line: flag it while still holding it, then release it with
+ * dt_dev_pixelpipe_cache_ref_count_entry(). A line still held by someone else is removed by the last
+ * of them; one still locked when released is left to the LRU.
+ *
+ * @param entry The cache line, held by the caller. NULL is a no-op.
  */
 void dt_dev_pixelpipe_cache_flag_auto_destroy(struct dt_pixel_cache_entry_t *entry);
-
-/**
- * @brief Free the entry if it has the flag "auto_destroy".
- * See `dt_dev_pixelpipe_cache_flag_auto_destroy()`.
- * This only removes entries whose reference count already dropped to 0 and whose lock is currently free.
- * Call it right after the final consumer releases its refcount, from the same control flow that flagged the
- * entry for auto-destruction. If another consumer still owns the entry, this becomes a no-op and generic cache
- * eviction or a later explicit retry will reap it once ownership reaches 0.
- *
- * @param cache
- */
-void dt_dev_pixelpipe_cache_auto_destroy_apply(struct dt_pixel_cache_entry_t *entry);
 
 /**
  * @brief Find the entry matching hash, and decrease its ref_count if found.
@@ -791,6 +858,22 @@ void dt_dev_pixelpipe_cache_auto_destroy_apply(struct dt_pixel_cache_entry_t *en
  * @param hash 
  */
 void dt_dev_pixelpipe_cache_unref_hash(const uint64_t hash);
+
+/**
+ * @brief Release one reference held on @p entry, by POINTER.
+ *
+ * Use this wherever the reference was TAKEN by pointer
+ * (`dt_dev_pixelpipe_cache_ref_count_entry(TRUE, entry)`), which is every long-lived claim in
+ * the tree. `dt_dev_pixelpipe_cache_unref_hash()` resolves the entry by looking its hash up in
+ * the cache, so the two are only interchangeable while an entry's hash never changes under its
+ * holder -- and it does: `_cache_try_rekey_reuse_locked()` moves a live entry to a new hash in
+ * place, which is the whole point of rekey reuse. Released by the old hash afterwards, the
+ * lookup finds nothing, the reference is never dropped, and the entry becomes permanently
+ * unevictable while its refcount stops meaning anything.
+ *
+ * A NULL @p entry is a no-op, so a holder can release unconditionally.
+ */
+void dt_dev_pixelpipe_cache_unref_entry(struct dt_pixel_cache_entry_t *entry);
 
 /**
  * @brief Change the hash/key of an existing cache line in place, without
@@ -817,8 +900,9 @@ int dt_dev_pixelpipe_cache_rekey(const uint64_t old_hash,
 
 /* --- Telling the rest of the application things ---------------------------
  *
- * The cache has three reasons to speak upward: warn the user that it is full, announce that a
- * cacheline became ready so a waiter can stop waiting, and feed the supervisor its bookkeeping.
+ * The cache has three reasons to speak upward: alert the user that an allocation could not be
+ * served (the cache is full, or the system itself runs out of memory), announce that a cacheline
+ * became ready so a waiter can stop waiting, and feed the supervisor its bookkeeping.
  * Every one of those used to be a direct call -- dt_control_log(), a raised
  * DT_SIGNAL_CACHELINE_READY, dt_supervisor_*() -- which put control/ and develop/ headers in a
  * module that is otherwise pure storage, and made the cache depend on the application rather
@@ -829,9 +913,22 @@ int dt_dev_pixelpipe_cache_rekey(const uint64_t old_hash,
  * dt_colorspaces_set_profile_changed_handler().
  */
 
-/** @brief Tell the user something went wrong. Called with an already-translated,
- * already-formatted string; the cache does not know what a toast is. */
+/** @brief Tell the user something that is fine to miss: the cache went over its budget, but the
+ * allocation went ahead. Called with an already-translated, already-formatted string; the cache
+ * does not know what a toast is. */
 typedef void (*dt_pixelpipe_cache_warn_handler_t)(const char *message);
+
+/** @brief Tell the user something that must not go unseen: what it says stays true after a toast
+ * would have gone. Same contract as dt_control_alert(): @p message is the kind of failure, the
+ * same text at every call; what was refused -- its size, its module -- is @p item, one line,
+ * already translated and formatted, NULL when unknown. */
+typedef void (*dt_pixelpipe_cache_alert_handler_t)(const char *message, const char *item);
+
+/** @brief Install the alert handler. The GUI installs it, once it exists, apart from the others:
+ * without a GUI there is nothing to alert with, and an alert is then printed on stderr, the item on
+ * the line under the message.
+ * @param alert may be NULL, which restores that fallback. */
+void dt_dev_pixelpipe_cache_set_alert_handler(dt_pixelpipe_cache_alert_handler_t alert);
 
 /** @brief A cacheline finished and is readable. @param hash its content hash,
  * @param producer_node_key which node published it. Waiters key on both. */

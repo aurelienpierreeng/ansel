@@ -445,7 +445,7 @@ void init_presets(dt_iop_module_so_t *self)
   p.grey[2] = 0.f;
 
   dt_gui_presets_add_generic(_("B&W: luminance-based"), self->op,
-                             self->version(), &p, sizeof(p), 1, DEVELOP_BLEND_CS_RGB_SCENE);
+                             self->version(), &p, sizeof(p), 1);
 
   // film emulations
 
@@ -474,7 +474,7 @@ void init_presets(dt_iop_module_so_t *self)
   p.grey[2] = 0.48737156f;
 
   dt_gui_presets_add_generic(_("B&W: ILFORD HP5+"), self->op,
-                             self->version(), &p, sizeof(p), 1, DEVELOP_BLEND_CS_RGB_SCENE);
+                             self->version(), &p, sizeof(p), 1);
 
   // ILFORD Delta 100
   // https://www.ilfordphoto.com/amfile/file/download/file/3/product/681/
@@ -483,7 +483,7 @@ void init_presets(dt_iop_module_so_t *self)
   p.grey[2] = 0.50081619f;
 
   dt_gui_presets_add_generic(_("B&W: ILFORD DELTA 100"), self->op,
-                             self->version(), &p, sizeof(p), 1, DEVELOP_BLEND_CS_RGB_SCENE);
+                             self->version(), &p, sizeof(p), 1);
 
   // ILFORD Delta 400 and 3200 - they have the same curve
   // https://www.ilfordphoto.com/amfile/file/download/file/1915/product/685/
@@ -493,7 +493,7 @@ void init_presets(dt_iop_module_so_t *self)
   p.grey[2] = 0.52009729f;
 
   dt_gui_presets_add_generic(_("B&W: ILFORD DELTA 400 - 3200"), self->op,
-                             self->version(), &p, sizeof(p), 1, DEVELOP_BLEND_CS_RGB_SCENE);
+                             self->version(), &p, sizeof(p), 1);
 
   // ILFORD FP4+
   // https://www.ilfordphoto.com/amfile/file/download/file/1919/product/690/
@@ -502,7 +502,7 @@ void init_presets(dt_iop_module_so_t *self)
   p.grey[2] = 0.53701643f;
 
   dt_gui_presets_add_generic(_("B&W: ILFORD FP4+"), self->op,
-                             self->version(), &p, sizeof(p), 1, DEVELOP_BLEND_CS_RGB_SCENE);
+                             self->version(), &p, sizeof(p), 1);
 
   // Fuji Acros 100
   // https://dacnard.wordpress.com/2013/02/15/the-real-shades-of-gray-bw-film-is-a-matter-of-heart-pt-1/
@@ -511,7 +511,7 @@ void init_presets(dt_iop_module_so_t *self)
   p.grey[2] = 0.353f;
 
   dt_gui_presets_add_generic(_("B&W: Fuji Acros 100"), self->op,
-                             self->version(), &p, sizeof(p), 1, DEVELOP_BLEND_CS_RGB_SCENE);
+                             self->version(), &p, sizeof(p), 1);
 
   // Kodak ?
   // can't find spectral sensitivity curves and the illuminant under which they are produced,
@@ -528,7 +528,7 @@ void init_presets(dt_iop_module_so_t *self)
   p.normalize_grey = FALSE;
   p.clip = FALSE;
   dt_gui_presets_add_generic(_("basic channel mixer"), self->op,
-                             self->version(), &p, sizeof(p), 1, DEVELOP_BLEND_CS_RGB_SCENE);
+                             self->version(), &p, sizeof(p), 1);
 
   // swap G-B
   p.red[0] = 1.f;
@@ -541,7 +541,7 @@ void init_presets(dt_iop_module_so_t *self)
   p.blue[1] = 1.f;
   p.blue[2] = 0.f;
   dt_gui_presets_add_generic(_("swap G and B"), self->op,
-                             self->version(), &p, sizeof(p), 1, DEVELOP_BLEND_CS_RGB_SCENE);
+                             self->version(), &p, sizeof(p), 1);
 
   // swap G-R
   p.red[0] = 0.f;
@@ -554,7 +554,7 @@ void init_presets(dt_iop_module_so_t *self)
   p.blue[1] = 0.f;
   p.blue[2] = 1.f;
   dt_gui_presets_add_generic(_("swap G and R"), self->op,
-                             self->version(), &p, sizeof(p), 1, DEVELOP_BLEND_CS_RGB_SCENE);
+                             self->version(), &p, sizeof(p), 1);
 
   // swap R-B
   p.red[0] = 0.f;
@@ -567,7 +567,7 @@ void init_presets(dt_iop_module_so_t *self)
   p.blue[1] = 0.f;
   p.blue[2] = 0.f;
   dt_gui_presets_add_generic(_("swap R and B"), self->op,
-                             self->version(), &p, sizeof(p), 1, DEVELOP_BLEND_CS_RGB_SCENE);
+                             self->version(), &p, sizeof(p), 1);
 }
 
 
@@ -2974,9 +2974,10 @@ static void start_profiling_callback(GtkWidget *togglebutton, dt_iop_module_t *s
   dt_control_queue_redraw_center();
 }
 
-static void run_profile_callback(GtkWidget *widget, GdkEventButton *event, gpointer user_data)
+static gboolean run_profile_callback(GtkWidget *widget __attribute__((unused)),
+                                     GdkEventButton *event __attribute__((unused)), gpointer user_data)
 {
-  if(dt_gui_widgets_suppressed()) return;
+  if(dt_gui_widgets_suppressed()) return FALSE;
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
   dt_iop_channelmixer_rgb_gui_data_t *g = (dt_iop_channelmixer_rgb_gui_data_t *)dt_iop_gui_data(self);
 
@@ -2985,11 +2986,13 @@ static void run_profile_callback(GtkWidget *widget, GdkEventButton *event, gpoin
   dt_iop_set_cache_bypass(self, TRUE);
   dt_iop_gui_leave_critical_section(self);
   dt_dev_pixelpipe_resync_history_preview(self->dev);
+  return TRUE;
 }
 
-static void run_validation_callback(GtkWidget *widget, GdkEventButton *event, gpointer user_data)
+static gboolean run_validation_callback(GtkWidget *widget __attribute__((unused)),
+                                        GdkEventButton *event __attribute__((unused)), gpointer user_data)
 {
-  if(dt_gui_widgets_suppressed()) return;
+  if(dt_gui_widgets_suppressed()) return FALSE;
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
   dt_iop_channelmixer_rgb_gui_data_t *g = (dt_iop_channelmixer_rgb_gui_data_t *)dt_iop_gui_data(self);
 
@@ -2998,16 +3001,18 @@ static void run_validation_callback(GtkWidget *widget, GdkEventButton *event, gp
   dt_iop_set_cache_bypass(self, TRUE);
   dt_iop_gui_leave_critical_section(self);
   dt_dev_pixelpipe_resync_history_preview(self->dev);
+  return TRUE;
 }
 
-static void commit_profile_callback(GtkWidget *widget, GdkEventButton *event, gpointer user_data)
+static gboolean commit_profile_callback(GtkWidget *widget __attribute__((unused)),
+                                        GdkEventButton *event __attribute__((unused)), gpointer user_data)
 {
-  if(dt_gui_widgets_suppressed()) return;
+  if(dt_gui_widgets_suppressed()) return FALSE;
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
   dt_iop_channelmixer_rgb_gui_data_t *g = (dt_iop_channelmixer_rgb_gui_data_t *)dt_iop_gui_data(self);
   dt_iop_channelmixer_rgb_params_t *p = (dt_iop_channelmixer_rgb_params_t *)self->params;
 
-  if(!g->profile_ready) return;
+  if(!g->profile_ready) return FALSE;
 
   dt_iop_gui_enter_critical_section(self);
 
@@ -3058,6 +3063,7 @@ static void commit_profile_callback(GtkWidget *widget, GdkEventButton *event, gp
 
   dt_print(DT_DEBUG_DEV, "[picker/channelmixerrgb] history commit source=commit_profile\n");
   dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
+  return TRUE;
 }
 
 static void _develop_ui_pipe_finished_callback(gpointer instance, gpointer user_data)
@@ -3219,9 +3225,9 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
       // single call -- the two colour-checker paths address it with chart-box coordinates, and
       // auto_detect_WB() averages it. Tiling calls process() once per tile with a tile-local
       // roi_in, so the chart box would be applied to a fragment and whichever tile ran last would
-      // win. Whether that happens is a runtime memory decision
-      // (dt_tiling_piece_fits_host_memory(), which reads dt_get_available_mem() and the pixelpipe
-      // cache's largest free run), so it shows up on one machine and not another.
+      // win. Whether that happens is a runtime memory decision (dt_tiling_piece_fits_host_memory(),
+      // which reads dt_dev_pixelpipe_cache_get_available() and the pixelpipe cache's largest free
+      // run), so it shows up on one machine and not another.
       piece->process_tiling_ready = 0;
     }
   }

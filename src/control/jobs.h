@@ -11,6 +11,7 @@
     Copyright (C) 2020 Pascal Obry.
     Copyright (C) 2022, 2025-2026 Aurélien PIERRE.
     Copyright (C) 2022 Martin Bařinka.
+    Copyright (C) 2026 Guillaume Stutin.
     
     darktable is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -99,6 +100,30 @@ void dt_control_jobs_init(struct dt_control_t *control);
 // fires a callback into an unmapped library -> SIGSEGV.
 void dt_control_jobs_drain(struct dt_control_t *control);
 void dt_control_jobs_cleanup(struct dt_control_t *control);
+
+/** Worker threads -- pool, reserved and kicker -- that have started and not returned yet.
+ *
+ * Once dt_control_running() is false, a worker returns as soon as the job it is running does:
+ * from then on this only falls, and it is the number of jobs still running. At 0 the joins of
+ * dt_control_shutdown() do not block. */
+int32_t dt_control_workers_alive(void);
+
+/** Called once per running job by dt_control_running_jobs_foreach(): the description given to
+ * dt_control_job_create(), the queue the job was added to (meaningless when it went to a reserved
+ * worker instead), and whether it did. */
+typedef void (*dt_control_running_jobs_foreach_callback_t)(const char *description, dt_job_queue_t queue,
+                                                           gboolean reserved, void *data);
+
+/** Report every job a worker is running. The queued ones are not reported.
+ *
+ * The callback runs under the scheduler's mutexes: it must not call back into it, and should
+ * return quickly. */
+void dt_control_running_jobs_foreach(struct dt_control_t *control,
+                                     dt_control_running_jobs_foreach_callback_t callback, void *data);
+
+/** How many jobs wait for a worker: those of the queues, and the one a reserved worker has not
+ * taken yet. Once dt_control_running() is false, none of them will run. */
+int32_t dt_control_queued_jobs_count(struct dt_control_t *control);
 
 int dt_control_add_job(struct dt_control_t *control, dt_job_queue_t queue_id, dt_job_t *job);
 int32_t dt_control_add_job_res(struct dt_control_t *s, dt_job_t *job, int32_t res);

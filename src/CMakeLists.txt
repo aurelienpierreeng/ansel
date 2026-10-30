@@ -3,6 +3,12 @@ add_subdirectory(external)
 # LensSerious: lens-correction math as data (git submodule). It IS the lens correction --
 # nothing here links liblensfun any more. Its importer still reads the upstream XML, but
 # only at build time, to produce data/lenses.db.
+#
+# Its own tests stay off here: EXCLUDE_FROM_ALL never builds their executables, yet their
+# add_test() calls still landed in Ansel's ctest, as six tests reported "Not Run" on every
+# run. The submodule's own CI is where they run. The importer lives outside its test block,
+# so lenses.db is unaffected.
+set(LENSSERIOUS_TESTS OFF)
 add_subdirectory(external/LensSerious EXCLUDE_FROM_ALL)
 # Its include directory is global, like ${CMAKE_CURRENT_SOURCE_DIR} below, because
 # common/image.h embeds ls_vendor_data_t by value and image.h reaches nearly every target
@@ -86,6 +92,7 @@ FILE(GLOB SOURCE_FILES
   "common/dtpthread.c"
   "pixel/eaw.c"
   "system/memory_arena.c"
+  "system/memory_pressure.c"
   "common/xmp_sidecar.cc"
   "common/film.c"
   "common/file_location.c"
@@ -192,6 +199,7 @@ FILE(GLOB SOURCE_FILES
   "control/jobs/film_jobs.c"
   "control/jobs/image_jobs.c"
   "control/jobs/import_jobs.c"
+  "control/jobs/import_sequence.c"
   "control/progress.c"
   "control/signal.c"
   "develop/develop.c"
@@ -210,6 +218,7 @@ FILE(GLOB SOURCE_FILES
   "develop/lightroom.c"
   "develop/pixelpipe.c"
   "caches/pixelpipe_cache.c"
+  "caches/pixelpipe_cache_pressure.c"
   "caches/pixelpipe_cache_wait.c"
   "develop/pixelpipe_cpu.c"
   "develop/pipeline_notify.c"
@@ -246,7 +255,9 @@ FILE(GLOB SOURCE_FILES
   "gui/dtgtk/filemanager.c"
   "gui/dtgtk/filmstrip.c"
   "gui/guides.c"
+  "gui/alert.c"
   "gui/application.c"
+  "gui/closing.c"
   "gui/splash.c"
   "gui/hist_dialog.c"
   "gui/preferences.c"
@@ -283,9 +294,6 @@ if(WIN32)
 
   list(APPEND SOURCE_FILES "win/getrusage.c")
   list(APPEND HEADER_FILES "win/getrusage.h")
-
-  list(APPEND SOURCE_FILES "win/rlimit.c")
-  list(APPEND HEADER_FILES "win/rlimit.h")
 
   list(APPEND SOURCE_FILES "win/getdelim.c")
   list(APPEND HEADER_FILES "win/getdelim.h")
@@ -846,6 +854,40 @@ endif()
 
 set_target_properties(lib_ansel PROPERTIES OUTPUT_NAME ansel)
 set_target_properties(lib_ansel PROPERTIES LINKER_LANGUAGE C)
+# The line above means the C driver links this target even though several IOP modules
+# and rawspeed compile as C++: they reach lib_ansel only via $<TARGET_OBJECTS:...> from
+# other targets, which are anonymous .obj files CMake never inspects for language, so
+# its usual "this target also needs the C++ runtime" auto-detection (the thing that
+# would normally add it despite LINKER_LANGUAGE C) never triggers here. This is
+# normally harmless: the C++ template instantiations these object files need already
+# exist as weak/COMDAT symbols compiled directly into rawspeed's and lib_ansel's own
+# objects, satisfying the link without ever touching the real C++ runtime lib -- until
+# ASan is involved (checked: a plain Clang build of this exact tree links fine without
+# any of the below; enabling it there instead produces DUPLICATE symbol errors against
+# libstdc++.dll.a, because the weak instantiations really were already enough).
+#
+# ANSEL_WIN32_CLANG (not a bare CXX_COMPILER_ID check): this is specifically about a
+# Windows DLL link enforcing every symbol at link time where ELF/Mach-O's lenient
+# shared-library resolution has never needed it (see the comment above), and
+# "MATCHES Clang" alone would also catch AppleClang on macOS, where forcing
+# -stdlib=libstdc++ below would break the build outright -- libstdc++ isn't shipped
+# there at all, only libc++.
+if(ANSEL_WIN32_CLANG AND CMAKE_CXX_FLAGS MATCHES "fsanitize=address")
+  # The library name alone is not enough: the C driver doing this link has no reason
+  # to search wherever the CXX compiler's own runtime lib actually lives (that search
+  # path is normally supplied by the CXX driver itself), so the directory has to come
+  # along with it explicitly too, or -lstdc++ resolves to nothing found.
+  target_link_libraries(lib_ansel PRIVATE ${CMAKE_CXX_IMPLICIT_LINK_LIBRARIES})
+  target_link_directories(lib_ansel PRIVATE ${CMAKE_CXX_IMPLICIT_LINK_DIRECTORIES})
+  # Even with the library and its directory both present, the plain C driver still
+  # fails to resolve any libstdc++ symbol from an otherwise perfectly valid link line
+  # (checked: undefined-symbol errors for basic std::ostream/std::string members that
+  # do exist in libstdc++.dll.a at the given path) -- until it is also told
+  # -stdlib=libstdc++ itself. Clang's C driver still consults -stdlib= for how it sets
+  # up the C++ exception/unwind personality it links against, independent of the
+  # language it thinks *this* invocation's own sources are in.
+  target_link_options(lib_ansel PRIVATE -stdlib=libstdc++)
+endif()
 
 #
 # Link external libs

@@ -564,6 +564,14 @@ endif(VALIDATE_APPDATA_FILE)
 if(TESTBUILD_OPENCL_PROGRAMS)
   set(TESTBUILD_OPENCL_PROGRAMS OFF)
 
+  # LLVM's config resolves zstd through the Findzstd.cmake module it ships,
+  # which declares zstd::libzstd_shared and zstd::libzstd_static only, where
+  # zstd's own export set carries zstd::libzstd as well. A later config-mode
+  # find_package(zstd) - OpenEXR 3.5's find_dependency - then refuses an
+  # export set that is half defined. Resolve zstd through its own config
+  # first, so the whole set exists and LLVM's module adds nothing.
+  find_package(zstd CONFIG QUIET)
+
   find_package(LLVM CONFIG)
 
   if(LLVM_FOUND)
@@ -748,11 +756,11 @@ endif()
 # because several CI Debug runners are not provisioned for it. An EXPLICIT
 # -DBUILD_TESTING=ON stays a hard requirement.
 #
-# Linux only. Windows links every executable with -municode, so each test binary needs the
-# wWinMain wrapper wired up first; Apple's ld64 has no --wrap, so the cmocka mock tests can
-# never link there. Both platforms opt in explicitly once someone does that work.
+# Linux and Windows. Windows links every executable with -municode, so the CRT enters
+# through wmain(): each test includes win/main_wrapper.h under _WIN32 for that. Apple's ld64
+# has no --wrap, so the cmocka mock tests can never link there.
 set(_build_testing_defaulted FALSE)
-if(CMAKE_BUILD_TYPE STREQUAL "Debug" AND "${BUILD_TESTING}" STREQUAL "" AND NOT WIN32 AND NOT APPLE)
+if(CMAKE_BUILD_TYPE STREQUAL "Debug" AND "${BUILD_TESTING}" STREQUAL "" AND NOT APPLE)
   set(BUILD_TESTING ON)
   set(_build_testing_defaulted TRUE)
 endif()

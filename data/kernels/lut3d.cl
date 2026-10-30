@@ -34,9 +34,12 @@ lut3d_tetrahedral(read_only image2d_t in, write_only image2d_t out, const int wi
   float4 input = read_imagef(in, sampleri, (int2)(x, y));
   float4 output = (float4)(0.0f);
 
-  input = clamp(input, (float4)0.0f, (float4)1.0f);
+  // The LUT only samples the unit RGB cube. Outside of it, keep the boundary deformation and add
+  // back the part of the input lying beyond the cube, exactly as dt_lut3d_apply() does on CPU.
+  const float4 normalized = clamp(input, (float4)0.0f, (float4)1.0f);
+  const float4 residual = input - normalized;
 
-  rgbd = input * (float)(level - 1);
+  rgbd = normalized * (float)(level - 1);
   rgbi = min( max( convert_int4(rgbd), (int4)0), (int4)(level - 2));
 
 // delta r, g, b
@@ -93,6 +96,7 @@ lut3d_tetrahedral(read_only image2d_t in, write_only image2d_t out, const int wi
       output = (1.0f-rgbd.y)*clut000 + (rgbd.y-rgbd.x)*clut010 + (rgbd.x-rgbd.z)*clut110 + rgbd.z*clut111;
     }
   }
+  output.xyz += residual.xyz;
   output.w = input.w;
   write_imagef(out, (int2)(x, y), output);
 }
@@ -114,9 +118,12 @@ lut3d_trilinear(read_only image2d_t in, write_only image2d_t out, const int widt
   float4 input = read_imagef(in, sampleri, (int2)(x, y));
   float4 output = (float4)(0.0f);
 
-  input = clamp(input, (float4)0.0f, (float4)1.0f);
+  // The LUT only samples the unit RGB cube. Outside of it, keep the boundary deformation and add
+  // back the part of the input lying beyond the cube, exactly as dt_lut3d_apply() does on CPU.
+  const float4 normalized = clamp(input, (float4)0.0f, (float4)1.0f);
+  const float4 residual = input - normalized;
 
-  rgbd = input * (float)(level - 1);
+  rgbd = normalized * (float)(level - 1);
   rgbi = min( max( convert_int4(rgbd), (int4)0), (int4)(level - 2));
 
   // delta r, g, b
@@ -151,6 +158,7 @@ lut3d_trilinear(read_only image2d_t in, write_only image2d_t out, const int widt
   tmp1 = tmp1*(1.0f-rgbd.y) + tmp2*rgbd.y;
   output = output*(1.0f-rgbd.z) + tmp1*rgbd.z;
 
+  output.xyz += residual.xyz;
   output.w = input.w;
   write_imagef(out, (int2)(x, y), output);
 }
@@ -170,9 +178,12 @@ lut3d_pyramid(read_only image2d_t in, write_only image2d_t out, const int width,
   float4 input = read_imagef(in, sampleri, (int2)(x, y));
   float4 output = (float4)(0.0f);
 
-  input = clamp(input, (float4)0.0f, (float4)1.0f);
+  // The LUT only samples the unit RGB cube. Outside of it, keep the boundary deformation and add
+  // back the part of the input lying beyond the cube, exactly as dt_lut3d_apply() does on CPU.
+  const float4 normalized = clamp(input, (float4)0.0f, (float4)1.0f);
+  const float4 residual = input - normalized;
 
-  rgbd = input * (float)(level - 1);
+  rgbd = normalized * (float)(level - 1);
   rgbi = min( max( convert_int4(rgbd), (int4)0), (int4)(level - 2));
 
   // delta r, g, b
@@ -214,6 +225,7 @@ lut3d_pyramid(read_only image2d_t in, write_only image2d_t out, const int width,
     output = clut000 + (clut100-clut000)*rgbd.x + (clut010-clut000)*rgbd.y + (clut111-clut110)*rgbd.z
       + (clut110-clut100-clut010+clut000)*rgbd.x*rgbd.y;
   }
+  output.xyz += residual.xyz;
   output.w = input.w;
   write_imagef(out, (int2)(x, y), output);
 }

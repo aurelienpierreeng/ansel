@@ -10,7 +10,8 @@
     Copyright (C) 2021 Ralf Brown.
     Copyright (C) 2022 Martin Bařinka.
     Copyright (C) 2025 Alynx Zhou.
-    Copyright (C) 2025 Aurélien PIERRE.
+    Copyright (C) 2025-2026 Aurélien PIERRE.
+    Copyright (C) 2026 Guillaume Stutin.
     
     darktable is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -75,7 +76,13 @@ typedef struct dt_mipmap_buffer_t
   float iscale;
   uint8_t *buf;
   dt_colorspaces_color_profile_type_t color_space;
+  /** @brief NULL with a non-NULL @ref buf when a blocking get could not allocate the thumbnail's
+   * entry: @ref buf is then a shared, read-only skull and @ref status is DT_IMAGEIO_CACHE_FULL. */
   dt_cache_entry_t *cache_entry;
+  /** @brief Why the entry holds no image: a thumbnail drawn as a skull, or a full-size input
+   * with no pixels. DT_IMAGEIO_OK otherwise, and when @ref buf is NULL because the entry is
+   * not available yet rather than failed. */
+  dt_imageio_retval_t status;
 } dt_mipmap_buffer_t;
 
 typedef struct dt_mipmap_cache_one_t dt_mipmap_cache_one_t;
@@ -117,7 +124,11 @@ typedef struct dt_mipmap_cache_settings_t
  * @details Every field takes effect immediately, including ::max_memory -- the LRU quota is
  * soft, so lowering it makes the next insertions evict harder rather than freeing anything
  * synchronously. Call it whenever the user changes one of the four; the application does that
- * from its DT_SIGNAL_PREFERENCES_CHANGE handler.
+ * from its DT_SIGNAL_PREFERENCES_CHANGE handler, and the thumbnail menu of the lighttable
+ * (`gui/actions/display.c`) for ::embedded_jpg, which it changes without that signal. Writing
+ * the conf key alone changes nothing: the cache keeps rendering in the mode it was told.
+ * A thumbnail still rendering in the previous ::embedded_jpg is not kept: its entry stays to
+ * be generated, and the next request renders it in the new mode.
  *
  * @param settings the new values. NULL is a no-op.
  */
@@ -140,6 +151,16 @@ void dt_mipmap_cache_get_settings(dt_mipmap_cache_settings_t *settings);
  *        which is only sensible in a test.
  */
 void dt_mipmap_cache_init(const dt_mipmap_cache_settings_t *settings, const gboolean verbose);
+
+/** @brief Write the resident thumbnails to the disk cache and drop them from RAM; the cache stays
+ * usable.
+ *
+ * A thumbnail reaches the disk cache only when its entry is released: on LRU eviction, or in
+ * dt_mipmap_cache_cleanup(). Call this before the part of a shutdown that can fail. Entries another
+ * thread holds are skipped, not waited for; they, and whatever is generated afterwards, are written
+ * by dt_mipmap_cache_cleanup().
+ */
+void dt_mipmap_cache_flush_to_disk(void);
 void dt_mipmap_cache_cleanup(void);
 void dt_mipmap_cache_print(void);
 
@@ -199,7 +220,7 @@ void dt_mipmap_cache_write_get_with_caller(
 void dt_mipmap_cache_release_with_caller(dt_mipmap_buffer_t *buf, const char *file,
                                          int line);
 
-// remove thumbnails, so they will be regenerated:
+// remove thumbnails, so they will be regenerated, and a full-size load that failed, so it is tried again:
 void dt_mipmap_cache_remove(const int32_t imgid, const gboolean flush_disk);
 void dt_mipmap_cache_remove_at_size(const int32_t imgid, const dt_mipmap_size_t mip, const gboolean flush_disk);
 

@@ -17,7 +17,7 @@
     Copyright (C) 2017 Rikard Öxler.
     Copyright (C) 2019-2021 Aldric Renaudin.
     Copyright (C) 2019 Alexis Mousset.
-    Copyright (C) 2019-2020, 2022-2023, 2025 Aurélien PIERRE.
+    Copyright (C) 2019-2020, 2022-2023, 2025-2026 Aurélien PIERRE.
     Copyright (C) 2019-2020 Heiko Bauke.
     Copyright (C) 2019 jakubfi.
     Copyright (C) 2019 luzpaz.
@@ -37,6 +37,7 @@
     Copyright (C) 2022 Martin Bařinka.
     Copyright (C) 2022 Victor Forsiuk.
     Copyright (C) 2023 Luca Zulberti.
+    Copyright (C) 2026 Guillaume Stutin.
     
     darktable is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -721,6 +722,16 @@ void dt_gui_preferences_show()
         gtk_grid_attach(GTK_GRID(grid), pinned_memory_labdef, 1, line, 1, 1);
 
         GtkWidget *pinned_memory = gtk_check_button_new();
+        gtk_widget_set_tooltip_text(
+            pinned_memory,
+            _("Keep the host-side buffers this device transfers to and from in page-locked "
+              "memory.\n\n"
+              "Enabled, the driver can move them by direct memory access. Disabled, it must "
+              "copy them through a staging buffer of its own first, so every transfer is made "
+              "twice. On a discrete card this is several times slower, and it is paid on every "
+              "frame the darkroom displays.\n\n"
+              "Page-locked memory cannot be swapped out, so turn this off if the machine is "
+              "short of RAM."));
         gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(pinned_memory),
                                      dt_opencl_detected_device_pinned_memory(dev));
         gtk_widget_set_tooltip_text(pinned_memory, _("Use pinned host memory for OpenCL transfers on this GPU"));
@@ -789,6 +800,14 @@ void dt_gui_preferences_show()
 
   if(restart_required)
     dt_control_log(_("Ansel needs to be restarted for settings to take effect"));
+
+  // On disk now rather than at exit, so that a process that dies later keeps these settings.
+  if(dt_conf_flush())
+  {
+    char configdir[DT_PATH_MAX] = { 0 };
+    dt_loc_get_user_config_dir(configdir, sizeof(configdir));
+    dt_control_alert(_("Settings not saved"), _("the settings file could not be written in this folder"), configdir);
+  }
 
   DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_PREFERENCES_CHANGE);
 }
@@ -1202,7 +1221,7 @@ static void _import_preset_from_file(const gchar* filename)
 {
   if(!dt_presets_import_from_file(filename))
   {
-    dt_control_log(_("failed to import preset %s"), filename);
+    dt_control_alert(_("Preset not imported"), _("failed to import preset"), filename);
   }
 }
 

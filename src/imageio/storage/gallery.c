@@ -34,6 +34,7 @@
     Copyright (C) 2022 Martin Bařinka.
     Copyright (C) 2022 Miloš Komarčević.
     Copyright (C) 2023 Ricky Moon.
+    Copyright (C) 2026 Guillaume Stutin.
     
     darktable is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -244,7 +245,8 @@ static gint sort_pos(pair_t *a, pair_t *b)
 }
 
 int store(dt_imageio_module_storage_t *self, dt_imageio_module_data_t *sdata, const int32_t imgid,
-          dt_imageio_module_format_t *format, dt_imageio_module_data_t *fdata, const int num, const int total,
+          dt_imageio_module_format_t *format, dt_imageio_module_data_t *fdata, const double scale_factor,
+          const int num, const int total,
           const gboolean high_quality, const gboolean export_masks,
           dt_colorspaces_color_profile_type_t icc_type, const gchar *icc_filename, dt_iop_color_intent_t icc_intent,
           dt_export_metadata_t *metadata)
@@ -299,8 +301,7 @@ int store(dt_imageio_module_storage_t *self, dt_imageio_module_data_t *sdata, co
   if(*c == '/') *c = '\0';
   if(g_mkdir_with_parents(dirname, 0755))
   {
-    fprintf(stderr, "[imageio_storage_gallery] could not create directory: `%s'!\n", dirname);
-    dt_control_log(_("could not create directory `%s'!"), dirname);
+    dt_control_alert(_("Export failed"), _("could not create directory!"), dirname);
     return 1;
   }
 
@@ -382,11 +383,10 @@ int store(dt_imageio_module_storage_t *self, dt_imageio_module_data_t *sdata, co
 
   // export image to file. need this to be able to access meaningful
   // fdata->width and height below.
-  if(dt_imageio_export(imgid, filename, format, fdata, TRUE, TRUE, export_masks, icc_type,
+  if(dt_imageio_export(imgid, filename, format, fdata, scale_factor, TRUE, TRUE, export_masks, icc_type,
                        icc_filename, icc_intent, self, sdata, num, total, metadata) != 0)
   {
-    fprintf(stderr, "[imageio_storage_gallery] could not export to file: `%s'!\n", filename);
-    dt_control_log(_("could not export to file `%s'!"), filename);
+    dt_control_alert(_("Export failed"), _("could not export to file!"), filename);
     dt_free(pair);
     dt_free(esc_relfilename);
     dt_free(esc_relthumbfilename);
@@ -422,11 +422,11 @@ int store(dt_imageio_module_storage_t *self, dt_imageio_module_data_t *sdata, co
   if(c <= filename || *c == '/') c = filename + strlen(filename);
   ext = format->extension(fdata);
   sprintf(c, "-thumb.%s", ext);
-  if(dt_imageio_export(imgid, filename, format, fdata, FALSE, FALSE, export_masks, icc_type, icc_filename,
+  // the thumbnail fits its own 200 px box, whatever factor the image was reduced by
+  if(dt_imageio_export(imgid, filename, format, fdata, 0.0, FALSE, FALSE, export_masks, icc_type, icc_filename,
                        icc_intent, self, sdata, num, total, NULL) != 0)
   {
-    fprintf(stderr, "[imageio_storage_gallery] could not export to file: `%s'!\n", filename);
-    dt_control_log(_("could not export to file `%s'!"), filename);
+    dt_control_alert(_("Export failed"), _("could not export to file!"), filename);
     return 1;
   }
   // restore for next image:

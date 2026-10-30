@@ -1,5 +1,7 @@
 # Ansel code base reorganization
 
+> **First checked 2026-09-29.** This file was mechanically checked against `8f4638a04e` on 2026-09-29 — every `file:line` citation resolved, every backticked symbol looked up in the tree, every OPEN/planned status claim tested, and every gate or baseline number it quotes compared with `tools/check_module_boundaries.sh` and `tools/include_baseline.txt`. **No per-claim semantic read was done**: a citation that resolves can still describe the wrong thing, so this is a floor, not a verification. Two numbers corrected: layering violations are **183**, not 217, and one function was renamed when the database module was sealed (`dt_history_repository_foreach_row()`).
+
 ## The initial problem
 
 Darktable was not modular, as the [/src dependency graph](@ref src) shows: everything is wired
@@ -165,7 +167,9 @@ Here is a complete image lifecycle, assuming it is already imported into databas
 2. load the pixel buffer from disk to mipmap cache and update the `dt_image_t.dsc` structure through `dt_mipmap_cache_get()`,
 3. load the image history from database into `dt_develop_t.history` through `dt_dev_read_history_ext()` which, internally:
   1. initialize a boilerplate history through `dt_dev_init_default_history()`, with module default parameters, auto-presets and mandatory modules for the image type,
-  2. deserialize SQLite3 rows into history items through `dt_history_db_foreach_history_row()`,
+  2. deserialize SQLite3 rows into history items through `dt_history_repository_foreach_row()`
+     (`src/database/history_repository.h:118`; it was `dt_history_db_foreach_history_row()` before
+     the database module was sealed),
   3. fetch the masks history from DB through `dt_masks_read_masks_history()` and attach it to `dt_develop_t.history` items,
   4. init/update all history-related hashes.
 4. From there, we have 2 branches :
@@ -222,7 +226,11 @@ Layers run low to high. A file may include from its own layer or below, never ab
 | 9 | `src/` root | yes | `darktable.c`, the orchestrator |
 
 Measured with `tools/statelessness_audit.py`: 739 files, 316 headers, **0 include cycles**,
-217 layering violations.
+217 layering violations. **Re-measured 2026-09-29 with `tools/include_graph.py --summary`: 814
+nodes, 361 headers, cycles 0, `layering_violations` 183** (and `tools/include_baseline.txt`
+agrees). Note `statelessness_audit.py` needs a populated `build-debug/` — it reads the object
+files — and errors out with `no .o files under .../build-debug` otherwise, which is why the
+cheaper `include_graph.py` is the one to reach for when only the graph numbers are wanted.
 
 ## What "stateless" buys, and why it is worth enforcing
 
@@ -249,7 +257,14 @@ state, it belongs in `system/`, `math/` or a module of its own.
 # The rules {#the-rules}
 
 Five gates run in CI. Each exists because the thing it checks broke something that no other
-gate could see, and all five fail the build rather than warn.
+gate could see, and every one of them fails the build rather than warns.
+
+**They do not all run on every build**, which this said until it was measured (2026-09-29):
+`check_conditional_includes.sh` runs on pull requests only, and `check_unused_includes.sh` on
+pull requests only *and* only in the `LLVM20` + `skiptest` cell — 1 of 13. Both gate a *diff*
+and a diff needs a base ref, so the restriction is right; the claim was not. A push to master
+is checked by three of the five. `doc/ci.md` has the table, the merge gate's design, and the
+holes the same audit found.
 
 | gate | rule |
 |---|---|
@@ -351,7 +366,8 @@ justify an include it has always carried is how mechanical work starts dragging 
 
 # What remains {#what-remains}
 
-Roughly in dependency order. Layering violations (217) fall as these land.
+Roughly in dependency order. Layering violations (**183** as of 2026-09-29, 217 when this was
+written) fall as these land.
 
 **Extract `database`, `caches`, `metadata` from `common/`.** `common/` is 63 translation units
 and remains the largest undifferentiated module. Database access in particular should be behind
@@ -367,7 +383,7 @@ remembering to lock the image cache first (see [§ Database](#database)).
 function pointers letting anything reach anything.
 
 **Make `pixel/` stateless.** No file there holds state of its own; all 13 that reach state do so
-through `common/opencl.c` (the device registry) or `develop/pixelpipe_cache.c`. Inverting those
+through `common/opencl.c` (the device registry) or `caches/pixelpipe_cache.c`. Inverting those
 two dependencies would make the tree's whole pixel-maths layer stateless.
 
 **Close `system/` fully.** It no longer includes anything outside itself, but the gate is what
@@ -400,7 +416,7 @@ needs the *writer* lock on the same `history_mutex`, and the writer-preferring r
 blocks new readers once a writer is queued, every GUI edit (a scroll on exposure, a mask drag)
 can stall for the full duration of whatever resync the worker thread happens to be mid-flight on.
 This is directly observable with the named-rwlock diagnostic added to `dt_pthread_rwlock_t`
-(`common/dtpthread.h`: `dt_pthread_rwlock_set_name()` + wait-time logging, opt-in per lock —
+(`system/dtpthread.h`: `dt_pthread_rwlock_set_name()` + wait-time logging, opt-in per lock —
 `dev->history_mutex` is named in `dt_dev_init()`) combined with `-d history`.
 
 **Status: fixed.** `dt_dev_pixelpipe_change()` now resyncs against a
@@ -447,3 +463,38 @@ The current architecture has the pipeline rendering triggered implicitely from h
 A direct module -> pipeline trigger would also avoid the messy business of having to handle mask preview GUI states within the pipeline recursion, which means that we have to hack the `piece->global_hash` to account for GUI states and properly recompute pipelines when switching on/off mask previews. That introduces lots of edge-cases to handle through heuristics and bypasses. Raster-mask providers already publish dedicated side-band cachelines, independently from their image outputs; the remaining architectural step would be a specialized pipeline that only runs the `distort_mask()` methods instead of performing those transforms while the consuming module blends. Note that color-pickers have also been completely removed from the rendering pixel pipeline and now deal directly with cachelines, from the GUI thread, which avoids having to recompute a pipe just to refresh their values.
 
 The new architecture doesn't force modules to take their input from the previous module output either, now they can take input from any module output in the pipeline as long as we know the global hash of the module, to fetch its output buffer on the cache. So we could have a new module, _masking & merging_ that could take input from several modules and blend them over each other with alpha, meaning we could have parallel branches within pipelines and not stay limited by single sequences of modules. Along with the new nodal graph viewer, that would allow a full nodal workflow.
+
+---
+
+## Direction and general engineering principles
+
+*Found `b69f8864d4`, 2026-06-25. Verified against `42eca0e8fe`, 2026-09-29.*
+
+Ansel inherited the Darktable practice of entangling every application layer (GUI, pipeline,
+history, database) and importing the whole software into the whole software through
+`#include "darktable.h"`. That voided the modularity principle, caused bugs and data races, and
+made maintenance prone to edge effects in an application that is heavily asynchronous and
+parallel.
+
+> **That specific problem is now largely closed, and this paragraph used to say otherwise.**
+> Measured at `42eca0e8fe` (2026-09-29): **13** files in all of `src/` include `darktable.h`,
+> out of 816 — five `main()`s and eight top-level translation units, which is exactly the shape
+> the goal below prescribes. **No header includes it at all**, and the file itself is down to ten
+> includes. Seven headers now carry comments actively routing callers away from it. Written in
+> the present tense, this section sent a reader to go and fix something the darktable.h strip had
+> already done. The risk today is **regression, not remediation** — keep it that way.
+
+The Ansel codebase should move toward more enclosed modularity, making data structure private
+to each translation unit and exposing only API to the outside (getters/setters/init/cleanup). 
+Direct value changes on data not owned by the current TU are forbidden. The dependency graph 
+should be simplified and only a minimal set of `#include` should be kept per TU. In particular,
+`src/darktable.h` inherits from lower-level modules and lower-level modules must not inherit it:
+it has stopped being the glue of all common helpers, and nothing should make it that again.
+
+CRUD operations should have one central entry point for the whole software and run only
+once, for as long as user didn't send new input, so the data lifecycle is legible and
+cacheable.
+
+Since every data flow in the software is a pipeline, issues should be tracked to their root
+cause by climbing the call tree up until the source is found, instead of being fixed where
+they are visible.

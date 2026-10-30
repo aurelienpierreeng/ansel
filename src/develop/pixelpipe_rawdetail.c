@@ -11,6 +11,28 @@
 #include "pixel/interpolation.h"
 #include "caches/pixelpipe_cache_alloc.h"
 
+gboolean dt_dev_pixelpipe_rawdetail_mask_check_hit(dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_iop_t *piece,
+                                                   const uint64_t output_hash)
+{
+  if(g_strcmp0(piece->module->op, "detailmask")) return TRUE;
+  const uint64_t mask_hash = dt_dev_pixelpipe_rawdetail_mask_hash(piece);
+  if(mask_hash == DT_PIXELPIPE_CACHE_HASH_INVALID || pipe->rawdetail_mask_hash == mask_hash) return TRUE;
+
+  // Looked up and referenced at once, as the stage's process() keeps the mask it finds.
+  if(dt_dev_pixelpipe_cache_ref_entry_by_hash(mask_hash, NULL, NULL))
+  {
+    dt_dev_clear_rawdetail_mask(pipe);
+    pipe->rawdetail_mask_hash = mask_hash;
+    memcpy(&pipe->rawdetail_mask_roi, &piece->roi_out, sizeof(dt_iop_roi_t));
+    return TRUE;
+  }
+
+  /* Pipes run one at a time, so nothing else holds this output while we are here: it goes, and
+   * neither lookup -- the exact hit, nor the writable acquisition after the recursion -- finds it. */
+  dt_dev_pixelpipe_cache_invalidate_hashes(&output_hash, 1);
+  return FALSE;
+}
+
 float *dt_dev_retrieve_rawdetail_mask(const dt_dev_pixelpipe_t *pipe, const dt_iop_module_t *target_module)
 {
   const dt_dev_pixelpipe_iop_t *detailmask_piece = NULL;
@@ -31,11 +53,10 @@ float *dt_dev_retrieve_rawdetail_mask(const dt_dev_pixelpipe_t *pipe, const dt_i
 
   if(pipe->rawdetail_mask_hash != mask_hash)
   {
-    dt_pixel_cache_entry_t *entry = dt_dev_pixelpipe_cache_get_entry(mask_hash);
-    if(IS_NULL_PTR(entry)) return NULL;
+    // Looked up and referenced at once: nobody may hold the mask when detailmask itself did not run.
+    if(!dt_dev_pixelpipe_cache_ref_entry_by_hash(mask_hash, NULL, NULL)) return NULL;
 
     dt_dev_clear_rawdetail_mask(mutable_pipe);
-    dt_dev_pixelpipe_cache_ref_count_entry(TRUE, entry);
     mutable_pipe->rawdetail_mask_hash = mask_hash;
     memcpy(&mutable_pipe->rawdetail_mask_roi, &detailmask_piece->roi_out, sizeof(dt_iop_roi_t));
   }

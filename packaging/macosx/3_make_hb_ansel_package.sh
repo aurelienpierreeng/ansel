@@ -40,7 +40,6 @@ dtAppName="Ansel"
 dtWorkingDir="$dtPackageDir"/"$dtAppName".app
 dtResourcesDir="$dtWorkingDir"/Contents/Resources
 dtExecDir="$dtWorkingDir"/Contents/MacOS
-dtExecutables=$(echo "$dtExecDir"/ansel{,-chart,-cli,-cltest,-generate-cache,-rs-identify,-curve-tool,-noiseprofile})
 homebrewHome=$(brew --prefix)
 
 # Install direct and transitive dependencies
@@ -226,13 +225,25 @@ echo "[Settings]
 gtk-icon-theme-name = Adwaita
 " >"$dtResourcesDir"/etc/gtk-3.0/settings.ini
 
-# Add ansel executables
-cp "$buildDir"/bin/ansel{,-cli,-cltest,-generate-cache,-rs-identify} "$dtExecDir"/
+# Add ansel executables. What belongs in the bundle is whatever `make install' put in bin/,
+# never a list spelled out here: a command gated on a build option (ansel-lens-db-update on
+# liblensfun, ansel-nn-parity and ansel-cltest on OpenCL) is then bundled wherever it was
+# built, and adding one needs no edit to this file. Both of the lensfun/OpenCL commands were
+# built, installed, and left out of the .app for exactly that reason, while CPack on Windows
+# and `make install' on Linux -- neither of which enumerates anything -- carried them. Only
+# executables land in bin/ here: lib_ansel goes to bin/ on WIN32 alone, and every
+# _detach_debuginfo() call that would put a .dbg beside one is commented out and WIN32-only.
+cp "$buildDir"/bin/* "$dtExecDir"/
 
-# Add ansel tools if existent
-if [[ -d libexec/ansel/tools ]]; then
+# Add ansel tools if existent. The test is on the install tree; a bare relative path asks
+# about this script's own directory, where it never exists, so the tools were never copied.
+if [[ -d "$buildDir"/libexec/ansel/tools ]]; then
     cp "$buildDir"/libexec/ansel/tools/* "$dtExecDir"/
 fi
+
+# The executables now in the bundle: what gets its homebrew dependencies installed below,
+# and its load paths rewritten. Read back from the bundle for the same reason as above.
+dtExecutables=$(find "$dtExecDir" -type f)
 
 # Add ansel directories
 cp -R "$buildDir"/{lib,share} "$dtResourcesDir"/

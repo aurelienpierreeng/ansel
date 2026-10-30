@@ -72,7 +72,23 @@ typedef struct dt_masks_form_gui_points_t
   float *source;   // source point in absolute coordinates in output image space
   int source_count;
   gboolean clockwise;
+  /* The box every sample above spans -- points, border and source alike, in the same space --
+   * so a hit test can answer "nothing here" without walking them: minx, maxx, miny, maxy; empty
+   * (min above max) when there is no sample. dt_masks_gui_points_update_bbox() fills it. */
+  float bbox[4];
 } dt_masks_form_gui_points_t;
+
+/** Can a cursor at (x, y), reaching @p reach around itself, touch a sample of @p gp at all:
+ * the box test every hit test runs before walking the samples. An empty box reaches nothing. */
+static inline gboolean dt_masks_gui_points_reach(const dt_masks_form_gui_points_t *gp, const float x,
+                                                 const float y, const float reach)
+{
+  return x >= gp->bbox[0] - reach && x <= gp->bbox[1] + reach && y >= gp->bbox[2] - reach
+         && y <= gp->bbox[3] + reach;
+}
+
+/** Recompute ::bbox from the samples @p gp holds. */
+void dt_masks_gui_points_update_bbox(dt_masks_form_gui_points_t *gp);
 
 
 /** structure used to display a form */
@@ -182,10 +198,26 @@ typedef struct dt_masks_form_gui_t
    * the outlines of every shape in the group rebuilt on every mouse move, and the 1/60 s throttle
    * in dt_masks_gui_form_create_throttled() bypassed by its own force_rebuild clause. */
   uint64_t geometry_generation;
+  /* The sampling density of the outlines, in image pixels between consecutive samples. The
+   * expose publishes the density the view shows, from what one device pixel spans, into the
+   * dev's own GUI state (dt_masks_gui_set_outline_density()), and every build reads it from
+   * there through dt_masks_gui_outline_step() -- so on any other GUI state, the creation
+   * session's for one, ::outline_step is not consulted. ::outline_step_built is the density the
+   * outlines in ::points were built at, on every state that holds outlines; a difference from
+   * the density in force is a rebuild, like a geometry move. An outline sampled finer than the
+   * screen can show costs its whole build, its transform, its boundary pass and its hit test for
+   * nothing: at fit zoom on a 24 Mpx raw that was five samples per device pixel. */
+  int outline_step;
+  int outline_step_built;
 } dt_masks_form_gui_t;
 
 /** Reset a form GUI state and bind it to its owning develop instance (gui->dev). */
 void dt_masks_init_form_gui(dt_develop_t *dev, dt_masks_form_gui_t *gui);
+/** Publish the density the view shows into the dev's GUI state: @p image_px_per_device_px is
+ * what one device pixel spans in image pixels (dt_draw_min_emit_step() on the transformed
+ * context). The outlines are sampled at whole image pixels, never finer than one.
+ * dt_masks_gui_outline_step() (masks/masks_distort.h) reads it back. */
+void dt_masks_gui_set_outline_density(dt_masks_form_gui_t *gui, double image_px_per_device_px);
 dt_masks_form_t *dt_masks_get_visible_form(const struct dt_develop_t *dev);
 void dt_masks_set_visible_form(struct dt_develop_t *dev, dt_masks_form_t *form);
 void dt_masks_gui_init(struct dt_develop_t *dev);
@@ -573,6 +605,11 @@ void dt_masks_events_post_expose_with(dt_develop_t *dev, struct dt_iop_module_t 
                                       int32_t width, int32_t height, int32_t pointerx, int32_t pointery,
                                       const dt_masks_overlay_transform_t *transform);
 
+/** Ask the centre widget for a redraw of what the last overlay frame touched, grown by the
+ * pointer's motion since, instead of the whole widget: for a motion the masks handled and
+ * nothing else did. Falls back to the whole widget when no frame has been recorded. */
+void dt_masks_overlay_queue_redraw(GtkWidget *widget);
+
 void dt_masks_events_post_expose(dt_develop_t *dev, struct dt_iop_module_t *module, cairo_t *cr, int32_t width, int32_t height,
                                  int32_t pointerx, int32_t pointery);
 int dt_masks_events_mouse_leave(struct dt_iop_module_t *module);
@@ -836,6 +873,12 @@ float dt_masks_apply_increment(float current, float amount, dt_masks_increment_t
 float dt_masks_apply_increment_precomputed(float current, float amount, float scale_amount, float offset_amount,
                                             dt_masks_increment_t increment);
 
+/** Draw every member of @p form but the one at @p except_pos, in the group's order. */
+void dt_group_events_post_expose_except(cairo_t *cr, float zoom_scale, dt_masks_form_t *form,
+                                        dt_masks_form_gui_t *gui, int except_pos);
+/** Draw the member of @p form at @p pos alone; nothing for a position the group has not. */
+void dt_group_events_post_expose_only(cairo_t *cr, float zoom_scale, dt_masks_form_t *form,
+                                      dt_masks_form_gui_t *gui, int pos);
 void dt_group_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_form_t *form,
                                  dt_masks_form_gui_t *gui);
 

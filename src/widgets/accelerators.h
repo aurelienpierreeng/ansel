@@ -14,6 +14,7 @@
     Copyright (C) 2021 Bill Ferguson.
     Copyright (C) 2022 Martin Bařinka.
     Copyright (C) 2023, 2025 Aurélien PIERRE.
+    Copyright (C) 2026 Guillaume Stutin.
     
     darktable is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -157,7 +158,8 @@ typedef struct dt_accels_t
   // TRUE if we didn't find a keyboardrc config file at startup and we need to init a new one
   gboolean init;
 
-  // between key_pressed and key_release events, this stores the active key strokes
+  // between key_pressed and key_release events, this stores the active key strokes;
+  // cleared when the main window gains or loses the focus (see dt_accels_dispatch)
   GtkAccelKey active_key;
 
   // Temporarily disable accelerators
@@ -207,6 +209,17 @@ dt_accels_t *dt_accels_init(char *config_file, GtkAccelFlags flags);
 void dt_accels_cleanup(dt_accels_t *accels);
 
 
+/**
+ * @brief Build the accel path of `feature` under `scope`.
+ *
+ * `scope` is a hierarchy, its levels separated by "/", with or without the leading "<Ansel>/".
+ * `feature` is ONE level: it is a GUI label, often translated, and a "/" in it is written as "-",
+ * because the "/" is the only structure an accel path has. A label that holds one would otherwise
+ * add a level that no code asked for. To nest several labels, build the path one label at a time,
+ * passing the path built so far as the next `scope`.
+ *
+ * @return a newly allocated path, to be freed with dt_free().
+ */
 gchar *dt_accels_build_path(const gchar *scope, const gchar *feature);
 
 /**

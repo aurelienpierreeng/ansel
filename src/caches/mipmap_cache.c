@@ -30,7 +30,7 @@
     Copyright (C) 2022 Miloš Komarčević.
     Copyright (C) 2023 Ricky Moon.
     Copyright (C) 2024 Alynx Zhou.
-    Copyright (C) 2025 Guillaume Stutin.
+    Copyright (C) 2025-2026 Guillaume Stutin.
     
     darktable is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -52,6 +52,7 @@
 #include "caches/pixelpipe_cache_alloc.h"
 #include "common/file_location.h"
 #include "common/grealpath.h"
+#include "common/image_extensions.h"
 #include "caches/image_cache.h"
 #include "develop/pixelpipe_hb.h"
 #include "develop/supervisor.h"
@@ -185,7 +186,13 @@ typedef enum dt_mipmap_buffer_dsc_flags
 {
   DT_MIPMAP_BUFFER_DSC_FLAG_NONE = 0,
   DT_MIPMAP_BUFFER_DSC_FLAG_GENERATE = 1 << 0,
-  DT_MIPMAP_BUFFER_DSC_FLAG_INVALIDATE = 1 << 1
+  DT_MIPMAP_BUFFER_DSC_FLAG_INVALIDATE = 1 << 1,
+  DT_MIPMAP_BUFFER_DSC_FLAG_ON_DISK = 1 << 2, // the pixels are those of the disk-cache file, as read
+  /* One generation attempt has already failed for this entry. Read together with GENERATE it gives
+   * the three states a failed thumbnail can be in: GENERATE|RETRIED is "failed once, try again on
+   * the next request", RETRIED alone is "failed twice, this is a skull and we have stopped", and
+   * neither is a thumbnail that generated normally. */
+  DT_MIPMAP_BUFFER_DSC_FLAG_RETRIED = 1 << 3
 } dt_mipmap_buffer_dsc_flags;
 
 // the embedded Exif data to tag thumbnails as sRGB or AdobeRGB
@@ -212,6 +219,9 @@ struct dt_mipmap_buffer_dsc
   size_t size;
   dt_mipmap_buffer_dsc_flags flags;
   dt_colorspaces_color_profile_type_t color_space;
+  // why width and height are 0, kept so the GUI can say it over the skull. Never written to
+  // the disk cache, which only ever receives real thumbnails.
+  dt_imageio_retval_t status;
 
 #if __has_feature(address_sanitizer) || defined(__SANITIZE_ADDRESS__)
   // do not touch!
@@ -232,24 +242,28 @@ static const size_t dt_mipmap_buffer_dsc_size __attribute__((unused)) = sizeof(s
 
 static uint8_t * _get_buffer_from_dsc(struct dt_mipmap_buffer_dsc *dsc);
 
+// The 8x8 skull a thumbnail shows when it holds no image, in DT_COLORSPACE_DISPLAY.
+#define X 0xffffffffu
+#define o 0u
+static const uint32_t _skull_8[64] DT_ALIGNED_ARRAY
+    = { o, o, o, o, o, o, o, o,
+        o, o, X, X, X, X, o, o,
+        o, X, o, X, X, o, X, o,
+        o, X, X, X, X, X, X, o,
+        o, o, X, o, o, X, o, o,
+        o, o, o, o, o, o, o, o,
+        o, o, X, X, X, X, o, o,
+        o, o, o, o, o, o, o, o };
+#undef o
+#undef X
+
 static inline void *dead_image_8(struct dt_mipmap_buffer_dsc *dsc)
 {
   dsc->width = dsc->height = 8;
   dsc->iscale = 1.0f;
   dsc->color_space = DT_COLORSPACE_DISPLAY;
-  assert(dsc->size > 64 * sizeof(uint32_t));
-  const uint32_t X = 0xffffffffu;
-  const uint32_t o = 0u;
-  const uint32_t image[]
-      = { o, o, o, o, o, o, o, o, 
-          o, o, X, X, X, X, o, o, 
-          o, X, o, X, X, o, X, o, 
-          o, X, X, X, X, X, X, o,
-          o, o, X, o, o, X, o, o, 
-          o, o, o, o, o, o, o, o, 
-          o, o, X, X, X, X, o, o, 
-          o, o, o, o, o, o, o, o };
-  memcpy(_get_buffer_from_dsc(dsc), image, sizeof(uint32_t) * 64);
+  assert(dsc->size > sizeof(_skull_8));
+  memcpy(_get_buffer_from_dsc(dsc), _skull_8, sizeof(_skull_8));
   return _get_buffer_from_dsc(dsc);
 }
 
@@ -327,75 +341,48 @@ exit:
 }
 
 /**
- * @brief Check if an image should be written to disk, if the thumbnail should be computed from embedded JPEG,
- * and optionaly return intermediate checks to get there, like whether the input is a JPEG file and if it exists on
- * the filesystem.
+ * @brief Return what choosing the source of a thumbnail needs: the input file, whether it exists
+ * on the filesystem, whether it is a JPEG, whether the image was edited, and whether it may be a raw.
  *
  * @param imgid Database SQL ID of the image
- * @param filename Filename of the input file. Can be NULL.
- * @param ext Extension of the input file. Can be NULL.
- * @param input_exists Whether the file can be found on the filesystem. Can be NULL.
- * @param is_jpg_input Whether the file is a JPEG. Can be NULL.
- * @param use_embedded_jpg Whether the lighttable should use the embedded JPEG thumbnail. Can be NULL.
- * @param write_to_disk Whether the cached thumbnail should be flushed to disk before being flushed from RAM. Can
- * be NULL.
+ * @param filename Filename of the input file, empty when there is none.
+ * @param ext Extension of the input file, with its dot.
+ * @param input_exists Whether the file can be found on the filesystem.
+ * @param is_jpg_input Whether the file is a JPEG.
+ * @param altered Whether the image has a history, which embedded JPEG mode 1 asks.
+ * @param may_be_raw Whether the image is a raw, or, before its first decode, has a raw extension,
+ * which the embedded JPEG modes ask.
  */
-static void _write_mipmap_to_disk(const int32_t imgid, char *filename, char *ext, gboolean *input_exists,
-                                  gboolean *is_jpg_input, gboolean *use_embedded_jpg, gboolean *write_to_disk)
+static void _get_thumbnail_input(const int32_t imgid, char *filename, char *ext, gboolean *input_exists,
+                                 gboolean *is_jpg_input, gboolean *altered, gboolean *may_be_raw)
 {
-  // Get file name
-  char _filename[DT_PATH_MAX] = { 0 };
   const dt_image_t *img = dt_image_cache_get(imgid, 'r');
-  if(filename || ext || input_exists || is_jpg_input)
-  {
-    const dt_image_path_source_t source = dt_image_choose_input_path(img, _filename, sizeof(_filename), FALSE);
-    if(source == DT_IMAGE_PATH_NONE) _filename[0] = '\0';
-    if(filename) strncpy(filename, _filename, DT_PATH_MAX);
-    if(input_exists) *input_exists = (source != DT_IMAGE_PATH_NONE);
-  }
+  const dt_image_path_source_t source = dt_image_choose_input_path(img, filename, DT_PATH_MAX, FALSE);
+  if(source == DT_IMAGE_PATH_NONE) filename[0] = '\0';
+  *input_exists = (source != DT_IMAGE_PATH_NONE);
 
-  // Get the file extension
-  if(ext || is_jpg_input)
-  {
-    char *_ext = _filename + strlen(_filename);
-    while(*_ext != '.' && _ext > _filename) _ext--;
-    if(ext) strncpy(ext, _ext, 5);
-    if(is_jpg_input) *is_jpg_input = !strcasecmp(_ext, ".jpg") || !strcasecmp(_ext, ".jpeg");
-  }
+  const char *_ext = filename + strlen(filename);
+  while(*_ext != '.' && _ext > filename) _ext--;
+  g_strlcpy(ext, _ext, 6);
+  *is_jpg_input = !strcasecmp(_ext, ".jpg") || !strcasecmp(_ext, ".jpeg");
 
-  // embedded JPG mode:
-  // 0 = never use embedded thumbnail
-  // 1 = only on unedited pics,
-  // 2 = always use embedded thumbnail
-  int mode = _settings_get().embedded_jpg;
-  gboolean altered = FALSE;
-  if(mode == 1)
-  {
-    if(img) altered = img->history_items > 0;
-  }
-  const gboolean _use_embedded_jpg
-      = (mode == 2                           // always use embedded
-         || (mode == 1 && !altered));        // use embedded only on unaltered images
-  if(use_embedded_jpg) *use_embedded_jpg = _use_embedded_jpg;
+  *altered = !IS_NULL_PTR(img) && img->history_items > 0;
 
-  // Save to cache only if the option is enabled by user and the thumbnail is not the embedded thumbnail
-  // The rationale is getting the un-processed JPEG thumbnail is cheap and not worth saving on disk.
-  // This allows fast toggling between JPEG and processed RAW thumbnail from GUI.
-  if(write_to_disk)
-  {
-    *write_to_disk = _settings_get().disk_backend;
-  }
+  // Before the first decode, an image is neither LDR nor HDR when its extension leaves that open,
+  // but the extension itself settles the question asked here: a .tif or a .heif is RGB, whether
+  // LDR or HDR; only a raw extension, like .dng, may be a raw.
+  *may_be_raw = IS_NULL_PTR(img) || dt_image_needs_rawprepare(img)
+                || (!dt_image_is_ldr(img) && !dt_image_is_hdr(img) && dt_image_ext_is_raw(_ext + 1));
 
-  if(img)
-    dt_image_cache_read_release(img);
+  if(img) dt_image_cache_read_release(img);
 }
 
 
 static void _init_f(dt_mipmap_buffer_t *mipmap_buf, float *buf, uint32_t *width, uint32_t *height, float *iscale,
                     const int32_t imgid);
-static void _init_8(uint8_t *buf, uint32_t *width, uint32_t *height, float *iscale,
-                    dt_colorspaces_color_profile_type_t *color_space, const int32_t imgid,
-                    const dt_mipmap_size_t size, dt_atomic_int *shutdown);
+static dt_imageio_retval_t _init_8(struct dt_mipmap_buffer_dsc *dsc, const int32_t imgid,
+                                   const dt_mipmap_size_t size, const int embedded_jpg_mode,
+                                   dt_atomic_int *shutdown);
 
 /**
  * @file: mipmap_cache.c
@@ -453,6 +440,7 @@ static void _sync_dsc_to_buf(dt_mipmap_buffer_t *buf, struct dt_mipmap_buffer_ds
   buf->height = dsc->height;
   buf->iscale = dsc->iscale;
   buf->color_space = dsc->color_space;
+  buf->status = dsc->status;
   buf->imgid = imgid;
   buf->size = mip;
   buf->buf = _get_buffer_from_dsc(dsc);
@@ -466,6 +454,7 @@ static void _invalidate_buffer(dt_mipmap_buffer_t *buf)
   buf->width = buf->height = 0;
   buf->iscale = 0.0f;
   buf->buf = NULL;
+  buf->status = DT_IMAGEIO_OK;
 }
 
 
@@ -501,6 +490,7 @@ void dt_mipmap_cache_update_buffer_addresses(dt_cache_entry_t *entry, struct dt_
   (*dsc)->height = height;
   (*dsc)->iscale = 1.0f;
   (*dsc)->color_space = DT_COLORSPACE_NONE;
+  (*dsc)->status = DT_IMAGEIO_OK;
   (*dsc)->flags = DT_MIPMAP_BUFFER_DSC_FLAG_GENERATE;
   (*dsc)->size = _get_entry_size(buffer_size);
 }
@@ -542,7 +532,18 @@ void *dt_mipmap_cache_alloc(dt_mipmap_buffer_t *buf, const dt_image_t *img)
   const size_t buffer_size = wd * ht * bpp;
   const size_t min_buffer_size = 64 * 4 * sizeof(float);
   entry->data = dt_alloc_align(_get_entry_size(MAX(buffer_size, min_buffer_size)));
-  if(IS_NULL_PTR(entry->data)) return NULL;
+  if(IS_NULL_PTR(entry->data))
+  {
+    /* The old payload is already gone, and every reader of a cache entry takes entry->data for a
+     * valid descriptor: _generate_blocking() writes dsc->status as soon as the loader returns
+     * DT_IMAGEIO_CACHE_FULL, so leaving NULL here crashes there. Fall back to the empty 0x0
+     * payload a full-size entry is created with (dt_mipmap_cache_allocate_dynamic()), so the
+     * load fails instead. */
+    entry->data = dt_alloc_align(_get_entry_size(min_buffer_size));
+    struct dt_mipmap_buffer_dsc *empty = NULL;
+    dt_mipmap_cache_update_buffer_addresses(entry, &empty, 0, 0, min_buffer_size);
+    return NULL;
+  }
 
   // Update the references
   struct dt_mipmap_buffer_dsc *dsc = NULL;
@@ -606,10 +607,7 @@ void dt_mipmap_cache_allocate_dynamic(void *data, dt_cache_entry_t *entry)
     if(img) dt_image_cache_read_release(img);
   }
 
-  gboolean write_to_disk;
-  _write_mipmap_to_disk(imgid, NULL, NULL, NULL, NULL, NULL, &write_to_disk);
-
-  if(cache->cachedir[0] && write_to_disk && mip < DT_MIPMAP_F)
+  if(cache->cachedir[0] && _settings_get().disk_backend && mip < DT_MIPMAP_F)
   {
     // try and load from disk, if successful set flag
     char filename[DT_PATH_MAX] = {0};
@@ -677,22 +675,28 @@ void dt_mipmap_cache_allocate_dynamic(void *data, dt_cache_entry_t *entry)
     dsc->height = jpg.height;
     dsc->iscale = 1.0f;
     dsc->color_space = color_space;
-    dsc->flags = 0;
+    dsc->flags = DT_MIPMAP_BUFFER_DSC_FLAG_ON_DISK;
 
     _cache_print(DT_DEBUG_CACHE, "[mipmap_cache] image %d at mip size %d (%ix%i) loaded from disk cache\n",
               imgid, mip, jpg.width, jpg.height);
 
 finish:
-    if(f && io_error)
+    dt_free_align(blob);
+
+    // Closed before the unlink: Windows cannot delete a file the CRT still holds open.
+    if(f)
+    {
+      fclose(f);
+      f = NULL;
+    }
+
+    if(io_error)
     {
       // Delete the file, we will regenerate it
       g_unlink(filename);
       fprintf(stderr, "[mipmap_cache] failed to open thumbnail for image %" PRIu32 " from `%s'. Reason: %s\n",
               imgid, filename, error);
     }
-
-    dt_free_align(blob);
-    if(f) fclose(f);
   }
 
   // cost is just flat one for the buffer, as the buffers might have different sizes,
@@ -719,6 +723,67 @@ static void dt_mipmap_cache_unlink_ondisk_thumbnail(void *data, int32_t imgid, d
   }
 }
 
+/** @brief Is there room on the filesystem holding @p dirname for one more thumbnail?
+ *
+ * A probe that cannot answer says yes, and lets the write itself fail if it must.
+ */
+static gboolean _disk_has_room_for_a_thumbnail(const char *dirname)
+{
+  struct statvfs vfsbuf;
+  if(statvfs(dirname, &vfsbuf)) return TRUE;
+
+  const int64_t free_mb = (((int64_t)vfsbuf.f_frsize * (int64_t)vfsbuf.f_bavail) >> 20);
+  if(free_mb < 100)
+  {
+    fprintf(stderr, "[mipmap_cache] not writing to the disk cache: only %" PRId64 " MB free on `%s'\n",
+            free_mb, dirname);
+    return FALSE;
+  }
+  return TRUE;
+}
+
+/** @brief Serialise one generated thumbnail into the on-disk cache. */
+static void _write_thumbnail_to_disk_cache(struct dt_mipmap_buffer_dsc *dsc, const int32_t imgid,
+                                           const dt_mipmap_size_t mip)
+{
+  gchar cache_path[DT_PATH_MAX] = { 0 };
+  dt_mipmap_get_cache_dir(cache_path, mip);
+  if(g_mkdir_with_parents(cache_path, 0750)) return;
+
+  if(!_disk_has_room_for_a_thumbnail(cache_path)) return;
+
+  char filename[DT_PATH_MAX] = { 0 };
+  dt_mipmap_get_cache_filename(filename, mip, imgid);
+
+  const uint8_t *exif = NULL;
+  int exif_len = 0;
+  if(dsc->color_space == DT_COLORSPACE_SRGB)
+  {
+    exif = dt_mipmap_cache_exif_data_srgb;
+    exif_len = dt_mipmap_cache_exif_data_srgb_length;
+  }
+  else if(dsc->color_space == DT_COLORSPACE_ADOBERGB)
+  {
+    exif = dt_mipmap_cache_exif_data_adobergb;
+    exif_len = dt_mipmap_cache_exif_data_adobergb_length;
+  }
+
+  // dt_imageio_jpeg_write() opens and closes the file itself: no other handle on it, or Windows
+  // cannot unlink it below.
+  const int cache_quality = _settings_get().cache_quality;
+  if(dt_imageio_jpeg_write(filename, _get_buffer_from_dsc(dsc), dsc->width, dsc->height,
+                           MIN(100, MAX(10, cache_quality)), exif, exif_len))
+  {
+    g_unlink(filename);
+    fprintf(stderr, "[mipmap_cache] failed to write image %" PRId32 " at size %d to the disk cache at `%s'\n",
+            imgid, mip, filename);
+    return;
+  }
+
+  _cache_print(DT_DEBUG_CACHE, "[mipmap_cache] image %" PRId32 " for size %d was written to cache at %s\n", imgid,
+               mip, filename);
+}
+
 void dt_mipmap_cache_deallocate_dynamic(void *data, dt_cache_entry_t *entry)
 {
   dt_mipmap_cache_t *cache = (dt_mipmap_cache_t *)data;
@@ -726,82 +791,37 @@ void dt_mipmap_cache_deallocate_dynamic(void *data, dt_cache_entry_t *entry)
 
   if(dt_supervisor_active())
     dt_supervisor_mipmap(DT_SV_DELETE, get_imgid(entry->key), (int)mip);
+
   if(mip < DT_MIPMAP_F)
   {
     const int32_t imgid = get_imgid(entry->key);
-    gboolean write_to_disk;
-    _write_mipmap_to_disk(imgid, NULL, NULL, NULL, NULL, NULL, &write_to_disk);
-
     struct dt_mipmap_buffer_dsc *dsc = _get_dsc_from_entry(entry);
-    // don't write skulls:
-    if(dsc->width > 8 && dsc->height > 8)
+
+    if(dsc->flags & DT_MIPMAP_BUFFER_DSC_FLAG_INVALIDATE)
     {
-      if(dsc->flags & DT_MIPMAP_BUFFER_DSC_FLAG_INVALIDATE)
-      {
-        dt_mipmap_cache_unlink_ondisk_thumbnail(data, get_imgid(entry->key), mip);
-      }
-      if(cache->cachedir[0] && write_to_disk && mip < DT_MIPMAP_F)
-      {
-        // serialize to disk
-        gchar cache_path[DT_PATH_MAX];
-        dt_mipmap_get_cache_dir(cache_path, mip);
-        const int mkd = g_mkdir_with_parents(cache_path, 0750);
-
-        if(!mkd)
-        {
-          char filename[DT_PATH_MAX] = {0};
-          dt_mipmap_get_cache_filename(filename, mip, get_imgid(entry->key));
-          // Don't write existing files as both performance and quality (lossy jpg) suffer
-          // FIXME: actually, yes, we write existing files too. See FIXME above.
-          FILE *f = NULL;
-          if((f = g_fopen(filename, "wb"))) // !g_file_test(filename, G_FILE_TEST_EXISTS)
-          {
-            // first check the disk isn't full
-            struct statvfs vfsbuf;
-            if (!statvfs(filename, &vfsbuf))
-            {
-              const int64_t free_mb = ((vfsbuf.f_frsize * vfsbuf.f_bavail) >> 20);
-              if (free_mb < 100)
-              {
-                fprintf(stderr, "Aborting image write as only %" PRId64 " MB free to write %s\n", free_mb, filename);
-                goto write_error;
-              }
-            }
-            else
-            {
-              fprintf(stderr, "Aborting image write since couldn't determine free space available to write %s\n", filename);
-              goto write_error;
-            }
-
-            const int cache_quality = _settings_get().cache_quality;
-            const uint8_t *exif = NULL;
-            int exif_len = 0;
-            if(dsc->color_space == DT_COLORSPACE_SRGB)
-            {
-              exif = dt_mipmap_cache_exif_data_srgb;
-              exif_len = dt_mipmap_cache_exif_data_srgb_length;
-            }
-            else if(dsc->color_space == DT_COLORSPACE_ADOBERGB)
-            {
-              exif = dt_mipmap_cache_exif_data_adobergb;
-              exif_len = dt_mipmap_cache_exif_data_adobergb_length;
-            }
-            if(dt_imageio_jpeg_write(filename, _get_buffer_from_dsc(dsc), dsc->width, dsc->height,
-                                     MIN(100, MAX(10, cache_quality)), exif, exif_len))
-            {
-write_error:
-              g_unlink(filename);
-            }
-            else
-            {
-              _cache_print(DT_DEBUG_CACHE, "[mipmap_cache] image %i for size %i was written to cache at %s\n", imgid, mip, filename);
-            }
-          }
-          if(f) fclose(f);
-        }
-      }
+      // The pixels no longer describe the image: the file goes, and nothing may replace it.
+      dt_mipmap_cache_unlink_ondisk_thumbnail(data, imgid, mip);
+    }
+    // Not an entry read from its file and unchanged since: writing it would only re-encode it, at a loss.
+    else if(dsc->flags & DT_MIPMAP_BUFFER_DSC_FLAG_ON_DISK)
+      _cache_print(DT_DEBUG_CACHE,
+                   "[mipmap_cache] image %" PRId32 " at mip size %d is not written to the disk cache: read from it\n",
+                   imgid, mip);
+    // Neither a render that never ran (GENERATE, over an uninitialised buffer) nor a skull (8x8).
+    else if(!(dsc->flags & DT_MIPMAP_BUFFER_DSC_FLAG_GENERATE) && dsc->width > 8 && dsc->height > 8)
+    {
+      if(cache->cachedir[0] && _settings_get().disk_backend) _write_thumbnail_to_disk_cache(dsc, imgid, mip);
+    }
+    else
+    {
+      // Logged, so that a real session says how often an aborted render leaves an entry behind.
+      _cache_print(DT_DEBUG_CACHE,
+                   "[mipmap_cache] image %" PRId32 " at mip size %d is not written to the disk cache: %s\n",
+                   imgid, mip,
+                   (dsc->flags & DT_MIPMAP_BUFFER_DSC_FLAG_GENERATE) ? "never generated" : "a skull");
     }
   }
+
   dt_free_align(entry->data);
   entry->data = NULL;
 }
@@ -873,6 +893,22 @@ void dt_mipmap_cache_init(const dt_mipmap_cache_settings_t *settings, const gboo
   dt_cache_set_cleanup_callback(&cache->mip_f.cache, dt_mipmap_cache_deallocate_dynamic, cache);
   cache->buffer_size[DT_MIPMAP_F]
       = _get_entry_size(4 * sizeof(float) * cache->max_width[DT_MIPMAP_F] * cache->max_height[DT_MIPMAP_F]);
+}
+
+void dt_mipmap_cache_flush_to_disk(void)
+{
+  dt_mipmap_cache_t *cache = _mipmap_cache;
+  if(IS_NULL_PTR(cache)) return;
+
+  /* A fill ratio of 0 evicts every entry no other thread holds. The eviction walk is reused because
+   * it already skips held entries and runs the cleanup callback, which writes the thumbnail. Only
+   * mip_thumbs: DT_MIPMAP_F and DT_MIPMAP_FULL are never written to disk. */
+  const size_t reclaimed = dt_cache_gc(&cache->mip_thumbs.cache, 0.0f);
+
+  // What left RAM, not what was written: an entry read from its file is dropped unwritten. The
+  // callback logs each write on its own.
+  _cache_print(DT_DEBUG_CACHE, "[mipmap_cache] flushed to disk: %.2f MB evicted from RAM\n",
+               reclaimed / (1024.0 * 1024.0));
 }
 
 void dt_mipmap_cache_cleanup(void)
@@ -1057,6 +1093,24 @@ static void _generate_blocking(dt_cache_entry_t *entry, dt_mipmap_buffer_t *buf,
   const uint32_t original_height = dsc->height;
   const float original_iscale = dsc->iscale;
   const dt_colorspaces_color_profile_type_t original_color_space = dsc->color_space;
+  const dt_imageio_retval_t original_status = dsc->status;
+  gboolean mode_changed = FALSE;
+
+  /* Retrying after a failure. The failed attempt left the skull's 8x8 in the descriptor, and
+   * _init_8() opens with `if(size >= DT_MIPMAP_F || dsc->width < 16 || dsc->height < 16) return
+   * DT_IMAGEIO_OK;` -- so re-entering with those dimensions does nothing at all, silently, and the
+   * skull would be kept as a thumbnail that generated. Put back what the allocator asked for
+   * (dt_mipmap_cache_update_buffer_addresses() sets exactly these). */
+  if((dsc->flags & DT_MIPMAP_BUFFER_DSC_FLAG_GENERATE)
+     && (dsc->flags & DT_MIPMAP_BUFFER_DSC_FLAG_RETRIED)
+     && mip <= DT_MIPMAP_F
+     && !IS_NULL_PTR(_mipmap_cache))
+  {
+    dsc->width = _mipmap_cache->max_width[mip];
+    dsc->height = _mipmap_cache->max_height[mip];
+    dsc->iscale = 1.0f;
+    dsc->color_space = DT_COLORSPACE_NONE;
+  }
 
   if(!(dsc->flags & DT_MIPMAP_BUFFER_DSC_FLAG_GENERATE))
   {
@@ -1069,23 +1123,34 @@ static void _generate_blocking(dt_cache_entry_t *entry, dt_mipmap_buffer_t *buf,
 
   if(mip == DT_MIPMAP_FULL)
   {
-    dt_image_t buffered_image;
-    if(_get_image_copy(imgid, &buffered_image)) return;
-
     // Get the input file path, possibly from our local cache of copied images
+    dt_image_t buffered_image;
     char filename[DT_PATH_MAX] = { 0 };
-    dt_image_path_source_t source = dt_image_choose_input_path(&buffered_image, filename, sizeof(filename), FALSE);
-    if(source == DT_IMAGE_PATH_NONE) return;
+    /* Nothing to read: tell the caller why, but leave the entry flagged for generation, since a
+     * file missing now (unplugged drive) may be back by the next request. */
+    if(_get_image_copy(imgid, &buffered_image)
+       || dt_image_choose_input_path(&buffered_image, filename, sizeof(filename), FALSE) == DT_IMAGE_PATH_NONE)
+    {
+      _invalidate_buffer(buf);
+      buf->status = DT_IMAGEIO_FILE_NOT_FOUND;
+      return;
+    }
 
     _cache_print(DT_DEBUG_CACHE,
       "[mipmap_cache] fetch image %i at mip size %d float32 (%ix%i) from original file I/O\n",
       imgid, mip, dsc->width, dsc->height);
+
+    /* dt_mipmap_cache_alloc() resets the flags to GENERATE alone, which would forget that this is
+     * already the retry: a file that never loads would then be read again on every request. */
+    const dt_mipmap_buffer_dsc_flags retried = dsc->flags & DT_MIPMAP_BUFFER_DSC_FLAG_RETRIED;
 
     // will call dt_mipmap_cache_alloc() internally:
     dt_imageio_retval_t ret = dt_imageio_open(&buffered_image, filename, buf);
 
     // We need to update dsc because dt_imageio_open re-alloc entry->data
     dsc = _get_dsc_from_entry(entry);
+    dsc->status = ret;
+    dsc->flags |= retried;
 
     if(ret == DT_IMAGEIO_OK)
     {
@@ -1119,27 +1184,67 @@ static void _generate_blocking(dt_cache_entry_t *entry, dt_mipmap_buffer_t *buf,
     _cache_print(DT_DEBUG_CACHE,
              "[mipmap_cache] compute mip size %d uint8 for image %i (%ix%i) from original file \n", mip,
              imgid, dsc->width, dsc->height);
-    _init_8((uint8_t *)_get_buffer_from_dsc(dsc), &dsc->width, &dsc->height, &dsc->iscale, &dsc->color_space, imgid,
-            mip, shutdown);
+    // The lighttable menu can change the embedded JPEG mode during the render, and its purge skips
+    // this entry, write-locked until we return: render in one mode, and check it is still current.
+    const int embedded_jpg_mode = _settings_get().embedded_jpg;
+    dsc->status = _init_8(dsc, imgid, mip, embedded_jpg_mode, shutdown);
+    const int current_mode = _settings_get().embedded_jpg;
+    mode_changed = embedded_jpg_mode != current_mode;
+    if(mode_changed)
+      _cache_print(DT_DEBUG_CACHE,
+                   "[mipmap_cache] image %d at mip size %d rendered in embedded JPEG mode %d, now %d: not kept\n",
+                   imgid, mip, embedded_jpg_mode, current_mode);
   }
 
-  if(shutdown && dt_atomic_get_int(shutdown))
+  if((shutdown && dt_atomic_get_int(shutdown)) || mode_changed)
   {
     /* A stale GUI request stopped its thumbnail/export pipe while this cache entry
-     * was still being produced. Keep the entry marked as "generate" so the next
-     * request can restart from a clean state instead of reusing a poisoned empty
-     * thumbnail for the rest of the session. */
+     * was still being produced, or the thumbnail was rendered in an embedded JPEG
+     * mode that is no longer the current one. Keep the entry marked as "generate"
+     * so the next request renders it again, instead of reusing a poisoned empty
+     * thumbnail, or one in the old mode, for the rest of the session. */
     dsc->width = original_width;
     dsc->height = original_height;
     dsc->iscale = original_iscale;
     dsc->color_space = original_color_space;
+    dsc->status = original_status;
     _invalidate_buffer(buf);
     return;
   }
 
+  /* _init_8() and _init_f() report a failure as a zero-sized image. Clearing GENERATE on it would
+   * latch the failure: every later request takes the "already in cache" path and gets the skull
+   * back, and dt_view_image_get_surface() reports an 8x8 buffer as DT_VIEW_SURFACE_OK, so the
+   * widget commits it and never asks again. One transient fault -- a momentary database lock, a
+   * network share reconnecting -- would cost an image its thumbnail for the whole session,
+   * clearable only through "Purge selected thumbnails from cache".
+   *
+   * One retry is granted instead. Bounded on purpose: an image that is genuinely unreadable must not
+   * re-run a full pipeline on every redraw, so it costs at most two attempts per cache entry. The
+   * skull is still published for this request either way -- the caller needs something to draw. */
+  const gboolean failed = (dsc->width == 0 || dsc->height == 0);
+
+  if(failed && !(dsc->flags & DT_MIPMAP_BUFFER_DSC_FLAG_RETRIED))
+  {
+    dsc->flags |= DT_MIPMAP_BUFFER_DSC_FLAG_RETRIED;   // GENERATE deliberately left set
+    _paint_skulls(buf, dsc, imgid, mip);
+    _validate_buffer(buf, dsc, imgid, mip);
+    _cache_print(DT_DEBUG_CACHE,
+                 "[mipmap_cache] image %d at mip size %d failed to generate; the next request will try"
+                 " again\n",
+                 imgid, mip);
+    return;
+  }
+
   dsc->flags &= ~DT_MIPMAP_BUFFER_DSC_FLAG_GENERATE;
+  if(!failed) dsc->flags &= ~DT_MIPMAP_BUFFER_DSC_FLAG_RETRIED;
   _paint_skulls(buf, dsc, imgid, mip);
   _validate_buffer(buf, dsc, imgid, mip);
+
+  if(failed)
+    _cache_print(DT_DEBUG_CACHE,
+                 "[mipmap_cache] image %d at mip size %d failed to generate twice; keeping the skull\n",
+                 imgid, mip);
 
   _cache_print(DT_DEBUG_CACHE, "[mipmap_cache] image %d at mip size %d got a new cache entry (%ix%i / %ix%i) at %p\n", imgid, mip, 
     buf->width, buf->height, dsc->width, dsc->height, buf->buf);
@@ -1171,6 +1276,19 @@ void dt_mipmap_cache_get_with_caller_and_shutdown(dt_mipmap_buffer_t *buf,
   {
     // simple case: only get and lock if it's there.
     dt_cache_entry_t *entry = dt_cache_testget(&_get_cache(cache, mip)->cache, key, mode);
+    if(entry)
+    {
+      struct dt_mipmap_buffer_dsc *dsc = _get_dsc_from_entry(entry);
+      ASAN_UNPOISON_MEMORY_REGION(dsc, dt_mipmap_buffer_dsc_size);
+      /* Not there yet: a render aborted mid-way leaves the entry flagged, over a buffer holding nothing.
+       * Nor is a render that failed: its buffer is the 8x8 skull, and the _init_8() loop would
+       * downsample it into a smaller size as if it were that image's thumbnail. */
+      if((dsc->flags & DT_MIPMAP_BUFFER_DSC_FLAG_GENERATE) || dsc->status != DT_IMAGEIO_OK)
+      {
+        dt_cache_release(&_get_cache(cache, mip)->cache, entry);
+        entry = NULL;
+      }
+    }
     buf->cache_entry = entry;
 
     if(entry)
@@ -1182,6 +1300,45 @@ void dt_mipmap_cache_get_with_caller_and_shutdown(dt_mipmap_buffer_t *buf,
   {
     // simple case: blocking get
     dt_cache_entry_t *entry =  dt_cache_get_with_caller(&_get_cache(cache, mip)->cache, key, mode, file, line);
+
+    /* The payload could not be allocated: CACHE_FULL for the callers that pass the status on (the
+     * export), to whom an OK status with no buffer reads as a success. A thumbnail still shows a
+     * skull, the shared one since no entry holds a copy: read-only, and no entry to release. */
+    if(IS_NULL_PTR(entry))
+    {
+      buf->cache_entry = NULL;
+      _invalidate_buffer(buf);
+      buf->status = DT_IMAGEIO_CACHE_FULL;
+      if(mip < DT_MIPMAP_F)
+      {
+        buf->width = 8;
+        buf->height = 8;
+        buf->iscale = 1.0f;
+        buf->color_space = DT_COLORSPACE_DISPLAY;
+        buf->buf = (uint8_t *)_skull_8;
+      }
+      fprintf(stderr, "[mipmap_cache] could not allocate a cache entry for image %" PRId32 " at mip size %d\n",
+              imgid, mip);
+      return;
+    }
+
+    /* An entry already in the cache comes back read-locked on a 'r' get. One still flagged for
+     * generation -- a failed render, retried -- would then be rendered into under that read lock,
+     * by several readers at once. Take it again for writing; _generate_blocking() re-reads the flags,
+     * so a writer that got there first leaves nothing to do. */
+    if(mode == 'r')
+    {
+      struct dt_mipmap_buffer_dsc *dsc = _get_dsc_from_entry(entry);
+      ASAN_UNPOISON_MEMORY_REGION(dsc, dt_mipmap_buffer_dsc_size);
+      if(dsc->flags & DT_MIPMAP_BUFFER_DSC_FLAG_GENERATE)
+      {
+        entry->_lock_demoting = 1;
+        dt_cache_release(&_get_cache(cache, mip)->cache, entry);
+        entry = dt_cache_get_with_caller(&_get_cache(cache, mip)->cache, key, 'w', file, line);
+        entry->_lock_demoting = 0;
+      }
+    }
+
     buf->cache_entry = entry;
     __sync_fetch_and_add(&(_get_cache(cache, mip)->stats_fetches), 1);
     _generate_blocking(entry, buf, imgid, mip, shutdown);
@@ -1293,7 +1450,10 @@ void dt_mipmap_cache_swap_at_size(const int32_t imgid, const dt_mipmap_size_t mi
     dt_colorprofiles_bgra8_to_adobergb_rgba8(buf, buf, dsc->width, dsc->height, profile);
 
     dsc->color_space = DT_COLORSPACE_ADOBERGB;
-    dsc->flags &= ~DT_MIPMAP_BUFFER_DSC_FLAG_GENERATE;
+    dsc->status = DT_IMAGEIO_OK;
+    // New pixels: the file, if there is one, no longer holds them, and no failure is left to retry.
+    dsc->flags &= ~(DT_MIPMAP_BUFFER_DSC_FLAG_GENERATE | DT_MIPMAP_BUFFER_DSC_FLAG_ON_DISK
+                    | DT_MIPMAP_BUFFER_DSC_FLAG_RETRIED);
     dt_cache_release(&_get_cache(cache, mip)->cache, entry);
   }
 }
@@ -1322,11 +1482,25 @@ void dt_mipmap_cache_remove_at_size(const int32_t imgid, const dt_mipmap_size_t 
   }
 }
 
-// get rid of all ldr thumbnails:
+// get rid of all ldr thumbnails, and of a full-size load that failed:
 void dt_mipmap_cache_remove(const int32_t imgid, const gboolean flush_disk)
 {
   for(dt_mipmap_size_t k = DT_MIPMAP_0; k < DT_MIPMAP_F; k++)
     dt_mipmap_cache_remove_at_size(imgid, k, flush_disk);
+
+  /* The decoded raw stays: a development change does not invalidate it. A failed load holds no
+   * raw, and the thumbnails generated next would read its failure back instead of trying the file
+   * again, which may have been repaired, or may now fit in memory. */
+  dt_cache_t *full = &_get_cache(_mipmap_cache, DT_MIPMAP_FULL)->cache;
+  const uint32_t key = get_key(imgid, DT_MIPMAP_FULL);
+  dt_cache_entry_t *entry = dt_cache_testget(full, key, 'r');
+  if(IS_NULL_PTR(entry)) return;
+
+  struct dt_mipmap_buffer_dsc *dsc = _get_dsc_from_entry(entry);
+  ASAN_UNPOISON_MEMORY_REGION(dsc, dt_mipmap_buffer_dsc_size);
+  const gboolean failed = dsc->status != DT_IMAGEIO_OK;
+  dt_cache_release(full, entry);
+  if(failed) dt_cache_remove(full, key);
 }
 
 /* Same as _remove_at_size(), minus the "thumbnails only" guard, so the two input sizes can
@@ -1373,7 +1547,7 @@ static void _init_f(dt_mipmap_buffer_t *mipmap_buf, float *out, uint32_t *width,
   dt_image_path_source_t source = DT_IMAGE_PATH_NONE;
   {
     const dt_image_t *img = dt_image_cache_get(imgid, 'r');
-    if(img)
+    if(!IS_NULL_PTR(img))
     {
       source = dt_image_choose_input_path(img, filename, sizeof(filename), FALSE);
       dt_image_cache_read_release(img);
@@ -1392,6 +1566,14 @@ static void _init_f(dt_mipmap_buffer_t *mipmap_buf, float *out, uint32_t *width,
   // lock image after we have the buffer, we might need to lock the image struct for
   // writing during raw loading, to write to width/height.
   const dt_image_t *image = dt_image_cache_get(imgid, 'r');
+  if(IS_NULL_PTR(image) || IS_NULL_PTR(buf.buf) || buf.width == 0 || buf.height == 0)
+  {
+    dt_image_cache_read_release(image);
+    dt_mipmap_cache_release(&buf);
+    *width = *height = 0;
+    *iscale = 0.0f;
+    return;
+  }
 
   dt_iop_roi_t roi_in, roi_out;
   roi_in.x = roi_in.y = 0;
@@ -1407,14 +1589,6 @@ static void _init_f(dt_mipmap_buffer_t *mipmap_buf, float *out, uint32_t *width,
   roi_out.scale = fminf(((float)wd) / (float)image->width, ((float)ht) / (float)image->height);
   roi_out.width = roi_out.scale * roi_in.width;
   roi_out.height = roi_out.scale * roi_in.height;
-
-  if(IS_NULL_PTR(buf.buf) || buf.width == 0 || buf.height == 0)
-  {
-    dt_image_cache_read_release(image);
-    *width = *height = 0;
-    *iscale = 0.0f;
-    return;
-  }
 
   mipmap_buf->color_space = DT_COLORSPACE_NONE; // TODO: do we need that information in this buffer?
 
@@ -1535,86 +1709,110 @@ static int _find_sidecar_jpg(const char *filename, const char *ext, char *sideca
   return 0;
 }
 
-static void _init_8(uint8_t *buf, uint32_t *width, uint32_t *height, float *iscale,
-                    dt_colorspaces_color_profile_type_t *color_space, const int32_t imgid,
-                    const dt_mipmap_size_t size, dt_atomic_int *shutdown)
+/**
+ * @brief Render an 8-bit thumbnail into the buffer of @p dsc, from a larger cached thumbnail, an
+ * embedded or companion JPEG, or a full pipeline run, in that order of preference.
+ *
+ * On entry, the width and height of @p dsc are the box the thumbnail must fit; on success, @p dsc
+ * holds the size, scale and colour space of what was rendered.
+ *
+ * @param embedded_jpg_mode the embedded JPEG mode to render in, read once by the caller, which
+ * keeps the result only if the mode has not changed meanwhile.
+ *
+ * @return DT_IMAGEIO_OK, or why the width and height of @p dsc were set to 0 -- which the caller
+ * paints as a skull, and keeps so the GUI can say why over it.
+ */
+static dt_imageio_retval_t _init_8(struct dt_mipmap_buffer_dsc *dsc, const int32_t imgid,
+                                   const dt_mipmap_size_t size, const int embedded_jpg_mode,
+                                   dt_atomic_int *shutdown)
 {
-  if(size >= DT_MIPMAP_F || *width < 16 || *height < 16) return;
+  if(size >= DT_MIPMAP_F || dsc->width < 16 || dsc->height < 16) return DT_IMAGEIO_OK;
 
-  *iscale = 1.0f;
-  const uint32_t wd = *width, ht = *height;
+  uint8_t *buf = _get_buffer_from_dsc(dsc);
+  dsc->iscale = 1.0f;
+  const uint32_t wd = dsc->width;
+  const uint32_t ht = dsc->height;
 
   char filename[DT_PATH_MAX] = { 0 };
   char ext[6] = { 0 };
-  gboolean input_exists, is_jpg_input, use_embedded_jpg;
-  const int embedded_jpg_mode = _settings_get().embedded_jpg;
-  _write_mipmap_to_disk(imgid, filename, ext, &input_exists, &is_jpg_input, &use_embedded_jpg, NULL);
+  gboolean input_exists = FALSE;
+  gboolean is_jpg_input = FALSE;
+  gboolean altered = FALSE;
+  gboolean may_be_raw = TRUE;
+  _get_thumbnail_input(imgid, filename, ext, &input_exists, &is_jpg_input, &altered, &may_be_raw);
+
+  // embedded JPG mode:
+  // 0 = never use embedded thumbnail
+  // 1 = only on unedited pics,
+  // 2 = always use embedded thumbnail
+  // so an edited image uses it only in mode 2, an unedited one in modes 1 and 2.
+  const gboolean use_embedded_jpg = altered ? embedded_jpg_mode == 2 : embedded_jpg_mode >= 1;
 
   /* do not even try to process file if it isn't available */
   if(!input_exists)
   {
-    *width = *height = 0;
-    *iscale = 0.0f;
-    *color_space = DT_COLORSPACE_NONE;
-    return;
+    dsc->width = 0;
+    dsc->height = 0;
+    dsc->iscale = 0.0f;
+    dsc->color_space = DT_COLORSPACE_NONE;
+    return DT_IMAGEIO_FILE_NOT_FOUND;
   }
 
   int res = 1;
 
-  // try to generate mip from larger mip
-  // This expects that invalid mips will be flushed, so the assumption is:
-  // if mip then it's valid (with regard to current history)
-  if(res && !use_embedded_jpg && size < DT_MIPMAP_F - 1)
+  if(!use_embedded_jpg)
   {
+    // try to generate mip from larger mip
+    // This expects that invalid mips will be flushed, so the assumption is:
+    // if mip then it's valid (with regard to current history)
     for(dt_mipmap_size_t k = size + 1; k < DT_MIPMAP_F; k++)
     {
       dt_mipmap_buffer_t tmp;
       dt_mipmap_cache_get(&tmp, imgid, k, DT_MIPMAP_TESTLOCK, 'r');
       if(IS_NULL_PTR(tmp.buf)) continue;
 
-      *color_space = tmp.color_space;
+      dsc->color_space = tmp.color_space;
       // downsample
-      dt_iop_flip_and_zoom_8(tmp.buf, tmp.width, tmp.height, buf, wd, ht, ORIENTATION_NONE, width, height);
-      _cache_print(DT_DEBUG_CACHE, "[mipmap_cache] generate mip size %d for image %d from mip size %d (%ix%i->%ix%i)\n", 
-        size, imgid, k, tmp.width, tmp.height, *width, *height);
+      dt_iop_flip_and_zoom_8(tmp.buf, tmp.width, tmp.height, buf, wd, ht, ORIENTATION_NONE, &dsc->width,
+                             &dsc->height);
+      _cache_print(DT_DEBUG_CACHE, "[mipmap_cache] generate mip size %d for image %d from mip size %d (%ix%i->%ix%i)\n",
+        size, imgid, k, tmp.width, tmp.height, dsc->width, dsc->height);
 
       dt_mipmap_cache_release(&tmp);
-      res = 0;
-      break;
+      return DT_IMAGEIO_OK;
     }
   }
-
-  // Orientation and camera framing are only needed when loading embedded JPEGs.
-  dt_image_orientation_t orientation = ORIENTATION_NONE;
-  dt_boundingbox_t usercrop = { 0.f, 0.f, 1.f, 1.f };
-  if(use_embedded_jpg)
+  else
   {
+    // Orientation and camera framing are only needed when loading embedded JPEGs.
+    dt_image_orientation_t orientation = ORIENTATION_NONE;
+    dt_boundingbox_t usercrop = { 0.f, 0.f, 1.f, 1.f };
     const dt_image_t *img = dt_image_cache_get(imgid, 'r');
     if(img)
     {
-      orientation = (img->orientation != ORIENTATION_NULL) ? img->orientation : ORIENTATION_NONE;
+      orientation = img->orientation;
       dt_image_cache_read_release(img);
     }
+    if(orientation == ORIENTATION_NULL) orientation = ORIENTATION_NONE;
 
     // Resolve outside the read lock: this path never decodes the raw, so the framing may still
     // have to be read from the file, and storing the answer needs the write lock.
     dt_image_resolve_usercrop(imgid, usercrop);
-  }
 
-  if(res && use_embedded_jpg)
-  {
     char sidecar_filename[DT_PATH_MAX] = { 0 };
 
     if(is_jpg_input)
     {
       // Input file is a JPEG
-      res = _load_jpg(filename, imgid, wd, ht, size, orientation, buf, width, height, color_space);
+      res = _load_jpg(filename, imgid, wd, ht, size, orientation, buf, &dsc->width, &dsc->height,
+                      &dsc->color_space);
     }
     else if(_find_sidecar_jpg(filename, ext, sidecar_filename))
     {
       // input file is a RAW but we have a companion JPEG file in the same folder:
       // use it in priority (it may be higher resolution/quality than embedded JPEG).
-      res = _load_jpg(sidecar_filename, imgid, wd, ht, size, orientation, buf, width, height, color_space);
+      res = _load_jpg(sidecar_filename, imgid, wd, ht, size, orientation, buf, &dsc->width, &dsc->height,
+                      &dsc->color_space);
     }
     else
     {
@@ -1622,7 +1820,8 @@ static void _init_8(uint8_t *buf, uint32_t *width, uint32_t *height, float *isca
       // try to load the embedded thumbnail. Might not be large enough though.
       uint8_t *tmp = NULL;
       int32_t thumb_width, thumb_height;
-      res = dt_imageio_large_thumbnail(filename, &tmp, &thumb_width, &thumb_height, color_space, *width, *height);
+      res = dt_imageio_large_thumbnail(filename, &tmp, &thumb_width, &thumb_height, &dsc->color_space,
+                                       dsc->width, dsc->height);
       if(!res)
       {
         // We take the thumbnail no matter its size. It might be too small for the requested dimension,
@@ -1639,68 +1838,73 @@ static void _init_8(uint8_t *buf, uint32_t *width, uint32_t *height, float *isca
         // Only here: the two branches above read a separate JPEG file, which the camera already
         // wrote cropped. This runs before the rotation below, hence the un-oriented box.
         dt_imageio_crop_thumbnail(usercrop, tmp, &thumb_width, &thumb_height);
-        dt_iop_flip_and_zoom_8(tmp, thumb_width, thumb_height, buf, wd, ht, orientation, width, height);
+        dt_iop_flip_and_zoom_8(tmp, thumb_width, thumb_height, buf, wd, ht, orientation, &dsc->width,
+                               &dsc->height);
         dt_pixelpipe_cache_free_align(tmp);
       }
     }
   }
 
-  if(res)
-  {
-    if(embedded_jpg_mode == 2)
-    {
-      _cache_print(DT_DEBUG_CACHE,
-               "[mipmap_cache] embedded JPEG mode forbids raw processing for image %d at mip %d\n",
-               imgid, size);
-      *width = *height = 0;
-      *iscale = 0.0f;
-      *color_space = DT_COLORSPACE_NONE;
-      return;
-    }
+  if(!res) return DT_IMAGEIO_OK;
 
-    // try the real thing: rawspeed + pixelpipe
-    dt_imageio_module_format_t format;
-    _dummy_data_t dat;
-    format.bpp = _bpp;
-    format.write_image = _write_image;
-    format.levels = _levels;
-    dat.head.max_width = wd;
-    dat.head.max_height = ht;
-    dat.buf = buf;
-    // export with flags: ignore exif (don't load from disk), don't swap byte order, don't do hq processing,
-    // no upscaling and signal we want thumbnail export
-    res = dt_imageio_export_with_flags(imgid, "unused", &format, (dt_imageio_module_data_t *)&dat, TRUE, FALSE, FALSE,
-                                       FALSE, TRUE, NULL, FALSE, FALSE, DT_COLORSPACE_ADOBERGB, NULL, DT_INTENT_LAST, NULL,
-                                       NULL, 1, 1, NULL, shutdown);
-    if(!res)
-    {
-      _cache_print(DT_DEBUG_CACHE, "[mipmap_cache] generated mip %d for image %d from scratch\n", size, imgid);
-      // might be smaller, or have a different aspect than what we got as input.
-      *width = dat.head.width;
-      *height = dat.head.height;
-      *iscale = 1.0f;
-      *color_space = DT_COLORSPACE_ADOBERGB;
-    }
+  // Mode 2 spares the cost of decoding a raw. A PNG, a TIFF or any other RGB file usually has
+  // no embedded preview, and is itself the cheap picture that preview stands in for.
+  if(embedded_jpg_mode == 2 && may_be_raw)
+  {
+    _cache_print(DT_DEBUG_CACHE,
+             "[mipmap_cache] embedded JPEG mode forbids raw processing for image %d at mip %d\n",
+             imgid, size);
+    dsc->width = 0;
+    dsc->height = 0;
+    dsc->iscale = 0.0f;
+    dsc->color_space = DT_COLORSPACE_NONE;
+    return DT_IMAGEIO_NO_EMBEDDED_THUMBNAIL;
   }
 
-  // any errors?
-  if(res)
+  // What an embedded preview shows of a raw is the picture before any edit. An RGB file that has
+  // none shows the same, so the embedded modes render it without its history.
+  const gboolean ignore_history = use_embedded_jpg && !may_be_raw;
+
+  // try the real thing: rawspeed + pixelpipe
+  dt_imageio_module_format_t format;
+  _dummy_data_t dat;
+  format.bpp = _bpp;
+  format.write_image = _write_image;
+  format.levels = _levels;
+  dat.head.max_width = wd;
+  dat.head.max_height = ht;
+  dat.buf = buf;
+  // export with flags: ignore exif (don't load from disk), don't swap byte order, don't do hq processing,
+  // no upscaling and signal we want thumbnail export
+  const dt_imageio_retval_t status
+      = dt_imageio_export_with_flags(imgid, "unused", &format, (dt_imageio_module_data_t *)&dat, TRUE, FALSE,
+                                     FALSE, FALSE, TRUE, ignore_history, NULL, FALSE, FALSE,
+                                     DT_COLORSPACE_ADOBERGB, NULL,
+                                     DT_INTENT_LAST, NULL, NULL, 1, 1, NULL, shutdown);
+  if(status != DT_IMAGEIO_OK)
   {
-    fprintf(stderr, "[mipmap_cache] could not process thumbnail!\n");
-    *width = *height = 0;
-    *iscale = 0.0f;
-    *color_space = DT_COLORSPACE_NONE;
+    g_printerr("[mipmap_cache] could not process thumbnail for image %" PRId32 " (%s): error %d\n", imgid,
+               filename, status);
+    dsc->width = 0;
+    dsc->height = 0;
+    dsc->iscale = 0.0f;
+    dsc->color_space = DT_COLORSPACE_NONE;
+    return status;
   }
+
+  _cache_print(DT_DEBUG_CACHE, "[mipmap_cache] generated mip %d for image %d from scratch\n", size, imgid);
+  // might be smaller, or have a different aspect than what we got as input.
+  dsc->width = dat.head.width;
+  dsc->height = dat.head.height;
+  dsc->iscale = 1.0f;
+  dsc->color_space = DT_COLORSPACE_ADOBERGB;
+  return DT_IMAGEIO_OK;
 }
 
 void dt_mipmap_cache_copy_thumbnails(const uint32_t dst_imgid, const uint32_t src_imgid)
 {
   dt_mipmap_cache_t *cache = _mipmap_cache;
-  gboolean write_to_disk_src, write_to_disk_dst;
-  _write_mipmap_to_disk(src_imgid, NULL, NULL, NULL, NULL, NULL, &write_to_disk_src);
-  _write_mipmap_to_disk(dst_imgid, NULL, NULL, NULL, NULL, NULL, &write_to_disk_dst);
-
-  if(cache->cachedir[0] && write_to_disk_src && write_to_disk_dst)
+  if(cache->cachedir[0] && _settings_get().disk_backend)
   {
     for(dt_mipmap_size_t mip = DT_MIPMAP_0; mip < DT_MIPMAP_F; mip++)
     {

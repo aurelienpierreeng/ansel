@@ -49,6 +49,12 @@ static inline size_t _box_size(const int *const box)
 static inline void rgb_to_JzCzhz(const dt_aligned_pixel_t rgb, dt_aligned_pixel_t JzCzhz,
                                  const dt_iop_order_iccprofile_info_t *const profile);
 
+/** @brief Whether a picker colorspace derives from Lab (Lab, LCh) rather than from RGB (RGB, HSL, JzCzhz). */
+static inline gboolean _picker_cst_wants_lab(const dt_iop_colorspace_type_t picker_cst)
+{
+  return picker_cst == IOP_CS_LAB || picker_cst == IOP_CS_LCH;
+}
+
 /**
  * @brief Convert a 4-channel sampling buffer into the picker colorspace.
  *
@@ -64,59 +70,42 @@ static void _color_picker_convert_buffer(const float *const restrict input, floa
                                          const dt_iop_colorspace_type_t picker_cst,
                                          const dt_iop_order_iccprofile_info_t *const profile)
 {
-  if(image_cst == IOP_CS_LAB && picker_cst == IOP_CS_LCH)
+  /* Two steps, so every pairing of the blending tabs is served: first bring the pixel into the
+   * family the picker space derives from (Lab for Lab/LCh, RGB for RGB/HSL/JzCzhz) -- the only
+   * step that needs the profile -- then derive the picker space from it. A Lab module blended in
+   * RGB (scene) asks Lab -> JzCzhz, an RGB module blended in Lab asks RGB -> LCh. */
+  const gboolean image_lab = (image_cst == IOP_CS_LAB);
+  const gboolean want_lab = _picker_cst_wants_lab(picker_cst);
+
+  __OMP_PARALLEL_FOR__()
+  for(size_t k = 0; k < pixels; k++)
   {
-    __OMP_PARALLEL_FOR__()
-    for(size_t k = 0; k < pixels; k++)
+    const size_t offset = 4 * k;
+    dt_aligned_pixel_t base = { input[offset], input[offset + 1], input[offset + 2], 0.0f };
+
+    if(image_lab && !want_lab)
+      dt_ioppr_lab_to_rgb_matrix(input + offset, base, profile->matrix_out_transposed, profile->lut_out,
+                                 profile->unbounded_coeffs_out, profile->lutsize, profile->nonlinearlut);
+    else if(!image_lab && want_lab)
+      dt_ioppr_rgb_matrix_to_lab(input + offset, base, profile->matrix_in_transposed, profile->lut_in,
+                                 profile->unbounded_coeffs_in, profile->lutsize, profile->nonlinearlut);
+
+    switch(picker_cst)
     {
-      const size_t offset = 4 * k;
-      dt_Lab_2_LCH(input + offset, output + offset);
-      output[offset + 3] = input[offset + 3];
+      case IOP_CS_LCH:
+        dt_Lab_2_LCH(base, output + offset);
+        break;
+      case IOP_CS_HSL:
+        dt_RGB_2_HSL(base, output + offset);
+        break;
+      case IOP_CS_JZCZHZ:
+        rgb_to_JzCzhz(base, output + offset, profile);
+        break;
+      default:
+        for(int c = 0; c < 3; c++) output[offset + c] = base[c];
+        break;
     }
-  }
-  else if(dt_iop_colorspace_is_rgb(image_cst) && picker_cst == IOP_CS_HSL)
-  {
-    __OMP_PARALLEL_FOR__()
-    for(size_t k = 0; k < pixels; k++)
-    {
-      const size_t offset = 4 * k;
-      dt_RGB_2_HSL(input + offset, output + offset);
-      output[offset + 3] = input[offset + 3];
-    }
-  }
-  else if(image_cst == IOP_CS_LAB && picker_cst == IOP_CS_RGB)
-  {
-    __OMP_PARALLEL_FOR__()
-    for(size_t k = 0; k < pixels; k++)
-    {
-      const size_t offset = 4 * k;
-      dt_ioppr_lab_to_rgb_matrix(input + offset, output + offset, profile->matrix_out_transposed,
-                                 profile->lut_out, profile->unbounded_coeffs_out,
-                                 profile->lutsize, profile->nonlinearlut);
-      output[offset + 3] = input[offset + 3];
-    }
-  }
-  else if(dt_iop_colorspace_is_rgb(image_cst) && picker_cst == IOP_CS_LAB)
-  {
-    __OMP_PARALLEL_FOR__()
-    for(size_t k = 0; k < pixels; k++)
-    {
-      const size_t offset = 4 * k;
-      dt_ioppr_rgb_matrix_to_lab(input + offset, output + offset, profile->matrix_in_transposed,
-                                 profile->lut_in, profile->unbounded_coeffs_in,
-                                 profile->lutsize, profile->nonlinearlut);
-      output[offset + 3] = input[offset + 3];
-    }
-  }
-  else if(dt_iop_colorspace_is_rgb(image_cst) && picker_cst == IOP_CS_JZCZHZ)
-  {
-    __OMP_PARALLEL_FOR__()
-    for(size_t k = 0; k < pixels; k++)
-    {
-      const size_t offset = 4 * k;
-      rgb_to_JzCzhz(input + offset, output + offset, profile);
-      output[offset + 3] = input[offset + 3];
-    }
+    output[offset + 3] = input[offset + 3];
   }
 }
 
@@ -794,12 +783,18 @@ void dt_color_picker_helper(const dt_iop_buffer_dsc_t *dsc, const float *const p
     // blur without clipping negatives because Lab a and b channels can be legitimately negative
     blur_2D_Bspline(pixel, denoised, tempbuf, roi->width, roi->height, 1, FALSE);
 
+    // Lab and RGB buffers convert to every picker space derived from either family; only crossing
+    // from one family to the other needs the profile.
+    const gboolean image_convertible = (image_cst == IOP_CS_LAB) || dt_iop_colorspace_is_rgb(image_cst);
+    const gboolean picker_convertible = _picker_cst_wants_lab(picker_cst) || dt_iop_colorspace_is_rgb(picker_cst)
+                                        || (picker_cst == IOP_CS_HSL) || (picker_cst == IOP_CS_JZCZHZ);
+    const gboolean crosses_family = (image_cst == IOP_CS_LAB) != _picker_cst_wants_lab(picker_cst);
+    const gboolean convertible
+        = image_convertible && picker_convertible && (!crosses_family || !IS_NULL_PTR(profile));
+
     if(((image_cst == picker_cst) || (picker_cst == IOP_CS_NONE)))
       color_picker_helper_4ch(dsc, denoised, roi, box, picked_color, picked_color_min, picked_color_max, picker_cst, profile);
-    else if((image_cst == IOP_CS_LAB
-             && (picker_cst == IOP_CS_LCH || picker_cst == IOP_CS_RGB))
-            || (dt_iop_colorspace_is_rgb(image_cst)
-                && (picker_cst == IOP_CS_LAB || picker_cst == IOP_CS_HSL || picker_cst == IOP_CS_JZCZHZ)))
+    else if(convertible)
     {
       /* The picker samples module input/output buffers after the previous piece has written them.
          When the requested picker colorspace differs from that buffer colorspace, we need a real

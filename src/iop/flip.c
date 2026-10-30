@@ -558,32 +558,32 @@ void init_presets(dt_iop_module_so_t *self)
 
   p.orientation = ORIENTATION_NULL;
   dt_gui_presets_add_generic(_("autodetect"), self->op,
-                             self->version(), &p, sizeof(p), 1, DEVELOP_BLEND_CS_NONE);
+                             self->version(), &p, sizeof(p), 1);
   dt_gui_presets_update_autoapply(_("autodetect"), self->op, self->version(), 1);
 
   p.orientation = ORIENTATION_NONE;
   dt_gui_presets_add_generic(_("no rotation"), self->op,
-                             self->version(), &p, sizeof(p), 1, DEVELOP_BLEND_CS_NONE);
+                             self->version(), &p, sizeof(p), 1);
 
   p.orientation = ORIENTATION_FLIP_HORIZONTALLY;
   dt_gui_presets_add_generic(_("flip horizontally"), self->op,
-                             self->version(), &p, sizeof(p), 1, DEVELOP_BLEND_CS_NONE);
+                             self->version(), &p, sizeof(p), 1);
 
   p.orientation = ORIENTATION_FLIP_VERTICALLY;
   dt_gui_presets_add_generic(_("flip vertically"), self->op,
-                             self->version(), &p, sizeof(p), 1, DEVELOP_BLEND_CS_NONE);
+                             self->version(), &p, sizeof(p), 1);
 
   p.orientation = ORIENTATION_ROTATE_CW_90_DEG;
   dt_gui_presets_add_generic(_("rotate by -90 degrees"), self->op,
-                             self->version(), &p, sizeof(p), 1, DEVELOP_BLEND_CS_NONE);
+                             self->version(), &p, sizeof(p), 1);
 
   p.orientation = ORIENTATION_ROTATE_CCW_90_DEG;
   dt_gui_presets_add_generic(_("rotate by  90 degrees"), self->op,
-                             self->version(), &p, sizeof(p), 1, DEVELOP_BLEND_CS_NONE);
+                             self->version(), &p, sizeof(p), 1);
 
   p.orientation = ORIENTATION_ROTATE_180_DEG;
   dt_gui_presets_add_generic(_("rotate by 180 degrees"), self->op,
-                             self->version(), &p, sizeof(p), 1, DEVELOP_BLEND_CS_NONE);
+                             self->version(), &p, sizeof(p), 1);
 
   dt_database_release_transaction();
 }

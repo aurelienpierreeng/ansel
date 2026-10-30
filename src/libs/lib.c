@@ -38,6 +38,7 @@
     Copyright (C) 2021-2022 Nicolas Auffray.
     Copyright (C) 2021 wpferguson.
     Copyright (C) 2022 Martin Bařinka.
+    Copyright (C) 2026 Guillaume Stutin.
     
     darktable is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -704,9 +705,6 @@ static void dt_lib_init_module(void *m)
     gchar *clean_name = delete_underscore(module->name(module));
     dt_capitalize_label(clean_name);
 
-    // slash is not allowed in module names because that makes accel pathes fail
-    assert(g_strrstr(clean_name, "/") == NULL);
-
     const char **views = module->views(module);
 
     // We add one accel path per view
@@ -974,8 +972,26 @@ static void _toggle_expanded(dt_lib_module_t *module, gboolean close_all)
   }
 }
 
+/**
+ * @brief Queue the module's expander as the scroll target of the panel that holds it.
+ *
+ * The panel scrolls to it once its size has changed, that is once the module has expanded
+ * or collapsed.
+ * dt_lib_gui_set_expanded() only queues the right panel, so a click that toggles a module
+ * of the left panel has to name its panel here, before toggling.
+ */
+static void _scroll_to_module(dt_lib_module_t *module)
+{
+  const uint32_t container = module->container(module);
+  if(container == DT_UI_CONTAINER_PANEL_LEFT_CENTER)
+    dt_gui_get_global()->scroll_to[0] = module->expander;
+  else if(container == DT_UI_CONTAINER_PANEL_RIGHT_CENTER)
+    dt_gui_get_global()->scroll_to[1] = module->expander;
+}
+
 static void expand_callback(GtkButton *button, dt_lib_module_t *module)
 {
+  _scroll_to_module(module);
   _toggle_expanded(module, FALSE);
 }
 
@@ -994,12 +1010,7 @@ static gboolean _lib_plugin_header_button_press(GtkWidget *w, GdkEventButton *e,
     /* bail out if module is static */
     if(!module->expandable(module)) return FALSE;
 
-    // make gtk scroll to the module once it updated its allocation size
-    uint32_t container = module->container(module);
-    if(container == DT_UI_CONTAINER_PANEL_LEFT_CENTER)
-      dt_gui_get_global()->scroll_to[0] = module->expander;
-    else if(container == DT_UI_CONTAINER_PANEL_RIGHT_CENTER)
-      dt_gui_get_global()->scroll_to[1] = module->expander;
+    _scroll_to_module(module);
 
     gtk_widget_grab_focus(GTK_WIDGET(module->expander));
 

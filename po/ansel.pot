@@ -4201,9 +4201,19 @@ msgstr ""
 msgid "unknown/invalid"
 msgstr ""
 
-#: ../src/common/colorlabels.c:336
+#: ../src/metadata/colorlabels.c:267
 #, c-format
 msgid "Color label set to %s for %i image(s)"
+msgstr ""
+
+#: ../src/metadata/colorlabels.c:270
+#, c-format
+msgid "Color label %s removed for %i image(s)"
+msgstr ""
+
+#: ../src/metadata/colorlabels.c:265
+#, c-format
+msgid "Color labels removed for %i image(s)"
 msgstr ""
 
 #: ../src/common/colorspaces.c:1691
@@ -5252,6 +5262,10 @@ msgstr ""
 
 #: ../src/common/import.c:765
 msgid "invalid date/time format for import"
+msgstr ""
+
+#: ../src/gui/import.c:836
+msgid "Please check the date."
 msgstr ""
 
 #: ../src/common/import.c:771 ../src/common/import.c:1278
@@ -6936,7 +6950,7 @@ msgid "no mask used"
 msgstr ""
 
 #: ../src/develop/blend_gui.c:3689
-msgid "Edit current module mask name"
+msgid "Edit current module's group name"
 msgstr ""
 
 #. buttons for mask polarity and edit mode
@@ -8060,9 +8074,75 @@ msgstr ""
 msgid "Ansel - Search accelerators"
 msgstr ""
 
-#: ../src/gui/gtk.c:458
+#: ../src/gui/closing.c:88 ../src/gui/gtk.c:458
 msgid "closing Ansel..."
 msgstr ""
+
+#: ../src/gui/closing.c:115
+msgid "Ansel is finishing its work before closing"
+msgstr ""
+
+#: ../src/gui/closing.c:130
+msgid "This window closes by itself as soon as it is done."
+msgstr ""
+
+#: ../src/gui/closing.c:134
+msgid "Details"
+msgstr ""
+
+#: ../src/gui/closing.c:146
+msgctxt "closing jobs"
+msgid "Type"
+msgstr ""
+
+#: ../src/gui/closing.c:152
+msgctxt "closing jobs"
+msgid "Description"
+msgstr ""
+
+#: ../src/gui/closing.c:203
+msgctxt "job type"
+msgid "Image operation"
+msgstr ""
+
+#: ../src/gui/closing.c:205
+msgctxt "job type"
+msgid "Thumbnail"
+msgstr ""
+
+#: ../src/gui/closing.c:207
+msgctxt "job type"
+msgid "Background task"
+msgstr ""
+
+#: ../src/gui/closing.c:209
+msgctxt "job type"
+msgid "Export"
+msgstr ""
+
+#: ../src/gui/closing.c:211
+msgctxt "job type"
+msgid "Maintenance"
+msgstr ""
+
+#: ../src/gui/closing.c:213
+msgctxt "job type"
+msgid "Darkroom rendering"
+msgstr ""
+
+#: ../src/gui/closing.c:267
+#, c-format
+msgid "%d other task, not started, is dropped"
+msgid_plural "%d other tasks, not started, are dropped"
+msgstr[0] ""
+msgstr[1] ""
+
+#: ../src/gui/closing.c:296
+#, c-format
+msgid "%d task is still running"
+msgid_plural "%d tasks are still running"
+msgstr[0] ""
+msgstr[1] ""
 
 #. font name can only use period as decimal separator
 #. but printf format strings use comma for some locales, so replace comma with period

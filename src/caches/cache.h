@@ -7,6 +7,8 @@
     Copyright (C) 2014-2016 Roman Lebedev.
     Copyright (C) 2020 Pascal Obry.
     Copyright (C) 2022 Martin Bařinka.
+    Copyright (C) 2026 Aurélien PIERRE.
+    Copyright (C) 2026 Guillaume Stutin.
     
     darktable is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -99,7 +101,8 @@ static inline void dt_cache_set_cleanup_callback(dt_cache_t *cache, dt_cache_cle
   cache->cleanup_data = cleanup_data;
 }
 
-// returns a slot in the cache for this key (newly allocated if need be), locked according to mode (r, w)
+// returns a slot in the cache for this key (newly allocated if need be), locked according to mode (r, w),
+// or NULL when the key was not cached and the new slot's payload could not be allocated
 #define dt_cache_get(A, B, C)  dt_cache_get_with_caller(A, B, C, __FILE__, __LINE__)
 dt_cache_entry_t *dt_cache_get_with_caller(dt_cache_t *cache, const uint32_t key, char mode, const char *file, int line);
 // same but returns 0 if not allocated yet (both will block and wait for entry rw locks to be released)
@@ -128,9 +131,9 @@ int32_t dt_cache_remove(dt_cache_t *cache, const uint32_t key);
 int dt_cache_seed(dt_cache_t *cache, const uint32_t key, const void *data, size_t data_size, size_t cost);
 // removes from the tip of the lru list, until the fill ratio of the hashtable
 // goes below the given parameter, in terms of the user defined cost measure.
-// will never lock and never fail, but sometimes not free memory (in case all
-// is locked)
-void dt_cache_gc(dt_cache_t *cache, const float fill_ratio);
+// takes cache->lock; skips the entries another thread holds rather than waiting
+// for them, so it may free less than asked. returns the cost reclaimed.
+size_t dt_cache_gc(dt_cache_t *cache, const float fill_ratio);
 
 // iterate over all currently contained data blocks.
 // not thread safe! only use this for init/cleanup!

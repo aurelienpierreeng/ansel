@@ -1,5 +1,6 @@
 #   This file is part of the Ansel project.
 #   Copyright (C) 2026 Aurélien PIERRE.
+#   Copyright (C) 2026 Guillaume Stutin.
 #   
 #   Ansel is free software: you can redistribute it and/or modify
 #   it under the terms of the GNU General Public License as published by
@@ -34,13 +35,53 @@ permissions:
   contents: write   # the image is also attached to the monthly nightly release
 
 jobs:
+  # The cron fires whether master moved or not. Before this job, every night on an unchanged
+  # head rebuilt the image, pushed it to Docker Hub again and replaced the archive the release
+  # already held for that commit. The release is asked first; tools/nightly_published.sh matches the commit hash in
+  # the asset names. A manual dispatch builds anyway, since rebuilding on purpose is what
+  # someone dispatching wants.
+  #
+  # The archive is what is asked about. The Docker Hub push needs no question of its own: it
+  # comes earlier in the same job, so an archive on the release means the image went out too.
+  #
+  # The build checks out the commit judged here, not the branch again, so a push landing in
+  # between cannot have one commit checked and another built.
+  published:
+    name: Is this commit already published
+    runs-on: ubuntu-latest
+    outputs:
+      sha: ${{ steps.check.outputs.sha }}
+      build: ${{ steps.check.outputs.build }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.ref_name }}
+          fetch-depth: 1
+          submodules: false
+      - name: Ask the release
+        id: check
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          EVENT: ${{ github.event_name }}
+        run: |
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          if [ "${EVENT}" != "workflow_dispatch" ] && tools/nightly_published.sh \
+            'Ansel-@VERSION@-docker.tar.zst'; then
+            echo "already published for this commit, not rebuilt"
+            echo "build=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "build=true" >> "$GITHUB_OUTPUT"
+          fi
+
   docker:
+    needs: published
+    if: ${{ needs.published.outputs.build == 'true' }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout ansel source
         uses: actions/checkout@v6
         with:
-          ref: ${{ env.BRANCH }}
+          ref: ${{ needs.published.outputs.sha }}
           # Full history: get_git_version_string.sh must reach the last version tag, or
           # the version degrades to a bare hash. (An earlier edit put this only in a
           # comment and left the key at 1; the first master run showed VERSION "b4597470".)

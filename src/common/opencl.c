@@ -32,7 +32,7 @@
     Copyright (C) 2022 Martin Bařinka.
     Copyright (C) 2022 Victor Forsiuk.
     Copyright (C) 2024 Alynx Zhou.
-    Copyright (C) 2025 Guillaume Stutin.
+    Copyright (C) 2025-2026 Guillaume Stutin.
     
     darktable is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -328,6 +328,47 @@ gboolean dt_opencl_read_device_config(const int devid)
   // do some safety housekeeping
   cl->dev[devid].avoid_atomics &= 1;
   cl->dev[devid].pinned_memory &= (DT_OPENCL_PINNING_ON | DT_OPENCL_PINNING_DISABLED);
+
+  /* PINNED HOST MEMORY IS THE DEFAULT, and a stored OFF from before this was decided must not
+   * keep winning silently.
+   *
+   * Every buffer that has to cross back to the CPU -- and on a darkroom frame that is at least
+   * the displayed output, which Cairo can only read from host memory -- is copied by
+   * `dt_opencl_read_host_from_device()`, a BLOCKING read. Into ordinary pageable memory the
+   * driver cannot DMA out of the pages it was handed: it stages through an internal pinned
+   * buffer and copies twice. Page-locked memory removes the staging copy, and
+   * `dt_dev_pixelpipe_cache_sync_cl_buffer()` can additionally take its map/unmap path instead
+   * of copying at all, since `dt_opencl_is_pinned_memory()` tests exactly these flags.
+   *
+   * Measured on a Quadro M2200 over a painting stroke, the same 11.7 MB display buffer, once
+   * per frame: 12.43 ms at 0.94 GB/s with this off, 2.04 ms at 5.58 GB/s with it on. It was
+   * 38% of the frame and became 7%. The default in `_opencl_device_init()` has always been
+   * DT_OPENCL_PINNING_ON; what reached users was a `0` inherited from configurations written
+   * before that, which `dt_opencl_read_device_config()` then loaded over it every start.
+   *
+   * So flip a stored OFF once, per device, and record that we did. The marker is a plain conf
+   * key rather than a confgen one on purpose: confgen keys report as existing from the first
+   * run, so they cannot answer "has this ever been written", whereas this one is absent until
+   * we write it. A user who genuinely wants pinning off sets it again afterwards and keeps it
+   * -- the flip happens once, not on every start. A device seen for the first time gets the
+   * marker with the default already on, so nothing is flipped for it later.
+   *
+   * Pinning is not free: page-locked pages cannot be swapped, so the cache flushes them under
+   * memory pressure (`flushing cached pinned buffers and retrying`). That is a bounded,
+   * handled cost against a copy paid on every frame of every interaction. */
+  gchar pin_default_key[256] = { 0 };
+  g_snprintf(pin_default_key, sizeof(pin_default_key), "%s/pinned_memory_default_applied", key_device);
+  if(!dt_conf_key_exists(pin_default_key))
+  {
+    if(cl->dev[devid].pinned_memory == DT_OPENCL_PINNING_OFF)
+    {
+      cl->dev[devid].pinned_memory = DT_OPENCL_PINNING_ON;
+      dt_print(DT_DEBUG_OPENCL,
+               "[dt_opencl_read_device_config] '%s' had pinned memory transfer off from an older "
+               "configuration; enabling it, which is the default\n", cl->dev[devid].cname);
+    }
+    dt_conf_set_bool(pin_default_key, TRUE);
+  }
   cl->dev[devid].micro_nap = CLAMP(cl->dev[devid].micro_nap, 250, 1000000);
   if((cl->dev[devid].clroundup_wd < 2) || (cl->dev[devid].clroundup_wd > 512))
     cl->dev[devid].clroundup_wd = 16;
@@ -967,7 +1008,7 @@ static int dt_opencl_device_init(dt_opencl_t *cl, const int dev, cl_device_id *d
   if(newdevice) // so far the device seems to be ok. Make sure to write&export the conf database to
   {
     dt_opencl_write_device_config(dev);
-    dt_conf_save(darktable.conf);
+    dt_conf_flush();
   }
 
   // now load all darktable cl kernels.
@@ -1293,13 +1334,6 @@ void dt_opencl_init(const gboolean exclude_opencl, const gboolean print_statisti
   _opencl_driver_crash_marker_path(_driver_crash_marker, sizeof(_driver_crash_marker));
   _opencl_fold_driver_crashes();
 
-  // work-around to fix a bug in some AMD OpenCL compilers, which would fail parsing certain numerical
-  // constants if locale is different from "C".
-  // we save the current locale, set locale to "C", and restore the previous setting after OpenCL is
-  // initialized
-  char *locale = strdup(setlocale(LC_ALL, NULL));
-  setlocale(LC_ALL, "C");
-
   cl->crc = 5781;
   cl->dlocl = NULL;
   cl->dev_priority_image = 0;
@@ -1309,8 +1343,15 @@ void dt_opencl_init(const gboolean exclude_opencl, const gboolean print_statisti
   cl->num_detected_devs = 0;
   cl->detected_devs = NULL;
 
+  // Before the locale save: only finally: restores it.
   if(exclude_opencl) return;
 
+  // work-around to fix a bug in some AMD OpenCL compilers, which would fail parsing certain numerical
+  // constants if locale is different from "C".
+  // we save the current locale, set locale to "C", and restore the previous setting after OpenCL is
+  // initialized
+  char *locale = strdup(setlocale(LC_ALL, NULL));
+  setlocale(LC_ALL, "C");
 
   cl_platform_id *all_platforms = NULL;
   cl_uint *all_num_devices = NULL;
@@ -2030,6 +2071,23 @@ size_t dt_opencl_get_device_max_global_mem(const int devid)
   if(!cl || !cl->inited || IS_NULL_PTR(cl->dev)) return 0;
   if(devid < 0 || devid >= cl->num_devs) return 0;
   return (size_t)cl->dev[devid].max_global_mem;
+}
+
+size_t dt_opencl_get_device_memory_in_use(const int devid)
+{
+  dt_opencl_t *cl = _opencl;
+  if(!cl || !cl->inited || IS_NULL_PTR(cl->dev)) return 0;
+  if(devid < 0 || devid >= cl->num_devs) return 0;
+  return cl->dev[devid].memory_in_use;
+}
+
+size_t dt_opencl_get_device_headroom(const int devid)
+{
+  dt_opencl_t *cl = _opencl;
+  if(!cl || !cl->inited || IS_NULL_PTR(cl->dev)) return 0;
+  if(devid < 0 || devid >= cl->num_devs) return 0;
+  // In MiB, as dt_opencl_check_tuning() reads it.
+  return cl->dev[devid].forced_headroom * 1024 * 1024;
 }
 
 int dt_opencl_report_pipe_error(void)
@@ -3108,6 +3166,21 @@ void dt_opencl_memory_statistics(int devid, cl_mem mem, size_t size, dt_opencl_m
     dt_print(DT_DEBUG_OPENCL,
               "[opencl memory] device %d: %" G_GSIZE_FORMAT " bytes (%.1f MB) in use\n", devid, _opencl->dev[devid].memory_in_use,
                                       (float)_opencl->dev[devid].memory_in_use/(1024*1024));
+}
+
+gboolean dt_opencl_get_mem_record(cl_mem mem, int *devid, size_t *size)
+{
+  if(IS_NULL_PTR(mem) || !(_opencl && _opencl->inited)) return FALSE;
+  dt_pthread_mutex_lock(&_opencl->mem_sizes_lock);
+  const dt_opencl_mem_record_t *rec = (const dt_opencl_mem_record_t *)g_hash_table_lookup(_opencl->mem_sizes, mem);
+  const gboolean found = !IS_NULL_PTR(rec);
+  if(found)
+  {
+    *devid = rec->devid;
+    *size = rec->size;
+  }
+  dt_pthread_mutex_unlock(&_opencl->mem_sizes_lock);
+  return found;
 }
 
 void dt_opencl_check_tuning(const int devid)

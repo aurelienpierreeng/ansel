@@ -38,7 +38,7 @@
     Copyright (C) 2022 Martin Bařinka.
     Copyright (C) 2022 Philipp Lutz.
     Copyright (C) 2023 Luca Zulberti.
-    Copyright (C) 2025 Guillaume Stutin.
+    Copyright (C) 2025-2026 Guillaume Stutin.
     
     darktable is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -318,7 +318,7 @@ void init_presets (dt_iop_module_so_t *self)
                                                          .deflicker_percentile = 50.0f,
                                                          .deflicker_target_level = -4.0f,
                                                          .compensate_exposure_bias = FALSE},
-                             sizeof(dt_iop_exposure_params_t), 1, DEVELOP_BLEND_CS_RGB_DISPLAY);
+                             sizeof(dt_iop_exposure_params_t), 1);
 
 
   // For scene-referred workflow, since filmic doesn't brighten as base curve does,
@@ -331,7 +331,7 @@ void init_presets (dt_iop_module_so_t *self)
                                                          .deflicker_percentile = 50.0f,
                                                          .deflicker_target_level = -4.0f,
                                                          .compensate_exposure_bias = TRUE},
-                             sizeof(dt_iop_exposure_params_t), 1, DEVELOP_BLEND_CS_RGB_SCENE);
+                             sizeof(dt_iop_exposure_params_t), 1);
 
   dt_gui_presets_update_ldr(_("scene-referred default"), self->op,
                             self->version(), FOR_RAW);
@@ -341,6 +341,7 @@ static void _deflicker_prepare_histogram(dt_iop_module_t *self, uint32_t **histo
                                          dt_dev_histogram_stats_t *histogram_stats)
 {
   const dt_image_t *img = dt_image_cache_get(self->dev->image_storage.id, 'r');
+  if(IS_NULL_PTR(img)) return;
   dt_image_t image = *img;
   dt_image_cache_read_release(img);
 

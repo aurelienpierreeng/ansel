@@ -23,6 +23,8 @@
     Copyright (C) 2022 Hanno Schwalm.
     Copyright (C) 2022 Martin Bařinka.
     Copyright (C) 2025 Alynx Zhou.
+    Copyright (C) 2026 Aurélien PIERRE.
+    Copyright (C) 2026 Guillaume Stutin.
     
     darktable is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -138,6 +140,23 @@ typedef enum dt_confgen_value_kind_t
   DT_VALUES
 } dt_confgen_value_kind_t;
 
+/** @brief A counter that advances whenever a conf value actually changes.
+ *
+ * For code on a hot path that would otherwise read conf per call: keep what you derived
+ * alongside the generation you derived it at, and re-derive only when the two differ. Every
+ * dt_conf_get_* takes the application-wide conf mutex -- the same one the GUI thread uses --
+ * and dt_conf_get_float additionally runs dt_calculator_solve() over the stored string, so
+ * on a pipeline thread this is contention, not arithmetic.
+ *
+ * It never goes backwards and starts at 1, so 0 is usable as "nothing cached yet".
+ *
+ * NOTE this says the CONFIGURATION changed, not that your derived value did. It is a cache
+ * key, never a substitute for folding state into a pipeline hash: a module whose pixels
+ * depend on a conf value still owes that value to its cache key (see iop/gamma.c and
+ * runtime_data_hash() in iop/iop_api.h), or the pipe serves pixels the key does not describe.
+ */
+uint64_t dt_conf_generation(void);
+
 void dt_conf_set_int(const char *name, int val);
 void dt_conf_set_int64(const char *name, int64_t val);
 void dt_conf_set_float(const char *name, float val);
@@ -217,8 +236,13 @@ void dt_conf_init(dt_conf_t *cf, const char *filename, GSList *override_entries)
 /** @brief Free everything @p cf owns. No dt_conf_*() call is valid afterwards. */
 void dt_conf_cleanup(dt_conf_t *cf);
 
-/** @brief Write @p cf back to its file. Overridden keys keep their stored value. */
-void dt_conf_save(dt_conf_t *cf);
+/** @brief Write the settings to their file now. Overridden keys keep their stored value.
+ *
+ * dt_conf_set_*() writes the in-memory table only: a change is on disk once this, or
+ * dt_conf_cleanup(), has run.
+ *
+ * @return 0 on success, 1 when the file could not be written; the reason is printed on stderr. */
+int dt_conf_flush(void);
 
 /**
  * @brief Does @p key have a value?

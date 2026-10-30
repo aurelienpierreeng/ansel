@@ -32,6 +32,7 @@
 #include "develop/dev_history.h"
 #include "develop/geometry/geometry.h"
 #include "develop/imageop.h"
+#include "develop/masks/masks_history.h"
 #include "develop/pixelpipe.h"
 #include "caches/pixelpipe_cache.h"
 #include "develop/supervisor.h"
@@ -274,12 +275,18 @@ static gboolean _sync_focused_in_place(dt_dev_pixelpipe_t *pipe, const dt_dev_hi
   // taken so the slot lock is not held across commit_params(); never the live GUI module->params.
   dt_iop_params_t *params = hist->params;
   void *tbuf = NULL;
+  uint64_t transient_serial = 0;
+  gboolean used_transient = FALSE;
   if(transient && focus->params_size > 0)
   {
     tbuf = g_malloc0(focus->params_size);
     if(!IS_NULL_PTR(tbuf)
-       && dt_dev_transient_params_get(dev, focus, tbuf, (size_t)focus->params_size, NULL, 0, NULL))
+       && dt_dev_transient_params_get(dev, focus, tbuf, (size_t)focus->params_size, NULL, 0, NULL,
+                                      &transient_serial))
+    {
       params = (dt_iop_params_t *)tbuf;
+      used_transient = TRUE;
+    }
     else
       dt_free(tbuf);
   }
@@ -289,6 +296,26 @@ static gboolean _sync_focused_in_place(dt_dev_pixelpipe_t *pipe, const dt_dev_hi
   piece->detail_mask = !IS_NULL_PTR(hist->blend_params) && hist->blend_params->details != 0.0f;
   dt_iop_commit_params(focus, params, hist->blend_params, pipe, piece);
   dt_free(tbuf);
+
+  /* `dt_iop_commit_params()` hands the params we pass to `module->commit_params()`, so the piece
+   * PROCESSES the transient blob -- but it derives the piece's identity from
+   * `dt_iop_compute_module_hash()`, which hashes `module->params`. That function says so itself:
+   * "WARNING: doesn't take into account parameters dynamically set at runtime". So a transient
+   * edit changed the pixels a recompute would produce without changing the hash that decides
+   * whether to recompute at all, and `dt_dev_pixelpipe_process()` exact-hit the cache and
+   * republished the previous frame. Drawlayer used to hide this by bumping `module->params`
+   * from its paint worker -- which is the very cross-thread write on GUI-owned state that the
+   * transient channel exists to avoid.
+   *
+   * The transient serial advances once per publish and is fetched under the same lock as the
+   * blob, so folding it in makes the piece's identity describe exactly the params it committed.
+   * Do this BEFORE `dt_pixelpipe_get_global_hash()` below, which folds the piece hashes into the
+   * cumulative pipe hash the cache is probed with. */
+  if(used_transient)
+  {
+    piece->hash = dt_hash(piece->hash, (const char *)&transient_serial, sizeof(transient_serial));
+    piece->global_hash = piece->hash;
+  }
   _refresh_pipe_detail_mask_state(pipe);
   if(previous_want_detail_mask != (pipe->want_detail_mask != DT_DEV_DETAIL_MASK_NONE)) return FALSE;
 
@@ -410,6 +437,8 @@ static void _seal_opencl_cache_policy(dt_dev_pixelpipe_t *pipe)
                                                        .active_in_gui = active_in_gui,
                                                        .has_autoset = has_autoset };
 
+    /* One hop is enough: a node that did not publish host data leaves none for a later consumer
+     * to trust, since a rekeyed cacheline reports no host pixels until they are rewritten. */
     piece->cache_output_on_ram
         = dt_dev_pipe_cache_policy_decide(&inputs, current_output_must_cache_host,
                                           &current_output_must_cache_host);
@@ -575,6 +604,41 @@ void dt_dev_pixelpipe_get_roi_out(dt_dev_pixelpipe_t *pipe,
   *height = roi_out.height;
 }
 
+static uint64_t _default_pipe_hash(dt_dev_pixelpipe_t *pipe)
+{
+  // Start with a hash that is unique, image-wise.
+  return dt_hash(5381, (const char *)&pipe->dev->image_storage.filename, DT_MAX_FILENAME_LEN);
+}
+
+/* Publish, on every enabled node, the cumulative hash of the PARAMETERS of the enabled modules
+ * above it -- `dt_dev_pixelpipe_iop_t.upstream_hash`, which says what that field is for.
+ *
+ * It is its own pass, run at the top of ROI planning as well as from the global-hash pass,
+ * because ROI planning is its first consumer and runs BEFORE the global hash is built: a
+ * `modify_roi_in()` that memoises anything against the chain above it would otherwise find
+ * either the value a commit invalidated or one describing a chain that has since changed.
+ * Nothing here reads an ROI, so running it twice per plan costs a walk and answers the same. */
+static void _publish_upstream_hashes(dt_dev_pixelpipe_t *pipe)
+{
+  uint64_t upstream = _default_pipe_hash(pipe);
+
+  for(GList *node = g_list_first(pipe->nodes); node; node = g_list_next(node))
+  {
+    dt_dev_pixelpipe_iop_t *piece = (dt_dev_pixelpipe_iop_t *)node->data;
+    if(IS_NULL_PTR(piece) || !piece->enabled) continue;
+
+    piece->upstream_hash = upstream;
+    upstream = dt_hash(upstream, (const char *)&piece->hash, sizeof(uint64_t));
+
+    /* Whether the module currently focused in the GUI suppresses this one's distortion. It is
+     * not in piece->hash -- it is GUI state, not history -- yet it decides whether this module
+     * takes part in dt_dev_distort_transform_plus(), which is precisely what a consumer of this
+     * hash back-transforms through. Focusing crop moves every drawn shape's box. */
+    const int bypass_distort = dt_dev_pixelpipe_activemodule_disables_currentmodule(pipe->dev, piece->module);
+    upstream = dt_hash(upstream, (const char *)&bypass_distort, sizeof(int));
+  }
+}
+
 void dt_dev_pixelpipe_get_roi_in(dt_dev_pixelpipe_t *pipe, const struct dt_iop_roi_t roi_out)
 {
   // while module->modify_roi_out describes how the current module will change the size of
@@ -587,11 +651,27 @@ void dt_dev_pixelpipe_get_roi_in(dt_dev_pixelpipe_t *pipe, const struct dt_iop_r
 
   // This function does not support NULL pipes or ad-hoc temp nodes.
 
+  // A modify_roi_in() that reads drawn shapes (retouch's source areas) resolves them in
+  // pipe->forms, the refcounted snapshot the run renders from, never in the GUI-owned dev->forms,
+  // which the GUI thread replaces and frees mid-edit. dt_dev_pixelpipe_process() takes its snapshot
+  // before planning, so both see the same shapes; any other caller plans against a snapshot held
+  // for the length of the walk, which it then owns and releases.
+  const gboolean owns_forms = IS_NULL_PTR(pipe->forms);
+  if(owns_forms) pipe->forms = dt_masks_snapshot_current_forms(pipe->dev, FALSE);
+
+  // a modify_roi_in() memoising against the chain above it needs this before the walk starts
+  _publish_upstream_hashes(pipe);
+
   dt_iop_roi_t roi_out_temp = roi_out;
   dt_iop_roi_t roi_in;
   gchar *pipe_name = NULL;
   if(dt_get_debug_flags() & DT_DEBUG_PIPE)
     pipe_name = _get_debug_pipe_name(pipe, pipe->dev);
+  // A modify_roi_in() can allocate from the pixelpipe cache -- lens does --, and the cache names the
+  // module and its image when it refuses, as it does while the module processes (pixelpipe_hb.c).
+  gchar *image = g_strdup_printf(_("`%s` (image id %d)"), pipe->dev->image_storage.filename,
+                                 pipe->dev->image_storage.id);
+  const char *prev_image = dt_pixelpipe_cache_set_current_image(image);
   for(GList *nodes = g_list_last(pipe->nodes); nodes; nodes = g_list_previous(nodes))
   {
     dt_dev_pixelpipe_iop_t *piece = (dt_dev_pixelpipe_iop_t *)nodes->data;
@@ -606,7 +686,11 @@ void dt_dev_pixelpipe_get_roi_in(dt_dev_pixelpipe_t *pipe, const struct dt_iop_r
 
     // If module is disabled, modify_roi_in() is a no-op
     if(piece->enabled)
+    {
+      const char *prev_module = dt_pixelpipe_cache_set_current_module(module->op);
       module->modify_roi_in(module, pipe, piece, &roi_out_temp, &roi_in);
+      dt_pixelpipe_cache_set_current_module(prev_module);
+    }
     else
       roi_in = roi_out_temp;
 
@@ -626,7 +710,11 @@ void dt_dev_pixelpipe_get_roi_in(dt_dev_pixelpipe_t *pipe, const struct dt_iop_r
     roi_out_temp = roi_in;
   }
 
+  dt_pixelpipe_cache_set_current_image(prev_image);
+  dt_free(image);
   if(pipe_name) dt_free(pipe_name);
+
+  if(owns_forms) dt_masks_forms_snapshot_release(&pipe->forms);
 
   /* ROI planning runs backwards, but rawprepare seals the effective Bayer/X-Trans phase only once
    * the real input crop is known. Forward that authored RAW descriptor now so the downstream RAW
@@ -654,11 +742,6 @@ void dt_dev_pixelpipe_get_roi_in(dt_dev_pixelpipe_t *pipe, const struct dt_iop_r
 
 }
 
-static uint64_t _default_pipe_hash(dt_dev_pixelpipe_t *pipe)
-{
-  // Start with a hash that is unique, image-wise.
-  return dt_hash(5381, (const char *)&pipe->dev->image_storage.filename, DT_MAX_FILENAME_LEN);
-}
 
 uint64_t dt_dev_pixelpipe_node_hash(dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_iop_t *piece, 
                                     const dt_iop_roi_t roi_out, const int pos)
@@ -1254,6 +1337,7 @@ void dt_dev_pixelpipe_propagate_formats(dt_dev_pixelpipe_t *pipe)
         piece->blendop_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
         piece->global_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
         piece->global_mask_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
+        piece->upstream_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
         piece->dsc_in = actual_input_dsc;
         piece->dsc_out = actual_input_dsc;
         dt_iop_buffer_dsc_update_bpp(&piece->dsc_in);
@@ -1310,6 +1394,7 @@ static void _sync_pipe_nodes_from_history(dt_dev_pixelpipe_t *pipe, GList *histo
     piece->blendop_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
     piece->global_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
     piece->global_mask_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
+    piece->upstream_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
     piece->enabled = piece->module->default_enabled;
     piece->detail_mask = FALSE;
 
@@ -1388,6 +1473,7 @@ static void _sync_pipe_nodes_from_history_from_node(dt_dev_pixelpipe_t *pipe, GL
     piece->blendop_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
     piece->global_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
     piece->global_mask_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
+    piece->upstream_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
 
     piece->enabled = piece->module->default_enabled;
     piece->detail_mask = FALSE;
@@ -1454,6 +1540,10 @@ void dt_pixelpipe_get_global_hash(dt_dev_pixelpipe_t *pipe)
   // bernstein hash (djb2)
   uint64_t hash = _default_pipe_hash(pipe);
   gboolean passthrough_preview = FALSE;
+
+  // see dt_dev_pixelpipe_iop_t.upstream_hash: its own pass, and not derived from `hash` below,
+  // which folds each piece's ROI
+  _publish_upstream_hashes(pipe);
 
   // Bypassing cache contaminates downstream modules, starting at the module requesting it.
   // Usecase : crop, clip, ashift, etc. that need the uncropped image ;
@@ -1785,14 +1875,15 @@ void dt_dev_pixelpipe_change(dt_dev_pixelpipe_t *pipe)
       = (dt_dev_pixelpipe_change_t)dt_atomic_exch_int((dt_atomic_int *)&pipe->changed, DT_DEV_PIPE_UNCHANGED);
 
   gchar *type = _get_debug_pipe_name(pipe, pipe->dev);
-  char *status_str = g_strdup_printf("%s%s%s%s%s%s%s",
+  char *status_str = g_strdup_printf("%s%s%s%s%s%s%s%s",
                                   (status & DT_DEV_PIPE_UNCHANGED) ? "UNCHANGED " : "",
                                   (status & DT_DEV_PIPE_REMOVE) ? "REMOVE " : "",
                                   (status & DT_DEV_PIPE_TOP_CHANGED) ? "TOP_CHANGED " : "",
                                   (status & DT_DEV_PIPE_SYNCH) ? "SYNCH " : "",
                                   (status & DT_DEV_PIPE_ZOOMED) ? "ZOOMED " : "",
                                   (status & DT_DEV_PIPE_CACHE_REQUEST) ? "CACHE_REQUEST " : "",
-                                  (status & DT_DEV_PIPE_REENTRY) ? "REENTRY " : "");
+                                  (status & DT_DEV_PIPE_REENTRY) ? "REENTRY " : "",
+                                  (status & DT_DEV_PIPE_SWITCHED) ? "SWITCHED " : "");
 
   dt_print(DT_DEBUG_DEV, "[dt_dev_pixelpipe_change] pipeline state changing for pipe %s, flag %s\n",
      type, status_str);
@@ -1802,6 +1893,10 @@ void dt_dev_pixelpipe_change(dt_dev_pixelpipe_t *pipe)
   // mask display off as a starting point
   pipe->mask_display = DT_DEV_PIXELPIPE_DISPLAY_NONE;
   pipe->bypass_blendif = 0;
+
+  // Only raised here: whatever changes next, the run that renders the switched-to state must
+  // leave the previous state's outputs alone. dt_dev_pixelpipe_process() lowers it once it did.
+  if(status & DT_DEV_PIPE_SWITCHED) pipe->keep_outputs = TRUE;
 
   /* Zoom/pan only replans ROI and hashes, it does not replay history sync.
    * Rebuild the aggregate detail-mask demand from the already synchronized

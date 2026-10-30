@@ -44,9 +44,11 @@ int pixelpipe_process_on_CPU(dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_io
   if(IS_NULL_PTR(output))
     output = dt_pixel_cache_alloc(output_entry);
 
+  // NULL only when the pixelpipe cache refused the buffer -- the pressure valve or the arena -- and
+  // the cache has already logged why: a lack of memory, not a bug.
   if(IS_NULL_PTR(output))
   {
-    fprintf(stdout, "[dev_pixelpipe] %s got a NULL output, report that to developers\n", module->name());
+    fprintf(stdout, "[dev_pixelpipe] %s got no output buffer: the pixelpipe cache refused it\n", module->name());
     return 1;
   }
 
@@ -106,10 +108,19 @@ int pixelpipe_process_on_CPU(dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_io
       out[k] = NAN;
   }
 
-  const gboolean fitting = dt_tiling_piece_fits_host_memory(MAX(piece->roi_in.width, piece->roi_out.width),
-                                                            MAX(piece->roi_in.height, piece->roi_out.height),
-                                                            MAX(process_input_dsc.bpp, piece->dsc_out.bpp),
-                                                            tiling->factor, tiling->overhead);
+  /* Asked only when tiling could save memory. The answer chooses between process() and
+   * process_tiling(), and getting it EVICTS cache lines -- other pipes' included -- until the
+   * module's whole working set fits one contiguous arena run. For a module that cannot be tiled,
+   * or whose tiling would fall back to process(), it chooses nothing, process() runs either way,
+   * and the eviction only throws work away. The module's own allocations still evict what each
+   * of them needs, when it is made. */
+  const gboolean fitting
+      = !piece->process_tiling_ready
+        || !dt_tiling_piece_can_save_memory(module, pipe, piece, process_input_dsc.bpp)
+        || dt_tiling_piece_fits_host_memory(MAX(piece->roi_in.width, piece->roi_out.width),
+                                            MAX(piece->roi_in.height, piece->roi_out.height),
+                                            MAX(process_input_dsc.bpp, piece->dsc_out.bpp),
+                                            tiling->factor, tiling->overhead);
 
   int err = 0;
   if(!fitting && piece->process_tiling_ready)
@@ -127,7 +138,13 @@ int pixelpipe_process_on_CPU(dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_io
 
   if(err)
   {
-    fprintf(stdout, "[pixelpipe] %s process on CPU returned with an error\n", module->name());
+    // a module that reads the killswitch mid-run fails for it (doc/module-abandon.md): that run was
+    // abandoned, not broken, and stays as quiet as a stop between two modules
+    if(dt_dev_pixelpipe_has_shutdown(pipe))
+      dt_print(DT_DEBUG_PIPE, "[pixelpipe] %s process on CPU stopped: the pipe abandoned its run\n",
+               module->name());
+    else
+      fprintf(stdout, "[pixelpipe] %s process on CPU returned with an error\n", module->name());
     if(input_locked)
       dt_dev_pixelpipe_cache_rdlock_entry(FALSE, input_entry);
     dt_pixelpipe_cache_free_align(process_input_temp);
@@ -140,10 +157,6 @@ int pixelpipe_process_on_CPU(dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_io
     blend_input_dsc = process_input_dsc;
     blend_output = output;
     blend_output_dsc = piece->dsc_out;
-    const dt_dev_pixelpipe_display_mask_t request_mask_display
-        = (module->dev->gui_attached && (module == module->dev->gui_module) && (pipe == module->dev->pipe))
-              ? module->request_mask_display
-              : DT_DEV_PIXELPIPE_DISPLAY_NONE;
 
     const dt_pixelpipe_blend_transform_t blend_transforms
         = dt_dev_pixelpipe_transform_for_blend(module, piece, &piece->dsc_out);
@@ -213,17 +226,11 @@ int pixelpipe_process_on_CPU(dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_io
 
     if(!err && (blend_transforms & DT_DEV_PIXELPIPE_BLEND_TRANSFORM_OUTPUT))
     {
-      if(request_mask_display & DT_DEV_PIXELPIPE_DISPLAY_ANY)
-      {
-        memcpy(output, blend_output,
-               (size_t)piece->roi_out.width * piece->roi_out.height * piece->dsc_out.bpp);
-      }
-      else
-      {
-        dt_colorspaces_apply_profile(module->op, module->multi_name, blend_output, output, piece->roi_out.width,
-                                            piece->roi_out.height, blend_output_dsc.cst, piece->dsc_out.cst,
-                                            &blend_output_dsc.cst, work_profile);
-      }
+      // A mask or channel preview is converted like any output: the preview is authored in the
+      // blending space precisely so this conversion lands it where the display expects it.
+      dt_colorspaces_apply_profile(module->op, module->multi_name, blend_output, output, piece->roi_out.width,
+                                   piece->roi_out.height, blend_output_dsc.cst, piece->dsc_out.cst,
+                                   &blend_output_dsc.cst, work_profile);
     }
   }
 

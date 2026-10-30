@@ -14,6 +14,7 @@
     Copyright (C) 2020 Ralf Brown.
     Copyright (C) 2021-2022 Hanno Schwalm.
     Copyright (C) 2022 Martin Bařinka.
+    Copyright (C) 2026 Guillaume Stutin.
     
     darktable is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -133,6 +134,22 @@ typedef struct dt_dev_pixelpipe_iop_t
   // Same as global hash but for raster masks
   uint64_t global_mask_hash;
 
+  /* Cumulative hash of the PARAMETERS of every enabled module upstream of this one: their
+   * history state, and neither their ROI nor anything of this module's own. It identifies the
+   * transformation chain above the node, which is what a drawn shape's rasterisation depends on
+   * -- every mask is rasterised in sensor coordinates and back-transformed through that chain,
+   * so it moves with an upstream parameter and not with the viewport. A module memoising such a
+   * result (see `iop/retouch.c`) keys it on this plus whatever of its own state the result
+   * depends on, and gets a memo that survives an edit of the parameter being dragged, which
+   * `global_hash` cannot offer.
+   *
+   * Deliberately ROI-free, because it is read from `modify_roi_in()`, which runs BEFORE
+   * `dt_pixelpipe_get_global_hash()` publishes the plan being built: what a consumer reads
+   * there still describes the previous plan's ROI, and would be a lie if the ROI were in it. It
+   * never describes the previous plan's PARAMETERS, since every commit path runs the hash pass
+   * before any planning. DT_PIXELPIPE_CACHE_HASH_INVALID until that pass has run at all. */
+  uint64_t upstream_hash;
+
   int bpc;             // bits per channel, 32 means float
   dt_iop_roi_t buf_in, buf_out; // theoretical full buffer regions of interest, as passed through modify_roi_out
   dt_iop_roi_t roi_in, roi_out; // planned runtime regions of interest after backward ROI propagation
@@ -158,6 +175,20 @@ typedef struct dt_dev_pixelpipe_iop_t
   // fails before producing a valid output for the new hash.
   dt_pixel_cache_entry_t cache_entry;
 
+  /** The cacheline written the run BEFORE `cache_entry`, offered as a second reuse candidate.
+   *
+   * It exists for one case: an output a consumer holds across frames, i.e. the backbuffer. Such
+   * an entry is refused by the rekey guard while it is on screen, and with a single hint the
+   * producer then had nothing to fall back on and allocated a new cacheline every frame --
+   * measured, 122 distinct host buffers over 122 frames, each re-pinning 12.2 MB for OpenCL.
+   * Two slots let it alternate: the one from two runs ago has been released by then, so the
+   * frame being displayed is republished rather than overwritten and both keep their payload.
+   *
+   * It costs nothing for every other module. `cache_entry` is tried first and, with nothing
+   * holding it, succeeds -- so this slot is never consulted and no second cacheline is kept
+   * alive on its account. */
+  dt_pixel_cache_entry_t cache_entry_prev;
+
   // Set to TRUE for modules that should mandatorily cache their output to RAM
   // even when running on OpenCL. This is a processing-policy flag authored
   // during synchronization and then consumed by one recursion step; it does not
@@ -174,7 +205,9 @@ typedef enum dt_dev_pixelpipe_change_t
   = 1 << 2, // all nodes up to end need to be synched, but no removal of module pieces is necessary
   DT_DEV_PIPE_ZOOMED = 1 << 3, // zoom event, preview pipe does not need changes
   DT_DEV_PIPE_CACHE_REQUEST = 1 << 4, // GUI requested one cacheline to be materialized on host
-  DT_DEV_PIPE_REENTRY = 1 << 5 // retry runtime side-band generation without rebuilding nodes
+  DT_DEV_PIPE_REENTRY = 1 << 5, // retry runtime side-band generation without rebuilding nodes
+  DT_DEV_PIPE_SWITCHED = 1 << 6 // history switched to another state (module toggled, undo, history jump):
+                                // keep the outputs it replaces, see dt_dev_pixelpipe_t.keep_outputs
 } dt_dev_pixelpipe_change_t;
 
 typedef enum dt_dev_pixelpipe_cache_request_t
@@ -225,7 +258,25 @@ typedef struct dt_backbuf_t
 
   /** Odd while a publication is in flight, even once it has settled. See ::dt_dev_backbuf_snapshot. */
   dt_atomic_uint64 generation;
+
+  /** The ONE cache reference that keeps the published cacheline alive, held by pointer.
+   *
+   * Private to whoever publishes this backbuffer -- never read by a consumer, and deliberately
+   * NOT part of ::dt_backbuf_state_t, which is the coherent snapshot consumers take. It is a
+   * pointer rather than the hash it used to be released by, because rekey reuse moves a live
+   * entry to a new hash in place: released by the hash it was taken at, the reference would
+   * never be found again and never dropped. Managed only through
+   * ::dt_dev_backbuf_take_keepalive and ::dt_dev_backbuf_release_keepalive. */
+  struct dt_pixel_cache_entry_t *keepalive;
 } dt_backbuf_t;
+
+/** @brief Take the keepalive reference on @p entry, releasing whatever this backbuffer held.
+ *  Idempotent for the same entry, so a republication that resolves to the same cacheline does
+ *  not stack references. */
+void dt_dev_backbuf_take_keepalive(dt_backbuf_t *backbuf, struct dt_pixel_cache_entry_t *entry);
+
+/** @brief Release this backbuffer's keepalive reference, if it holds one. Safe to call twice. */
+void dt_dev_backbuf_release_keepalive(dt_backbuf_t *backbuf);
 
 /** @brief One coherent publication, by value. */
 typedef struct dt_backbuf_state_t
@@ -372,7 +423,9 @@ typedef struct dt_dev_pixelpipe_t
 
   // References held on the dedicated global raster-mask cachelines required by
   // the current graph. Keeping them at pipe level prevents LRU eviction between
-  // provider publication and downstream consumption or mask export.
+  // provider publication and downstream consumption or mask export. They go with
+  // the graph: dt_dev_pixelpipe_cleanup_nodes() releases them, as it releases
+  // rawdetail_mask_hash.
   GArray *raster_mask_hashes;
 
   int output_imgid;
@@ -521,12 +574,23 @@ typedef struct dt_dev_pixelpipe_t
   gboolean bypass_cache;
 
   // If TRUE, do not keep any pixelpipe cache lines around for reuse.
-  // This is intended for one-shot pipelines such as thumbnail exports where caching is pure overhead
-  // and can lead to memory pressure (RAM buffers + OpenCL pinned/device buffers).
+  // This is intended for one-shot pipelines such as exports and thumbnails where caching is pure
+  // overhead and can lead to memory pressure (RAM buffers + OpenCL pinned/device buffers).
+  // Lines other pipes hold are still reused: dt_dev_pixelpipe_cache_get_writable() hands them back
+  // as exact hits, and only what this pipe computes is dropped once consumed.
   gboolean no_cache;
 
-  // Temporarily pause the infinite loop of pipeline
-  gboolean pause;
+  /* When TRUE, a module writes its output into a new cacheline instead of rekeying the one it
+   * wrote last time, so the outputs of the state just left stay cached for a switch back. Raised
+   * by DT_DEV_PIPE_SWITCHED, lowered once a run completes. */
+  gboolean keep_outputs;
+
+  // Temporarily pause the infinite loop of pipeline.
+  // Written by drawlayer from BOTH the GUI thread and its paint worker, polled by the
+  // darkroom loop -- so it is atomic, like `running`, `shutdown` and `realtime` beside it.
+  // The pause path happened to be fenced by the `shutdown` store that followed it; the
+  // RESUME path had no atomic after it at all.
+  dt_atomic_int pause;
 
   // Run a self-setting pipeline that will update history for each module
   // depending on its input if it implements the autoset() method
@@ -641,7 +705,7 @@ void dt_dev_pixelpipe_set_icc(dt_dev_pixelpipe_t *pipe, dt_colorspaces_color_pro
                               const gchar *icc_filename, dt_iop_color_intent_t icc_intent);
 // destroys all allocated data.
 void dt_dev_pixelpipe_cleanup(dt_dev_pixelpipe_t *pipe);
-// cleanup all nodes except clean input/output
+// cleanup all nodes except clean input/output, and release the side-band masks they referenced
 void dt_dev_pixelpipe_cleanup_nodes(dt_dev_pixelpipe_t *pipe);
 // sync with develop_t history stack from scratch (new node added, have to pop old ones)
 // this should be called with dev->history_mutex locked in read mode
@@ -677,6 +741,26 @@ float *dt_dev_get_raster_mask(dt_dev_pixelpipe_t *pipe, const struct dt_iop_modu
 // helper function writing the pipe-processed ctmask data to dest
 float *dt_dev_distort_detail_mask(const dt_dev_pixelpipe_t *pipe, float *src, const struct dt_iop_module_t *target_module);
 float *dt_dev_retrieve_rawdetail_mask(const dt_dev_pixelpipe_t *pipe, const struct dt_iop_module_t *target_module);
+
+/**
+ * @brief Whether a cached output of @p piece may stand for it, called before that output is looked up.
+ *
+ * @details
+ * The hidden `detailmask` stage publishes two cachelines: its output, a copy of its input, and the
+ * detail mask, under a hash of its own. Either can be evicted without the other, and the output
+ * alone cannot rebuild the mask: a consumer finding none skips the detail refinement, and its
+ * output is cached under the hash of a refined one. So a cached output stands for the stage only
+ * while its mask is there too. When it is, the pipe takes the mask now, as the stage's process()
+ * would; when it is not, the output is invalidated so that the stage runs and publishes the mask
+ * again. Any other piece's output stands as it is.
+ *
+ * @param pipe The pipe about to look up the output.
+ * @param piece The piece the output belongs to.
+ * @param output_hash The output's cache key.
+ * @return TRUE when the output may stand for the piece, FALSE when it was invalidated.
+ */
+gboolean dt_dev_pixelpipe_rawdetail_mask_check_hit(dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_iop_t *piece,
+                                                   const uint64_t output_hash);
 
 
 /**

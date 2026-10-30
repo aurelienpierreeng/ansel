@@ -27,6 +27,7 @@
     Copyright (C) 2022 Martin Bařinka.
     Copyright (C) 2022 Miloš Komarčević.
     Copyright (C) 2023 Luca Zulberti.
+    Copyright (C) 2026 Guillaume Stutin.
     
     darktable is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -536,7 +537,10 @@ static gboolean _update_shortcut_state(dt_shortcut_t *shortcut, GtkAccelKey *key
     else
     {
       // We loaded user config file, and user made changes in there.
-      // We will need to update our "defaults", which now become rather a memory of previous state
+      // We will need to update our "defaults", which now become rather a memory of previous state.
+      // A path the config never mentioned cannot land here anymore: _insert_accel() seeds the
+      // accel_map entry with this shortcut's own default, so an absent path arrives equal to it
+      // and takes the branch above. Reaching this one means the file really did say something else.
       shortcut->key = key->accel_key;
       shortcut->mods = key->accel_mods;
       shortcut->type = DT_SHORTCUT_USER;
@@ -618,8 +622,33 @@ static void _connect_accel(dt_shortcut_t *shortcut);
 
 static void _insert_accel(dt_accels_t *accels, dt_shortcut_t *shortcut)
 {
-  // init an accel_map entry with no keys so Gtk collects them from user config later.
-  gtk_accel_map_add_entry(shortcut->path, 0, 0);
+  // Register the app default as the accel_map entry's OWN default, not as an entry with no
+  // keys. Both spellings let the user config win -- gtk_accel_map_add_entry() only sets the
+  // current value when it creates the entry, and gtk_accel_map_load() has already run by now
+  // (see gui/application.c), so a path the user config knows about keeps whatever that file
+  // said. The difference is what happens to a path the config does NOT know about, and with
+  // (0, 0) that case was indistinguishable from a shortcut the user had cleared: the entry
+  // came back with key 0, _update_shortcut_state() compared it against a non-zero app default,
+  // concluded "the user changed this" and recorded the shortcut as permanently unbound. Every
+  // newly added default shortcut was therefore born dead for anyone with an existing config.
+  //
+  // Accel pathes are built from TRANSLATED menu labels (that is why the config file is
+  // localized), so the same happens when a label's translation lands or changes: the shortcut
+  // is looked up under a path that config has never seen. That is how F5 stopped applying the
+  // purple label in French -- the fr catalogue gained "Violet" for a menu entry that used to
+  // fall back to the English "Purple", and the F5 saved under the old path was orphaned.
+  //
+  // Passing the default here also makes GTK's own changed/unchanged bookkeeping mean what we
+  // need on the way out: gtk_accel_map_save() comments out an entry that still sits at its
+  // default and writes the others verbatim, so a shortcut the user cleared is saved as a real
+  // (path "") line and is read back as a known path with key 0 -- still cleared, this time
+  // because the file says so rather than because the file is silent.
+  //
+  // One-time cost of the change: a config written by an older build recorded a cleared default
+  // shortcut as a commented line, which reads back as "unknown path", so such a shortcut is
+  // restored to its default once. It is then saved under the new spelling and stays cleared
+  // from there on.
+  gtk_accel_map_add_entry(shortcut->path, shortcut->key, shortcut->mods);
   dt_pthread_mutex_lock(&accels->lock);
   g_hash_table_insert(accels->acceleratables, shortcut->path, shortcut);
 
@@ -994,10 +1023,14 @@ void dt_accels_remove_shortcut(dt_accels_t *accels, const char *path)
 
 gchar *dt_accels_build_path(const gchar *scope, const gchar *feature)
 {
-  if(strncmp(scope, "<Ansel>/", strlen("<Ansel>/")) == 0)
-    return g_strdup_printf("%s/%s", scope, feature);
-  else
-    return g_strdup_printf("<Ansel>/%s/%s", scope, feature);
+  // The preferences tree, the parent lookup and the search all split the path on "/",
+  // so a "/" from a label would make it one level deeper than its caller meant.
+  gchar *level = g_strdelimit(g_strdup(feature), "/", '-');
+  gchar *path = (strncmp(scope, "<Ansel>/", strlen("<Ansel>/")) == 0)
+                    ? g_strdup_printf("%s/%s", scope, level)
+                    : g_strdup_printf("<Ansel>/%s/%s", scope, level);
+  dt_free(level);
+  return path;
 }
 
 static void _accels_keys_decode(dt_accels_t *accels, GdkEvent *event, guint *keyval, GdkModifierType *mods)
@@ -1201,6 +1234,18 @@ gboolean dt_accels_dispatch(GtkWidget *w, GdkEvent *event, gpointer user_data)
 {
   dt_accels_t *accels = (dt_accels_t *)user_data;
 
+  // A shortcut that opens a window (import, export) moves the focus there while its key is
+  // still down, so the release never comes back here. The held key is therefore only known
+  // within one stretch of focus: forget it when the focus comes or goes, or the next press of
+  // the same shortcut reads as auto-repeat and does nothing.
+  if(event->type == GDK_FOCUS_CHANGE)
+  {
+    dt_widget_log("[shortcuts] Focus %s, held key forgotten\n", event->focus_change.in ? "in" : "out");
+    accels->active_key.accel_key = 0;
+    accels->active_key.accel_mods = 0;
+    return FALSE;
+  }
+
   // Ditch everything that is not a key stroke or key strokes that are modifiers alone
   // Abort early for performance.
   if(event->key.is_modifier || IS_NULL_PTR(accels->active_group) || accels->reset > 0 || !gtk_window_is_active(GTK_WINDOW(w)))
@@ -1329,8 +1374,11 @@ static void _make_column_clearable(GtkTreeViewColumn *col, GtkCellRenderer *rend
 {
   dt_shortcut_t *shortcut;
   gtk_tree_model_get(model, iter, COL_SHORTCUT, &shortcut, -1);
+  // "changes-prevent-symbolic" is Adwaita's padlock. A plain "lock" exists in neither Adwaita
+  // nor hicolor and renders as GTK's "image-missing" placeholder.
   g_object_set (renderer,
-                "icon-name", (!IS_NULL_PTR(shortcut) && !shortcut->locked) ? "edit-delete-symbolic" : "lock",
+                "icon-name", (!IS_NULL_PTR(shortcut) && !shortcut->locked) ? "edit-delete-symbolic"
+                                                                         : "changes-prevent-symbolic",
                 "visible",   (!IS_NULL_PTR(shortcut)),
                 "sensitive", (!IS_NULL_PTR(shortcut) && !shortcut->locked && shortcut->key),
                 NULL);

@@ -15,7 +15,8 @@
     Copyright (C) 2021 Pascal Obry.
     Copyright (C) 2022-2023, 2025-2026 Aurélien PIERRE.
     Copyright (C) 2022 Martin Bařinka.
-    
+    Copyright (C) 2026 Guillaume Stutin.
+
     darktable is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
     the Free Software Foundation, either version 3 of the License, or
@@ -193,6 +194,8 @@ typedef struct dt_thumbtable_t
   // Coalesce layout/scroll updates outside of draw handlers.
   guint idle_update_id;
   guint focus_idle_id;
+  // Destroys the thumbnails scrolled away from, once the current page is drawn.
+  guint evict_idle_id;
 
   // Last parent overlay allocation (used to ignore no-op size-allocate signals).
   int last_parent_width;

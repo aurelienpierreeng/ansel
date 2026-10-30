@@ -42,6 +42,8 @@
 #include "develop/masks.h"
 #include "develop/masks_debug.h"
 #include "develop/masks/masks_functions.h"
+#include "develop/masks/masks_distort.h"
+#include "widgets/widget_settings.h"
 #include "math/math.h"
 #include "system/mem_alloc.h"
 
@@ -53,6 +55,10 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
+
+#ifdef _WIN32
+#include "win/main_wrapper.h"
+#endif
 
 /* The reported raw's own size. Not an arbitrary canvas: several thresholds in the outline
  * builder are in ABSOLUTE pixels -- the recursion splits until samples are within a pixel, the
@@ -546,6 +552,40 @@ static const float _brush_1352[7][11] = {
   { 0.36773169f, 0.193801045f, 0.375862241f, 0.187250778f, 0.35960114f, 0.200351343f, 0.0239629708f, 0.0239629708f, 1.0f, 0.660000026f, 1 },
 };
 
+/* _MG_1074.CR2, brush #4 of its sidecar (2026-09-08): eight nodes, the second with a radius
+ * 2.6 times its neighbours', so the stroke flares from node 0 into node 1 and back. Reported
+ * as "some dashed border missing near node 0" once the envelope samples had fixed the long
+ * sides elsewhere: the flare's rate sits near the tilt cap. Frame 5184x3456. */
+static const float _brush_1074[8][11] = {
+  /* columns: node x y | ctrl1 x y | ctrl2 x y | border in out | density | fading | state */
+  { 0.758693337f, 0.601638496f, 0.760810494f, 0.609281301f, 0.762927711f, 0.616924226f, 0.0375316516f, 0.0375316516f, 1.0f, 0.660000026f, 1 },
+  { 0.748442948f, 0.644278347f, 0.751883447f, 0.688123882f, 0.755324066f, 0.731969476f, 0.097397998f, 0.097397998f, 1.0f, 0.660000026f, 1 },
+  { 0.729495943f, 0.881070495f, 0.729165137f, 0.923407614f, 0.728834331f, 0.965744674f, 0.0375316516f, 0.0375316516f, 1.0f, 0.660000026f, 1 },
+  { 0.720828474f, 0.935475111f, 0.712888777f, 0.937285244f, 0.704949141f, 0.939095378f, 0.0375316516f, 0.0375316516f, 1.0f, 0.660000026f, 1 },
+  { 0.694164455f, 0.938894272f, 0.681527078f, 0.934268355f, 0.668889761f, 0.929642439f, 0.0375316516f, 0.0375316516f, 1.0f, 0.660000026f, 1 },
+  { 0.646394014f, 0.915664196f, 0.637064874f, 0.909529805f, 0.627735794f, 0.903395414f, 0.0375316516f, 0.0375316516f, 1.0f, 0.660000026f, 1 },
+  { 0.630183876f, 0.897663355f, 0.625552356f, 0.897462249f, 0.620920897f, 0.897261143f, 0.0375316516f, 0.0375316516f, 1.0f, 0.660000026f, 1 },
+  { 0.614701509f, 0.904702842f, 0.609275997f, 0.908323109f, 0.603850603f, 0.911943376f, 0.0375316516f, 0.0375316516f, 1.0f, 0.660000026f, 1 },
+};
+
+/* The same brush as the darkroom held it on the evening of 2026-09-08, rebuilt from the
+ * frame dump (MASKS_DUMP_OVERLAY) rather than the sidecar, which no longer matched: node 1 is
+ * 287 px from node 0 now, and the radius rate along that segment peaks near 1 -- the discs
+ * almost nest, and the union's top is the rear envelope of the flare, 40 px outside node 1's
+ * circle at a tilt of 64 degrees. Radii measured on the dump: 132 px everywhere, 342.5 at
+ * node 1; frame 5184x3456. */
+static const float _brush_1074b[8][11] = {
+  /* columns: node x y | ctrl1 x y | ctrl2 x y | border in out | density | fading | state */
+  { 0.751560571f, 0.636493056f, 0.749378858f, 0.628718171f, 0.753744213f, 0.64426794f, 0.0381944444f, 0.0381944444f, 1.0f, 0.660000026f, 1 },
+  { 0.745943287f, 0.718943866f, 0.742395833f, 0.674337384f, 0.749488812f, 0.763550347f, 0.0991030093f, 0.0991030093f, 1.0f, 0.660000026f, 1 },
+  { 0.722523148f, 0.958313079f, 0.722864583f, 0.915240162f, 0.722181713f, 1.001386f, 0.0381944444f, 0.0381944444f, 1.0f, 0.660000026f, 1 },
+  { 0.705744599f, 0.972430556f, 0.713929398f, 0.970590278f, 0.697559799f, 0.974273727f, 0.0381944444f, 0.0381944444f, 1.0f, 0.660000026f, 1 },
+  { 0.673414352f, 0.969363426f, 0.686442901f, 0.974068287f, 0.660387731f, 0.964655671f, 0.0381944444f, 0.0381944444f, 1.0f, 0.660000026f, 1 },
+  { 0.627581019f, 0.944195602f, 0.637197145f, 0.950434028f, 0.617962963f, 0.937954282f, 0.0381944444f, 0.0381944444f, 1.0f, 0.660000026f, 1 },
+  { 0.615711806f, 0.931918403f, 0.62048804f, 0.932120949f, 0.6109375f, 0.931712963f, 0.0381944444f, 0.0381944444f, 1.0f, 0.660000026f, 1 },
+  { 0.598933256f, 0.942965856f, 0.604527392f, 0.939282407f, 0.593341049f, 0.946649306f, 0.0381944444f, 0.0381944444f, 1.0f, 0.660000026f, 1 },
+};
+
 /* Point the dev's geometry at a given frame size. The chain must be rebuilt afterwards or it
  * stops being authoritative and every outline comes back empty, silently. */
 static void _set_frame(dt_develop_t *dev, const int w, const int h)
@@ -597,9 +637,23 @@ static const float _polygon_1788045925[15][8] = {
  *
  * A tolerance rather than exact equality, because the overlay is antialiased by cairo and its
  * output is not promised to be identical across cairo versions. Anything that moves geometry
- * moves far more than this. */
+ * moves far more than this.
+ *
+ * Windows gets its own bounds: the baselines were rendered on Linux, and the UCRT64 build
+ * (clang, its own cairo and libm) lands antialiased edges and outline samples differently.
+ * Measured 2026-10-03 against the committed baselines: nine renders out of the corpus
+ * differ, at worst 25 per channel (brush-1313-cusp-5184x3888-overlay, 369 px) and at most
+ * 0.0243% of the pixels (polygon-comb-overlay, worst 4) -- including one alpha mask
+ * (brush-1074-flare, 500 px, worst 12), so not cairo alone. Every coverage check passes on
+ * the same run, 0 px missing and 0 in excess. The bounds below hold that with some margin;
+ * a moved geometry still lands far beyond them, at full contrast over hundreds of pixels. */
+#ifdef _WIN32
+#define MASKS_BASELINE_MAX_DELTA 32      /* per channel, of 255 */
+#define MASKS_BASELINE_MAX_SHARE 0.0004  /* share of pixels allowed to differ at all */
+#else
 #define MASKS_BASELINE_MAX_DELTA 8       /* per channel, of 255 */
 #define MASKS_BASELINE_MAX_SHARE 0.0002  /* share of pixels allowed to differ at all */
+#endif
 /* The per-pixel bound only means something once enough pixels carry it. A change that moves
  * geometry moves hundreds of pixels; an outline sample moved by a float ulp moves a handful,
  * because a dash edge on the antialiased overlay lands one pixel over. Measured: restructuring
@@ -647,7 +701,34 @@ static void _surface_diff(cairo_surface_t *const a, cairo_surface_t *const b,
 }
 
 static const char *baseline_dir = NULL;
+
+/* MASKS_OUTLINE_STEP=<n> has the corpus build every GUI outline every n image pixels -- the
+ * density the darkroom shows a zoomed-out image at -- so the band check judges what a user sees
+ * at fit zoom; unset, the corpus judges pixel-accurate outlines. The baselines are step-1
+ * pictures and are not compared at any other step. --time-overlay takes its density from its
+ * view (MASKS_OVERLAY_VIEW), the way the darkroom does: the expose publishes it from the
+ * transformed context, which is also why the corpus re-applies its own before every build --
+ * the overlay it writes beside each case is drawn at full resolution and publishes 1. */
+static int _outline_step_override = 0;
+
+/* Give @p dev a GUI state with the density its outlines are built at: the override when set,
+ * else @p image_px_per_device_px. */
+static void _outline_density_apply(dt_develop_t *dev, const double image_px_per_device_px)
+{
+  if(IS_NULL_PTR(dev->form_gui))
+  {
+    dev->form_gui = (dt_masks_form_gui_t *)calloc(1, sizeof(dt_masks_form_gui_t));
+    if(IS_NULL_PTR(dev->form_gui)) return;
+    dt_masks_init_form_gui(dev, dev->form_gui);
+  }
+  dt_masks_gui_set_outline_density(dev->form_gui, (_outline_step_override > 0) ? (double)_outline_step_override
+                                                                                 : image_px_per_device_px);
+}
+
+
 static gboolean baseline_update = FALSE;
+static gboolean time_overlay = FALSE;
+static int time_overlay_frames = 30;
 static int baseline_missing = 0;
 
 /** Compare @p path against its baseline, or create the baseline when updating. Returns TRUE when
@@ -655,6 +736,11 @@ static int baseline_missing = 0;
 static gboolean _baseline_check(const char *path, const char *name)
 {
   if(IS_NULL_PTR(baseline_dir)) return TRUE;
+  if(_outline_step_override > 1)
+  {
+    printf("      baseline: not compared, the outline is sampled every %d px\n", _outline_step_override);
+    return TRUE;
+  }
 
   char *base = g_strdup_printf("%s/%s.png", baseline_dir, name);
 
@@ -798,6 +884,7 @@ typedef struct _band_t
   int kept;
   int inside;
   int outside;
+  int off_frame;   /* kept samples past the edge of the frame, which no map can judge */
   double seconds;
 } _band_t;
 
@@ -812,6 +899,7 @@ static _band_t _outline_band_check(dt_develop_t *dev, dt_masks_form_t *form, con
   int skip_count = 0;
   dt_masks_skip_range_t *skips = NULL;
 
+  _outline_density_apply(dev, 1.0);
   const double t0 = dt_get_wtime();
   const dt_masks_raster_result_t st = dt_masks_get_points_border(dev, form, &points, &points_count, &border,
                                                                  &border_count, &skips, &skip_count, 0, NULL);
@@ -827,7 +915,9 @@ static _band_t _outline_band_check(dt_develop_t *dev, dt_masks_form_t *form, con
     const int y = (int)lrintf(border[i * 2 + 1]);
     if(x < 0 || y < 0 || x >= w || y >= h)
     {
-      band.outside++;
+      /* a shape drawn past the edge of the image has a boundary there the maps cannot judge;
+       * it is drawn all the same, and not a spoke to nowhere */
+      band.off_frame++;
       continue;
     }
     const size_t at = (size_t)y * w + x;
@@ -907,8 +997,8 @@ static void _judge_raster(dt_develop_t *dev, dt_masks_form_t *form, const _brush
   if(missing.largest > 0) printf(" around (%d,%d)", missing.cx, missing.cy);
   printf(")  excess %7d px (largest run %7d px", excess.total, excess.largest);
   if(excess.largest > 0) printf(" around (%d,%d)", excess.cx, excess.cy);
-  printf(")  outline: %d kept, %d inside, %d outside, built in %.1f ms  budget %d  -> %s\n",
-         band.kept, band.inside, band.outside, 1000.0 * band.seconds, c->budget_px, alpha_path);
+  printf(")  outline: %d kept, %d inside, %d outside, %d off frame, built in %.1f ms  budget %d  -> %s\n",
+         band.kept, band.inside, band.outside, band.off_frame, 1000.0 * band.seconds, c->budget_px, alpha_path);
   if(!ok) failures++;
 
   g_free(alpha_path);
@@ -1250,6 +1340,564 @@ static void _run_case(dt_develop_t *dev, dt_masks_form_t *form, const char *name
 
 /* ------------------------------------------------------------------------------------- */
 
+
+/* ---------------------------------------------------------------------------------------------
+ * The overlay's per-frame cost, headless.
+ *
+ * What the darkroom pays on every motion event while a mask is being edited is the drawing of
+ * every shape's outline into the view: a cairo path of one vertex per device pixel, stroked
+ * twice. This mode reproduces that draw alone -- the outline buffers are built once and cached
+ * by the geometry generation exactly as in the darkroom -- on a screen-sized surface with the
+ * fit transform, and reports milliseconds per frame. Two states per case: the shape as one of
+ * a group's members (path only) and as the selected member (path, dashed border, nodes and
+ * handles), which are the two costs a drag frame is made of. The last frame is saved as
+ * <case>-screen[-selected].png, so the pixels a change produces can be compared as well. */
+#define OVERLAY_SCREEN_W 2560
+#define OVERLAY_SCREEN_H 1440
+
+/* How much of an outline's border the boundary pass skipped: the sample count and the number
+ * of ranges. */
+static void _overlay_skipped(const dt_masks_form_gui_points_t *const gp, int *skipped, int *ranges)
+{
+  *skipped = 0;
+  *ranges = gp->border_skip_count;
+  for(int k = 0; k < gp->border_skip_count; k++)
+    *skipped += gp->border_skips[k].resume_at - gp->border_skips[k].jump_from;
+}
+
+/* The range that skips border sample @p i, or -1. */
+static int _overlay_skip_of(const dt_masks_form_gui_points_t *const gp, const int i)
+{
+  for(int k = 0; k < gp->border_skip_count; k++)
+    if(i >= gp->border_skips[k].jump_from && i < gp->border_skips[k].resume_at) return k;
+  return -1;
+}
+
+/* MASKS_DUMP_SKIPS=<dir>: every border sample of the selected state, raw coordinates, with the
+ * range that skips it and its spine point, as <dir>/<case>-border.txt; and every range on
+ * stdout with its ends on screen. This is what let the missing dashes be measured on the
+ * renders instead of judged by eye. */
+static void _overlay_dump_skips(const dt_masks_form_gui_points_t *const gp, const char *name,
+                                const dt_masks_overlay_transform_t *const transform)
+{
+  const char *dump_dir = g_getenv("MASKS_DUMP_SKIPS");
+  if(IS_NULL_PTR(dump_dir)) return;
+  const int border = gp->border_count;
+  char *path = g_strdup_printf("%s/%s-border.txt", dump_dir, name);
+  FILE *f = g_fopen(path, "w");
+  if(!IS_NULL_PTR(f))
+  {
+    for(int i = 0; i < border; i++)
+      fprintf(f, "%d %.2f %.2f %d %.2f %.2f\n", i, gp->border[2 * i], gp->border[2 * i + 1], _overlay_skip_of(gp, i),
+              gp->points[2 * i], gp->points[2 * i + 1]);
+    fclose(f);
+  }
+  g_free(path);
+  for(int k = 0; k < gp->border_skip_count; k++)
+  {
+    const int a = gp->border_skips[k].jump_from;
+    const int b = MIN(gp->border_skips[k].resume_at, border - 1);
+    printf("  skip %2d: [%6d, %6d) %6d samples  from (%.0f, %.0f) to (%.0f, %.0f) on screen\n", k, a,
+           gp->border_skips[k].resume_at, gp->border_skips[k].resume_at - a,
+           gp->border[2 * a] * transform->scale + transform->offset_x,
+           gp->border[2 * a + 1] * transform->scale + transform->offset_y,
+           gp->border[2 * b] * transform->scale + transform->offset_x,
+           gp->border[2 * b + 1] * transform->scale + transform->offset_y);
+  }
+}
+
+/* Paint the background and draw one overlay frame at @p transform. */
+static void _overlay_frame(dt_develop_t *dev, cairo_surface_t *surface, const dt_masks_overlay_transform_t *const transform)
+{
+  cairo_t *cr = cairo_create(surface);
+  cairo_set_source_rgb(cr, 0.12, 0.12, 0.12);
+  cairo_paint(cr);
+  dt_masks_events_post_expose_with(dev, NULL, cr, OVERLAY_SCREEN_W, OVERLAY_SCREEN_H, -1, -1, transform);
+  cairo_destroy(cr);
+}
+
+/* A frame must leave nothing behind. Draw once more at a PANNED transform, then compare with
+ * the same frame drawn onto a fresh surface after a rebuild: anything the frame left in the
+ * canvas -- a handle painted outside the rectangle it composited and cleared -- lands in the
+ * panned frame as pixels the fresh one does not have. Returns how many. */
+static long _overlay_leftovers(dt_develop_t *dev, cairo_surface_t *surface,
+                               const dt_masks_overlay_transform_t *const transform)
+{
+  const dt_masks_overlay_transform_t panned
+      = { .scale = transform->scale, .offset_x = transform->offset_x + 97.0, .offset_y = transform->offset_y - 61.0 };
+  _overlay_frame(dev, surface, &panned);
+  cairo_surface_t *fresh = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, OVERLAY_SCREEN_W, OVERLAY_SCREEN_H);
+  /* the same device scale, or the two frames differ by construction */
+  double ppd_x = 1.0;
+  double ppd_y = 1.0;
+  cairo_surface_get_device_scale(surface, &ppd_x, &ppd_y);
+  cairo_surface_set_device_scale(fresh, ppd_x, ppd_y);
+  dev->form_gui->formid = 0;
+  dev->form_gui->geometry_generation = 0;
+  _overlay_frame(dev, fresh, &panned);
+  cairo_surface_flush(surface);
+  cairo_surface_flush(fresh);
+  const uint32_t *pa = (const uint32_t *)cairo_image_surface_get_data(surface);
+  const uint32_t *pb = (const uint32_t *)cairo_image_surface_get_data(fresh);
+  const int stride = cairo_image_surface_get_stride(surface) / 4;
+  long leftovers = 0;
+  int bx0 = OVERLAY_SCREEN_W;
+  int by0 = OVERLAY_SCREEN_H;
+  int bx1 = -1;
+  int by1 = -1;
+  for(int y = 0; y < OVERLAY_SCREEN_H; y++)
+    for(int x = 0; x < OVERLAY_SCREEN_W; x++)
+      if(pa[y * stride + x] != pb[y * stride + x])
+      {
+        leftovers++;
+        bx0 = MIN(bx0, x);
+        by0 = MIN(by0, y);
+        bx1 = MAX(bx1, x);
+        by1 = MAX(by1, y);
+      }
+  if(leftovers > 0 && !IS_NULL_PTR(g_getenv("MASKS_DUMP_SKIPS")))
+  {
+    printf("  leftovers within (%d,%d)-(%d,%d)\n", bx0, by0, bx1, by1);
+    char *path = g_strdup_printf("%s/leftover-panned.png", g_getenv("MASKS_DUMP_SKIPS"));
+    cairo_surface_write_to_png(surface, path);
+    g_free(path);
+    path = g_strdup_printf("%s/leftover-fresh.png", g_getenv("MASKS_DUMP_SKIPS"));
+    cairo_surface_write_to_png(fresh, path);
+    g_free(path);
+  }
+  cairo_surface_destroy(fresh);
+  return leftovers;
+}
+
+/* What one state of one case cost: the frame, and the first frame that also built the outline. */
+typedef struct _overlay_timing_t
+{
+  double per_frame_ms;
+  double build_ms;
+} _overlay_timing_t;
+
+/* The measurement line of one state, with the outline's sample and skip counts. */
+static void _overlay_report(dt_develop_t *dev, const char *name, const int img_w, const int img_h,
+                            const gboolean selected, const _overlay_timing_t *const timing,
+                            const dt_masks_overlay_transform_t *const transform)
+{
+  int points = 0;
+  int border = 0;
+  int skip_ranges = 0;
+  int skipped = 0;
+  const dt_masks_form_gui_points_t *const gp
+      = (const dt_masks_form_gui_points_t *)g_list_nth_data(dev->form_gui->points, 0);
+  if(!IS_NULL_PTR(gp))
+  {
+    points = gp->points_count;
+    border = gp->border_count;
+    _overlay_skipped(gp, &skipped, &skip_ranges);
+    if(selected) _overlay_dump_skips(gp, name, transform);
+  }
+  printf("[TIME] %-26s %5dx%-4d %-8s %7.2f ms/frame  (first frame incl. build %7.2f ms at step %d;"
+         " %d outline samples, %d border samples, %d skipped in %d ranges)\n",
+         name, img_w, img_h, selected ? "selected" : "member", timing->per_frame_ms, timing->build_ms,
+         dt_masks_gui_outline_step(dev), points, border, skipped, skip_ranges);
+}
+
+/* THE HIT TEST, timed. A pointer motion hit-tests the selected member only -- its nodes and
+ * handles, then its samples through get_distance -- and a button press hit-tests every member
+ * to choose one; both walk the outlines at the density they were built at. A grid of positions
+ * over the whole image says what each costs per event, and how many positions find a shape. */
+static void _time_hit_test(dt_develop_t *dev, dt_masks_form_t *form, const char *name, const int img_w,
+                           const int img_h)
+{
+  dt_masks_form_gui_t *gui = dev->form_gui;
+  const int per_axis = 20;
+  const float radius = 10.0f;
+  dt_widget_set_mouse_radius(radius, radius);
+  gui->group_selected = 0;
+  /* nothing is being dragged: a drag index of 0 would answer every motion with "node 0" */
+  dt_masks_gui_reset_dragging(gui);
+
+  GList *members = NULL;
+  if(form->type & DT_MASKS_GROUP)
+  {
+    for(const GList *node = form->points; node; node = g_list_next(node))
+    {
+      const dt_masks_form_group_t *entry = (const dt_masks_form_group_t *)node->data;
+      dt_masks_form_t *member = dt_masks_get_from_id(dev, entry->formid);
+      if(!IS_NULL_PTR(member)) members = g_list_append(members, member);
+    }
+  }
+  else
+    members = g_list_append(members, form);
+  if(IS_NULL_PTR(members)) return;
+  dt_masks_form_t *selected = (dt_masks_form_t *)members->data;
+
+  double hover_seconds = 0.0;
+  double press_seconds = 0.0;
+  int hits = 0;
+  const int positions = per_axis * per_axis;
+  for(int p = 0; p < positions; p++)
+  {
+    gui->pos[0] = (float)img_w * ((float)(p % per_axis) + 0.5f) / (float)per_axis;
+    gui->pos[1] = (float)img_h * ((float)(p / per_axis) + 0.5f) / (float)per_axis;
+    gui->raw_pos[0] = gui->pos[0];
+    gui->raw_pos[1] = gui->pos[1];
+
+    double t0 = dt_get_wtime();
+    if(!IS_NULL_PTR(selected->functions->update_hover)) selected->functions->update_hover(selected, gui, 0);
+    hover_seconds += dt_get_wtime() - t0;
+
+    t0 = dt_get_wtime();
+    int index = 0;
+    for(const GList *node = members; node; node = g_list_next(node), index++)
+    {
+      dt_masks_form_t *member = (dt_masks_form_t *)node->data;
+      if(IS_NULL_PTR(member->functions->get_distance)) continue;
+      int inside = 0;
+      int inside_border = 0;
+      int near_handle = -1;
+      int inside_source = 0;
+      float dist = FLT_MAX;
+      member->functions->get_distance(gui->pos[0], gui->pos[1], radius, gui, index, g_list_length(member->points),
+                                      &inside, &inside_border, &near_handle, &inside_source, &dist);
+      if(inside || inside_border || near_handle >= 0 || inside_source) hits++;
+    }
+    press_seconds += dt_get_wtime() - t0;
+  }
+  printf("[HIT]  %-26s hover %.3f ms/motion (%s), press %.3f ms/click (%d members), %d hits over %d positions,"
+         " at step %d\n",
+         name, 1000.0 * hover_seconds / positions, selected->name, 1000.0 * press_seconds / positions,
+         g_list_length(members), hits, positions, dt_masks_gui_outline_step(dev));
+  g_list_free(members);
+}
+
+static void _time_overlay_form(dt_develop_t *dev, dt_masks_form_t *form, const char *name, const char *dir,
+                               const int img_w, const int img_h, const int frames)
+{
+  _set_frame(dev, img_w, img_h);
+  if(IS_NULL_PTR(dev->form_gui))
+  {
+    dev->form_gui = (dt_masks_form_gui_t *)calloc(1, sizeof(dt_masks_form_gui_t));
+    if(IS_NULL_PTR(dev->form_gui)) return;
+    dt_masks_init_form_gui(dev, dev->form_gui);
+  }
+  dev->form_gui->dev = dev;
+  dev->form_gui->form_visible = form;
+  dt_dev_geometry_set_processed_size(dev, img_w, img_h);
+
+  /* fit the image into the screen, centred: what the darkroom shows at zoom "fit" -- or, with
+   * MASKS_OVERLAY_VIEW="scale,offset_x,offset_y[,ppd]", the view the darkroom is showing, in
+   * user units, with the surface's device scale, to reproduce what a user sees at a zoom */
+  const double scale = MIN((double)OVERLAY_SCREEN_W / img_w, (double)OVERLAY_SCREEN_H / img_h);
+  dt_masks_overlay_transform_t transform
+      = { .scale = scale,
+          .offset_x = 0.5 * (OVERLAY_SCREEN_W - scale * img_w),
+          .offset_y = 0.5 * (OVERLAY_SCREEN_H - scale * img_h) };
+  double ppd = 1.0;
+  const char *view = g_getenv("MASKS_OVERLAY_VIEW");
+  if(!IS_NULL_PTR(view))
+  {
+    double v[4] = { scale, transform.offset_x, transform.offset_y, 1.0 };
+    gchar **parts = g_strsplit(view, ",", 4);
+    for(int i = 0; i < 4 && !IS_NULL_PTR(parts[i]); i++) v[i] = g_ascii_strtod(parts[i], NULL);
+    g_strfreev(parts);
+    transform.scale = v[0];
+    transform.offset_x = v[1];
+    transform.offset_y = v[2];
+    ppd = (v[3] > 0.0) ? v[3] : 1.0;
+  }
+
+  cairo_surface_t *surface = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, OVERLAY_SCREEN_W, OVERLAY_SCREEN_H);
+  if(cairo_surface_status(surface) != CAIRO_STATUS_SUCCESS)
+  {
+    cairo_surface_destroy(surface);
+    return;
+  }
+  cairo_surface_set_device_scale(surface, ppd, ppd);
+
+  for(int selected = 0; selected < 2; selected++)
+  {
+    dev->form_gui->formid = 0;                 /* rebuild the outline cache for this form */
+    dev->form_gui->geometry_generation = 0;
+    dev->form_gui->group_selected = selected ? 0 : -1;
+    dev->form_gui->form_selected = FALSE;
+
+    /* the first frame builds the outline, which the darkroom also does once per edit; it is
+     * not the per-frame cost and is timed apart */
+    _overlay_timing_t timing = { 0 };
+    const double build_start = dt_get_wtime();
+    _overlay_frame(dev, surface, &transform);
+    timing.build_ms = 1000.0 * (dt_get_wtime() - build_start);
+
+    const double start = dt_get_wtime();
+    for(int f = 0; f < frames; f++) _overlay_frame(dev, surface, &transform);
+    timing.per_frame_ms = 1000.0 * (dt_get_wtime() - start) / MAX(frames, 1);
+    _overlay_report(dev, name, img_w, img_h, selected, &timing, &transform);
+
+    if(!IS_NULL_PTR(dir))
+    {
+      char *png = g_strdup_printf("%s/%s-screen%s.png", dir, name, selected ? "-selected" : "");
+      cairo_surface_flush(surface);
+      cairo_surface_write_to_png(surface, png);
+      g_free(png);
+    }
+
+    const long leftovers = _overlay_leftovers(dev, surface, &transform);
+    if(leftovers > 0)
+    {
+      printf("[FAIL] %-26s %-8s left %ld pixel(s) behind for the next, panned frame\n", name,
+             selected ? "selected" : "member", leftovers);
+      failures++;
+    }
+  }
+  _time_hit_test(dev, form, name, img_w, img_h);
+  cairo_surface_destroy(surface);
+}
+
+/* The painted pixels' bounding box of an overlay rendered onto @p surface. */
+static gboolean _painted_bbox(cairo_surface_t *surface, int *x0, int *y0, int *x1, int *y1)
+{
+  cairo_surface_flush(surface);
+  const uint32_t *px = (const uint32_t *)cairo_image_surface_get_data(surface);
+  const int stride = cairo_image_surface_get_stride(surface) / 4;
+  const int w = cairo_image_surface_get_width(surface);
+  const int h = cairo_image_surface_get_height(surface);
+  gboolean any = FALSE;
+  const uint32_t background = px[0];   /* the corner is letterboxed, never painted */
+  for(int y = 0; y < h; y++)
+    for(int x = 0; x < w; x++)
+    {
+      const uint32_t p = px[y * stride + x];
+      if(p == background) continue;
+      if(!any)
+      {
+        *x0 = x;
+        *x1 = x;
+        *y0 = y;
+        *y1 = y;
+        any = TRUE;
+      }
+      *x0 = MIN(*x0, x);
+      *x1 = MAX(*x1, x);
+      *y0 = MIN(*y0, y);
+      *y1 = MAX(*y1, y);
+    }
+  return any;
+}
+
+/* A HiDPI view: the same pixels, a device scale of 2 on the surface, half the user units. The
+ * overlay must land on the same pixels as at scale 1 -- measured as the painted bounding box,
+ * to within the antialiasing and the thicker lines a 2x screen is entitled to. This is the
+ * check the darkroom on a 2x screen made necessary: everything at half size in the top-left
+ * quadrant, because cairo's device space is not the pixel grid. */
+static void _check_hidpi_placement(dt_develop_t *dev, dt_masks_form_t *form, const char *name, const int img_w,
+                                   const int img_h)
+{
+  _set_frame(dev, img_w, img_h);
+  dev->form_gui->form_visible = form;
+  dt_dev_geometry_set_processed_size(dev, img_w, img_h);
+  const double scale = MIN((double)OVERLAY_SCREEN_W / img_w, (double)OVERLAY_SCREEN_H / img_h);
+  int bbox[2][4] = { { 0, 0, 0, 0 }, { 0, 0, 0, 0 } };
+  gboolean any[2] = { FALSE, FALSE };
+  for(int hidpi = 0; hidpi < 2; hidpi++)
+  {
+    const double ppd = hidpi ? 2.0 : 1.0;
+    cairo_surface_t *surface = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, OVERLAY_SCREEN_W, OVERLAY_SCREEN_H);
+    cairo_surface_set_device_scale(surface, ppd, ppd);
+    const dt_masks_overlay_transform_t transform
+        = { .scale = scale / ppd,
+            .offset_x = 0.5 * (OVERLAY_SCREEN_W - scale * img_w) / ppd,
+            .offset_y = 0.5 * (OVERLAY_SCREEN_H - scale * img_h) / ppd };
+    dev->form_gui->formid = 0;
+    dev->form_gui->geometry_generation = 0;
+    dev->form_gui->group_selected = 0;
+    cairo_t *cr = cairo_create(surface);
+    cairo_set_source_rgb(cr, 0.12, 0.12, 0.12);
+    cairo_paint(cr);
+    dt_masks_events_post_expose_with(dev, NULL, cr, (int)(OVERLAY_SCREEN_W / ppd), (int)(OVERLAY_SCREEN_H / ppd), -1, -1,
+                                     &transform);
+    cairo_destroy(cr);
+    any[hidpi] = _painted_bbox(surface, &bbox[hidpi][0], &bbox[hidpi][1], &bbox[hidpi][2], &bbox[hidpi][3]);
+    cairo_surface_destroy(surface);
+  }
+  const int tolerance = 12;   /* antialiasing plus the wider lines and handles of a 2x screen */
+  gboolean ok = any[0] && any[1];
+  for(int i = 0; i < 4; i++)
+    if(abs(bbox[0][i] - bbox[1][i]) > tolerance) ok = FALSE;
+  printf("[%s] %-26s hidpi placement: 1x bbox (%d,%d)-(%d,%d)  2x bbox (%d,%d)-(%d,%d)\n", ok ? "PASS" : "FAIL", name,
+         bbox[0][0], bbox[0][1], bbox[0][2], bbox[0][3], bbox[1][0], bbox[1][1], bbox[1][2], bbox[1][3]);
+  if(!ok) failures++;
+}
+
+static void _time_overlay_brush(dt_develop_t *dev, GList *nodes, const char *name, const char *dir,
+                                const int img_w, const int img_h, const int frames)
+{
+  dt_masks_form_t form = { 0 };
+  form.type = DT_MASKS_BRUSH;
+  form.functions = &dt_masks_functions_brush;
+  form.version = 6;
+  form.formid = 900;
+  g_strlcpy(form.name, name, sizeof(form.name));
+  form.points = nodes;
+  _time_overlay_form(dev, &form, name, dir, img_w, img_h, frames);
+  _check_hidpi_placement(dev, &form, name, img_w, img_h);
+  g_list_free_full(form.points, free);
+}
+
+/* A refcounted form the group can find in dev->forms, from a node list the harness built. */
+static dt_masks_form_t *_group_member(dt_develop_t *dev, const dt_masks_type_t type,
+                                      const dt_masks_functions_t *functions, GList *nodes, const int formid,
+                                      const char *name)
+{
+  dt_masks_form_t *form = dt_masks_create(type);
+  if(IS_NULL_PTR(form)) return NULL;
+  form->functions = functions;
+  form->version = 6;
+  form->formid = formid;
+  g_strlcpy(form->name, name, sizeof(form->name));
+  form->points = nodes;
+  dt_masks_append_form(dev, form);
+  return form;
+}
+
+/* The darkroom's actual frame: a group of many members, one of them selected, every one of
+ * them stroked on every full frame. The single-shape cases price a shape; this prices what a
+ * pipe frame pays for a mask-heavy edit, and what a static layer for the members that did not
+ * change saves. Eleven members: every brush and polygon of the corpus in one group. */
+static void _time_overlay_group(dt_develop_t *dev, const char *dir, const int frames)
+{
+  GList *members = NULL;
+  int id = 1000;
+  members = g_list_append(members, _group_member(dev, DT_MASKS_BRUSH, &dt_masks_functions_brush,
+                                                 _brush_from_table(_brush_1313, 11), id++, "brush-1313-cusp"));
+  members = g_list_append(members, _group_member(dev, DT_MASKS_BRUSH, &dt_masks_functions_brush,
+                                                 _brush_from_table(_brush_cusp_tbl, 3), id++, "brush-cusp"));
+  members = g_list_append(members, _group_member(dev, DT_MASKS_BRUSH, &dt_masks_functions_brush,
+                                                 _brush_from_table(_brush_hairpin_tbl, 3), id++, "brush-hairpin"));
+  members = g_list_append(members, _group_member(dev, DT_MASKS_BRUSH, &dt_masks_functions_brush,
+                                                 _brush_from_table(_brush_zigzag_tbl, 6), id++, "brush-zigzag"));
+  members = g_list_append(members, _group_member(dev, DT_MASKS_BRUSH, &dt_masks_functions_brush,
+                                                 _brush_from_table(_brush_selfcross_tbl, 5), id++, "brush-selfcross"));
+  members = g_list_append(members, _group_member(dev, DT_MASKS_BRUSH, &dt_masks_functions_brush,
+                                                 _brush_from_table(_brush_concave_tbl, 5), id++, "brush-concave"));
+  members = g_list_append(members, _group_member(dev, DT_MASKS_BRUSH, &dt_masks_functions_brush,
+                                                 _brush_from_table11(_brush_1360, 43), id++, "brush-1360"));
+  members = g_list_append(members, _group_member(dev, DT_MASKS_BRUSH, &dt_masks_functions_brush,
+                                                 _brush_from_table11(_brush_1352, 7), id++, "brush-1352"));
+  members = g_list_append(members, _group_member(dev, DT_MASKS_BRUSH, &dt_masks_functions_brush,
+                                                 _brush_from_table11(_brush_1074b, 8), id++, "brush-1074b"));
+  {
+    GList *nodes = NULL;
+    for(int i = 0; i < 15; i++)
+    {
+      const float *r = _polygon_1788045925[i];
+      nodes = g_list_append(nodes, _polygon_node(r[0], r[1], r[2], r[3], r[4], r[5], r[6]));
+    }
+    members = g_list_append(members, _group_member(dev, DT_MASKS_POLYGON, &dt_masks_functions_polygon, nodes, id++,
+                                                   "polygon-1788045925"));
+  }
+  {
+    GList *nodes = NULL;
+    const float radius = 0.028f;
+    for(int i = 0; i < 5; i++)
+    {
+      const float x = 0.20f + 0.13f * i;
+      nodes = g_list_append(nodes, _polygon_node(x, 0.35f, x, 0.35f, x, 0.35f, radius));
+      nodes = g_list_append(nodes, _polygon_node(x + 0.05f, 0.62f, x + 0.05f, 0.62f, x + 0.05f, 0.62f, radius));
+    }
+    nodes = g_list_append(nodes, _polygon_node(0.80f, 0.78f, 0.80f, 0.78f, 0.80f, 0.78f, radius));
+    nodes = g_list_append(nodes, _polygon_node(0.20f, 0.78f, 0.20f, 0.78f, 0.20f, 0.78f, radius));
+    members = g_list_append(members, _group_member(dev, DT_MASKS_POLYGON, &dt_masks_functions_polygon, nodes, id++,
+                                                   "polygon-comb"));
+  }
+
+  dt_masks_form_t *group = dt_masks_create(DT_MASKS_GROUP);
+  if(IS_NULL_PTR(group)) return;
+  group->formid = 999;
+  g_strlcpy(group->name, "group-11", sizeof(group->name));
+  int count = 0;
+  for(const GList *node = members; node; node = g_list_next(node))
+  {
+    const dt_masks_form_t *member = (const dt_masks_form_t *)node->data;
+    if(IS_NULL_PTR(member)) continue;
+    dt_masks_form_group_t *entry = (dt_masks_form_group_t *)calloc(1, sizeof(dt_masks_form_group_t));
+    entry->formid = member->formid;
+    entry->parentid = group->formid;
+    entry->state = DT_MASKS_STATE_USE | DT_MASKS_STATE_SHOW;
+    entry->opacity = 1.0f;
+    group->points = g_list_append(group->points, entry);
+    count++;
+  }
+  char name[64];
+  g_snprintf(name, sizeof(name), "group-%d", count);
+  _time_overlay_form(dev, group, name, dir, IMG_W, IMG_H, frames);
+
+  /* the members leave dev->forms with the list's own references; the harness's follow */
+  for(const GList *node = members; node; node = g_list_next(node))
+  {
+    dt_masks_form_t *member = (dt_masks_form_t *)node->data;
+    if(IS_NULL_PTR(member)) continue;
+    dev->forms = g_list_remove(dev->forms, member);
+    dt_masks_form_unref(member);   /* dev->forms's claim */
+    dt_masks_form_unref(member);   /* the harness's */
+  }
+  g_list_free(members);
+  dt_masks_form_unref(group);
+}
+
+static void _time_overlay_all(dt_develop_t *dev, const char *dir, const int frames)
+{
+  printf("overlay timing: %dx%d screen, fit zoom, %d frames per measurement\n", OVERLAY_SCREEN_W,
+         OVERLAY_SCREEN_H, frames);
+  _time_overlay_brush(dev, _brush_from_table(_brush_1313, 11), "brush-1313-cusp", dir, 5198, 3904, frames);
+  _time_overlay_brush(dev, _brush_from_table(_brush_cusp_tbl, 3), "brush-cusp", dir, IMG_W, IMG_H, frames);
+  _time_overlay_brush(dev, _brush_from_table(_brush_hairpin_tbl, 3), "brush-hairpin", dir, IMG_W, IMG_H, frames);
+  _time_overlay_brush(dev, _brush_from_table(_brush_zigzag_tbl, 6), "brush-zigzag", dir, IMG_W, IMG_H, frames);
+  _time_overlay_brush(dev, _brush_from_table(_brush_selfcross_tbl, 5), "brush-selfcross", dir, IMG_W, IMG_H, frames);
+  _time_overlay_brush(dev, _brush_from_table(_brush_concave_tbl, 5), "brush-concave", dir, IMG_W, IMG_H, frames);
+  _time_overlay_brush(dev, _brush_from_table11(_brush_1360, 43), "brush-1360-pressure-ramp", dir, 5184, 3888, frames);
+  _time_overlay_brush(dev, _brush_from_table11(_brush_1352, 7), "brush-1352-radius-step", dir, IMG_W, IMG_H, frames);
+  _time_overlay_brush(dev, _brush_from_table11(_brush_1074, 8), "brush-1074-flare", dir, 5184, 3456, frames);
+  _time_overlay_brush(dev, _brush_from_table11(_brush_1074b, 8), "brush-1074-flare-b", dir, 5184, 3456, frames);
+
+  {
+    dt_masks_form_t form = { 0 };
+    form.type = DT_MASKS_POLYGON;
+    form.functions = &dt_masks_functions_polygon;
+    form.version = 6;
+    form.formid = 106;
+    g_strlcpy(form.name, "polygon-1788045925", sizeof(form.name));
+    for(int i = 0; i < 15; i++)
+    {
+      const float *r = _polygon_1788045925[i];
+      form.points = g_list_append(form.points, _polygon_node(r[0], r[1], r[2], r[3], r[4], r[5], r[6]));
+    }
+    _time_overlay_form(dev, &form, "polygon-1788045925", dir, 5198, 3904, frames);
+    _check_hidpi_placement(dev, &form, "polygon-1788045925", 5198, 3904);
+    g_list_free_full(form.points, free);
+  }
+  {
+    dt_masks_form_t form = { 0 };
+    form.type = DT_MASKS_POLYGON;
+    form.functions = &dt_masks_functions_polygon;
+    form.version = 6;
+    form.formid = 104;
+    g_strlcpy(form.name, "polygon-comb", sizeof(form.name));
+    const float radius = 0.028f;
+    for(int i = 0; i < 5; i++)
+    {
+      const float x = 0.20f + 0.13f * i;
+      form.points = g_list_append(form.points, _polygon_node(x, 0.35f, x, 0.35f, x, 0.35f, radius));
+      form.points = g_list_append(form.points,
+                                  _polygon_node(x + 0.05f, 0.62f, x + 0.05f, 0.62f, x + 0.05f, 0.62f, radius));
+    }
+    form.points = g_list_append(form.points, _polygon_node(0.80f, 0.78f, 0.80f, 0.78f, 0.80f, 0.78f, radius));
+    form.points = g_list_append(form.points, _polygon_node(0.20f, 0.78f, 0.20f, 0.78f, 0.20f, 0.78f, radius));
+    _time_overlay_form(dev, &form, "polygon-comb", dir, IMG_W, IMG_H, frames);
+    _check_hidpi_placement(dev, &form, "polygon-comb", IMG_W, IMG_H);
+    g_list_free_full(form.points, free);
+  }
+  _time_overlay_group(dev, dir, frames);
+}
+
 int main(int argc, char *argv[])
 {
   /* Defaulting to "/tmp" wrote three dozen renders and CSVs to PREDICTABLE names in a
@@ -1289,6 +1937,11 @@ int main(int argc, char *argv[])
       g_free(default_baseline);
       default_baseline = g_strdup(argv[++i]);
     }
+    else if(!strcmp(argv[i], "--time-overlay"))
+    {
+      time_overlay = TRUE;
+      if(i + 1 < argc && argv[i + 1][0] != '-') time_overlay_frames = atoi(argv[++i]);
+    }
     else if(!strcmp(argv[i], "--no-baseline"))
     {
       g_free(default_baseline);
@@ -1312,8 +1965,13 @@ int main(int argc, char *argv[])
     return 1;
   }
 
+  /* MASKS_DEBUG=1 turns on the masks and perf traces, which is how the per-stage cost of an
+   * overlay frame is read; the corpus itself does not want them. */
+  const gboolean debug = !IS_NULL_PTR(g_getenv("MASKS_DEBUG"));
   char *argv_override[] = {
     "ansel-test-masks-geometry",
+    debug ? "-d" : "--conf", debug ? "masks" : "write_sidecar_files=FALSE",
+    debug ? "-d" : "--conf", debug ? "perf" : "write_sidecar_files=FALSE",
     "--library", ":memory:",
     "--datadir", ANSEL_TEST_SOURCE_DIR "/data",
     // the build tree keeps its modules under src/, laid out as the installed tree expects
@@ -1354,6 +2012,16 @@ int main(int argc, char *argv[])
   printf("geometry chain authoritative: %s\n",
          dt_geometry_chain_authoritative(dev.geometry_chain) ? "yes" : "NO -- outlines will be empty");
 
+  const char *step_env = g_getenv("MASKS_OUTLINE_STEP");
+  if(!IS_NULL_PTR(step_env)) _outline_step_override = MAX(0, atoi(step_env));
+  if(!time_overlay && _outline_step_override > 0)
+    printf("GUI outlines sampled every %d px\n", _outline_step_override);
+
+  if(time_overlay)
+  {
+    _time_overlay_all(&dev, dir, MAX(time_overlay_frames, 1));
+    return 0;
+  }
   printf("mask geometry corpus -> %s\n", dir);
 
   /* 0. THE REPORTED SHAPE. Issue #1313's follow-up: brush #1, cusp at node 8. The stroke loses
@@ -1412,6 +2080,10 @@ int main(int argc, char *argv[])
     _run_brush_case11_at(&dev, _brush_1360, 43, &c1360);
     _run_brush_case11_at(&dev, _brush_1352, 7, &c1352);
     _run_brush_case11_at(&dev, _brush_1352, 7, &c1352_small);
+    const _brush_case_t c1074 = { "brush-1074-flare", dir, 0, 5184, 3456 };
+    _run_brush_case11_at(&dev, _brush_1074, 8, &c1074);
+    const _brush_case_t c1074b = { "brush-1074-flare-b", dir, 0, 5184, 3456 };
+    _run_brush_case11_at(&dev, _brush_1074b, 8, &c1074b);
   }
 
   /* 3b. THE SECOND REPORTED SHAPE, polygon #2. Two defects were reported against it: the outer

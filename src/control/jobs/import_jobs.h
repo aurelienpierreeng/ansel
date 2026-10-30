@@ -102,7 +102,10 @@ void dt_control_import_data_free(dt_control_import_t *data);
  * @param index Incremental number in a sequence
  * @param img dt_image_t object. Needs to be inited with EXIF fields prior to calling this function, otherwise EXIF variables are expanded to defaults/fallback.
  * @param data Import options
- * @return gchar* The full path after variables expansion
+ * @return A newly allocated normalized path after variables expansion, or NULL
+ *         when expansion, cleanup, normalization, or path construction fails.
+ *         The caller releases it with dt_free(); data->target_dir remains owned
+ *         by data and is replaced only after releasing it before a re-expansion.
  */
 gchar *dt_build_filename_from_pattern(const char *const filename, const int index, dt_image_t *img, dt_control_import_t *data);
 

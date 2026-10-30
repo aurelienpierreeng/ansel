@@ -60,7 +60,7 @@
     Copyright (C) 2022 Victor Forsiuk.
     Copyright (C) 2023-2024 Alynx Zhou.
     Copyright (C) 2023 Ricky Moon.
-    Copyright (C) 2024-2025 Guillaume Stutin.
+    Copyright (C) 2024-2026 Guillaume Stutin.
     Copyright (C) 2024 Miguel Moquillon.
     
     darktable is free software: you can redistribute it and/or modify
@@ -144,6 +144,7 @@ typedef struct dt_control_gpx_apply_t
 typedef struct dt_control_export_t
 {
   int max_width, max_height, format_index, storage_index;
+  double scale_factor; // > 0: reduce by it, otherwise fit in max_width x max_height
   dt_imageio_module_data_t *sdata; // needed since the gui thread resets things like overwrite once the export
   // is dispatched, but we have to keep that information
   gboolean export_masks;
@@ -187,7 +188,8 @@ static int32_t _generic_dt_control_fileop_images_job_run(dt_job_t *job,
 
   if(film_id <= 0)
   {
-    dt_control_log(_("failed to create film roll for destination directory, aborting move.."));
+    dt_control_alert(_("File operation failed"),
+                     _("failed to create film roll for destination directory, aborting move.."), NULL);
     return -1;
   }
 
@@ -298,6 +300,7 @@ static int32_t dt_control_save_xmps_job_run(dt_job_t *job)
     const dt_image_write_sidecar_result_t res =
       forced ? dt_image_write_sidecar_file_forced(imgid)
              : dt_image_write_sidecar_file(imgid);
+    const char *alert_msg = NULL;
     switch(res)
     {
       case DT_IMAGE_WRITE_SIDECAR_OK:
@@ -306,15 +309,27 @@ static int32_t dt_control_save_xmps_job_run(dt_job_t *job)
         // xmp writing is off, or the setting changed mid-batch: nothing was attempted, nothing to report
         break;
       case DT_IMAGE_WRITE_SIDECAR_CACHE_BUSY:
-        dt_control_log(_("cannot write XMP file for image %i: the image cache entry is busy, try again."), imgid);
+        alert_msg = _("cannot write XMP file: the image cache entry is busy, try again.");
         break;
       case DT_IMAGE_WRITE_SIDECAR_NO_SOURCE_PATH:
-        dt_control_log(_("cannot write XMP file for image %i: the original file could not be found."), imgid);
+        alert_msg = _("cannot write XMP file: the original file could not be found.");
         break;
       case DT_IMAGE_WRITE_SIDECAR_IO_ERROR:
-        dt_control_log(_("cannot write XMP file for image %i: the target storage may be unavailable or read-only."),
-                       imgid);
+        alert_msg = _("cannot write XMP file: the target storage may be unavailable or read-only.");
         break;
+    }
+    if(!IS_NULL_PTR(alert_msg))
+    {
+      // The image goes under the message, by the path it has in the library: an id means nothing to
+      // the user, and dt_image_full_path() gives no path for an original that is gone.
+      char fullpath[DT_PATH_MAX] = { 0 };
+      const dt_image_t *img = dt_image_cache_get(imgid, 'r');
+      if(!IS_NULL_PTR(img))
+      {
+        g_strlcpy(fullpath, img->fullpath, sizeof(fullpath));
+        dt_image_cache_read_release(img);
+      }
+      dt_control_alert(_("Sidecar file not written"), alert_msg, fullpath[0] ? fullpath : NULL);
     }
   }
   return 0;
@@ -403,6 +418,14 @@ static int dt_control_merge_hdr_process(dt_imageio_module_data_t *datai, const c
 
   // just take a copy. also do it after blocking read, so filters will make sense.
   const dt_image_t *img = dt_image_cache_get(imgid, 'r');
+  if(IS_NULL_PTR(img))
+  {
+    // a merge missing one of its exposures is not the merge that was asked for
+    dt_control_alert(_("Image could not be opened"), _("Could not read image information from the database."),
+                     NULL);
+    d->abort = TRUE;
+    return 1;
+  }
   const dt_image_t image = *img;
   dt_image_cache_read_release(img);
 
@@ -551,11 +574,9 @@ static int32_t dt_control_merge_hdr_job_run(dt_job_t *job)
 
     const int32_t imgid = GPOINTER_TO_INT(t->data);
 
-    const gboolean is_scaling =
-      dt_conf_is_equal("plugins/lighttable/export/resizing", "scaling");
-
-    dt_imageio_export_with_flags(imgid, "unused", &buf, (dt_imageio_module_data_t *)&dat, TRUE, FALSE, FALSE, is_scaling,
-                                 FALSE, "pre:rawprepare", FALSE, FALSE, DT_COLORSPACE_NONE, NULL, DT_INTENT_LAST, NULL,
+    // the merge reads the images at full size: the export module's size settings are not its own
+    dt_imageio_export_with_flags(imgid, "unused", &buf, (dt_imageio_module_data_t *)&dat, TRUE, FALSE, FALSE, 0.0,
+                                 FALSE, FALSE, "pre:rawprepare", FALSE, FALSE, DT_COLORSPACE_NONE, NULL, DT_INTENT_LAST, NULL,
                                  NULL, num, total, NULL, NULL);
 
     t = g_list_next(t);
@@ -778,7 +799,8 @@ static int32_t dt_control_remove_images_job_run(dt_job_t *job)
 
   if(!remove_ok)
   {
-    dt_control_log(_("cannot remove local copy when the original file is not accessible."));
+    dt_control_alert(_("File operation failed"),
+                     _("cannot remove local copy when the original file is not accessible."), NULL);
     return 0;
   }
 
@@ -1323,6 +1345,25 @@ static int32_t dt_control_refresh_exif_run(dt_job_t *job)
 }
 
 
+/* Whether the image is still in the library and its file still on disk; tells the user when it is not. */
+static gboolean _export_source_available(const int32_t imgid)
+{
+  const dt_image_t *image = dt_image_cache_get(imgid, 'r');
+  if(IS_NULL_PTR(image)) return FALSE;
+
+  char imgfilename[DT_PATH_MAX] = { 0 };
+  gboolean from_cache = TRUE;
+  dt_image_full_path(image->id, imgfilename, sizeof(imgfilename), &from_cache, __FUNCTION__);
+  const gboolean available = g_file_test(imgfilename, G_FILE_TEST_IS_REGULAR);
+  if(!available)
+  {
+    dt_control_log(_("image `%s' is currently unavailable"), image->filename);
+    fprintf(stderr, "image `%s' is currently unavailable\n", imgfilename);
+  }
+  dt_image_cache_read_release(image);
+  return available;
+}
+
 static int32_t dt_control_export_job_run(dt_job_t *job)
 {
   dt_control_image_enumerator_t *params = (dt_control_image_enumerator_t *)dt_control_job_get_params(job);
@@ -1412,29 +1453,11 @@ static int32_t dt_control_export_job_run(dt_job_t *job)
     /* register export timestamp in cache */
     dt_image_cache_set_export_timestamp(imgid);
 
-    // check if image still exists:
-    const dt_image_t *image = dt_image_cache_get((int32_t)imgid, 'r');
-    if(image)
-    {
-      char imgfilename[DT_PATH_MAX] = { 0 };
-      gboolean from_cache = TRUE;
-      dt_image_full_path(image->id,  imgfilename,  sizeof(imgfilename),  &from_cache, __FUNCTION__);
-      if(!g_file_test(imgfilename, G_FILE_TEST_IS_REGULAR))
-      {
-        dt_control_log(_("image `%s' is currently unavailable"), image->filename);
-        fprintf(stderr, "image `%s' is currently unavailable\n", imgfilename);
-        // dt_image_remove(imgid);
-        dt_image_cache_read_release(image);
-      }
-      else
-      {
-        dt_image_cache_read_release(image);
-        if(mstorage->store(mstorage, sdata, imgid, mformat, fdata, num, total, TRUE,
-                           settings->export_masks, settings->icc_type, settings->icc_filename, settings->icc_intent,
-                           &metadata) != 0)
-          dt_control_job_cancel(job);
-      }
-    }
+    if(_export_source_available(imgid)
+       && mstorage->store(mstorage, sdata, imgid, mformat, fdata, settings->scale_factor, num, total, TRUE,
+                          settings->export_masks, settings->icc_type, settings->icc_filename,
+                          settings->icc_intent, &metadata) != 0)
+      dt_control_job_cancel(job);
 
     fraction += 1.0 / total;
     if(fraction > 1.0) fraction = 1.0;
@@ -1912,10 +1935,7 @@ static void dt_control_export_cleanup(void *p)
   dt_control_image_enumerator_cleanup(params);
 }
 
-void dt_control_export(GList *imgid_list, int max_width, int max_height, int format_index, int storage_index,
-                       gboolean high_quality, gboolean export_masks, char *style,
-                       dt_colorspaces_color_profile_type_t icc_type, const gchar *icc_filename,
-                       dt_iop_color_intent_t icc_intent, const gchar *metadata_export)
+void dt_control_export(GList *imgid_list, const dt_control_export_request_t *request)
 {
   dt_job_t *job = dt_control_job_create(&dt_control_export_job_run, "export");
   if(IS_NULL_PTR(job)) return;
@@ -1930,28 +1950,29 @@ void dt_control_export(GList *imgid_list, int max_width, int max_height, int for
   params->index = imgid_list;
 
   dt_control_export_t *data = params->data;
-  data->max_width = max_width;
-  data->max_height = max_height;
-  data->format_index = format_index;
-  data->storage_index = storage_index;
-  dt_imageio_module_storage_t *mstorage = dt_imageio_get_storage_by_index(storage_index);
+  data->max_width = request->max_width;
+  data->max_height = request->max_height;
+  data->scale_factor = request->scale_factor;
+  data->format_index = request->format_index;
+  data->storage_index = request->storage_index;
+  dt_imageio_module_storage_t *mstorage = dt_imageio_get_storage_by_index(request->storage_index);
   g_assert(mstorage);
   // get shared storage param struct (global sequence counter, one picasa connection etc)
   dt_imageio_module_data_t *sdata = mstorage->get_params(mstorage);
   if(IS_NULL_PTR(sdata))
   {
-    dt_control_log(_("failed to get parameters from storage module `%s', aborting export.."),
-                   mstorage->name(mstorage));
+    dt_control_alert(_("Export failed"), _("failed to get parameters from storage module, aborting export.."),
+                     mstorage->name(mstorage));
     dt_control_job_dispose(job);
     return;
   }
   data->sdata = sdata;
-  data->export_masks = export_masks;
-  g_strlcpy(data->style, style, sizeof(data->style));
-  data->icc_type = icc_type;
-  data->icc_filename = g_strdup(icc_filename);
-  data->icc_intent = icc_intent;
-  data->metadata_export = g_strdup(metadata_export);
+  data->export_masks = request->export_masks;
+  g_strlcpy(data->style, request->style, sizeof(data->style));
+  data->icc_type = request->icc_type;
+  data->icc_filename = g_strdup(request->icc_filename);
+  data->icc_intent = request->icc_intent;
+  data->metadata_export = g_strdup(request->metadata_export);
 
   dt_control_job_add_progress(job, _("export images"), TRUE);
   dt_control_add_job(dt_control_get_global(), DT_JOB_QUEUE_USER_EXPORT, job);

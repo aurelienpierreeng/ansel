@@ -555,6 +555,12 @@ int dt_exif_read_blob(uint8_t **buf, const char *path, const int32_t imgid, cons
       // GPS data
       dt_remove_exif_geotag(exifData);
       const dt_image_t *cimg = dt_image_cache_get(imgid, 'r');
+      if(IS_NULL_PTR(cimg))
+      {
+        std::cerr << "[exiv2 dt_exif_read_blob] " << path << ": could not load image " << imgid
+                  << ", no Exif data written" << std::endl;
+        return 0;
+      }
       if(!isnan(cimg->geoloc.longitude) && !isnan(cimg->geoloc.latitude))
       {
         exifData["Exif.GPSInfo.GPSVersionID"] = "02 02 00 00";

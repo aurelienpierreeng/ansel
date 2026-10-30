@@ -29,7 +29,8 @@
     Copyright (C) 2021 Marco Carrarini.
     Copyright (C) 2022 Emin Cavalic.
     Copyright (C) 2023 Alynx Zhou.
-    
+    Copyright (C) 2026 Guillaume Stutin.
+
     darktable is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
     the Free Software Foundation, either version 3 of the License, or
@@ -410,7 +411,8 @@ treeview separator,
 }
 
 *:disabled,
-#module-header .dt_iop_enable_button.dt_iop_enable_forced_off {
+#module-header .dt_iop_enable_button.dt_iop_enable_forced_off,
+.dt_supervisor_evictable {
   opacity: 0.5;
 }
 
@@ -499,6 +501,33 @@ treeview {
   border: none;
   background-image: none;
   background-color: transparent;
+}
+
+/**
+ * The editor a treeview opens on a cell is an ordinary entry, and it is the one entry in the
+ * application that does not sit over a solid surface: the row goes on painting its own text
+ * underneath it, so the 25% recessed fill shows the old value through the one being typed.
+ * @grey_25 is what that fill already composites to over a .dt_recessed_scroll, so an opaque
+ * background of it keeps the look of every other field and hides what is behind.
+ **/
+treeview entry {
+  background-color: @grey_25;
+}
+
+/**
+ * A row a click cannot act on says so by its text. Measured offscreen, against this theme: the
+ * text of an insensitive cell came out at #e5e0be where a live one is #ece2b3 -- the same white
+ * for any reader, so a greyed row read as an ordinary one. @disabled_fg_color is what the theme
+ * already means by "disabled" elsewhere, and it lands at #8a8b97: dimmer than the live text,
+ * still lighter than the row behind it, so the row stays legible while reading as dead.
+ *
+ * The state reaches a single cell, not only a whole disabled widget -- a cell renderer with
+ * sensitive == FALSE is drawn in the insensitive state -- which is why this one selector covers
+ * both the individual dead rows and a list greyed out as a whole. It has to be `treeview`, on the
+ * view's own node: `treeview text:disabled` matches nothing, measured.
+ **/
+treeview:disabled {
+  color: @disabled_fg_color;
 }
 
 /**

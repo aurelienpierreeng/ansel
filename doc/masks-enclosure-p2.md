@@ -2,12 +2,28 @@
 
 [TOC]
 
+> **First checked 2026-09-29.** This file was mechanically checked against `8f4638a04e` on 2026-09-29 — every `file:line` citation resolved, every backticked symbol looked up in the tree, every OPEN/planned status claim tested, and every gate or baseline number it quotes compared with `tools/check_module_boundaries.sh` and `tools/include_baseline.txt`. **No per-claim semantic read was done**: a citation that resolves can still describe the wrong thing, so this is a floor, not a verification. **The status was stale and is corrected**: P2 has largely shipped as `src/develop/masks_group.h`, and the ratchet's `masks_member_baseline` is 68 against the 102 this survey measured.
+
 ## Status
 
-**Design only — no API code has been written yet.** This document exists so the design survives
-between sessions and contributors, in the same spirit as `doc/masks_history_dedup.md`. Phases P0
-and P1 of the plan have shipped (typed rasterisation result; the section-9 ratchet in
-`tools/check_module_boundaries.sh`); P2 is what drains the counts that ratchet holds.
+~~**Design only — no API code has been written yet.**~~ **P2 has largely shipped** (checked
+2026-09-29 at `8f4638a04e`). `src/develop/masks_group.h` exists and carries the API this document
+designs, with the `dt_masks_result_t` return and the id-keyed, `dev`-first shape argued for
+below: `dt_masks_group_set_member_operation()` (:135), `dt_masks_group_get_member()` (:152),
+`dt_masks_group_contains()` (:165), `dt_masks_group_covers_shapes()` (:180),
+`dt_masks_group_first_use()` (:197), `dt_masks_group_find_holder()` (:212),
+`dt_masks_group_list()` (:229), `dt_masks_group_set_member_opacity()` (:251), plus
+`dt_masks_form_get_info()` and `dt_masks_group_copy_members()`.
+
+The ratchet says how much it drained: `tools/check_module_boundaries.sh:423` now reads
+`masks_member_baseline=68`, against the **102** this survey measured — a third of the external
+struct accesses are gone. The other counters stand at `masks_include_baseline=18`,
+`masks_gui_include_baseline=11`, `masks_write_baseline=16`, `masks_alloc_baseline=1`,
+`masks_forms_baseline=67`, `masks_row_baseline=27`. `src/develop/masks` is **still not closed**,
+which is what those non-zero baselines mean, so the rest of this document is live work rather
+than history.
+
+Phases P0 and P1 shipped before it (typed rasterisation result; the section-9 ratchet itself).
 
 It was produced by surveying every one of the ~385 external accesses in the five consumer files,
 grouping them by *intent* rather than by struct mechanics, then designing three independent APIs
@@ -28,8 +44,13 @@ the tree already distinguishes the cases positionally:
   locks and COW-touches internally; returns a value ⟹ it reads under the read lock.
 
 Only the *resolvers* come in pairs. That removes about six functions relative to the CRUD proposal,
-and it makes `iop/spots.c:441/561` — which resolves `self->dev->forms` from the pipeline thread, the
-retouch bug that never got migrated — visibly wrong at the call site.
+and it makes a pipeline-thread lookup in `self->dev->forms` — the bug retouch and spots both carried
+in `modify_roi_in()` and `process()` — visibly wrong at the call site.
+
+The first resolver of the snapshot side already exists and takes the pipe itself rather than its
+list: `dt_masks_get_from_id_in_pipe(const dt_dev_pixelpipe_t *pipe, int id)` (`develop/masks.h`),
+used by retouch and spots on the pipeline thread. The pipe still names the world first, and callers
+no longer touch `pipe->forms`, which is what the `->forms` ratchet counts.
 
 Handles are non-negotiable for reads. **Verified:** `dt_masks_get_visible_form()` can return a
 `formid == 0` transient display group that is in neither `dev->forms` nor `dev->allforms`
@@ -113,7 +134,7 @@ must be what everyone else consumes.
 
 ```c
 dt_masks_form_t *dt_masks_get_group_from_id   (struct dt_develop_t *dev, int group_id);
-dt_masks_form_t *dt_masks_get_group_from_id_in(GList *forms, int group_id);   /* pipe->forms */
+dt_masks_form_t *dt_masks_get_group_from_id_in_pipe(const dt_dev_pixelpipe_t *pipe, int group_id);
 ```
 
 NULL unless it resolves *and* is a group. Collapses ~30 sites that write `dt_masks_get_from_id(...)`
@@ -166,8 +187,15 @@ gchar   *dt_masks_group_member_label           (struct dt_develop_t *dev, int gr
 
 The first two delete `blend_gui.c:1482-1521` outright — pure masks-graph queries with zero GUI
 content in a GUI file. **Depth-cap both at 32**, as `_masks_find_any_parent_group()` already does
-and neither copy does. `owner_group` replaces `dt_masks_form_group_find_any()` and **drops its COW
-side effect** — verified: that function copy-on-write-touches inside a *lookup*.
+and neither copy does. `owner_group` replaces the old any-parent lookup and **drops its COW
+side effect** — verified at survey time: that function copy-on-write-touched inside a *lookup*.
+It shipped as `dt_masks_group_find_holder()` (`develop/masks_group.h:212`); the surviving
+entry-level helper is `dt_masks_form_group_find_entry()` (`masks/masks_gui.c:1368`), which is a
+plain read. Neither `dt_masks_form_group_find_any()` nor `_masks_find_any_parent_group()` exists
+any more, so take the names in this paragraph as the survey's, not the tree's — the depth cap
+they were cited for lives in the recursive search at `masks_gui.c:1496-1501`, whose comment
+explains that a raw DB/XMP load does not validate against a group referencing its own ancestor
+(the interactive path guards it in `dt_masks_group_add_form`).
 
 ### Writes — all id-keyed, all COW internal, all returning `dt_masks_result_t`
 
@@ -195,7 +223,7 @@ dt_masks_result_t dt_masks_form_set_retouch_mode(struct dt_develop_t *dev, int f
 int               dt_masks_group_create_for_module(struct dt_iop_module_t *module, const char *name);
 ```
 
-> **The line numbers below are historical.** They were verified against `libs/masks.c` as it stood
+> **The line numbers below are historical.** They were verified against `libs/shape_manager.c` as it stood
 > when this survey was made. That file is now `libs/shape_manager.c` and has been substantially
 > rewritten since — the panel was split into two lists and grew per-row actions — so the numbers
 > locate nothing in the current tree. The file and symbol names are still right; find the code by

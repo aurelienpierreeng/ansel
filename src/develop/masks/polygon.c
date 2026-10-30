@@ -96,7 +96,7 @@ static void _polygon_get_XY(const float p0_x, const float p0_y, const float p1_x
  */
 static gboolean _polygon_border_get_XY(const float p0_x, const float p0_y, const float p1_x, const float p1_y,
                                    const float p2_x, const float p2_y, const float p3_x, const float p3_y,
-                                   const float t, const float radius,
+                                   const float t, const float radius, float radius_rate,
                                    float *center_x, float *center_y, float *border_x, float *border_y)
 {
   // we get the point
@@ -153,12 +153,32 @@ static gboolean _polygon_border_get_XY(const float p0_x, const float p0_y, const
     }
     /* only a curve collapsed to a single point has no direction at all */
     if(dx == 0.0 && dy == 0.0) return FALSE;
+
+    /* a limit direction has a direction and no speed, so no rate can be taken against it */
+    radius_rate = 0.0f;
   }
 
-  const double l = 1.0 / sqrt(dx * dx + dy * dy);
-  *border_x = (*center_x) + radius * dy * l;
-  *border_y = (*center_y) - radius * dx * l;
+  /* on the envelope of the feather's discs, not on the normal: see
+   * dt_masks_outline_envelope_offset() */
+  const float centre[2] = { *center_x, *center_y };
+  float border[2];
+  dt_masks_outline_envelope_offset(centre, (float)dx, (float)dy, radius, radius_rate, border);
+  *border_x = border[0];
+  *border_y = border[1];
   return TRUE;
+}
+
+/* The feather along a segment eases from one node's to the other's, r1 + (r2 - r1) * t^2 (3 - 2t);
+ * its rate by t, (r2 - r1) * 6 t (1 - t), is zero at both ends, so the end samples stay on the
+ * normal and the joints built from them are unchanged. */
+static inline float _polygon_radius_at(const float r1, const float r2, const double t)
+{
+  return r1 + (r2 - r1) * t * t * (3.0 - 2.0 * t);
+}
+
+static inline float _polygon_radius_rate_at(const float r1, const float r2, const double t)
+{
+  return (r2 - r1) * 6.0 * t * (1.0 - t);
 }
 
 /**
@@ -319,7 +339,7 @@ static gboolean _polygon_is_clockwise(dt_masks_form_t *mask_form)
 static void _polygon_points_recurs_border_gaps(const float *const center_max, const float *const border_min,
                                                const float *const border_max, dt_masks_dynbuf_t *draw_points,
                                                dt_masks_dynbuf_t *draw_border,
-                                               gboolean clockwise)
+                                               gboolean clockwise, const int step)
 {
   // we want to find the start and end angles
   double angle_start = atan2f(border_min[1] - center_max[1], border_min[0] - center_max[0]);
@@ -342,12 +362,12 @@ static void _polygon_points_recurs_border_gaps(const float *const center_max, co
   const float radius_end = sqrtf((border_max[1] - center_max[1]) * (border_max[1] - center_max[1])
                                  + (border_max[0] - center_max[0]) * (border_max[0] - center_max[0]));
 
-  // and the max length of the circle arc
+  // and the max length of the circle arc, in samples
   int step_count = 0;
   if(angle_end > angle_start)
-    step_count = (angle_end - angle_start) * fmaxf(radius_start, radius_end);
+    step_count = (angle_end - angle_start) * fmaxf(radius_start, radius_end) / (float)step;
   else
-    step_count = (angle_start - angle_end) * fmaxf(radius_start, radius_end);
+    step_count = (angle_start - angle_end) * fmaxf(radius_start, radius_end) / (float)step;
   if(step_count < 2) return;
 
   // and now we add the points
@@ -408,8 +428,8 @@ static void _polygon_points_recurs(float *segment_start, float *segment_end,
     have_border_min =
     _polygon_border_get_XY(segment_start[0], segment_start[1], segment_start[2], segment_start[3],
                            segment_end[2], segment_end[3], segment_end[0], segment_end[1], t_min,
-                           segment_start[4]
-                               + (segment_end[4] - segment_start[4]) * t_min * t_min * (3.0 - 2.0 * t_min),
+                           _polygon_radius_at(segment_start[4], segment_end[4], t_min),
+                           _polygon_radius_rate_at(segment_start[4], segment_end[4], t_min),
                            polygon_min, polygon_min + 1, border_min, border_min + 1);
   }
   if(!have_max)
@@ -417,8 +437,8 @@ static void _polygon_points_recurs(float *segment_start, float *segment_end,
     have_border_max =
     _polygon_border_get_XY(segment_start[0], segment_start[1], segment_start[2], segment_start[3],
                            segment_end[2], segment_end[3], segment_end[0], segment_end[1], t_max,
-                           segment_start[4]
-                               + (segment_end[4] - segment_start[4]) * t_max * t_max * (3.0 - 2.0 * t_max),
+                           _polygon_radius_at(segment_start[4], segment_end[4], t_max),
+                           _polygon_radius_rate_at(segment_start[4], segment_end[4], t_max),
                            polygon_max, polygon_max + 1, border_max, border_max + 1);
   }
 
@@ -448,8 +468,7 @@ static void _polygon_points_recurs(float *segment_start, float *segment_end,
          * at the top level and (0, 0) -- the image origin -- below it, written to the buffer
          * as geometry. A spoke of the right LENGTH along the chord's normal is always a valid
          * piece of the disc union. */
-        const float radius = segment_start[4]
-                             + (segment_end[4] - segment_start[4]) * t_max * t_max * (3.0 - 2.0 * t_max);
+        const float radius = _polygon_radius_at(segment_start[4], segment_end[4], t_max);
         dt_masks_outline_offset_along(polygon_max, segment_end[1] - segment_start[1],
                                       -(segment_end[0] - segment_start[0]), radius, border_max);
         have_border_max = TRUE;
@@ -568,7 +587,7 @@ static void _polygon_joint_arc(const _polygon_walk_t *const w, const float *cons
 {
   if(fabsf(to[0] - from[0]) <= 1.0f && fabsf(to[1] - from[1]) <= 1.0f) return;
   const gboolean clockwise = dt_masks_outline_short_way(centre, from, to, w->clockwise);
-  _polygon_points_recurs_border_gaps(centre, from, to, w->dpoints, w->dborder, clockwise);
+  _polygon_points_recurs_border_gaps(centre, from, to, w->dpoints, w->dborder, clockwise, w->pixel_threshold);
 }
 
 /* One segment of the walk: the joint at its start node, then every sample within a pixel of
@@ -586,9 +605,9 @@ static gboolean _polygon_walk_segment(const _polygon_walk_t *const w, _polygon_w
   float c1[2];
   float b1[2];
   const gboolean have_b0 = _polygon_border_get_XY(p1[0], p1[1], p1[2], p1[3], p2[2], p2[3], p2[0], p2[1], 0.0f,
-                                                  p1[4], c0, c0 + 1, b0, b0 + 1);
+                                                  p1[4], 0.0f, c0, c0 + 1, b0, b0 + 1);
   const gboolean have_b1 = _polygon_border_get_XY(p1[0], p1[1], p1[2], p1[3], p2[2], p2[3], p2[0], p2[1], 1.0f,
-                                                  p2[4], c1, c1 + 1, b1, b1 + 1);
+                                                  p2[4], 0.0f, c1, c1 + 1, b1, b1 + 1);
   if(!have_b0 && !have_b1) return FALSE;
   if(!have_b0) dt_masks_outline_offset_along(c0, b1[0] - c1[0], b1[1] - c1[1], p1[4], b0);
   if(!have_b1) dt_masks_outline_offset_along(c1, b0[0] - c0[0], b0[1] - c0[1], p2[4], b1);
@@ -670,10 +689,10 @@ static int _polygon_get_pts_border(dt_develop_t *develop, dt_masks_form_t *mask_
   const float input_width = dist->iwidth;
   const float input_height = dist->iheight;
 
-  /* Fixed at one pixel: the interior fill is a scanline over these samples and needs every
-   * row crossed; the pipe's mask_rasterization_step is a spoke-spacing budget, not a
-   * scanline one. */
-  const int pixel_threshold = 1;
+  /* The pipe's is fixed at one pixel: its interior fill is a scanline over these samples and
+   * needs every row crossed, and its mask_rasterization_step is a spoke-spacing budget, not a
+   * scanline one. The GUI fills nothing and samples at the density it shows. */
+  const int pixel_threshold = IS_NULL_PTR(dist->pipe) ? dist->rasterization_step : 1;
   const int node_count = (int)g_list_length(mask_form->points);
 
   dt_masks_dynbuf_t *dpoints = dt_masks_dynbuf_init(1000000, "polygon dpoints");
@@ -1152,6 +1171,10 @@ static void _polygon_get_distance(float point_x, float point_y, float radius,
   dt_masks_form_gui_points_t *gui_points
       = (dt_masks_form_gui_points_t *)g_list_nth_data(mask_gui->points, form_index);
   if(IS_NULL_PTR(gui_points)) return;
+  /* Nothing to walk when the cursor cannot reach a sample: the box every sample spans, grown by
+   * the cursor's reach, answers for the whole shape in four comparisons, and every answer
+   * initialised above is what the walk would have given -- nothing inside, nothing near. */
+  if(!dt_masks_gui_points_reach(gui_points, point_x, point_y, 2.0f * radius)) return;
 
   float min_dist_pixel = FLT_MAX;
 
@@ -2211,7 +2234,7 @@ static void _polygon_bounding_box(const float *const point_buffer, const float *
   *posy = ymin - 2;
 }
 
-static int _get_area(const dt_iop_module_t *const module, dt_dev_pixelpipe_t *pipe,
+static int _get_area(const dt_iop_module_t *const module, const dt_dev_pixelpipe_t *pipe,
                      const dt_dev_pixelpipe_iop_t *const piece,
                      dt_masks_form_t *const mask_form, int *width, int *height, int *posx, int *posy,
                      gboolean get_source)
@@ -2242,8 +2265,8 @@ static int _get_area(const dt_iop_module_t *const module, dt_dev_pixelpipe_t *pi
   return 0;
 }
 
-static dt_masks_raster_result_t _polygon_get_source_area(dt_iop_module_t *module, dt_dev_pixelpipe_t *pipe,
-                                   dt_dev_pixelpipe_iop_t *piece,
+static dt_masks_raster_result_t _polygon_get_source_area(const dt_iop_module_t *module, const dt_dev_pixelpipe_t *pipe,
+                                   const dt_dev_pixelpipe_iop_t *piece,
                                    dt_masks_form_t *mask_form, int *width, int *height, int *posx, int *posy)
 {
   *width = 0;
@@ -2254,7 +2277,7 @@ static dt_masks_raster_result_t _polygon_get_source_area(dt_iop_module_t *module
       _get_area(module, pipe, piece, mask_form, width, height, posx, posy, TRUE));
 }
 
-static dt_masks_raster_result_t _polygon_get_area(const dt_iop_module_t *const module, dt_dev_pixelpipe_t *pipe,
+static dt_masks_raster_result_t _polygon_get_area(const dt_iop_module_t *const module, const dt_dev_pixelpipe_t *pipe,
                              const dt_dev_pixelpipe_iop_t *const piece,
                              dt_masks_form_t *const mask_form,
                              int *width, int *height, int *posx, int *posy)
@@ -2363,7 +2386,7 @@ static inline int _falloff_bridge_queue(int *const dpoints, int dindex, const in
   return dindex;
 }
 
-static dt_masks_raster_result_t _polygon_get_mask(const dt_iop_module_t *const module, dt_dev_pixelpipe_t *pipe,
+static dt_masks_raster_result_t _polygon_get_mask(const dt_iop_module_t *const module, const dt_dev_pixelpipe_t *pipe,
                              const dt_dev_pixelpipe_iop_t *const piece,
                              dt_masks_form_t *const mask_form,
                              float **buffer, int *width, int *height, int *posx, int *posy)
@@ -2987,7 +3010,7 @@ static inline void _polygon_falloff_roi(float *buffer, int *p0, int *p1, int bw,
 
 // build a stamp which can be combined with other shapes in the same group
 // prerequisite: 'buffer' is all zeros
-static dt_masks_raster_result_t _polygon_get_mask_roi(const dt_iop_module_t *const module, dt_dev_pixelpipe_t *pipe,
+static dt_masks_raster_result_t _polygon_get_mask_roi(const dt_iop_module_t *const module, const dt_dev_pixelpipe_t *pipe,
                                  const dt_dev_pixelpipe_iop_t *const piece,
                                  dt_masks_form_t *const mask_form,
                                  const dt_iop_roi_t *roi, float *buffer,

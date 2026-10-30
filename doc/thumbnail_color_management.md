@@ -2,6 +2,8 @@
 
 [TOC]
 
+> **First checked 2026-09-29.** This file was mechanically checked against `8f4638a04e` on 2026-09-29 — every `file:line` citation resolved, every backticked symbol looked up in the tree, every OPEN/planned status claim tested, and every gate or baseline number it quotes compared with `tools/check_module_boundaries.sh` and `tools/include_baseline.txt`. **No per-claim semantic read was done**: a citation that resolves can still describe the wrong thing, so this is a floor, not a verification. Nothing was found wrong by those checks.
+
 to ease debugging the code will use DT_COLORSPACE_DISPLAY for images loaded without a color space mentioned in Exif or when explicitly exporting
 for the Display profile, while buffers get initialized as DT_COLORSPACE_NONE. if ever such a thumbnail gets encountered there is a bug
 (i.e., a code path where a thumbnail gets loaded without the color space being set).

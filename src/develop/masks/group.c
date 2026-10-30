@@ -161,6 +161,21 @@ static void _group_events_post_expose_draw(cairo_t *cr, float zoom_scale, dt_mas
   }
 }
 
+void dt_group_events_post_expose_except(cairo_t *cr, float zoom_scale, dt_masks_form_t *form,
+                                        dt_masks_form_gui_t *gui, const int except_pos)
+{
+  int pos = 0;
+  for(GList *fpts = form->points; fpts; fpts = g_list_next(fpts), pos++)
+    if(pos != except_pos) _group_events_post_expose_draw(cr, zoom_scale, form, gui, pos);
+}
+
+void dt_group_events_post_expose_only(cairo_t *cr, float zoom_scale, dt_masks_form_t *form,
+                                      dt_masks_form_gui_t *gui, const int pos)
+{
+  if(pos < 0 || pos >= (int)g_list_length(form->points)) return;
+  _group_events_post_expose_draw(cr, zoom_scale, form, gui, pos);
+}
+
 void dt_group_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_form_t *form,
                                  dt_masks_form_gui_t *gui)
 {
@@ -232,7 +247,7 @@ static int _inverse_mask(const dt_iop_module_t *const module, const dt_dev_pixel
   return 0;
 }
 
-static dt_masks_raster_result_t _group_get_mask(const dt_iop_module_t *const module, dt_dev_pixelpipe_t *pipe,
+static dt_masks_raster_result_t _group_get_mask(const dt_iop_module_t *const module, const dt_dev_pixelpipe_t *pipe,
                            const dt_dev_pixelpipe_iop_t *const piece,
                            dt_masks_form_t *const form,
                            float **buffer, int *width, int *height, int *posx, int *posy)
@@ -279,9 +294,9 @@ static dt_masks_raster_result_t _group_get_mask(const dt_iop_module_t *const mod
     dt_masks_form_t *sel = dt_masks_get_from_id(module->dev, fpt->formid);
     if(sel)
     {
-      const dt_masks_raster_result_t child
-          = dt_masks_get_mask(module, pipe, piece, sel, &bufs[nb_ok], &w[nb_ok], &h[nb_ok],
-                              &px[nb_ok], &py[nb_ok]);
+      dt_masks_area_t area;
+      const dt_masks_raster_result_t child = dt_masks_get_mask(module, pipe, piece, sel, &bufs[nb_ok], &area);
+      w[nb_ok] = area.width, h[nb_ok] = area.height, px[nb_ok] = area.x, py[nb_ok] = area.y;
       if(child == DT_MASKS_RASTER_ERROR)
       {
         err = DT_MASKS_RASTER_ERROR;
@@ -675,7 +690,36 @@ static uint64_t _group_prefix_hash(const dt_masks_form_t *const form, GList *mas
   return hash ? hash : 1;
 }
 
-static dt_masks_raster_result_t _group_get_mask_roi(const dt_iop_module_t *const restrict module, dt_dev_pixelpipe_t *pipe,
+/* Publish `fold` under `prefix`, unless a line already answers to it. dt_dev_pixelpipe_cache_get()
+ * hands back a reference, plus the write lock when it created the line, whether or not the buffer
+ * could be allocated: both go back on every path. */
+static void _group_publish_prefix(const uint64_t prefix, const float *const fold, const size_t npixels,
+                                  const dt_dev_pixelpipe_t *pipe)
+{
+  void *slot = NULL;
+  dt_pixel_cache_entry_t *entry = NULL;
+  const int created = dt_dev_pixelpipe_cache_get(prefix, npixels * sizeof(float), "masks group prefix",
+                                                IS_NULL_PTR(pipe) ? -1 : pipe->type, TRUE, &slot, &entry);
+  if(IS_NULL_PTR(entry)) return;
+
+  if(!created)
+  {
+    // already published: nothing to write, only the reference to hand back
+    dt_dev_pixelpipe_cache_ref_count_entry(FALSE, entry);
+    return;
+  }
+
+  // Created without a buffer: nothing a later render could resume from. Flagged while still held, so
+  // the release removes it.
+  if(IS_NULL_PTR(slot))
+    dt_dev_pixelpipe_cache_flag_auto_destroy(entry);
+  else
+    memcpy(slot, fold, npixels * sizeof(float));
+  dt_dev_pixelpipe_cache_wrlock_entry(FALSE, entry);
+  dt_dev_pixelpipe_cache_ref_count_entry(FALSE, entry);
+}
+
+static dt_masks_raster_result_t _group_get_mask_roi(const dt_iop_module_t *const restrict module, const dt_dev_pixelpipe_t *pipe,
                                const dt_dev_pixelpipe_iop_t *const restrict piece,
                                dt_masks_form_t *const form, const dt_iop_roi_t *const roi,
                                float *const restrict buffer, dt_iop_roi_t *touched)
@@ -710,10 +754,21 @@ static dt_masks_raster_result_t _group_get_mask_roi(const dt_iop_module_t *const
     const uint64_t prefix = _group_prefix_hash(form, masks, piece, roi, count);
     if(prefix == 0) break;
 
+    /* Retained, not peeked. A prefix sits at refcount 0 between renders, so any thread's eviction
+     * may free it at any moment: dt_dev_pixelpipe_cache_peek() takes no reference, and the entry
+     * it returns can be gone before the read lock below is taken. The lookup and the reference
+     * are therefore one step, under the cache lock, and the reference is what the release at the
+     * end of this block hands back -- releasing after a peek drops one this code never took. */
     void *cached = NULL;
     dt_pixel_cache_entry_t *entry = NULL;
-    if(dt_dev_pixelpipe_cache_peek(prefix, &cached, &entry, -1, NULL) && !IS_NULL_PTR(cached))
+    if(dt_dev_pixelpipe_cache_ref_host_entry_by_hash(prefix, &cached, &entry))
     {
+      // A hash identifies content, never a size: refuse a line too short for this ROI.
+      if(dt_pixel_cache_entry_get_size(entry) < npixels * sizeof(float))
+      {
+        dt_dev_pixelpipe_cache_ref_count_entry(FALSE, entry);
+        continue;
+      }
       dt_dev_pixelpipe_cache_rdlock_entry(TRUE, entry);
       memcpy(buffer, cached, npixels * sizeof(float));
       dt_dev_pixelpipe_cache_rdlock_entry(FALSE, entry);
@@ -897,22 +952,7 @@ static dt_masks_raster_result_t _group_get_mask_roi(const dt_iop_module_t *const
      && !IS_NULL_PTR(publishable))
   {
     const uint64_t prefix = _group_prefix_hash(form, masks, piece, roi, shape_count - 1);
-    if(prefix != 0)
-    {
-      void *slot = NULL;
-      dt_pixel_cache_entry_t *entry = NULL;
-      const int created = dt_dev_pixelpipe_cache_get(prefix, npixels * sizeof(float), "masks group prefix",
-                                                    IS_NULL_PTR(pipe) ? -1 : pipe->type, TRUE, &slot, &entry);
-      if(!IS_NULL_PTR(slot))
-      {
-        if(created)
-        {
-          memcpy(slot, publishable, npixels * sizeof(float));
-          dt_dev_pixelpipe_cache_wrlock_entry(FALSE, entry);
-        }
-        dt_dev_pixelpipe_cache_ref_count_entry(FALSE, entry);
-      }
-    }
+    if(prefix != 0) _group_publish_prefix(prefix, publishable, npixels, pipe);
   }
 
   dt_pixelpipe_cache_free_align(publishable);
@@ -920,7 +960,7 @@ static dt_masks_raster_result_t _group_get_mask_roi(const dt_iop_module_t *const
   return err;
 }
 
-dt_masks_raster_result_t dt_masks_group_render_roi(dt_iop_module_t *module, dt_dev_pixelpipe_t *pipe,
+dt_masks_raster_result_t dt_masks_group_render_roi(dt_iop_module_t *module, const dt_dev_pixelpipe_t *pipe,
                                                    const dt_dev_pixelpipe_iop_t *piece, dt_masks_form_t *form,
                                                    const dt_iop_roi_t *roi, float *buffer)
 {

@@ -53,6 +53,8 @@
 #include "iop/drawlayer/brush.h"
 #include "iop/drawlayer/cache.h"
 #include "iop/drawlayer/common.h"
+#include "iop/drawlayer/conf.h"
+#include "iop/drawlayer/layers.h"
 #include "iop/drawlayer/coordinates.h"
 #include "iop/drawlayer/io.h"
 #include "iop/drawlayer/module.h"
@@ -122,23 +124,11 @@ typedef struct drawlayer_preview_background_t
 typedef dt_drawlayer_runtime_request_t drawlayer_runtime_request_t;
 typedef dt_drawlayer_runtime_context_t drawlayer_runtime_host_context_t;
 
-#define _commit_dabs dt_drawlayer_commit_dabs
-#define _flush_layer_cache dt_drawlayer_flush_layer_cache
-#define _sync_widget_cache dt_drawlayer_sync_widget_cache
-#define _set_drawlayer_pipeline_realtime_mode dt_drawlayer_set_pipeline_realtime_mode
-#define _ensure_layer_cache dt_drawlayer_ensure_layer_cache
-#define _release_all_base_patch_extra_refs dt_drawlayer_release_all_base_patch_extra_refs
-#define _drawlayer_wait_for_rasterization_modal dt_drawlayer_wait_for_rasterization_modal
-#define _current_live_padding dt_drawlayer_current_live_padding
-#define _layer_to_widget_coords dt_drawlayer_layer_to_widget_coords
-#define _touch_stroke_commit_hash dt_drawlayer_touch_stroke_commit_hash
-#define _drawlayer_runtime_collect_inputs NULL
-#define _drawlayer_runtime_perform_action NULL
 
 gboolean dt_drawlayer_commit_dabs(dt_iop_module_t *self, gboolean record_history);
 gboolean dt_drawlayer_flush_layer_cache(dt_iop_module_t *self);
 static void _sync_mode_sensitive_widgets(dt_iop_module_t *self);
-static void _refresh_layer_widgets(dt_iop_module_t *self);
+void dt_drawlayer_refresh_layer_widgets(dt_iop_module_t *self);
 static void _sync_layer_controls(dt_iop_module_t *self);
 static void _sanitize_requested_layer_name(const char *requested, char *name, size_t name_size);
 static gboolean _prompt_layer_name_dialog(const char *title, const char *message, const char *initial_name,
@@ -150,15 +140,12 @@ static dt_drawlayer_runtime_result_t _update_gui_runtime_manager(dt_iop_module_t
                                                                  dt_iop_drawlayer_gui_data_t *g,
                                                                  dt_drawlayer_runtime_event_t event,
                                                                  gboolean flush_pending);
-static void _sync_cached_brush_colors(dt_iop_module_t *self, const float display_rgb[3]);
 
 typedef struct drawlayer_wait_dialog_t
 {
   GtkWidget *dialog;
 } drawlayer_wait_dialog_t;
 
-#include "drawlayer/conf.c"
-#include "drawlayer/coordinates.c"
 #include "control/signal.h"
 
 /** @brief Convert one display-space brush color snapshot to pipeline space. */
@@ -188,14 +175,14 @@ static void _brush_pipeline_color_from_display(dt_iop_module_t *self, const floa
     }
   }
 
-  const float gain = exp2f(_conf_hdr_exposure());
+  const float gain = exp2f(dt_drawlayer_conf_hdr_exposure());
   pipeline_rgb[0] *= gain;
   pipeline_rgb[1] *= gain;
   pipeline_rgb[2] *= gain;
 }
 
 /** @brief Cache brush colors in GUI state so stroke input snapshots don't re-transform per event. */
-static void _sync_cached_brush_colors(dt_iop_module_t *self, const float display_rgb[3])
+void dt_drawlayer_sync_cached_brush_colors(dt_iop_module_t *self, const float display_rgb[3])
 {
   dt_iop_drawlayer_gui_data_t *g = self ? (dt_iop_drawlayer_gui_data_t *)dt_iop_gui_data(self) : NULL;
   if(IS_NULL_PTR(g) || !display_rgb) return;
@@ -207,10 +194,19 @@ static void _sync_cached_brush_colors(dt_iop_module_t *self, const float display
   g->ui.brush_color_valid = TRUE;
 }
 
-static void _fill_input_brush_settings(dt_iop_module_t *self, dt_drawlayer_paint_raw_input_t *input)
+/**
+ * @brief Re-resolve the brush from conf into the GUI-side cache.
+ *
+ * Every read here parses a string (`dt_conf_get_float` -> `dt_calculator_solve`), so this
+ * runs when something CHANGES the brush, not when the pointer moves. Its three runtime
+ * writers are `dt_drawlayer_conf_sync_params_from_gui` (every widget), the colour setter, and `scrolled()`;
+ * `gui_update`, `change_image` and `gui_focus` invalidate as well, so a path nobody
+ * enumerated still refills on the next non-motion event.
+ */
+static void _refresh_brush_settings_cache(dt_iop_drawlayer_gui_data_t *g)
 {
-  if(IS_NULL_PTR(self) || IS_NULL_PTR(input)) return;
-  dt_iop_drawlayer_gui_data_t *g = (dt_iop_drawlayer_gui_data_t *)dt_iop_gui_data(self);
+  if(IS_NULL_PTR(g)) return;
+  dt_drawlayer_brush_settings_t *const c = &g->ui.brush_settings;
 
   uint32_t map_flags = 0u;
   if(dt_conf_get_bool(DRAWLAYER_CONF_MAP_PRESSURE_SIZE)) map_flags |= DRAWLAYER_INPUT_MAP_PRESSURE_SIZE;
@@ -226,6 +222,53 @@ static void _fill_input_brush_settings(dt_iop_module_t *self, dt_drawlayer_paint
   if(dt_conf_get_bool(DRAWLAYER_CONF_MAP_ACCEL_FLOW)) map_flags |= DRAWLAYER_INPUT_MAP_ACCEL_FLOW;
   if(dt_conf_get_bool(DRAWLAYER_CONF_MAP_ACCEL_SOFTNESS)) map_flags |= DRAWLAYER_INPUT_MAP_ACCEL_SOFTNESS;
 
+  c->map_flags = map_flags;
+  c->pressure_profile = (uint8_t)dt_drawlayer_conf_mapping_profile(DRAWLAYER_CONF_PRESSURE_PROFILE);
+  c->tilt_profile = (uint8_t)dt_drawlayer_conf_mapping_profile(DRAWLAYER_CONF_TILT_PROFILE);
+  c->accel_profile = (uint8_t)dt_drawlayer_conf_mapping_profile(DRAWLAYER_CONF_ACCEL_PROFILE);
+  c->distance_percent = dt_drawlayer_conf_distance() / 100.0f;
+  c->smoothing_percent = dt_drawlayer_conf_smoothing() / 100.0f;
+  c->brush_radius = dt_drawlayer_conf_size();
+  c->brush_opacity = dt_drawlayer_conf_opacity() / 100.0f;
+  c->brush_flow = dt_drawlayer_conf_flow() / 100.0f;
+  c->brush_hardness = dt_drawlayer_conf_hardness();
+  c->brush_sprinkles = dt_drawlayer_conf_sprinkles() / 100.0f;
+  c->brush_sprinkle_size = dt_drawlayer_conf_sprinkle_size();
+  c->brush_sprinkle_coarseness = dt_drawlayer_conf_sprinkle_coarseness() / 100.0f;
+  c->brush_shape = dt_drawlayer_conf_brush_shape();
+  c->brush_mode = dt_drawlayer_conf_brush_mode();
+  g->ui.brush_settings_valid = TRUE;
+}
+
+void dt_drawlayer_invalidate_brush_settings_cache(dt_iop_drawlayer_gui_data_t *g)
+{
+  if(!IS_NULL_PTR(g)) g->ui.brush_settings_valid = FALSE;
+}
+
+static void _fill_input_brush_settings(dt_iop_module_t *self, dt_drawlayer_paint_raw_input_t *input)
+{
+  if(IS_NULL_PTR(self) || IS_NULL_PTR(input)) return;
+  dt_iop_drawlayer_gui_data_t *g = (dt_iop_drawlayer_gui_data_t *)dt_iop_gui_data(self);
+  if(!IS_NULL_PTR(g) && !g->ui.brush_settings_valid) _refresh_brush_settings_cache(g);
+
+  /* Only reachable without GUI data, where there is nowhere to cache. */
+  uint32_t map_flags = 0u;
+  if(IS_NULL_PTR(g))
+  {
+    if(dt_conf_get_bool(DRAWLAYER_CONF_MAP_PRESSURE_SIZE)) map_flags |= DRAWLAYER_INPUT_MAP_PRESSURE_SIZE;
+    if(dt_conf_get_bool(DRAWLAYER_CONF_MAP_PRESSURE_OPACITY)) map_flags |= DRAWLAYER_INPUT_MAP_PRESSURE_OPACITY;
+    if(dt_conf_get_bool(DRAWLAYER_CONF_MAP_PRESSURE_FLOW)) map_flags |= DRAWLAYER_INPUT_MAP_PRESSURE_FLOW;
+    if(dt_conf_get_bool(DRAWLAYER_CONF_MAP_PRESSURE_SOFTNESS)) map_flags |= DRAWLAYER_INPUT_MAP_PRESSURE_SOFTNESS;
+    if(dt_conf_get_bool(DRAWLAYER_CONF_MAP_TILT_SIZE)) map_flags |= DRAWLAYER_INPUT_MAP_TILT_SIZE;
+    if(dt_conf_get_bool(DRAWLAYER_CONF_MAP_TILT_OPACITY)) map_flags |= DRAWLAYER_INPUT_MAP_TILT_OPACITY;
+    if(dt_conf_get_bool(DRAWLAYER_CONF_MAP_TILT_FLOW)) map_flags |= DRAWLAYER_INPUT_MAP_TILT_FLOW;
+    if(dt_conf_get_bool(DRAWLAYER_CONF_MAP_TILT_SOFTNESS)) map_flags |= DRAWLAYER_INPUT_MAP_TILT_SOFTNESS;
+    if(dt_conf_get_bool(DRAWLAYER_CONF_MAP_ACCEL_SIZE)) map_flags |= DRAWLAYER_INPUT_MAP_ACCEL_SIZE;
+    if(dt_conf_get_bool(DRAWLAYER_CONF_MAP_ACCEL_OPACITY)) map_flags |= DRAWLAYER_INPUT_MAP_ACCEL_OPACITY;
+    if(dt_conf_get_bool(DRAWLAYER_CONF_MAP_ACCEL_FLOW)) map_flags |= DRAWLAYER_INPUT_MAP_ACCEL_FLOW;
+    if(dt_conf_get_bool(DRAWLAYER_CONF_MAP_ACCEL_SOFTNESS)) map_flags |= DRAWLAYER_INPUT_MAP_ACCEL_SOFTNESS;
+  }
+
   float display_rgb[3] = { 0.0f };
   float pipeline_rgb[3] = { 0.0f };
   if(!IS_NULL_PTR(g) && g->ui.brush_color_valid)
@@ -235,8 +278,8 @@ static void _fill_input_brush_settings(dt_iop_module_t *self, dt_drawlayer_paint
   }
   else
   {
-    _conf_display_color(display_rgb);
-    if(!IS_NULL_PTR(g)) _sync_cached_brush_colors(self, display_rgb);
+    dt_drawlayer_conf_display_color(display_rgb);
+    if(!IS_NULL_PTR(g)) dt_drawlayer_sync_cached_brush_colors(self, display_rgb);
     if(!IS_NULL_PTR(g) && g->ui.brush_color_valid)
     {
       memcpy(display_rgb, g->ui.brush_display_color, sizeof(display_rgb));
@@ -251,21 +294,22 @@ static void _fill_input_brush_settings(dt_iop_module_t *self, dt_drawlayer_paint
     }
   }
 
-  input->map_flags = map_flags;
-  input->pressure_profile = (uint8_t)_conf_mapping_profile(DRAWLAYER_CONF_PRESSURE_PROFILE);
-  input->tilt_profile = (uint8_t)_conf_mapping_profile(DRAWLAYER_CONF_TILT_PROFILE);
-  input->accel_profile = (uint8_t)_conf_mapping_profile(DRAWLAYER_CONF_ACCEL_PROFILE);
-  input->distance_percent = _conf_distance() / 100.0f;
-  input->smoothing_percent = _conf_smoothing() / 100.0f;
-  input->brush_radius = _conf_size();
-  input->brush_opacity = _conf_opacity() / 100.0f;
-  input->brush_flow = _conf_flow() / 100.0f;
-  input->brush_hardness = _conf_hardness();
-  input->brush_sprinkles = _conf_sprinkles() / 100.0f;
-  input->brush_sprinkle_size = _conf_sprinkle_size();
-  input->brush_sprinkle_coarseness = _conf_sprinkle_coarseness() / 100.0f;
-  input->brush_shape = _conf_brush_shape();
-  input->brush_mode = _conf_brush_mode();
+  const dt_drawlayer_brush_settings_t *const c = IS_NULL_PTR(g) ? NULL : &g->ui.brush_settings;
+  input->map_flags = c ? c->map_flags : map_flags;
+  input->pressure_profile = c ? c->pressure_profile : (uint8_t)dt_drawlayer_conf_mapping_profile(DRAWLAYER_CONF_PRESSURE_PROFILE);
+  input->tilt_profile = c ? c->tilt_profile : (uint8_t)dt_drawlayer_conf_mapping_profile(DRAWLAYER_CONF_TILT_PROFILE);
+  input->accel_profile = c ? c->accel_profile : (uint8_t)dt_drawlayer_conf_mapping_profile(DRAWLAYER_CONF_ACCEL_PROFILE);
+  input->distance_percent = c ? c->distance_percent : dt_drawlayer_conf_distance() / 100.0f;
+  input->smoothing_percent = c ? c->smoothing_percent : dt_drawlayer_conf_smoothing() / 100.0f;
+  input->brush_radius = c ? c->brush_radius : dt_drawlayer_conf_size();
+  input->brush_opacity = c ? c->brush_opacity : dt_drawlayer_conf_opacity() / 100.0f;
+  input->brush_flow = c ? c->brush_flow : dt_drawlayer_conf_flow() / 100.0f;
+  input->brush_hardness = c ? c->brush_hardness : dt_drawlayer_conf_hardness();
+  input->brush_sprinkles = c ? c->brush_sprinkles : dt_drawlayer_conf_sprinkles() / 100.0f;
+  input->brush_sprinkle_size = c ? c->brush_sprinkle_size : dt_drawlayer_conf_sprinkle_size();
+  input->brush_sprinkle_coarseness = c ? c->brush_sprinkle_coarseness : dt_drawlayer_conf_sprinkle_coarseness() / 100.0f;
+  input->brush_shape = c ? c->brush_shape : dt_drawlayer_conf_brush_shape();
+  input->brush_mode = c ? c->brush_mode : dt_drawlayer_conf_brush_mode();
   input->color[0] = pipeline_rgb[0];
   input->color[1] = pipeline_rgb[1];
   input->color[2] = pipeline_rgb[2];
@@ -298,7 +342,7 @@ static void _fill_input_layer_coords(dt_iop_module_t *self, dt_drawlayer_paint_r
              input->have_layer_coords ? 1 : 0);
 }
 
-static gboolean _layer_name_non_empty(const char *name)
+gboolean dt_drawlayer_layer_name_non_empty(const char *name)
 {
   if(IS_NULL_PTR(name)) return FALSE;
   char tmp[DRAWLAYER_NAME_SIZE] = { 0 };
@@ -307,7 +351,7 @@ static gboolean _layer_name_non_empty(const char *name)
   return tmp[0] != '\0';
 }
 
-static gboolean _get_current_work_profile_key(dt_iop_module_t *self, GList *iop_list, dt_dev_pixelpipe_t *pipe,
+gboolean dt_drawlayer_current_work_profile_key(dt_iop_module_t *self, GList *iop_list, dt_dev_pixelpipe_t *pipe,
                                               char *key, const size_t key_size)
 {
   if(IS_NULL_PTR(key) || key_size == 0) return FALSE;
@@ -328,8 +372,6 @@ typedef struct drawlayer_process_scratch_t
   size_t layerbuf_pixels;
   float *cl_background_rgba;
   size_t cl_background_rgba_pixels;
-  float *flush_update_rgba;
-  size_t flush_update_rgba_pixels;
 } drawlayer_process_scratch_t;
 
 static void _destroy_process_scratch(gpointer data)
@@ -338,7 +380,6 @@ static void _destroy_process_scratch(gpointer data)
   if(IS_NULL_PTR(scratch)) return;
   dt_drawlayer_cache_free_temp_buffer((void **)&scratch->layerbuf, "drawlayer process scratch");
   dt_drawlayer_cache_free_temp_buffer((void **)&scratch->cl_background_rgba, "drawlayer process scratch");
-  dt_drawlayer_cache_free_temp_buffer((void **)&scratch->flush_update_rgba, "drawlayer process update scratch");
   dt_free(scratch);
 }
 
@@ -356,60 +397,11 @@ static drawlayer_process_scratch_t *_get_process_scratch(void)
   return scratch;
 }
 
-static inline __attribute__((always_inline)) gboolean _resolve_layer_geometry(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe,
-                                        const dt_dev_pixelpipe_iop_t *piece, int *layer_width,
-                                        int *layer_height, int *origin_x, int *origin_y)
-{
-  if(!IS_NULL_PTR(layer_width)) *layer_width = 0;
-  if(!IS_NULL_PTR(layer_height)) *layer_height = 0;
-  if(!IS_NULL_PTR(origin_x)) *origin_x = 0;
-  if(!IS_NULL_PTR(origin_y)) *origin_y = 0;
-  if(IS_NULL_PTR(self) || IS_NULL_PTR(self->dev)) return FALSE;
-  /* The canvas has the RAW image's dimensions, in this image's own orientation, and is centred
-   * on the module's frame -- the same for every pipe, every zoom and every crop, which is the
-   * point of anchoring to it: a crop changes which window of the canvas a render reads, not
-   * where the paint sits. See iop/drawlayer/coordinates.h.
-   *
-   * It used to be the module's own stage frame, lifted back through roi_out.scale. That size
-   * moves with every crop, and the authored raster was then fitted onto the new frame -- the
-   * paint moved and stretched with the crop.
-   *
-   * Thumbnail and export pipes may start from a downscaled mipmap; that shrinks the module's
-   * frame, not the canvas, and the placement's scale absorbs it. */
-  int resolved_width = 0;
-  int resolved_height = 0;
-  if(!dt_drawlayer_layer_canvas_for_pipe(self, pipe, &resolved_width, &resolved_height)) return FALSE;
 
-  (void)piece;
 
-  if(!IS_NULL_PTR(layer_width)) *layer_width = resolved_width;
-  if(!IS_NULL_PTR(layer_height)) *layer_height = resolved_height;
-  return resolved_width > 0 && resolved_height > 0;
-}
 
-static inline __attribute__((always_inline)) uint64_t _drawlayer_params_cache_hash(const int32_t imgid, const dt_iop_drawlayer_params_t *params,
-                                             const int layer_width, const int layer_height)
-{
-  /* Internal drawlayer base-cache identity must stay stable across transient
-   * stroke/hash updates. Key only by image + layer identity + working profile,
-   * not by volatile fields (stroke hash, sidecar timestamp...).
-   *
-   * This keeps the shared base patch line hot across interactive drawing ticks
-   * and avoids expensive rekey conflicts/republishing during realtime updates. */
-  uint64_t hash = 5381u;
-  hash = dt_hash(hash, (const char *)&imgid, sizeof(imgid));
-  hash = dt_hash(hash, (const char *)&layer_width, sizeof(layer_width));
-  hash = dt_hash(hash, (const char *)&layer_height, sizeof(layer_height));
-  if(!IS_NULL_PTR(params))
-  {
-    hash = dt_hash(hash, params->layer_name, sizeof(params->layer_name));
-    hash = dt_hash(hash, (const char *)&params->layer_order, sizeof(params->layer_order));
-    hash = dt_hash(hash, params->work_profile, sizeof(params->work_profile));
-  }
-  return hash ? hash : 1u;
-}
 
-static gboolean _rekey_shared_base_patch(drawlayer_patch_t *patch, const int32_t imgid,
+gboolean dt_drawlayer_rekey_shared_base_patch(drawlayer_patch_t *patch, const int32_t imgid,
                                          const dt_iop_drawlayer_params_t *params)
 {
   /* Rekeying lets the same pixelpipe cache line keep its allocated storage and
@@ -417,7 +409,7 @@ static gboolean _rekey_shared_base_patch(drawlayer_patch_t *patch, const int32_t
    * history snapshot. This is the central piece that lets other pipelines find
    * the newest base patch through the cache instead of through GUI internals. */
   if(IS_NULL_PTR(patch) || IS_NULL_PTR(patch->cache_entry) || IS_NULL_PTR(params)) return FALSE;
-  const uint64_t new_hash = _drawlayer_params_cache_hash(imgid, params, patch->width, patch->height);
+  const uint64_t new_hash = dt_drawlayer_params_cache_hash(imgid, params, patch->width, patch->height);
   if(new_hash == patch->cache_hash) return TRUE;
   if(dt_dev_pixelpipe_cache_rekey(patch->cache_hash, new_hash, patch->cache_entry) == 0)
   {
@@ -457,7 +449,7 @@ static gboolean _rekey_shared_base_patch(drawlayer_patch_t *patch, const int32_t
   return TRUE;
 }
 
-static void _retain_base_patch_loaded_ref(dt_iop_drawlayer_gui_data_t *g)
+void dt_drawlayer_retain_base_patch_loaded_ref(dt_iop_drawlayer_gui_data_t *g)
 {
   if(IS_NULL_PTR(g) || IS_NULL_PTR(g->process.base_patch.cache_entry) || g->process.base_patch_loaded_ref) return;
   dt_dev_pixelpipe_cache_ref_count_entry(TRUE, g->process.base_patch.cache_entry);
@@ -525,7 +517,7 @@ static inline __attribute__((always_inline)) gboolean _refresh_piece_base_cache(
      && !g_strcmp0(data->process.cache_layer_name, params->layer_name)
      && data->process.base_patch.width > 0 && data->process.base_patch.height > 0)
   {
-    const uint64_t cached_hash = _drawlayer_params_cache_hash(pipe->dev->image_storage.id, params,
+    const uint64_t cached_hash = dt_drawlayer_params_cache_hash(pipe->dev->image_storage.id, params,
                                                               data->process.base_patch.width,
                                                               data->process.base_patch.height);
     if(data->process.base_patch.cache_hash == cached_hash)
@@ -541,7 +533,7 @@ static inline __attribute__((always_inline)) gboolean _refresh_piece_base_cache(
 
   int layer_width = 0;
   int layer_height = 0;
-  const gboolean have_pipe_geometry = _resolve_layer_geometry(self, pipe, piece, &layer_width, &layer_height, NULL, NULL);
+  const gboolean have_pipe_geometry = dt_drawlayer_resolve_layer_geometry(self, pipe, piece, &layer_width, &layer_height, NULL, NULL);
 
   /* The canvas is the raw frame in every pipe, so the stored page's own dimensions are no longer
    * consulted to decide it -- they used to be, because a thumbnail or export pipe resolved a
@@ -564,7 +556,7 @@ static inline __attribute__((always_inline)) gboolean _refresh_piece_base_cache(
       return FALSE;
   }
 
-  const uint64_t base_hash = _drawlayer_params_cache_hash(pipe->dev->image_storage.id, params, layer_width, layer_height);
+  const uint64_t base_hash = dt_drawlayer_params_cache_hash(pipe->dev->image_storage.id, params, layer_width, layer_height);
   if(data->process.cache_valid && data->process.base_patch.cache_entry
      && data->process.base_patch.cache_hash == base_hash && data->process.cache_imgid == pipe->dev->image_storage.id
      && !g_strcmp0(data->process.cache_layer_name, params->layer_name))
@@ -583,7 +575,7 @@ static inline __attribute__((always_inline)) gboolean _refresh_piece_base_cache(
   {
     int created = 0;
     if(!dt_drawlayer_cache_patch_alloc_shared(&data->process.base_patch,
-                                              _drawlayer_params_cache_hash(pipe->dev->image_storage.id, params, layer_width,
+                                              dt_drawlayer_params_cache_hash(pipe->dev->image_storage.id, params, layer_width,
                                                                            layer_height),
                                               (size_t)layer_width * layer_height, layer_width, layer_height,
                                               "drawlayer sidecar cache", &created))
@@ -599,7 +591,8 @@ static inline __attribute__((always_inline)) gboolean _refresh_piece_base_cache(
     }
 
     gboolean warm_loaded = FALSE;
-    if(have_sidecar && info.found)
+    const gboolean load_attempted = have_sidecar && info.found;
+    if(load_attempted)
     {
       dt_drawlayer_io_patch_t warm_patch = { 0 };
       dt_drawlayer_cache_patch_wrlock(&data->process.base_patch);
@@ -621,6 +614,23 @@ static inline __attribute__((always_inline)) gboolean _refresh_piece_base_cache(
       data->process.cache_layer_order = info.found ? info.index : params->layer_order;
       dt_drawlayer_paint_runtime_state_reset(&data->process.cache_dirty_rect);
       return TRUE;
+    }
+
+    /* A fresh arena page is NOT zeroed -- `dt_drawlayer_cache_patch_alloc_shared` allocates,
+     * it does not clear -- and below we are about to publish it as a valid canvas. When the
+     * load ran it already memset its destination before touching the file, so the only
+     * uncleared case is the one where it never ran. Clear exactly that one: the GUI-side twin
+     * (`dt_drawlayer_ensure_layer_cache`) has always cleared here, and the two loaders had
+     * diverged. Both key the same cache entry, so an uncleared page created by the pipeline is
+     * adopted by the GUI as the layer's content and a later sidecar write makes it permanent.
+     * Do NOT move this into the allocator: the rekey-conflict caller memcpys the whole buffer
+     * on its next statement and would pay a dead full-canvas memset. */
+    if(!load_attempted)
+    {
+      dt_drawlayer_cache_patch_wrlock(&data->process.base_patch);
+      dt_drawlayer_cache_clear_transparent_float(data->process.base_patch.pixels,
+                                                 (size_t)layer_width * layer_height);
+      dt_drawlayer_cache_patch_wrunlock(&data->process.base_patch);
     }
 
     data->process.cache_valid = TRUE;
@@ -710,20 +720,13 @@ static gboolean _drawlayer_sync_host_image_to_device(const int devid, cl_mem dev
 
 static gboolean _drawlayer_acquire_source_image(const int devid, const float *layer_pixels,
                                                 dt_pixel_cache_entry_t *resolved_entry,
-                                                const gboolean force_device_copy, const gboolean realtime_reuse,
+                                                const gboolean realtime_reuse,
                                                 const int source_w, const int source_h,
                                                 dt_drawlayer_process_state_t *process,
                                                 drawlayer_cl_image_handle_t *source)
 {
   if(IS_NULL_PTR(source) || IS_NULL_PTR(layer_pixels) || source_w <= 0 || source_h <= 0) return FALSE;
   *source = (drawlayer_cl_image_handle_t){ 0 };
-
-  if(force_device_copy)
-  {
-    source->mem
-        = dt_opencl_copy_host_to_device(devid, (void *)layer_pixels, source_w, source_h, 4 * sizeof(float));
-    return !IS_NULL_PTR(source->mem);
-  }
 
   /* Realtime redraws keep revisiting the same host-backed layer cache. Prefer a
    * reusable device buffer first so the blend path can stay asynchronous instead
@@ -802,15 +805,16 @@ static int _drawlayer_copy_or_resample_layer_roi(const int devid, cl_mem dev_sou
    * stamped at full canvas resolution, so this resample only ever previews it at
    * display scale (mostly downscaling). Bilinear is the only kernel here with no
    * negative lobes: it cannot overshoot, so it never rings/halos at stroke edges
-   * nor pushes alpha out of [0,1] — unlike the user-pref default (Lanczos) or the
-   * Catmull-Rom "bicubic". On minification dt_interpolation_resample widens the
-   * tap support, so bilinear acts as a clean area filter (no aliasing). */
+   * nor pushes alpha out of [0,1] — unlike the user-pref default (Mitchell, whose
+   * negative excursion is small, ~3%, but non-zero) or the Catmull-Rom "bicubic".
+   * On minification dt_interpolation_resample widens the tap support, so bilinear
+   * acts as a clean area filter (no aliasing). */
   const struct dt_interpolation *const itor = dt_interpolation_new(DT_INTERPOLATION_BILINEAR);
   return dt_interpolation_resample_cl(itor, devid, dev_layer_rgba, target_roi, dev_source_rgba, source_roi);
 }
 
 static gboolean _drawlayer_acquire_layer_image(const int devid, dt_pixel_cache_entry_t *resolved_entry,
-                                               const gboolean realtime_reuse, const gboolean direct_copy,
+                                               const gboolean realtime_reuse,
                                                cl_mem dev_source_rgba, const int source_w, const int source_h,
                                                const dt_iop_roi_t *const target_roi,
                                                const dt_iop_roi_t *const source_roi,
@@ -818,12 +822,6 @@ static gboolean _drawlayer_acquire_layer_image(const int devid, dt_pixel_cache_e
 {
   if(IS_NULL_PTR(layer) || !err || IS_NULL_PTR(target_roi) || IS_NULL_PTR(source_roi)) return FALSE;
   *layer = (drawlayer_cl_image_handle_t){ 0 };
-
-  if(direct_copy)
-  {
-    layer->mem = dev_source_rgba;
-    return TRUE;
-  }
 
   if(realtime_reuse && resolved_entry)
   {
@@ -917,40 +915,69 @@ static gboolean _drawlayer_map_source_damage_to_target(const dt_drawlayer_damage
   return TRUE;
 }
 
-static int _blend_layer_over_input_cl(const int devid, const int kernel_premult_over, cl_mem dev_out,
-                                      cl_mem dev_in, drawlayer_process_scratch_t *scratch,
-                                      const float *layer_pixels, dt_pixel_cache_entry_t *source_entry,
-                                      cl_mem source_mem_override, const int source_w, const int source_h,
-                                      dt_drawlayer_process_state_t *process,
-                                      const dt_iop_roi_t *const target_roi, const dt_iop_roi_t *const source_roi,
-                                      const gboolean direct_copy, const gboolean use_preview_bg,
-                                      const float preview_bg, const gboolean realtime_reuse,
-                                      const gboolean force_device_copy, const gboolean allow_partial)
+/**
+ * @brief Everything the GPU layer-over-input blend needs, in one place.
+ *
+ * It used to be sixteen positional arguments at a single call site, four of them adjacent
+ * same-typed neighbours (two ints for the source size, two gbooleans for the reuse and
+ * partial policies) where a transposition compiles silently and changes what is composited.
+ * Named fields at the call site make that mistake unwriteable.
+ */
+typedef struct drawlayer_blend_cl_request_t
 {
-  if(devid < 0 || IS_NULL_PTR(dev_out) || IS_NULL_PTR(dev_in) || IS_NULL_PTR(scratch) || (IS_NULL_PTR(layer_pixels) && !source_mem_override) || source_w <= 0
-     || source_h <= 0 || !target_roi || target_roi->width <= 0 || target_roi->height <= 0)
-    return FALSE;
-  if(kernel_premult_over < 0) return FALSE;
+  int devid;
+  int kernel_premult_over;
+  cl_mem dev_out;
+  cl_mem dev_in;
+  drawlayer_process_scratch_t *scratch;
+  const float *layer_pixels;
+  dt_pixel_cache_entry_t *source_entry;
+  int source_w;
+  int source_h;
+  dt_drawlayer_process_state_t *process;
+  const dt_iop_roi_t *target_roi;
+  const dt_iop_roi_t *source_roi;
+  gboolean use_preview_bg;
+  float preview_bg;
+  gboolean realtime_reuse;
+  gboolean allow_partial;
+} drawlayer_blend_cl_request_t;
 
-  dt_pixel_cache_entry_t *resolved_entry = source_entry;
+static int _blend_layer_over_input_cl(const drawlayer_blend_cl_request_t *const req)
+{
+  if(req->devid < 0 || IS_NULL_PTR(req->dev_out) || IS_NULL_PTR(req->dev_in) || IS_NULL_PTR(req->scratch) || IS_NULL_PTR(req->layer_pixels) || req->source_w <= 0
+     || req->source_h <= 0 || !req->target_roi || req->target_roi->width <= 0 || req->target_roi->height <= 0)
+    return FALSE;
+  if(req->kernel_premult_over < 0) return FALSE;
+
+  dt_pixel_cache_entry_t *resolved_entry = req->source_entry;
   gboolean resolved_entry_ref = FALSE;
-  if(realtime_reuse && !resolved_entry)
+  if(req->realtime_reuse && !resolved_entry)
   {
     resolved_entry
-        = dt_dev_pixelpipe_cache_ref_entry_for_host_ptr((void *)layer_pixels);
+        = dt_dev_pixelpipe_cache_ref_entry_for_host_ptr((void *)req->layer_pixels);
     resolved_entry_ref = (!IS_NULL_PTR(resolved_entry));
   }
 
-  /* Realtime partial composite: when the caller validated that dev_out still
+  /* Realtime partial composite: when the caller validated that req->dev_out still
    * holds this node's previous full composite (same buffer, hash and geometry)
    * and only the painted sub-rect of the layer changed, refresh just that window
    * instead of re-resampling the whole display. The source-damage rectangle must
    * be snapshotted here because _drawlayer_acquire_source_image() consumes (and
-   * resets) process->cache_dirty_rect while uploading the dirty source region. */
+   * resets) req->process->cache_dirty_rect while uploading the dirty source region. */
   dt_drawlayer_damaged_rect_t target_damage = { 0 };
-  const gboolean partial = allow_partial && !use_preview_bg && !direct_copy && !source_mem_override && process
-                           && _drawlayer_map_source_damage_to_target(&process->cache_dirty_rect, target_roi,
-                                                                     source_roi, &target_damage);
+  const gboolean partial = req->allow_partial && !req->use_preview_bg && req->process
+                           && _drawlayer_map_source_damage_to_target(&req->process->cache_dirty_rect, req->target_roi,
+                                                                     req->source_roi, &target_damage);
+
+  /* Localise the composite's cost. Measured on a 10.4 s stroke, `Drawing' cost 37.5 ms a frame
+   * with a 23 ms FLOOR -- something runs unconditionally -- against a total frame of 109.5 ms.
+   * A per-module total cannot say whether that is the source upload, the resample or the
+   * kernel, and the three have very different fixes. */
+  const gboolean trace_stages = (dt_get_debug_flags() & DT_DEBUG_PERF) != 0;
+  const gint64 stage_t0 = trace_stages ? g_get_monotonic_time() : 0;
+  gint64 stage_source = stage_t0;
+  gint64 stage_layer = stage_t0;
 
   drawlayer_cl_image_handle_t source = { 0 };
   drawlayer_cl_image_handle_t layer = { 0 };
@@ -960,11 +987,10 @@ static int _blend_layer_over_input_cl(const int devid, const int kernel_premult_
   cl_mem dev_background = NULL;
   int err = CL_SUCCESS;
   int result = FALSE;
-  if(source_mem_override)
-    source.mem = source_mem_override;
-  else if(!_drawlayer_acquire_source_image(devid, layer_pixels, resolved_entry, force_device_copy, realtime_reuse,
-                                           source_w, source_h, process, &source))
+  if(!_drawlayer_acquire_source_image(req->devid, req->layer_pixels, resolved_entry, req->realtime_reuse,
+                                           req->source_w, req->source_h, req->process, &source))
     goto cleanup;
+  if(trace_stages) stage_source = g_get_monotonic_time();
 
   if(partial)
   {
@@ -974,17 +1000,17 @@ static int _blend_layer_over_input_cl(const int devid, const int kernel_premult_
     size_t zero_origin[3] = { 0, 0, 0 };
     size_t win_region[3] = { (size_t)dw, (size_t)dh, 1 };
 
-    /* All three windows are damage-sized device scratch buffers. We keep the
+    /* All three windows are damage-sized device req->scratch buffers. We keep the
      * unmodified full-frame `blendop_premult_over` kernel (local 0,0 coords) and
      * stage the sub-window through copies so the GPU kernel ABI never changes:
      *   layer_partial = resample(source, damaged display window)
-     *   bg_partial    = dev_in[window]                       (background slice)
+     *   bg_partial    = req->dev_in[window]                       (background slice)
      *   out_partial   = over(layer_partial, bg_partial)      (full-window kernel)
-     *   dev_out[window] = out_partial                        (refresh in place)
-     * The rest of dev_out keeps the previous full composite. */
-    dev_layer_partial = dt_opencl_alloc_device(devid, dw, dh, 4 * sizeof(float));
-    dev_bg_partial = dt_opencl_alloc_device(devid, dw, dh, 4 * sizeof(float));
-    dev_out_partial = dt_opencl_alloc_device(devid, dw, dh, 4 * sizeof(float));
+     *   req->dev_out[window] = out_partial                        (refresh in place)
+     * The rest of req->dev_out keeps the previous full composite. */
+    dev_layer_partial = dt_opencl_alloc_device(req->devid, dw, dh, 4 * sizeof(float));
+    dev_bg_partial = dt_opencl_alloc_device(req->devid, dw, dh, 4 * sizeof(float));
+    dev_out_partial = dt_opencl_alloc_device(req->devid, dw, dh, 4 * sizeof(float));
     if(IS_NULL_PTR(dev_layer_partial) || IS_NULL_PTR(dev_bg_partial) || IS_NULL_PTR(dev_out_partial))
     {
       err = CL_MEM_OBJECT_ALLOCATION_FAILURE;
@@ -994,73 +1020,81 @@ static int _blend_layer_over_input_cl(const int devid, const int kernel_premult_
      * sub-window's global target origin maps back to the correct source region
      * through the unchanged interpolation source mapping. */
     const dt_iop_roi_t sub_target_roi = {
-      .x = target_roi->x + target_damage.nw[0],
-      .y = target_roi->y + target_damage.nw[1],
+      .x = req->target_roi->x + target_damage.nw[0],
+      .y = req->target_roi->y + target_damage.nw[1],
       .width = dw,
       .height = dh,
-      .scale = target_roi->scale,
+      .scale = req->target_roi->scale,
     };
-    err = _drawlayer_copy_or_resample_layer_roi(devid, source.mem, dev_layer_partial, source_w, source_h,
-                                                &sub_target_roi, source_roi);
+    err = _drawlayer_copy_or_resample_layer_roi(req->devid, source.mem, dev_layer_partial, req->source_w, req->source_h,
+                                                &sub_target_roi, req->source_roi);
     if(err != CL_SUCCESS) goto cleanup;
 
-    err = dt_opencl_enqueue_copy_image(devid, dev_in, dev_bg_partial, win_origin, zero_origin, win_region);
+    err = dt_opencl_enqueue_copy_image(req->devid, req->dev_in, dev_bg_partial, win_origin, zero_origin, win_region);
     if(err != CL_SUCCESS) goto cleanup;
 
-    err = _drawlayer_run_premult_over_kernel(devid, kernel_premult_over, dev_bg_partial, dev_layer_partial,
+    err = _drawlayer_run_premult_over_kernel(req->devid, req->kernel_premult_over, dev_bg_partial, dev_layer_partial,
                                              dev_out_partial, dw, dh, 0, 0);
     if(err != CL_SUCCESS) goto cleanup;
 
-    err = dt_opencl_enqueue_copy_image(devid, dev_out_partial, dev_out, zero_origin, win_origin, win_region);
+    err = dt_opencl_enqueue_copy_image(req->devid, dev_out_partial, req->dev_out, zero_origin, win_origin, win_region);
     if(err != CL_SUCCESS) goto cleanup;
 
     if(dt_get_debug_flags() & DT_DEBUG_VERBOSE)
       dt_print(DT_DEBUG_PERF, "[drawlayer] partial composite window=%dx%d at (%d,%d) of %dx%d\n", dw, dh,
-               target_damage.nw[0], target_damage.nw[1], target_roi->width, target_roi->height);
+               target_damage.nw[0], target_damage.nw[1], req->target_roi->width, req->target_roi->height);
 
     if(source.is_pinned)
     {
-      if(!dt_opencl_finish(devid))
+      if(!dt_opencl_finish(req->devid))
       {
         err = -1;
         goto cleanup;
       }
     }
     result = TRUE;
+    if(trace_stages)
+      dt_print(DT_DEBUG_PERF,
+               "[drawlayer] composite partial win=%dx%d src=%.2f ms kernel=%.2f ms total=%.2f ms\n",
+               dw, dh, (stage_source - stage_t0) / 1000.0,
+               (g_get_monotonic_time() - stage_source) / 1000.0,
+               (g_get_monotonic_time() - stage_t0) / 1000.0);
     goto cleanup;
   }
 
-  if(!_drawlayer_acquire_layer_image(devid, resolved_entry, realtime_reuse, direct_copy, source.mem, source_w,
-                                     source_h, target_roi, source_roi, &layer, &err))
+  if(!_drawlayer_acquire_layer_image(req->devid, resolved_entry, req->realtime_reuse, source.mem, req->source_w,
+                                     req->source_h, req->target_roi, req->source_roi, &layer, &err))
     goto cleanup;
+  if(trace_stages) stage_layer = g_get_monotonic_time();
 
-  if(use_preview_bg)
+  if(req->use_preview_bg)
   {
-    const size_t out_pixels = (size_t)target_roi->width * target_roi->height;
-    float *background = dt_drawlayer_cache_ensure_scratch_buffer(&scratch->cl_background_rgba,
-                                                                 &scratch->cl_background_rgba_pixels, out_pixels,
-                                                                 "drawlayer process scratch");
+    const size_t out_pixels = (size_t)req->target_roi->width * req->target_roi->height;
+    float *background = dt_drawlayer_cache_ensure_scratch_buffer(&req->scratch->cl_background_rgba,
+                                                                 &req->scratch->cl_background_rgba_pixels, out_pixels,
+                                                                 "drawlayer req->process req->scratch");
     if(IS_NULL_PTR(background)) goto cleanup;
     __OMP_PARALLEL_FOR__(if(out_pixels > 4096))
     for(size_t kk = 0; kk < out_pixels; kk++)
     {
       float *pixel = background + 4 * kk;
-      pixel[0] = preview_bg;
-      pixel[1] = preview_bg;
-      pixel[2] = preview_bg;
+      pixel[0] = req->preview_bg;
+      pixel[1] = req->preview_bg;
+      pixel[2] = req->preview_bg;
       pixel[3] = 1.0f;
     }
     dev_background = dt_dev_pixelpipe_cache_get_pinned_image(
-        background, NULL, devid, target_roi->width, target_roi->height,
+        background, NULL, req->devid, req->target_roi->width, req->target_roi->height,
         4 * sizeof(float), CL_MEM_READ_WRITE | CL_MEM_USE_HOST_PTR, NULL);
     if(IS_NULL_PTR(dev_background)) goto cleanup;
   }
   else
-    dev_background = dev_in;
+    dev_background = req->dev_in;
 
-  err = _drawlayer_run_premult_over_kernel(devid, kernel_premult_over, dev_background, layer.mem, dev_out,
-                                           target_roi->width, target_roi->height, 0, 0);
+  err = _drawlayer_run_premult_over_kernel(req->devid, req->kernel_premult_over, dev_background, layer.mem, req->dev_out,
+                                           req->target_roi->width, req->target_roi->height, 0, 0);
   if(err != CL_SUCCESS) goto cleanup;
+  const gint64 stage_kernel = trace_stages ? g_get_monotonic_time() : 0;
 
   /* The realtime display source is the host-backed full-resolution cache.
    * When imported as CL_MEM_USE_HOST_PTR, queued GPU reads may still touch that
@@ -1068,7 +1102,7 @@ static int _blend_layer_over_input_cl(const int devid, const int kernel_premult_
    * the cache lock whenever the layer source is host-backed. */
   if(source.is_pinned)
   {
-    if(!dt_opencl_finish(devid))
+    if(!dt_opencl_finish(req->devid))
     {
       err = -1;
       goto cleanup;
@@ -1076,13 +1110,22 @@ static int _blend_layer_over_input_cl(const int devid, const int kernel_premult_
   }
 
   result = TRUE;
+  if(trace_stages)
+    dt_print(DT_DEBUG_PERF,
+             "[drawlayer] composite FULL out=%dx%d src=%dx%d src_up=%.2f ms resample=%.2f ms "
+             "kernel=%.2f ms finish=%.2f ms total=%.2f ms pinned=%d\n",
+             req->target_roi->width, req->target_roi->height, req->source_w, req->source_h,
+             (stage_source - stage_t0) / 1000.0, (stage_layer - stage_source) / 1000.0,
+             (stage_kernel - stage_layer) / 1000.0,
+             (g_get_monotonic_time() - stage_kernel) / 1000.0,
+             (g_get_monotonic_time() - stage_t0) / 1000.0, source.is_pinned ? 1 : 0);
 
 cleanup:
   if(dev_layer_partial) dt_opencl_release_mem_object(dev_layer_partial);
   if(dev_bg_partial) dt_opencl_release_mem_object(dev_bg_partial);
   if(dev_out_partial) dt_opencl_release_mem_object(dev_out_partial);
-  if(use_preview_bg)
-    dt_dev_pixelpipe_cache_put_pinned_image(scratch->cl_background_rgba, NULL,
+  if(req->use_preview_bg)
+    dt_dev_pixelpipe_cache_put_pinned_image(req->scratch->cl_background_rgba, NULL,
                                             (void **)&dev_background);
   if(layer.mem && layer.mem != source.mem)
   {
@@ -1091,12 +1134,12 @@ cleanup:
     else
       dt_opencl_release_mem_object(layer.mem);
   }
-  if(!source_mem_override && source.is_pinned)
-    dt_dev_pixelpipe_cache_put_pinned_image((void *)layer_pixels, resolved_entry,
+  if(source.is_pinned)
+    dt_dev_pixelpipe_cache_put_pinned_image((void *)req->layer_pixels, resolved_entry,
                                             (void **)&source.mem);
-  else if(!source_mem_override && source.is_cached_device && resolved_entry)
+  else if(source.is_cached_device && resolved_entry)
     dt_dev_pixelpipe_cache_release_cl_buffer((void **)&source.mem, resolved_entry, NULL, TRUE);
-  else if(!source_mem_override && source.mem)
+  else if(source.mem)
     dt_opencl_release_mem_object(source.mem);
   if(resolved_entry_ref)
     dt_dev_pixelpipe_cache_ref_count_entry(FALSE, resolved_entry);
@@ -1123,7 +1166,7 @@ static gboolean _profile_key_is_sane(const char *value)
   return separators >= 2;
 }
 
-static int64_t _sidecar_timestamp_from_path(const char *path)
+int64_t dt_drawlayer_sidecar_timestamp_from_path(const char *path)
 {
   if(IS_NULL_PTR(path) || path[0] == '\0' || !g_file_test(path, G_FILE_TEST_EXISTS)) return 0;
 
@@ -1140,8 +1183,8 @@ static void _ensure_cursor_stamp_surface(dt_iop_module_t *self, const float widg
 
   const double ppd = (dt_gui_get_global() && dt_gui_get_global()->ppd > 0.0) ? dt_gui_get_global()->ppd : 1.0;
   float display_rgb[3] = { 0.0f };
-  _conf_display_color(display_rgb);
-  const int shape = _conf_brush_shape();
+  dt_drawlayer_conf_display_color(display_rgb);
+  const int shape = dt_drawlayer_conf_brush_shape();
   const int size_px = MAX(2, (int)ceil((2.0f * widget_radius + 2.0f) * ppd));
 
   const gboolean needs_rebuild
@@ -1316,7 +1359,7 @@ static gboolean _prompt_layer_name_dialog(const char *title, const char *message
   if(gtk_dialog_run(GTK_DIALOG(dialog)) == GTK_RESPONSE_ACCEPT)
   {
     _sanitize_requested_layer_name(gtk_entry_get_text(GTK_ENTRY(entry)), name, name_size);
-    accepted = _layer_name_non_empty(name);
+    accepted = dt_drawlayer_layer_name_non_empty(name);
   }
 
   gtk_widget_destroy(dialog);
@@ -1330,7 +1373,7 @@ static gboolean _color_picker_set_from_position(dt_iop_module_t *self, const flo
 
   float display_rgb[3] = { 0.0f };
   if(!dt_drawlayer_widgets_update_from_picker_position(g->ui.widgets, g->controls.color, x, y, display_rgb)) return FALSE;
-  _apply_display_brush_color(self, display_rgb, FALSE);
+  dt_drawlayer_conf_apply_display_brush_color(self, display_rgb, FALSE);
   return TRUE;
 }
 
@@ -1359,7 +1402,7 @@ static gboolean _color_swatch_button_press(GtkWidget *widget, GdkEventButton *ev
 
   float display_rgb[3] = { 0.0f };
   if(!dt_drawlayer_widgets_pick_history_color(g->ui.widgets, widget, event->x, event->y, display_rgb)) return FALSE;
-  _apply_display_brush_color(self, display_rgb, FALSE);
+  dt_drawlayer_conf_apply_display_brush_color(self, display_rgb, FALSE);
   return TRUE;
 }
 
@@ -1368,9 +1411,9 @@ static void _sync_brush_profile_preview_widget(dt_iop_module_t *self)
   dt_iop_drawlayer_gui_data_t *g = self ? (dt_iop_drawlayer_gui_data_t *)dt_iop_gui_data(self) : NULL;
   if(IS_NULL_PTR(g) || !g->ui.widgets || IS_NULL_PTR(g->controls.brush_shape)) return;
 
-  dt_drawlayer_widgets_set_brush_profile_preview(g->ui.widgets, _conf_opacity() / 100.0f, _conf_hardness(),
-                                                 _conf_sprinkles() / 100.0f, _conf_sprinkle_size(),
-                                                 _conf_sprinkle_coarseness() / 100.0f, _conf_brush_shape());
+  dt_drawlayer_widgets_set_brush_profile_preview(g->ui.widgets, dt_drawlayer_conf_opacity() / 100.0f, dt_drawlayer_conf_hardness(),
+                                                 dt_drawlayer_conf_sprinkles() / 100.0f, dt_drawlayer_conf_sprinkle_size(),
+                                                 dt_drawlayer_conf_sprinkle_coarseness() / 100.0f, dt_drawlayer_conf_brush_shape());
   gtk_widget_queue_draw(g->controls.brush_shape);
 }
 
@@ -1392,7 +1435,7 @@ static gboolean _brush_profile_button_press(GtkWidget *widget, GdkEventButton *e
   int shape = DT_DRAWLAYER_BRUSH_SHAPE_LINEAR;
   if(!dt_drawlayer_widgets_pick_brush_profile(g->ui.widgets, widget, event->x, event->y, &shape)) return FALSE;
 
-  _sync_params_from_gui(self, FALSE);
+  dt_drawlayer_conf_sync_params_from_gui(self, FALSE);
   _sync_mode_sensitive_widgets(self);
   if(!_update_gui_runtime_manager(self, g, DT_DRAWLAYER_RUNTIME_EVENT_GUI_SYNC_TEMP_BUFFERS, TRUE).ok) return FALSE;
   _sync_brush_profile_preview_widget(self);
@@ -1405,7 +1448,7 @@ static gboolean _working_rgb_to_display_rgb(dt_iop_module_t *self, dt_dev_pixelp
 {
   if(IS_NULL_PTR(working_rgb) || !display_rgb) return FALSE;
 
-  const float gain = exp2f(_conf_hdr_exposure());
+  const float gain = exp2f(dt_drawlayer_conf_hdr_exposure());
   const float inv_gain = (gain > 0.0f) ? 1.0f / gain : 1.0f;
   const float preview_rgb[3] = {
     working_rgb[0] * inv_gain,
@@ -1433,13 +1476,29 @@ static gboolean _working_rgb_to_display_rgb(dt_iop_module_t *self, dt_dev_pixelp
   return TRUE;
 }
 
+/**
+ * @brief Does the brush currently lay down the chosen colour?
+ *
+ * Asked in two places that must agree: the panel, which shows the colour swatch and the
+ * pickers only when the answer is yes, and the on-canvas cursor, which fills its stamp with
+ * that colour for the same reason. They were two separate comparisons 1600 lines apart, in
+ * two spellings, with nothing forcing them to be read together -- the shape that has cost
+ * this tree the CFA phase, retouch's mask preview and display encoding's conf reads. Add a
+ * mode that paints with a colour and one of them would grow while the other did not: the
+ * panel offering a colour the cursor draws hollow, or the reverse.
+ */
+static gboolean _brush_paints_color(void)
+{
+  return dt_drawlayer_conf_brush_mode() == DT_DRAWLAYER_BRUSH_MODE_PAINT;
+}
+
 /** @brief Apply selected picker color to drawlayer brush color. */
 void color_picker_apply(dt_iop_module_t *self, GtkWidget *picker, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece)
 {
   (void)picker;
   (void)piece;
   if(IS_NULL_PTR(self) || dt_gui_widgets_suppressed()) return;
-  const drawlayer_pick_source_t source = _conf_pick_source();
+  const drawlayer_pick_source_t source = dt_drawlayer_conf_pick_source();
   const float *picked = (source == DRAWLAYER_PICK_SOURCE_OUTPUT) ? self->picked_output_color : self->picked_color;
   const float *picked_min
       = (source == DRAWLAYER_PICK_SOURCE_OUTPUT) ? self->picked_output_color_min : self->picked_color_min;
@@ -1449,7 +1508,7 @@ void color_picker_apply(dt_iop_module_t *self, GtkWidget *picker, dt_dev_pixelpi
 
   float display_rgb[3] = { 0.0f };
   if(!_working_rgb_to_display_rgb(self, pipe, picked, display_rgb)) return;
-  _apply_display_brush_color(self, display_rgb, TRUE);
+  dt_drawlayer_conf_apply_display_brush_color(self, display_rgb, TRUE);
 }
 
 static gboolean _color_picker_button_press(GtkWidget *widget, GdkEventButton *event, gpointer user_data)
@@ -1470,7 +1529,7 @@ static gboolean _color_picker_button_release(GtkWidget *widget, GdkEventButton *
   {
     float display_rgb[3] = { 0.0f };
     if(dt_drawlayer_widgets_finish_picker_drag(g->ui.widgets, display_rgb))
-      _remember_display_color(self, display_rgb);
+      dt_drawlayer_conf_remember_display_color(self, display_rgb);
   }
   return FALSE;
 }
@@ -1484,7 +1543,7 @@ static gboolean _color_picker_motion(GtkWidget *widget, GdkEventMotion *event, g
   return _color_picker_set_from_position(self, event->x, event->y);
 }
 
-static void _sanitize_params(dt_iop_module_t *self, dt_iop_drawlayer_params_t *params)
+void dt_drawlayer_sanitize_params(dt_iop_module_t *self, dt_iop_drawlayer_params_t *params)
 {
   if(IS_NULL_PTR(params)) return;
 
@@ -1503,7 +1562,7 @@ static void _sanitize_params(dt_iop_module_t *self, dt_iop_drawlayer_params_t *p
   else
     params->work_profile[sizeof(params->work_profile) - 1] = '\0';
 
-  if(!_layer_name_non_empty(params->layer_name))
+  if(!dt_drawlayer_layer_name_non_empty(params->layer_name))
   {
     params->layer_name[0] = '\0';
     params->layer_order = -1;
@@ -1520,7 +1579,7 @@ static void _sanitize_params(dt_iop_module_t *self, dt_iop_drawlayer_params_t *p
   if(params->work_profile[0] == '\0' && !IS_NULL_PTR(self) && self->dev)
   {
     char current_profile[DRAWLAYER_PROFILE_SIZE] = { 0 };
-    if(_get_current_work_profile_key(self, self->dev->iop, self->dev->pipe, current_profile,
+    if(dt_drawlayer_current_work_profile_key(self, self->dev->iop, self->dev->pipe, current_profile,
                                      sizeof(current_profile)))
       g_strlcpy(params->work_profile, current_profile, sizeof(params->work_profile));
   }
@@ -1554,13 +1613,7 @@ static void _sanitize_requested_layer_name(const char *requested, char *name, co
   g_strstrip(name);
 }
 
-/* Realtime worker/queue implementation lives in its own implementation include. */
-#include "drawlayer/worker.c"
 
-/* Layer cache and sidecar synchronization stay in a private implementation
- * include so drawlayer.c keeps the orchestration flow readable without
- * introducing a second public API boundary. */
-#include "drawlayer/layers.c"
 
 // Find the cached working layer if any
 static inline __attribute__((always_inline)) gboolean _update_runtime_state(const drawlayer_runtime_request_t *request,
@@ -1615,7 +1668,6 @@ static inline __attribute__((always_inline)) gboolean _update_runtime_state(cons
     source->cache_entry = process->base_patch.cache_entry;
     source->width = process->base_patch.width;
     source->height = process->base_patch.height;
-    source->direct_copy = FALSE;
     source->source_roi = source_full_roi;
     source->target_roi = process_roi;
     dt_drawlayer_cache_patch_rdlock(&process->base_patch);
@@ -1672,16 +1724,14 @@ void dt_drawlayer_touch_stroke_commit_hash(dt_iop_drawlayer_params_t *params, co
   params->stroke_commit_hash = (uint32_t)(hash ? hash : 1u);
 }
 
-static void _refresh_layer_widgets(dt_iop_module_t *self)
+void dt_drawlayer_refresh_layer_widgets(dt_iop_module_t *self)
 {
   dt_iop_drawlayer_gui_data_t *g = self ? (dt_iop_drawlayer_gui_data_t *)dt_iop_gui_data(self) : NULL;
   dt_iop_drawlayer_params_t *params = self ? (dt_iop_drawlayer_params_t *)self->params : NULL;
   GMainContext *const ui_ctx = g_main_context_default();
   if(IS_NULL_PTR(g) || IS_NULL_PTR(params) || !(ui_ctx && g_main_context_is_owner(ui_ctx))) return;
 
-  g->manager.background_job_running = g->session.background_job_running;
-
-  if(g->controls.layer_select) _populate_layer_list(self);
+  if(g->controls.layer_select) dt_drawlayer_layers_populate_list(self);
   _sync_layer_controls(self);
 }
 
@@ -1691,7 +1741,7 @@ static void _sync_layer_controls(dt_iop_module_t *self)
   dt_iop_drawlayer_params_t *params = self ? (dt_iop_drawlayer_params_t *)self->params : NULL;
   if(IS_NULL_PTR(g) || IS_NULL_PTR(params)) return;
 
-  const gboolean attached = _layer_name_non_empty(params->layer_name);
+  const gboolean attached = dt_drawlayer_layer_name_non_empty(params->layer_name);
   const gboolean missing = (g->session.missing_layer_error[0] != '\0');
   const gboolean have_existing_layers = g->controls.layer_select && dt_bauhaus_combobox_length(g->controls.layer_select) > 0;
 
@@ -1760,7 +1810,7 @@ gboolean dt_drawlayer_commit_dabs(dt_iop_module_t *self, const gboolean record_h
    * reset it here — that would truncate the live path. This must guard BOTH commit
    * kinds: a quiet flush (record_history == FALSE, scheduled by GUI_SCROLL /
    * GUI_SYNC_TEMP_BUFFERS while pending stroke work exists) would otherwise run
-   * _wait_worker_idle + finalize + _reset_stroke_session mid-stroke without ever
+   * dt_drawlayer_worker_wait_idle + finalize + dt_drawlayer_layers_reset_stroke_session mid-stroke without ever
    * clearing painting_active, silently cutting the stroke short. The realtime worker
    * already keeps base_patch updated incrementally, so there is nothing to flush
    * mid-stroke; defer a history commit to the worker and no-op a quiet flush. The
@@ -1774,7 +1824,7 @@ gboolean dt_drawlayer_commit_dabs(dt_iop_module_t *self, const gboolean record_h
     return TRUE;
   }
 
-  _cancel_async_commit(g->stroke.worker);
+  dt_drawlayer_worker_cancel_async_commit(g->stroke.worker);
 
   if(!record_history)
     dt_drawlayer_worker_seal_for_commit(g->stroke.worker);
@@ -1783,7 +1833,7 @@ gboolean dt_drawlayer_commit_dabs(dt_iop_module_t *self, const gboolean record_h
    * - the backend worker must be idle,
    * - the full-resolution layer cache must already contain the stroke,
    * - only then do we mutate params/history so the pipeline invalidation sees a coherent state. */
-  _wait_worker_idle(self, g->stroke.worker);
+  dt_drawlayer_worker_wait_idle(self, g->stroke.worker);
   /* Damage-rectangle ownership stays in drawlayer:
    * paint accumulates per-dab bounds into a stroke rectangle, and on commit the
    * module consumes that rectangle to update cache dirty state. */
@@ -1801,7 +1851,7 @@ gboolean dt_drawlayer_commit_dabs(dt_iop_module_t *self, const gboolean record_h
   had_last_dab = g->stroke.last_dab_valid;
   last_dab_x = g->stroke.last_dab_x;
   last_dab_y = g->stroke.last_dab_y;
-  _reset_stroke_session(g);
+  dt_drawlayer_layers_reset_stroke_session(g);
   dt_iop_gui_leave_critical_section(self);
   dt_drawlayer_worker_reset_stroke(g->stroke.worker);
 
@@ -1814,7 +1864,7 @@ gboolean dt_drawlayer_commit_dabs(dt_iop_module_t *self, const gboolean record_h
      * Base-patch synchronization is handled at explicit persistence points
      * (save/focus-out/mouse-leave/geometry rebuild) so recomputes can keep
      * blending the already-updated process tile directly. */
-    _touch_stroke_commit_hash(params, sample_count, had_last_dab, last_dab_x, last_dab_y, 0u);
+    dt_drawlayer_touch_stroke_commit_hash(params, sample_count, had_last_dab, last_dab_x, last_dab_y, 0u);
     _retain_base_patch_stroke_ref(g);
     if(record_history && self->dev)
     {
@@ -1827,7 +1877,7 @@ gboolean dt_drawlayer_commit_dabs(dt_iop_module_t *self, const gboolean record_h
       if(self->post_history_commit) self->post_history_commit(self);
 
       g->manager.realtime_active = FALSE;
-      _set_drawlayer_pipeline_realtime_mode(self, FALSE);
+      dt_drawlayer_set_pipeline_realtime_mode(self, FALSE);
       dt_dev_pixelpipe_update_history_all(self->dev);
       dt_dev_write_history(self->dev, FALSE);
       dt_dev_history_notify_change(self->dev, self->dev->image_storage.id);
@@ -1843,7 +1893,7 @@ gboolean dt_drawlayer_commit_dabs(dt_iop_module_t *self, const gboolean record_h
   if(!(had_stroke && record_history))
   {
     g->manager.realtime_active = FALSE;
-    _set_drawlayer_pipeline_realtime_mode(self, FALSE);
+    dt_drawlayer_set_pipeline_realtime_mode(self, FALSE);
   }
 
   return TRUE;
@@ -1855,27 +1905,7 @@ static void _develop_ui_pipe_finished_callback(gpointer instance, gpointer user_
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
   dt_iop_drawlayer_gui_data_t *g = self ? (dt_iop_drawlayer_gui_data_t *)dt_iop_gui_data(self) : NULL;
   if(IS_NULL_PTR(g) || IS_NULL_PTR(self->dev)) return;
-  drawlayer_runtime_host_context_t runtime_host = {
-    .runtime = {
-      .self = self,
-      .runtime_params = (const dt_iop_drawlayer_params_t *)self->params,
-      .gui = g,
-      .manager = &g->manager,
-      .process_state = &g->process,
-    },
-  };
-  const dt_drawlayer_runtime_host_t runtime_manager = {
-    .user_data = &runtime_host,
-    .collect_inputs = _drawlayer_runtime_collect_inputs,
-    .perform_action = _drawlayer_runtime_perform_action,
-  };
-  dt_drawlayer_runtime_manager_update(
-      &g->manager,
-      &(dt_drawlayer_runtime_update_request_t){
-        .event = DT_DRAWLAYER_RUNTIME_EVENT_GUI_PIPE_FINISHED,
-        .raw_input_kind = DT_DRAWLAYER_RUNTIME_RAW_INPUT_NONE,
-      },
-      &runtime_manager);
+  _update_gui_runtime_manager(self, g, DT_DRAWLAYER_RUNTIME_EVENT_GUI_PIPE_FINISHED, FALSE);
 }
 
 static void _sync_mode_sensitive_widgets(dt_iop_module_t *self)
@@ -1883,8 +1913,8 @@ static void _sync_mode_sensitive_widgets(dt_iop_module_t *self)
   dt_iop_drawlayer_gui_data_t *g = self ? (dt_iop_drawlayer_gui_data_t *)dt_iop_gui_data(self) : NULL;
   if(IS_NULL_PTR(g) || IS_NULL_PTR(g->controls.color) || IS_NULL_PTR(g->controls.softness)) return;
 
-  const gboolean paint_mode = (_conf_brush_mode() == DT_DRAWLAYER_BRUSH_MODE_PAINT);
-  const gboolean show_hardness = (_conf_brush_shape() != DT_DRAWLAYER_BRUSH_SHAPE_GAUSSIAN);
+  const gboolean paint_mode = _brush_paints_color();
+  const gboolean show_hardness = (dt_drawlayer_conf_brush_shape() != DT_DRAWLAYER_BRUSH_SHAPE_GAUSSIAN);
   gtk_widget_set_visible(GTK_WIDGET(g->controls.color), paint_mode);
   if(g->controls.color_row) gtk_widget_set_visible(g->controls.color_row, paint_mode);
   if(g->controls.color_swatch) gtk_widget_set_visible(g->controls.color_swatch, paint_mode);
@@ -1899,13 +1929,13 @@ static gboolean _delete_current_layer(dt_iop_module_t *self)
 
   dt_iop_drawlayer_gui_data_t *g = (dt_iop_drawlayer_gui_data_t *)dt_iop_gui_data(self);
   dt_iop_drawlayer_params_t *params = (dt_iop_drawlayer_params_t *)self->params;
-  if(!_layer_name_non_empty(params->layer_name)) return FALSE;
+  if(!dt_drawlayer_layer_name_non_empty(params->layer_name)) return FALSE;
 
   GString *errors = g_string_new(NULL);
   gboolean deleted = FALSE;
   int layer_width = 0;
   int layer_height = 0;
-  if(!_resolve_layer_geometry(self, NULL, NULL, &layer_width, &layer_height, NULL, NULL))
+  if(!dt_drawlayer_resolve_layer_geometry(self, NULL, NULL, &layer_width, &layer_height, NULL, NULL))
   {
     const dt_dev_image_geometry_t geometry = dt_dev_geometry_snapshot(self->dev);
     layer_width = geometry.raw_width;
@@ -1915,16 +1945,16 @@ static gboolean _delete_current_layer(dt_iop_module_t *self)
   char path[DT_PATH_MAX] = { 0 };
   if(!dt_drawlayer_io_sidecar_path(self->dev->image_storage.id, path, sizeof(path)))
   {
-    _layerio_append_error(errors, _("failed to resolve drawlayer sidecar path"));
+    dt_drawlayer_layers_append_error(errors, _("failed to resolve drawlayer sidecar path"));
   }
   else if(!g_file_test(path, G_FILE_TEST_EXISTS))
   {
-    _layerio_append_error(errors, _("drawlayer sidecar TIFF is missing"));
+    dt_drawlayer_layers_append_error(errors, _("drawlayer sidecar TIFF is missing"));
   }
   else
   {
     if(!dt_drawlayer_io_delete_layer(path, params->layer_name, layer_width, layer_height))
-      _layerio_append_error(errors, _("failed to delete drawing layer from sidecar"));
+      dt_drawlayer_layers_append_error(errors, _("failed to delete drawing layer from sidecar"));
     else
     {
       deleted = TRUE;
@@ -1935,7 +1965,7 @@ static gboolean _delete_current_layer(dt_iop_module_t *self)
       if(g) g->session.missing_layer_error[0] = '\0';
       if(!IS_NULL_PTR(g))
       {
-        _release_all_base_patch_extra_refs(g);
+        dt_drawlayer_release_all_base_patch_extra_refs(g);
         dt_drawlayer_cache_patch_clear(&g->process.base_patch, "drawlayer patch");
         g->process.cache_valid = FALSE;
         g->process.cache_dirty = FALSE;
@@ -1943,13 +1973,13 @@ static gboolean _delete_current_layer(dt_iop_module_t *self)
         g->process.cache_imgid = -1;
         g->process.cache_layer_name[0] = '\0';
         g->process.cache_layer_order = -1;
-        _reset_stroke_session(g);
+        dt_drawlayer_layers_reset_stroke_session(g);
       }
-      _refresh_layer_widgets(self);
+      dt_drawlayer_refresh_layer_widgets(self);
     }
   }
 
-  _layerio_log_errors(errors);
+  dt_drawlayer_layers_log_errors(errors);
   g_string_free(errors, TRUE);
   return deleted;
 }
@@ -1959,7 +1989,7 @@ static gboolean _confirm_delete_layer(dt_iop_module_t *self, const gboolean remo
   if(IS_NULL_PTR(self->dev)) return FALSE;
 
   dt_iop_drawlayer_params_t *params = (dt_iop_drawlayer_params_t *)self->params;
-  if(!_layer_name_non_empty(params->layer_name)) return removing_module;
+  if(!dt_drawlayer_layer_name_non_empty(params->layer_name)) return removing_module;
 
   GtkWidget *dialog = gtk_message_dialog_new(
       GTK_WINDOW(dt_gui_main_window()), GTK_DIALOG_DESTROY_WITH_PARENT | GTK_DIALOG_MODAL,
@@ -1997,7 +2027,7 @@ static gboolean _rename_current_layer_from_gui(dt_iop_module_t *self, const char
   dt_iop_drawlayer_gui_data_t *g = self ? (dt_iop_drawlayer_gui_data_t *)dt_iop_gui_data(self) : NULL;
   dt_iop_drawlayer_params_t *params = self ? (dt_iop_drawlayer_params_t *)self->params : NULL;
   if(IS_NULL_PTR(self) || IS_NULL_PTR(self->dev) || IS_NULL_PTR(g) || IS_NULL_PTR(params)) return FALSE;
-  if(!_layer_name_non_empty(params->layer_name)) return FALSE;
+  if(!dt_drawlayer_layer_name_non_empty(params->layer_name)) return FALSE;
 
   char new_name[DRAWLAYER_NAME_SIZE] = { 0 };
   char stripped_requested[DRAWLAYER_NAME_SIZE] = { 0 };
@@ -2013,35 +2043,35 @@ static gboolean _rename_current_layer_from_gui(dt_iop_module_t *self, const char
   gboolean renamed = FALSE;
   int layer_width = 0;
   int layer_height = 0;
-  if(!_resolve_layer_geometry(self, NULL, NULL, &layer_width, &layer_height, NULL, NULL))
+  if(!dt_drawlayer_resolve_layer_geometry(self, NULL, NULL, &layer_width, &layer_height, NULL, NULL))
   {
     const dt_dev_image_geometry_t geometry = dt_dev_geometry_snapshot(self->dev);
     layer_width = geometry.raw_width;
     layer_height = geometry.raw_height;
   }
 
-  if(!_commit_dabs(self, FALSE))
-    _layerio_append_error(errors, _("failed to commit drawing stroke before renaming"));
-  else if(!_flush_layer_cache(self))
-    _layerio_append_error(errors, _("failed to write drawing layer sidecar"));
+  if(!dt_drawlayer_commit_dabs(self, FALSE))
+    dt_drawlayer_layers_append_error(errors, _("failed to commit drawing stroke before renaming"));
+  else if(!dt_drawlayer_flush_layer_cache(self))
+    dt_drawlayer_layers_append_error(errors, _("failed to write drawing layer sidecar"));
   else
   {
     char path[DT_PATH_MAX] = { 0 };
     if(!dt_drawlayer_io_sidecar_path(self->dev->image_storage.id, path, sizeof(path)))
-      _layerio_append_error(errors, _("failed to resolve drawlayer sidecar path"));
+      dt_drawlayer_layers_append_error(errors, _("failed to resolve drawlayer sidecar path"));
     else if(!g_file_test(path, G_FILE_TEST_EXISTS))
-      _layerio_append_error(errors, _("drawlayer sidecar TIFF is missing"));
+      dt_drawlayer_layers_append_error(errors, _("drawlayer sidecar TIFF is missing"));
     else
     {
       dt_drawlayer_io_layer_info_t info = { 0 };
       if(!dt_drawlayer_io_rename_layer(path, params->layer_name, new_name, params->work_profile,
                                        layer_width, layer_height, &info))
-        _layerio_append_error(errors, _("failed to rename drawing layer in sidecar"));
+        dt_drawlayer_layers_append_error(errors, _("failed to rename drawing layer in sidecar"));
       else
       {
         g_strlcpy(params->layer_name, new_name, sizeof(params->layer_name));
         params->layer_order = info.index;
-        params->sidecar_timestamp = _sidecar_timestamp_from_path(path);
+        params->sidecar_timestamp = dt_drawlayer_sidecar_timestamp_from_path(path);
         g_strlcpy(g->process.cache_layer_name, params->layer_name, sizeof(g->process.cache_layer_name));
         g->process.cache_layer_order = params->layer_order;
         renamed = TRUE;
@@ -2052,15 +2082,15 @@ static gboolean _rename_current_layer_from_gui(dt_iop_module_t *self, const char
   if(renamed)
   {
     g->session.missing_layer_error[0] = '\0';
-    _refresh_layer_widgets(self);
+    dt_drawlayer_refresh_layer_widgets(self);
     if(self->dev) dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
   }
   else
   {
-    _refresh_layer_widgets(self);
+    dt_drawlayer_refresh_layer_widgets(self);
   }
 
-  _layerio_log_errors(errors);
+  dt_drawlayer_layers_log_errors(errors);
   g_string_free(errors, TRUE);
   return renamed;
 }
@@ -2091,8 +2121,8 @@ static gboolean _create_new_layer(dt_iop_module_t *self, const char *requested_n
 
   const dt_iop_drawlayer_params_t previous = *params;
 
-  if(!_commit_dabs(self, FALSE)) return FALSE;
-  if(!_flush_layer_cache(self)) return FALSE;
+  if(!dt_drawlayer_commit_dabs(self, FALSE)) return FALSE;
+  if(!dt_drawlayer_flush_layer_cache(self)) return FALSE;
 
   g_strlcpy(params->layer_name, new_name, sizeof(params->layer_name));
   params->layer_order = -1;
@@ -2116,7 +2146,7 @@ static gboolean _create_new_layer(dt_iop_module_t *self, const char *requested_n
     return FALSE;
   }
   g->process.cache_dirty = TRUE;
-  if(!_flush_layer_cache(self))
+  if(!dt_drawlayer_flush_layer_cache(self))
   {
     *params = previous;
     gui_update(self);
@@ -2124,13 +2154,13 @@ static gboolean _create_new_layer(dt_iop_module_t *self, const char *requested_n
   }
 
   g->session.missing_layer_error[0] = '\0';
-  _touch_stroke_commit_hash(params, 0, FALSE, 0.0f, 0.0f, 0u);
+  dt_drawlayer_touch_stroke_commit_hash(params, 0, FALSE, 0.0f, 0.0f, 0u);
   if(self->dev)
   {
     dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
     dt_dev_pixelpipe_update_history_all(self->dev);
   }
-  _refresh_layer_widgets(self);
+  dt_drawlayer_refresh_layer_widgets(self);
   gui_update(self);
   return TRUE;
 }
@@ -2185,7 +2215,7 @@ static gboolean _background_layer_job_done_idle(gpointer user_data)
       if(result->success && params)
       {
         params->sidecar_timestamp = result->sidecar_timestamp;
-        _refresh_layer_widgets(module);
+        dt_drawlayer_refresh_layer_widgets(module);
       }
     }
   }
@@ -2213,16 +2243,16 @@ static gboolean _create_background_layer_from_input(dt_iop_module_t *self)
   dt_iop_drawlayer_params_t *params = self ? (dt_iop_drawlayer_params_t *)self->params : NULL;
   if(IS_NULL_PTR(self) || IS_NULL_PTR(self->dev) || IS_NULL_PTR(g) || IS_NULL_PTR(params)) return FALSE;
   if(g->session.background_job_running) return FALSE;
-  if(!_layer_name_non_empty(params->layer_name)) return FALSE;
+  if(!dt_drawlayer_layer_name_non_empty(params->layer_name)) return FALSE;
 
-  if(!_commit_dabs(self, FALSE)) return FALSE;
-  if(!_ensure_layer_cache(self)) return FALSE;
-  if(!_flush_layer_cache(self)) return FALSE;
+  if(!dt_drawlayer_commit_dabs(self, FALSE)) return FALSE;
+  if(!dt_drawlayer_ensure_layer_cache(self)) return FALSE;
+  if(!dt_drawlayer_flush_layer_cache(self)) return FALSE;
 
   dt_dev_pixelpipe_iop_t *piece = dt_dev_distort_get_iop_pipe(self->dev->pipe, self);
   int layer_width = 0;
   int layer_height = 0;
-  if(!_resolve_layer_geometry(self, self->dev->pipe, piece, &layer_width, &layer_height, NULL, NULL)) return FALSE;
+  if(!dt_drawlayer_resolve_layer_geometry(self, self->dev->pipe, piece, &layer_width, &layer_height, NULL, NULL)) return FALSE;
 
   char sidecar_path[DT_PATH_MAX] = { 0 };
   if(!dt_drawlayer_io_sidecar_path(self->dev->image_storage.id, sidecar_path, sizeof(sidecar_path))) return FALSE;
@@ -2280,7 +2310,7 @@ static void _widget_changed(GtkWidget *widget, gpointer user_data)
   dt_iop_drawlayer_gui_data_t *g = (dt_iop_drawlayer_gui_data_t *)dt_iop_gui_data(self);
   if(IS_NULL_PTR(g) || (dt_gui_get_global() && dt_gui_widgets_suppressed())) return;
 
-  _sync_params_from_gui(self, FALSE);
+  dt_drawlayer_conf_sync_params_from_gui(self, FALSE);
 
   if(widget == g->controls.brush_mode || widget == g->controls.brush_shape) _sync_mode_sensitive_widgets(self);
 
@@ -2291,7 +2321,7 @@ static void _widget_changed(GtkWidget *widget, gpointer user_data)
   {
     float display_rgb[3] = { 0.0f };
     if(dt_drawlayer_widgets_get_display_color(g->ui.widgets, display_rgb))
-      _sync_cached_brush_colors(self, display_rgb);
+      dt_drawlayer_sync_cached_brush_colors(self, display_rgb);
   }
 
   if(widget == g->controls.brush_shape || widget == g->controls.opacity || widget == g->controls.softness || widget == g->controls.sprinkles
@@ -2304,7 +2334,7 @@ static gboolean _apply_selected_layer_attachment(dt_iop_module_t *self, dt_iop_d
                                                  dt_iop_drawlayer_params_t *params, const char *layer_name,
                                                  const int layer_order)
 {
-  if(IS_NULL_PTR(self) || IS_NULL_PTR(g) || IS_NULL_PTR(params) || layer_order < 0 || !_layer_name_non_empty(layer_name)) return FALSE;
+  if(IS_NULL_PTR(self) || IS_NULL_PTR(g) || IS_NULL_PTR(params) || layer_order < 0 || !dt_drawlayer_layer_name_non_empty(layer_name)) return FALSE;
 
   char previous_name[DRAWLAYER_NAME_SIZE] = { 0 };
   g_strlcpy(previous_name, params->layer_name, sizeof(previous_name));
@@ -2321,13 +2351,13 @@ static gboolean _apply_selected_layer_attachment(dt_iop_module_t *self, dt_iop_d
   }
 
   g->session.missing_layer_error[0] = '\0';
-  _touch_stroke_commit_hash(params, 0, FALSE, 0.0f, 0.0f, 0u);
+  dt_drawlayer_touch_stroke_commit_hash(params, 0, FALSE, 0.0f, 0.0f, 0u);
   if(self->dev)
   {
     dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
     dt_dev_pixelpipe_update_history_all(self->dev);
   }
-  _refresh_layer_widgets(self);
+  dt_drawlayer_refresh_layer_widgets(self);
   return TRUE;
 }
 
@@ -2344,7 +2374,7 @@ static void _layer_selected(GtkWidget *widget, gpointer user_data)
   const char *text = dt_bauhaus_combobox_get_text(g->controls.layer_select);
   if(IS_NULL_PTR(text)) return;
 
-  if(!_layer_name_non_empty(params->layer_name))
+  if(!dt_drawlayer_layer_name_non_empty(params->layer_name))
   {
     _sync_layer_controls(self);
     return;
@@ -2359,13 +2389,13 @@ static void _attach_selected_layer_clicked(GtkButton *button, gpointer user_data
   dt_iop_drawlayer_gui_data_t *g = self ? (dt_iop_drawlayer_gui_data_t *)dt_iop_gui_data(self) : NULL;
   dt_iop_drawlayer_params_t *params = self ? (dt_iop_drawlayer_params_t *)self->params : NULL;
   if(IS_NULL_PTR(self) || IS_NULL_PTR(self->dev) || IS_NULL_PTR(g) || IS_NULL_PTR(params)) return;
-  if(_layer_name_non_empty(params->layer_name)) return;
+  if(dt_drawlayer_layer_name_non_empty(params->layer_name)) return;
 
   const int active = dt_bauhaus_combobox_get(g->controls.layer_select);
   if(active < 0) return;
 
   const char *text = dt_bauhaus_combobox_get_text(g->controls.layer_select);
-  if(!_layer_name_non_empty(text)) return;
+  if(!dt_drawlayer_layer_name_non_empty(text)) return;
   _apply_selected_layer_attachment(self, g, params, text, active);
 }
 
@@ -2376,7 +2406,7 @@ static void _rename_layer_clicked(GtkButton *button, gpointer user_data)
   dt_iop_drawlayer_gui_data_t *g = self ? (dt_iop_drawlayer_gui_data_t *)dt_iop_gui_data(self) : NULL;
   dt_iop_drawlayer_params_t *params = self ? (dt_iop_drawlayer_params_t *)self->params : NULL;
   if(IS_NULL_PTR(self) || IS_NULL_PTR(self->dev) || IS_NULL_PTR(g) || IS_NULL_PTR(params)) return;
-  if(!_layer_name_non_empty(params->layer_name)) return;
+  if(!dt_drawlayer_layer_name_non_empty(params->layer_name)) return;
 
   char requested_name[DRAWLAYER_NAME_SIZE] = { 0 };
   if(!_prompt_layer_name_dialog(_("Rename drawing layer"),
@@ -2393,13 +2423,13 @@ static void _delete_layer_clicked(GtkButton *button, gpointer user_data)
   (void)button;
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
   if(IS_NULL_PTR(self->dev)) return;
-  if(!_commit_dabs(self, FALSE)) return;
+  if(!dt_drawlayer_commit_dabs(self, FALSE)) return;
   if(!_confirm_delete_layer(self, FALSE)) return;
 
   dt_iop_drawlayer_params_t *params = (dt_iop_drawlayer_params_t *)self->params;
-  _touch_stroke_commit_hash(params, 0, FALSE, 0.0f, 0.0f, 0u);
+  dt_drawlayer_touch_stroke_commit_hash(params, 0, FALSE, 0.0f, 0.0f, 0u);
   if(self->dev) dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
-  _refresh_layer_widgets(self);
+  dt_drawlayer_refresh_layer_widgets(self);
   gui_update(self);
 }
 
@@ -2409,7 +2439,7 @@ static gboolean _fill_current_layer(dt_iop_module_t *self, const float value)
   dt_iop_drawlayer_params_t *params = self ? (dt_iop_drawlayer_params_t *)self->params : NULL;
   if(IS_NULL_PTR(self) || IS_NULL_PTR(self->dev) || IS_NULL_PTR(g) || IS_NULL_PTR(params)) return FALSE;
 
-  if(!_commit_dabs(self, FALSE)) return FALSE;
+  if(!dt_drawlayer_commit_dabs(self, FALSE)) return FALSE;
   if(!_update_gui_runtime_manager(self, g, DT_DRAWLAYER_RUNTIME_EVENT_GUI_SYNC_TEMP_BUFFERS, FALSE).ok) return FALSE;
   if(IS_NULL_PTR(g->process.base_patch.pixels)) return FALSE;
 
@@ -2434,8 +2464,8 @@ static gboolean _fill_current_layer(dt_iop_module_t *self, const float value)
   g->process.cache_dirty_rect.nw[1] = 0;
   g->process.cache_dirty_rect.se[0] = g->process.base_patch.width;
   g->process.cache_dirty_rect.se[1] = g->process.base_patch.height;
-  _touch_stroke_commit_hash(params, 0, FALSE, 0.0f, 0.0f, 0u);
-  _reset_stroke_session(g);
+  dt_drawlayer_touch_stroke_commit_hash(params, 0, FALSE, 0.0f, 0.0f, 0u);
+  dt_drawlayer_layers_reset_stroke_session(g);
 
   dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
   return TRUE;
@@ -2447,7 +2477,7 @@ static gboolean _clear_current_layer(dt_iop_module_t *self)
   dt_iop_drawlayer_params_t *params = self ? (dt_iop_drawlayer_params_t *)self->params : NULL;
   if(IS_NULL_PTR(self) || IS_NULL_PTR(self->dev) || IS_NULL_PTR(g) || IS_NULL_PTR(params)) return FALSE;
 
-  if(!_commit_dabs(self, FALSE)) return FALSE;
+  if(!dt_drawlayer_commit_dabs(self, FALSE)) return FALSE;
   if(!_update_gui_runtime_manager(self, g, DT_DRAWLAYER_RUNTIME_EVENT_GUI_SYNC_TEMP_BUFFERS, FALSE).ok) return FALSE;
   if(IS_NULL_PTR(g->process.base_patch.pixels)) return FALSE;
 
@@ -2462,8 +2492,8 @@ static gboolean _clear_current_layer(dt_iop_module_t *self)
   g->process.cache_dirty_rect.nw[1] = 0;
   g->process.cache_dirty_rect.se[0] = g->process.base_patch.width;
   g->process.cache_dirty_rect.se[1] = g->process.base_patch.height;
-  _touch_stroke_commit_hash(params, 0, FALSE, 0.0f, 0.0f, 0u);
-  _reset_stroke_session(g);
+  dt_drawlayer_touch_stroke_commit_hash(params, 0, FALSE, 0.0f, 0.0f, 0u);
+  dt_drawlayer_layers_reset_stroke_session(g);
 
   dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
   return TRUE;
@@ -2504,12 +2534,12 @@ static void _save_layer_clicked(GtkButton *button, gpointer user_data)
                                   _("The sidecar save was aborted."));
     return;
   }
-  if(!_layer_name_non_empty(g->process.cache_layer_name))
+  if(!dt_drawlayer_layer_name_non_empty(g->process.cache_layer_name))
   {
     _show_drawlayer_modal_message(GTK_MESSAGE_ERROR,
                                   _("Layer name is empty."),
                                   _("The sidecar save was aborted."));
-    _refresh_layer_widgets(self);
+    dt_drawlayer_refresh_layer_widgets(self);
     return;
   }
 
@@ -2529,13 +2559,13 @@ static void _save_layer_clicked(GtkButton *button, gpointer user_data)
     return;
   }
 
-  _drawlayer_wait_for_rasterization_modal(g, _("Saving layer"),
+  dt_drawlayer_wait_for_rasterization_modal(g, _("Saving layer"),
                                           _("Waiting for the layer rasterization to finish..."));
 
   /* Saving the sidecar is explicit persistence, not a history edit.
    * We still finalize any pending stroke first so the flush sees the latest
    * authoritative cache state, then write that cache to the TIFF immediately. */
-  if(!_commit_dabs(self, FALSE))
+  if(!dt_drawlayer_commit_dabs(self, FALSE))
   {
     _show_drawlayer_modal_message(GTK_MESSAGE_ERROR,
                                   _("Failed to finalize the drawing stroke."),
@@ -2543,10 +2573,10 @@ static void _save_layer_clicked(GtkButton *button, gpointer user_data)
     return;
   }
 
-  _rekey_shared_base_patch(&g->process.base_patch, self->dev->image_storage.id,
+  dt_drawlayer_rekey_shared_base_patch(&g->process.base_patch, self->dev->image_storage.id,
                            (const dt_iop_drawlayer_params_t *)self->params);
 
-  if(!_flush_layer_cache(self))
+  if(!dt_drawlayer_flush_layer_cache(self))
   {
     _show_drawlayer_modal_message(GTK_MESSAGE_ERROR,
                                   _("Failed to write the drawing layer sidecar."),
@@ -2554,8 +2584,8 @@ static void _save_layer_clicked(GtkButton *button, gpointer user_data)
     return;
   }
 
-  _release_all_base_patch_extra_refs(g);
-  _refresh_layer_widgets(self);
+  dt_drawlayer_release_all_base_patch_extra_refs(g);
+  dt_drawlayer_refresh_layer_widgets(self);
 
   _show_drawlayer_modal_message(GTK_MESSAGE_INFO,
                                 _("Drawing sidecar saved."),
@@ -2603,7 +2633,7 @@ static void _preview_bg_toggled(GtkToggleButton *button, gpointer user_data)
     g->session.preview_bg_mode = DRAWLAYER_PREVIEW_BG_IMAGE;
 
   _sync_preview_bg_buttons(self);
-  if(params) _touch_stroke_commit_hash(params, 0, FALSE, 0.0f, 0.0f, 0u);
+  if(params) dt_drawlayer_touch_stroke_commit_hash(params, 0, FALSE, 0.0f, 0.0f, 0u);
   dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
   dt_dev_pixelpipe_update_history_all(self->dev);
 }
@@ -2656,6 +2686,11 @@ void dt_drawlayer_begin_gui_stroke_capture(dt_iop_module_t *self, const dt_drawl
   g->stroke.stroke_event_index = event_index;
   g->stroke.last_dab_valid = FALSE;
   dt_drawlayer_worker_reset_live_publish(g->stroke.worker);
+  /* Hand the worker its own params blob for this stroke's heartbeats. Nothing may change
+   * `self->params` while a stroke is live -- every GUI writer of it runs `dt_drawlayer_commit_dabs(self,
+   * FALSE)` first, which waits for the worker -- so one snapshot here is valid for the whole
+   * stroke, and the worker never has to read a blob the GUI thread owns. */
+  dt_drawlayer_worker_snapshot_params(g->stroke.worker, (const dt_iop_drawlayer_params_t *)self->params);
   dt_iop_gui_leave_critical_section(self);
 }
 
@@ -2687,8 +2722,6 @@ static dt_drawlayer_runtime_result_t _update_gui_runtime_manager(dt_iop_module_t
   };
   const dt_drawlayer_runtime_host_t runtime_manager = {
     .user_data = (void *)&runtime_host,
-    .collect_inputs = _drawlayer_runtime_collect_inputs,
-    .perform_action = _drawlayer_runtime_perform_action,
   };
   return dt_drawlayer_runtime_manager_update(
       &g->manager,
@@ -2708,12 +2741,12 @@ void dt_drawlayer_show_runtime_feedback(const dt_iop_drawlayer_gui_data_t *g,
   switch(feedback)
   {
     case DT_DRAWLAYER_RUNTIME_FEEDBACK_FOCUS_LOSS_WAIT:
-      _drawlayer_wait_for_rasterization_modal(g, _("Finishing drawing"),
+      dt_drawlayer_wait_for_rasterization_modal(g, _("Finishing drawing"),
                                               _("Waiting for the drawing rasterization to finish..."));
       break;
 
     case DT_DRAWLAYER_RUNTIME_FEEDBACK_SAVE_WAIT:
-      _drawlayer_wait_for_rasterization_modal(g, _("Saving layer"),
+      dt_drawlayer_wait_for_rasterization_modal(g, _("Saving layer"),
                                               _("Waiting for the layer rasterization to finish..."));
       break;
 
@@ -2837,7 +2870,7 @@ void commit_params(dt_iop_module_t *self, dt_iop_params_t *params, dt_dev_pixelp
                                           g ? &g->process : NULL, display_pipe, &data->runtime_manager,
                                           &data->runtime_process, &data->runtime_display_pipe);
   memcpy(&data->params, params, sizeof(dt_iop_drawlayer_params_t));
-  _sanitize_params(self, &data->params);
+  dt_drawlayer_sanitize_params(self, &data->params);
 
   /* Every pipe now warms the same authoritative base-patch snapshot through
    * the pixelpipe cache during `commit_params()`. GUI pipes still keep their
@@ -2850,7 +2883,7 @@ void commit_params(dt_iop_module_t *self, dt_iop_params_t *params, dt_dev_pixelp
 void gui_reset(dt_iop_module_t *self)
 {
   if(IS_NULL_PTR(self) || IS_NULL_PTR(self->dev)) return;
-  if(!_commit_dabs(self, FALSE)) return;
+  if(!dt_drawlayer_commit_dabs(self, FALSE)) return;
   if(!_confirm_delete_layer(self, FALSE)) return;
 
   dt_iop_drawlayer_params_t *params = (dt_iop_drawlayer_params_t *)self->params;
@@ -2858,124 +2891,39 @@ void gui_reset(dt_iop_module_t *self)
   params->layer_order = -1;
   params->sidecar_timestamp = 0;
   memset(params->work_profile, 0, sizeof(params->work_profile));
-  _touch_stroke_commit_hash(params, 0, FALSE, 0.0f, 0.0f, 0u);
+  dt_drawlayer_touch_stroke_commit_hash(params, 0, FALSE, 0.0f, 0.0f, 0u);
   dt_iop_drawlayer_gui_data_t *g = (dt_iop_drawlayer_gui_data_t *)dt_iop_gui_data(self);
   if(!IS_NULL_PTR(g))
   {
     g->session.missing_layer_error[0] = '\0';
-    drawlayer_runtime_host_context_t runtime_host = {
-      .runtime = {
-        .self = self,
-        .runtime_params = (const dt_iop_drawlayer_params_t *)self->params,
-        .gui = g,
-        .manager = &g->manager,
-        .process_state = &g->process,
-      },
-    };
-    const dt_drawlayer_runtime_host_t runtime_manager = {
-      .user_data = &runtime_host,
-      .collect_inputs = _drawlayer_runtime_collect_inputs,
-      .perform_action = _drawlayer_runtime_perform_action,
-    };
-    dt_drawlayer_runtime_manager_update(
-        &g->manager,
-        &(dt_drawlayer_runtime_update_request_t){
-          .event = DT_DRAWLAYER_RUNTIME_EVENT_GUI_RESYNC,
-          .raw_input_kind = DT_DRAWLAYER_RUNTIME_RAW_INPUT_NONE,
-        },
-        &runtime_manager);
+    _update_gui_runtime_manager(self, g, DT_DRAWLAYER_RUNTIME_EVENT_GUI_RESYNC, FALSE);
   }
 
   _sync_mode_sensitive_widgets(self);
-  _refresh_layer_widgets(self);
+  dt_drawlayer_refresh_layer_widgets(self);
 }
 
 /** @brief Hook called before module removal from history stack. */
 gboolean module_will_remove(dt_iop_module_t *self)
 {
   if(IS_NULL_PTR(self->dev)) return TRUE;
-  if(!_commit_dabs(self, FALSE)) return FALSE;
-  _flush_layer_cache(self);
+  if(!dt_drawlayer_commit_dabs(self, FALSE)) return FALSE;
+  dt_drawlayer_flush_layer_cache(self);
   return _confirm_delete_layer(self, TRUE);
 }
 
-/** @brief Build GUI widgets and initialize worker/caches. */
-void gui_init(dt_iop_module_t *self)
+
+
+
+/**
+ * @brief Build the Brush tab: mode, colour, geometry, thickness and texture.
+ *
+ * The largest of the three and entirely stereotyped -- a control, its tooltip, its range,
+ * its pack. It reads nothing of the module's own state; everything it builds is reached
+ * afterwards through g->controls.
+ */
+static void _build_brush_tab(dt_iop_module_t *self, dt_iop_drawlayer_gui_data_t *g, GtkWidget *brush_tab)
 {
-  IOP_GUI_ALLOC(drawlayer);
-  dt_iop_drawlayer_gui_data_t *g = (dt_iop_drawlayer_gui_data_t *)dt_iop_gui_data(self);
-  dt_iop_drawlayer_params_t *params = (dt_iop_drawlayer_params_t *)self->params;
-  _ensure_gui_conf_defaults();
-  g->ui.widgets = dt_drawlayer_widgets_init();
-  dt_drawlayer_runtime_manager_init(&g->manager);
-  dt_drawlayer_process_state_init(&g->process);
-  _load_color_history(g);
-  _sanitize_params(self, params);
-
-  dt_drawlayer_worker_init(self, &g->stroke.worker, &g->manager.painting_active,
-                           &g->stroke.finish_commit_pending, &g->stroke.stroke_sample_count,
-                           &g->stroke.current_stroke_batch);
-  g->session.background_job_running = FALSE;
-  g->session.last_view_x = 0.0f;
-  g->session.last_view_y = 0.0f;
-  g->session.last_view_scale = 1.0f;
-  if(self->dev)
-  {
-    g->session.last_view_x = dt_dev_viewport_center_x(self->dev);
-    g->session.last_view_y = dt_dev_viewport_center_y(self->dev);
-    g->session.last_view_scale = dt_dev_viewport_scaling(self->dev);
-  }
-
-  self->gui->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
-  if(self->gui->reset_button) gtk_widget_hide(self->gui->reset_button);
-
-  GtkWidget *history_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
-  g->controls.save_layer = gtk_button_new_with_label(_("save sidecar"));
-  gtk_box_pack_start(GTK_BOX(history_box), g->controls.save_layer, TRUE, TRUE, 0);
-  gtk_box_pack_start(GTK_BOX(self->gui->widget), history_box, FALSE, FALSE, 0);
-
-  GtkWidget *notebook = gtk_notebook_new();
-  g->controls.notebook = notebook;
-  gtk_widget_set_hexpand(notebook, TRUE);
-  gtk_box_pack_start(GTK_BOX(self->gui->widget), notebook, FALSE, FALSE, 0);
-  // image_colorpicker lives on the "Brush" tab; reset it if still active once the
-  // user switches away from that tab.
-  dt_ui_notebook_set_picker_owner(GTK_NOTEBOOK(notebook), self);
-
-  GtkWidget *brush_tab = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
-  GtkWidget *layer_tab = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
-  GtkWidget *input_tab = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
-  g->controls.brush_tab = brush_tab;
-  g->controls.layer_tab = layer_tab;
-  g->controls.input_tab = input_tab;
-
-  gtk_notebook_append_page(GTK_NOTEBOOK(notebook), brush_tab, gtk_label_new(_("Brush")));
-  gtk_notebook_append_page(GTK_NOTEBOOK(notebook), layer_tab, gtk_label_new(_("Layer")));
-  gtk_notebook_append_page(GTK_NOTEBOOK(notebook), input_tab, gtk_label_new(_("Input")));
-  gtk_container_child_set(GTK_CONTAINER(notebook), brush_tab, "tab-expand", TRUE, "tab-fill", TRUE, NULL);
-  gtk_container_child_set(GTK_CONTAINER(notebook), layer_tab, "tab-expand", TRUE, "tab-fill", TRUE, NULL);
-  gtk_container_child_set(GTK_CONTAINER(notebook), input_tab, "tab-expand", TRUE, "tab-fill", TRUE, NULL);
-
-  GtkWidget *preview_title = gtk_label_new(_("Background"));
-  g->controls.preview_title = preview_title;
-  gtk_widget_set_halign(preview_title, GTK_ALIGN_START);
-  GtkWidget *preview_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
-  g->controls.preview_box = preview_box;
-  GSList *preview_group = NULL;
-  g->controls.preview_bg_image = gtk_radio_button_new_with_label(preview_group, _("image"));
-  preview_group = gtk_radio_button_get_group(GTK_RADIO_BUTTON(g->controls.preview_bg_image));
-  g->controls.preview_bg_white = gtk_radio_button_new_with_label(preview_group, _("white"));
-  preview_group = gtk_radio_button_get_group(GTK_RADIO_BUTTON(g->controls.preview_bg_white));
-  g->controls.preview_bg_grey = gtk_radio_button_new_with_label(preview_group, _("grey"));
-  preview_group = gtk_radio_button_get_group(GTK_RADIO_BUTTON(g->controls.preview_bg_grey));
-  g->controls.preview_bg_black = gtk_radio_button_new_with_label(preview_group, _("black"));
-  gtk_box_pack_start(GTK_BOX(preview_box), g->controls.preview_bg_image, TRUE, TRUE, 0);
-  gtk_box_pack_start(GTK_BOX(preview_box), g->controls.preview_bg_white, TRUE, TRUE, 0);
-  gtk_box_pack_start(GTK_BOX(preview_box), g->controls.preview_bg_grey, TRUE, TRUE, 0);
-  gtk_box_pack_start(GTK_BOX(preview_box), g->controls.preview_bg_black, TRUE, TRUE, 0);
-  gtk_box_pack_start(GTK_BOX(layer_tab), preview_title, FALSE, FALSE, 0);
-  gtk_box_pack_start(GTK_BOX(layer_tab), preview_box, FALSE, FALSE, 0);
-
   g->controls.brush_mode = dt_bauhaus_combobox_new(dt_bauhaus_get_global(), DT_GUI_MODULE(self));
   dt_bauhaus_combobox_add(g->controls.brush_mode, _("paint"));
   dt_bauhaus_combobox_add(g->controls.brush_mode, _("erase"));
@@ -3083,88 +3031,6 @@ void gui_init(dt_iop_module_t *self)
   dt_bauhaus_slider_set_format(g->controls.sprinkle_coarseness, "%");
   gtk_box_pack_start(GTK_BOX(brush_tab), g->controls.sprinkle_coarseness, TRUE, TRUE, 0);
 
-  GtkWidget *layer_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
-  GtkWidget *layer_status = gtk_label_new("");
-  g->controls.layer_status = layer_status;
-  gtk_widget_set_halign(layer_status, GTK_ALIGN_START);
-  gtk_label_set_xalign(GTK_LABEL(layer_status), 0.0f);
-  gtk_label_set_line_wrap(GTK_LABEL(layer_status), TRUE);
-  GtkWidget *layer_fill_title = gtk_label_new(_("Fill"));
-  g->controls.layer_fill_title = layer_fill_title;
-  gtk_widget_set_halign(layer_fill_title, GTK_ALIGN_START);
-  GtkWidget *layer_action_row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
-  g->controls.layer_action_row = layer_action_row;
-  GtkWidget *layer_fill_row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
-  g->controls.layer_fill_row = layer_fill_row;
-  g->controls.layer_select = dt_bauhaus_combobox_new(dt_bauhaus_get_global(), DT_GUI_MODULE(self));
-  dt_bauhaus_widget_set_label(g->controls.layer_select, _("Source layer"));
-  g->controls.delete_layer = gtk_button_new_with_label(_("delete layer"));
-  g->controls.create_layer = gtk_button_new_with_label(_("create new layer"));
-  g->controls.rename_layer = gtk_button_new_with_label(_("rename layer"));
-  g->controls.attach_layer = gtk_button_new_with_label(_("reuse selected layer"));
-  g->controls.create_background = gtk_button_new_with_label(_("create background from input"));
-  g->controls.fill_white = gtk_button_new_with_label(_("white"));
-  g->controls.fill_black = gtk_button_new_with_label(_("black"));
-  g->controls.fill_transparent = gtk_button_new_with_label(_("transparency"));
-  gtk_box_pack_start(GTK_BOX(layer_box), layer_status, FALSE, FALSE, 0);
-  gtk_box_pack_start(GTK_BOX(layer_box), g->controls.layer_select, FALSE, FALSE, 0);
-  gtk_box_pack_start(GTK_BOX(layer_action_row), g->controls.create_layer, TRUE, TRUE, 0);
-  gtk_box_pack_start(GTK_BOX(layer_action_row), g->controls.rename_layer, TRUE, TRUE, 0);
-  gtk_box_pack_start(GTK_BOX(layer_action_row), g->controls.attach_layer, TRUE, TRUE, 0);
-  gtk_box_pack_start(GTK_BOX(layer_action_row), g->controls.delete_layer, TRUE, TRUE, 0);
-  gtk_box_pack_start(GTK_BOX(layer_box), layer_action_row, FALSE, FALSE, 0);
-  gtk_box_pack_start(GTK_BOX(layer_box), layer_fill_title, FALSE, FALSE, 0);
-  gtk_box_pack_start(GTK_BOX(layer_fill_row), g->controls.fill_white, TRUE, TRUE, 0);
-  gtk_box_pack_start(GTK_BOX(layer_fill_row), g->controls.fill_black, TRUE, TRUE, 0);
-  gtk_box_pack_start(GTK_BOX(layer_fill_row), g->controls.fill_transparent, TRUE, TRUE, 0);
-  gtk_box_pack_start(GTK_BOX(layer_box), layer_fill_row, FALSE, FALSE, 0);
-  gtk_box_pack_start(GTK_BOX(layer_box), g->controls.create_background, FALSE, FALSE, 0);
-  gtk_box_pack_start(GTK_BOX(layer_tab), layer_box, FALSE, FALSE, 0);
-
-  GtkWidget *mapping_title = gtk_label_new(_("tablet mapping"));
-  gtk_widget_set_halign(mapping_title, GTK_ALIGN_START);
-  GtkWidget *grid = gtk_grid_new();
-  gtk_grid_set_row_spacing(GTK_GRID(grid), DT_GUI_BOX_SPACING);
-  gtk_grid_set_column_spacing(GTK_GRID(grid), DT_GUI_BOX_SPACING);
-
-  const char *labels[4] = { _("size"), _("opacity"), _("flow"), _("hardness") };
-  const char *rows[3] = { _("pressure"), _("tilt"), _("acceleration") };
-  GtkWidget **targets[3][4] = {
-    { &g->controls.map_pressure_size, &g->controls.map_pressure_opacity, &g->controls.map_pressure_flow, &g->controls.map_pressure_softness },
-    { &g->controls.map_tilt_size, &g->controls.map_tilt_opacity, &g->controls.map_tilt_flow, &g->controls.map_tilt_softness },
-    { &g->controls.map_accel_size, &g->controls.map_accel_opacity, &g->controls.map_accel_flow, &g->controls.map_accel_softness },
-  };
-  GtkWidget **profiles[3] = { &g->controls.pressure_profile, &g->controls.tilt_profile, &g->controls.accel_profile };
-
-  for(int c = 0; c < 4; c++)
-  {
-    GtkWidget *label = gtk_label_new(labels[c]);
-    gtk_label_set_angle(GTK_LABEL(label), 90.0);
-    gtk_grid_attach(GTK_GRID(grid), label, c + 1, 0, 1, 1);
-  }
-  gtk_grid_attach(GTK_GRID(grid), gtk_label_new(_("profile")), 5, 0, 1, 1);
-
-  for(int r = 0; r < 3; r++)
-  {
-    gtk_grid_attach(GTK_GRID(grid), gtk_label_new(rows[r]), 0, r + 1, 1, 1);
-    for(int c = 0; c < 4; c++)
-    {
-      *targets[r][c] = gtk_check_button_new();
-      gtk_grid_attach(GTK_GRID(grid), *targets[r][c], c + 1, r + 1, 1, 1);
-    }
-    *profiles[r] = dt_bauhaus_combobox_new(dt_bauhaus_get_global(), DT_GUI_MODULE(self));
-    dt_bauhaus_combobox_add(*profiles[r], _("linear"));
-    dt_bauhaus_combobox_add(*profiles[r], _("quadratic"));
-    dt_bauhaus_combobox_add(*profiles[r], _("square root"));
-    dt_bauhaus_combobox_add(*profiles[r], _("inverse linear"));
-    dt_bauhaus_combobox_add(*profiles[r], _("inverse square root"));
-    dt_bauhaus_combobox_add(*profiles[r], _("inverse quadratic"));
-    gtk_grid_attach(GTK_GRID(grid), *profiles[r], 5, r + 1, 1, 1);
-  }
-
-  gtk_box_pack_start(GTK_BOX(input_tab), mapping_title, FALSE, FALSE, 0);
-  gtk_box_pack_start(GTK_BOX(input_tab), grid, FALSE, FALSE, 0);
-
   g_signal_connect(g->controls.brush_shape, "draw", G_CALLBACK(_brush_profile_draw), self);
   g_signal_connect(g->controls.brush_shape, "button-press-event", G_CALLBACK(_brush_profile_button_press), self);
   g_signal_connect(G_OBJECT(g->controls.brush_mode), "value-changed", G_CALLBACK(_widget_changed), self);
@@ -3185,6 +3051,75 @@ void gui_init(dt_iop_module_t *self)
   g_signal_connect(G_OBJECT(g->controls.sprinkle_coarseness), "value-changed", G_CALLBACK(_widget_changed), self);
   g_signal_connect(G_OBJECT(g->controls.softness), "value-changed", G_CALLBACK(_widget_changed), self);
   g_signal_connect(G_OBJECT(g->controls.hdr_exposure), "value-changed", G_CALLBACK(_widget_changed), self);
+}
+
+/**
+ * @brief Build the Layer tab: the Background choice, the layer list and its actions.
+ *
+ * The Background radios and the layer box pack into the same tab and were written a hundred
+ * lines apart, with the whole Brush tab between them; the previous commit moved them
+ * together so this one could lift them out.
+ */
+static void _build_layer_tab(dt_iop_module_t *self, dt_iop_drawlayer_gui_data_t *g, GtkWidget *layer_tab)
+{
+  GtkWidget *preview_title = gtk_label_new(_("Background"));
+  g->controls.preview_title = preview_title;
+  gtk_widget_set_halign(preview_title, GTK_ALIGN_START);
+  GtkWidget *preview_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
+  g->controls.preview_box = preview_box;
+  GSList *preview_group = NULL;
+  g->controls.preview_bg_image = gtk_radio_button_new_with_label(preview_group, _("image"));
+  preview_group = gtk_radio_button_get_group(GTK_RADIO_BUTTON(g->controls.preview_bg_image));
+  g->controls.preview_bg_white = gtk_radio_button_new_with_label(preview_group, _("white"));
+  preview_group = gtk_radio_button_get_group(GTK_RADIO_BUTTON(g->controls.preview_bg_white));
+  g->controls.preview_bg_grey = gtk_radio_button_new_with_label(preview_group, _("grey"));
+  preview_group = gtk_radio_button_get_group(GTK_RADIO_BUTTON(g->controls.preview_bg_grey));
+  g->controls.preview_bg_black = gtk_radio_button_new_with_label(preview_group, _("black"));
+  gtk_box_pack_start(GTK_BOX(preview_box), g->controls.preview_bg_image, TRUE, TRUE, 0);
+  gtk_box_pack_start(GTK_BOX(preview_box), g->controls.preview_bg_white, TRUE, TRUE, 0);
+  gtk_box_pack_start(GTK_BOX(preview_box), g->controls.preview_bg_grey, TRUE, TRUE, 0);
+  gtk_box_pack_start(GTK_BOX(preview_box), g->controls.preview_bg_black, TRUE, TRUE, 0);
+  gtk_box_pack_start(GTK_BOX(layer_tab), preview_title, FALSE, FALSE, 0);
+  gtk_box_pack_start(GTK_BOX(layer_tab), preview_box, FALSE, FALSE, 0);
+
+  GtkWidget *layer_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
+  GtkWidget *layer_status = gtk_label_new("");
+  g->controls.layer_status = layer_status;
+  gtk_widget_set_halign(layer_status, GTK_ALIGN_START);
+  gtk_label_set_xalign(GTK_LABEL(layer_status), 0.0f);
+  gtk_label_set_line_wrap(GTK_LABEL(layer_status), TRUE);
+  GtkWidget *layer_fill_title = gtk_label_new(_("Fill"));
+  g->controls.layer_fill_title = layer_fill_title;
+  gtk_widget_set_halign(layer_fill_title, GTK_ALIGN_START);
+  GtkWidget *layer_action_row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
+  g->controls.layer_action_row = layer_action_row;
+  GtkWidget *layer_fill_row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
+  g->controls.layer_fill_row = layer_fill_row;
+  g->controls.layer_select = dt_bauhaus_combobox_new(dt_bauhaus_get_global(), DT_GUI_MODULE(self));
+  dt_bauhaus_widget_set_label(g->controls.layer_select, _("Source layer"));
+  g->controls.delete_layer = gtk_button_new_with_label(_("delete layer"));
+  g->controls.create_layer = gtk_button_new_with_label(_("create new layer"));
+  g->controls.rename_layer = gtk_button_new_with_label(_("rename layer"));
+  g->controls.attach_layer = gtk_button_new_with_label(_("reuse selected layer"));
+  g->controls.create_background = gtk_button_new_with_label(_("create background from input"));
+  GtkWidget *fill_white = gtk_button_new_with_label(_("white"));
+  GtkWidget *fill_black = gtk_button_new_with_label(_("black"));
+  GtkWidget *fill_transparent = gtk_button_new_with_label(_("transparency"));
+  gtk_box_pack_start(GTK_BOX(layer_box), layer_status, FALSE, FALSE, 0);
+  gtk_box_pack_start(GTK_BOX(layer_box), g->controls.layer_select, FALSE, FALSE, 0);
+  gtk_box_pack_start(GTK_BOX(layer_action_row), g->controls.create_layer, TRUE, TRUE, 0);
+  gtk_box_pack_start(GTK_BOX(layer_action_row), g->controls.rename_layer, TRUE, TRUE, 0);
+  gtk_box_pack_start(GTK_BOX(layer_action_row), g->controls.attach_layer, TRUE, TRUE, 0);
+  gtk_box_pack_start(GTK_BOX(layer_action_row), g->controls.delete_layer, TRUE, TRUE, 0);
+  gtk_box_pack_start(GTK_BOX(layer_box), layer_action_row, FALSE, FALSE, 0);
+  gtk_box_pack_start(GTK_BOX(layer_box), layer_fill_title, FALSE, FALSE, 0);
+  gtk_box_pack_start(GTK_BOX(layer_fill_row), fill_white, TRUE, TRUE, 0);
+  gtk_box_pack_start(GTK_BOX(layer_fill_row), fill_black, TRUE, TRUE, 0);
+  gtk_box_pack_start(GTK_BOX(layer_fill_row), fill_transparent, TRUE, TRUE, 0);
+  gtk_box_pack_start(GTK_BOX(layer_box), layer_fill_row, FALSE, FALSE, 0);
+  gtk_box_pack_start(GTK_BOX(layer_box), g->controls.create_background, FALSE, FALSE, 0);
+  gtk_box_pack_start(GTK_BOX(layer_tab), layer_box, FALSE, FALSE, 0);
+
   g_signal_connect(G_OBJECT(g->controls.layer_select), "value-changed", G_CALLBACK(_layer_selected), self);
   g_signal_connect(g->controls.preview_bg_image, "toggled", G_CALLBACK(_preview_bg_toggled), self);
   g_signal_connect(g->controls.preview_bg_white, "toggled", G_CALLBACK(_preview_bg_toggled), self);
@@ -3194,44 +3129,139 @@ void gui_init(dt_iop_module_t *self)
   g_signal_connect(g->controls.rename_layer, "clicked", G_CALLBACK(_rename_layer_clicked), self);
   g_signal_connect(g->controls.attach_layer, "clicked", G_CALLBACK(_attach_selected_layer_clicked), self);
   g_signal_connect(g->controls.create_background, "clicked", G_CALLBACK(_create_background_clicked), self);
-  g_signal_connect(g->controls.save_layer, "clicked", G_CALLBACK(_save_layer_clicked), self);
   g_signal_connect(g->controls.delete_layer, "clicked", G_CALLBACK(_delete_layer_clicked), self);
-  g_signal_connect(g->controls.fill_white, "clicked", G_CALLBACK(_fill_white_clicked), self);
-  g_signal_connect(g->controls.fill_black, "clicked", G_CALLBACK(_fill_black_clicked), self);
-  g_signal_connect(g->controls.fill_transparent, "clicked", G_CALLBACK(_fill_transparent_clicked), self);
+  g_signal_connect(fill_white, "clicked", G_CALLBACK(_fill_white_clicked), self);
+  g_signal_connect(fill_black, "clicked", G_CALLBACK(_fill_black_clicked), self);
+  g_signal_connect(fill_transparent, "clicked", G_CALLBACK(_fill_transparent_clicked), self);
+}
+
+/**
+ * @brief Build the Input tab: the tablet-mapping grid and its profile combos.
+ *
+ * The grid is three input axes by four brush properties, and the two tables below are the
+ * only statement of which cell is which control. They stay inside this function along with
+ * the signal loop that reads them -- a table that escapes its builder is a table some other
+ * function starts spelling out by hand, which is what happened to gui_update.
+ */
+static void _build_input_tab(dt_iop_module_t *self, dt_iop_drawlayer_gui_data_t *g, GtkWidget *input_tab)
+{
+  GtkWidget *mapping_title = gtk_label_new(_("tablet mapping"));
+  gtk_widget_set_halign(mapping_title, GTK_ALIGN_START);
+  GtkWidget *grid = gtk_grid_new();
+  gtk_grid_set_row_spacing(GTK_GRID(grid), DT_GUI_BOX_SPACING);
+  gtk_grid_set_column_spacing(GTK_GRID(grid), DT_GUI_BOX_SPACING);
+
+  const char *labels[4] = { _("size"), _("opacity"), _("flow"), _("hardness") };
+  const char *rows[3] = { _("pressure"), _("tilt"), _("acceleration") };
+  dt_drawlayer_mapping_row_t mapping[DT_DRAWLAYER_MAPPING_ROWS];
+  dt_drawlayer_mapping_rows(g, mapping);
+
+  for(int c = 0; c < 4; c++)
+  {
+    GtkWidget *label = gtk_label_new(labels[c]);
+    gtk_label_set_angle(GTK_LABEL(label), 90.0);
+    gtk_grid_attach(GTK_GRID(grid), label, c + 1, 0, 1, 1);
+  }
+  gtk_grid_attach(GTK_GRID(grid), gtk_label_new(_("profile")), 5, 0, 1, 1);
 
   for(int r = 0; r < 3; r++)
   {
-    for(int c = 0; c < 4; c++) g_signal_connect(*targets[r][c], "toggled", G_CALLBACK(_widget_changed), self);
-    g_signal_connect(G_OBJECT(*profiles[r]), "value-changed", G_CALLBACK(_widget_changed), self);
+    gtk_grid_attach(GTK_GRID(grid), gtk_label_new(rows[r]), 0, r + 1, 1, 1);
+    for(int c = 0; c < 4; c++)
+    {
+      *mapping[r].targets[c].widget = gtk_check_button_new();
+      gtk_grid_attach(GTK_GRID(grid), *mapping[r].targets[c].widget, c + 1, r + 1, 1, 1);
+    }
+    *mapping[r].profile.widget = dt_bauhaus_combobox_new(dt_bauhaus_get_global(), DT_GUI_MODULE(self));
+    dt_bauhaus_combobox_add(*mapping[r].profile.widget, _("linear"));
+    dt_bauhaus_combobox_add(*mapping[r].profile.widget, _("quadratic"));
+    dt_bauhaus_combobox_add(*mapping[r].profile.widget, _("square root"));
+    dt_bauhaus_combobox_add(*mapping[r].profile.widget, _("inverse linear"));
+    dt_bauhaus_combobox_add(*mapping[r].profile.widget, _("inverse square root"));
+    dt_bauhaus_combobox_add(*mapping[r].profile.widget, _("inverse quadratic"));
+    gtk_grid_attach(GTK_GRID(grid), *mapping[r].profile.widget, 5, r + 1, 1, 1);
   }
+
+  gtk_box_pack_start(GTK_BOX(input_tab), mapping_title, FALSE, FALSE, 0);
+  gtk_box_pack_start(GTK_BOX(input_tab), grid, FALSE, FALSE, 0);
+
+  for(int r = 0; r < 3; r++)
+  {
+    for(int c = 0; c < DT_DRAWLAYER_MAPPING_TARGETS; c++) g_signal_connect(*mapping[r].targets[c].widget, "toggled", G_CALLBACK(_widget_changed), self);
+    g_signal_connect(G_OBJECT(*mapping[r].profile.widget), "value-changed", G_CALLBACK(_widget_changed), self);
+  }
+}
+/** @brief Build GUI widgets and initialize worker/caches. */
+void gui_init(dt_iop_module_t *self)
+{
+  IOP_GUI_ALLOC(drawlayer);
+  dt_iop_drawlayer_gui_data_t *g = (dt_iop_drawlayer_gui_data_t *)dt_iop_gui_data(self);
+  dt_iop_drawlayer_params_t *params = (dt_iop_drawlayer_params_t *)self->params;
+  dt_drawlayer_conf_ensure_defaults();
+  g->ui.widgets = dt_drawlayer_widgets_init();
+  dt_drawlayer_runtime_manager_init(&g->manager);
+  dt_drawlayer_process_state_init(&g->process);
+  dt_drawlayer_conf_load_color_history(g);
+  dt_drawlayer_sanitize_params(self, params);
+
+  dt_drawlayer_worker_init(self, &g->stroke.worker, &g->manager.painting_active,
+                           &g->stroke.finish_commit_pending, &g->stroke.stroke_sample_count,
+                           &g->stroke.current_stroke_batch);
+  g->session.background_job_running = FALSE;
+  g->session.last_view_x = 0.0f;
+  g->session.last_view_y = 0.0f;
+  g->session.last_view_scale = 1.0f;
+  if(self->dev)
+  {
+    g->session.last_view_x = dt_dev_viewport_center_x(self->dev);
+    g->session.last_view_y = dt_dev_viewport_center_y(self->dev);
+    g->session.last_view_scale = dt_dev_viewport_scaling(self->dev);
+  }
+
+  self->gui->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
+  if(self->gui->reset_button) gtk_widget_hide(self->gui->reset_button);
+
+  GtkWidget *history_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
+  g->controls.save_layer = gtk_button_new_with_label(_("save sidecar"));
+  gtk_box_pack_start(GTK_BOX(history_box), g->controls.save_layer, TRUE, TRUE, 0);
+  gtk_box_pack_start(GTK_BOX(self->gui->widget), history_box, FALSE, FALSE, 0);
+
+  GtkWidget *notebook = gtk_notebook_new();
+  g->controls.notebook = notebook;
+  gtk_widget_set_hexpand(notebook, TRUE);
+  gtk_box_pack_start(GTK_BOX(self->gui->widget), notebook, FALSE, FALSE, 0);
+  // image_colorpicker lives on the "Brush" tab; reset it if still active once the
+  // user switches away from that tab.
+  dt_ui_notebook_set_picker_owner(GTK_NOTEBOOK(notebook), self);
+
+  GtkWidget *brush_tab = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
+  GtkWidget *layer_tab = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
+  GtkWidget *input_tab = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
+  g->controls.brush_tab = brush_tab;
+  g->controls.layer_tab = layer_tab;
+  g->controls.input_tab = input_tab;
+
+  gtk_notebook_append_page(GTK_NOTEBOOK(notebook), brush_tab, gtk_label_new(_("Brush")));
+  gtk_notebook_append_page(GTK_NOTEBOOK(notebook), layer_tab, gtk_label_new(_("Layer")));
+  gtk_notebook_append_page(GTK_NOTEBOOK(notebook), input_tab, gtk_label_new(_("Input")));
+  gtk_container_child_set(GTK_CONTAINER(notebook), brush_tab, "tab-expand", TRUE, "tab-fill", TRUE, NULL);
+  gtk_container_child_set(GTK_CONTAINER(notebook), layer_tab, "tab-expand", TRUE, "tab-fill", TRUE, NULL);
+  gtk_container_child_set(GTK_CONTAINER(notebook), input_tab, "tab-expand", TRUE, "tab-fill", TRUE, NULL);
+
+  _build_brush_tab(self, g, brush_tab);
+
+  _build_layer_tab(self, g, layer_tab);
+
+  _build_input_tab(self, g, input_tab);
+
+  g_signal_connect(g->controls.save_layer, "clicked", G_CALLBACK(_save_layer_clicked), self);
 
   DT_DEBUG_CONTROL_SIGNAL_CONNECT(dt_control_signal_get_global(), DT_SIGNAL_DEVELOP_UI_PIPE_FINISHED,
                                   G_CALLBACK(_develop_ui_pipe_finished_callback), self);
 
   if(self->dev)
   {
-    drawlayer_runtime_host_context_t runtime_host = {
-      .runtime = {
-        .self = self,
-        .runtime_params = (const dt_iop_drawlayer_params_t *)self->params,
-        .gui = g,
-        .manager = &g->manager,
-        .process_state = &g->process,
-      },
-    };
-    const dt_drawlayer_runtime_host_t runtime_manager = {
-      .user_data = &runtime_host,
-      .collect_inputs = _drawlayer_runtime_collect_inputs,
-      .perform_action = _drawlayer_runtime_perform_action,
-    };
-    dt_drawlayer_runtime_manager_update(
-        &g->manager,
-        &(dt_drawlayer_runtime_update_request_t){
-          .event = DT_DRAWLAYER_RUNTIME_EVENT_GUI_RESYNC,
-          .raw_input_kind = DT_DRAWLAYER_RUNTIME_RAW_INPUT_NONE,
-        },
-        &runtime_manager);
+    _update_gui_runtime_manager(self, g, DT_DRAWLAYER_RUNTIME_EVENT_GUI_RESYNC, FALSE);
   }
 }
 
@@ -3242,98 +3272,73 @@ void gui_update(dt_iop_module_t *self)
   dt_iop_drawlayer_params_t *params = (dt_iop_drawlayer_params_t *)self->params;
   if(IS_NULL_PTR(g)) return;
 
-  _sanitize_params(self, params);
+  /* This function drives conf -> widgets, so nothing it writes may be read back and sent the
+   * other way. dt_iop_gui_update() already brackets its call to us in a freeze, but seven
+   * places call gui_update(self) directly; on those the twelve raw
+   * gtk_toggle_button_set_active() calls below each wake _widget_changed, whose first act is
+   * to read ALL twenty-six widgets and write them to conf -- from a panel this function has
+   * only half refilled. Bauhaus suppresses its own emissions; plain GTK toggles do not, so
+   * the bracket has to be here. The freeze is depth-counted, so nesting inside
+   * dt_iop_gui_update()'s own costs nothing. */
+  dt_gui_widget_freeze();
 
-  dt_bauhaus_combobox_set(g->controls.brush_mode, _conf_brush_mode());
-  dt_bauhaus_slider_set(g->controls.size, _conf_size());
-  dt_bauhaus_slider_set(g->controls.distance, _conf_distance());
-  dt_bauhaus_slider_set(g->controls.smoothing, _conf_smoothing());
-  dt_bauhaus_slider_set(g->controls.opacity, _conf_opacity());
-  dt_bauhaus_slider_set(g->controls.flow, _conf_flow());
-  dt_bauhaus_slider_set(g->controls.sprinkles, _conf_sprinkles());
-  dt_bauhaus_slider_set(g->controls.sprinkle_size, _conf_sprinkle_size());
-  dt_bauhaus_slider_set(g->controls.sprinkle_coarseness, _conf_sprinkle_coarseness());
-  dt_bauhaus_slider_set(g->controls.softness, _conf_hardness());
-  if(g->controls.image_colorpicker_source) dt_bauhaus_combobox_set(g->controls.image_colorpicker_source, _conf_pick_source());
-  dt_bauhaus_slider_set(g->controls.hdr_exposure, _conf_hdr_exposure());
+  /* Belt and braces beside the three enumerated writers: any refresh of the panel refills
+   * the resolved brush on the next pointer event, so a conf path nobody found cannot leave
+   * the cache stale for longer than one non-motion event. */
+  dt_drawlayer_invalidate_brush_settings_cache(g);
 
-  _sync_color_picker_from_conf(self);
+  dt_drawlayer_sanitize_params(self, params);
+
+  dt_bauhaus_combobox_set(g->controls.brush_mode, dt_drawlayer_conf_brush_mode());
+  dt_bauhaus_slider_set(g->controls.size, dt_drawlayer_conf_size());
+  dt_bauhaus_slider_set(g->controls.distance, dt_drawlayer_conf_distance());
+  dt_bauhaus_slider_set(g->controls.smoothing, dt_drawlayer_conf_smoothing());
+  dt_bauhaus_slider_set(g->controls.opacity, dt_drawlayer_conf_opacity());
+  dt_bauhaus_slider_set(g->controls.flow, dt_drawlayer_conf_flow());
+  dt_bauhaus_slider_set(g->controls.sprinkles, dt_drawlayer_conf_sprinkles());
+  dt_bauhaus_slider_set(g->controls.sprinkle_size, dt_drawlayer_conf_sprinkle_size());
+  dt_bauhaus_slider_set(g->controls.sprinkle_coarseness, dt_drawlayer_conf_sprinkle_coarseness());
+  dt_bauhaus_slider_set(g->controls.softness, dt_drawlayer_conf_hardness());
+  if(g->controls.image_colorpicker_source) dt_bauhaus_combobox_set(g->controls.image_colorpicker_source, dt_drawlayer_conf_pick_source());
+  dt_bauhaus_slider_set(g->controls.hdr_exposure, dt_drawlayer_conf_hdr_exposure());
+
+  dt_drawlayer_conf_sync_color_picker(self);
   _sync_brush_profile_preview_widget(self);
   if(g->controls.color) gtk_widget_queue_draw(g->controls.color);
 
-  if(GTK_IS_TOGGLE_BUTTON(g->controls.map_pressure_size))
-    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->controls.map_pressure_size),
-                                 dt_conf_get_bool(DRAWLAYER_CONF_MAP_PRESSURE_SIZE));
-  if(GTK_IS_TOGGLE_BUTTON(g->controls.map_pressure_opacity))
-    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->controls.map_pressure_opacity),
-                                 dt_conf_get_bool(DRAWLAYER_CONF_MAP_PRESSURE_OPACITY));
-  if(GTK_IS_TOGGLE_BUTTON(g->controls.map_pressure_flow))
-    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->controls.map_pressure_flow),
-                                 dt_conf_get_bool(DRAWLAYER_CONF_MAP_PRESSURE_FLOW));
-  if(GTK_IS_TOGGLE_BUTTON(g->controls.map_pressure_softness))
-    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->controls.map_pressure_softness),
-                                 dt_conf_get_bool(DRAWLAYER_CONF_MAP_PRESSURE_SOFTNESS));
+  /* The cached display and pipeline brush colours depend on the HDR exposure refilled above,
+   * and `brush_color_valid` is set once and never cleared, so nothing rebuilds them lazily.
+   * They used to be refreshed only because setting that slider woke _widget_changed on the
+   * unfrozen paths -- an accident, and one the frozen path never had. Asked for directly,
+   * every caller gets it. */
+  {
+    float display_rgb[3] = { 0.0f };
+    if(dt_drawlayer_widgets_get_display_color(g->ui.widgets, display_rgb))
+      dt_drawlayer_sync_cached_brush_colors(self, display_rgb);
+  }
 
-  if(GTK_IS_TOGGLE_BUTTON(g->controls.map_tilt_size))
-    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->controls.map_tilt_size),
-                                 dt_conf_get_bool(DRAWLAYER_CONF_MAP_TILT_SIZE));
-  if(GTK_IS_TOGGLE_BUTTON(g->controls.map_tilt_opacity))
-    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->controls.map_tilt_opacity),
-                                 dt_conf_get_bool(DRAWLAYER_CONF_MAP_TILT_OPACITY));
-  if(GTK_IS_TOGGLE_BUTTON(g->controls.map_tilt_flow))
-    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->controls.map_tilt_flow),
-                                 dt_conf_get_bool(DRAWLAYER_CONF_MAP_TILT_FLOW));
-  if(GTK_IS_TOGGLE_BUTTON(g->controls.map_tilt_softness))
-    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->controls.map_tilt_softness),
-                                 dt_conf_get_bool(DRAWLAYER_CONF_MAP_TILT_SOFTNESS));
-
-  if(GTK_IS_TOGGLE_BUTTON(g->controls.map_accel_size))
-    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->controls.map_accel_size),
-                                 dt_conf_get_bool(DRAWLAYER_CONF_MAP_ACCEL_SIZE));
-  if(GTK_IS_TOGGLE_BUTTON(g->controls.map_accel_opacity))
-    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->controls.map_accel_opacity),
-                                 dt_conf_get_bool(DRAWLAYER_CONF_MAP_ACCEL_OPACITY));
-  if(GTK_IS_TOGGLE_BUTTON(g->controls.map_accel_flow))
-    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->controls.map_accel_flow),
-                                 dt_conf_get_bool(DRAWLAYER_CONF_MAP_ACCEL_FLOW));
-  if(GTK_IS_TOGGLE_BUTTON(g->controls.map_accel_softness))
-    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->controls.map_accel_softness),
-                                 dt_conf_get_bool(DRAWLAYER_CONF_MAP_ACCEL_SOFTNESS));
-
-  if(g->controls.pressure_profile)
-    dt_bauhaus_combobox_set(g->controls.pressure_profile, _conf_mapping_profile(DRAWLAYER_CONF_PRESSURE_PROFILE));
-  if(g->controls.tilt_profile) dt_bauhaus_combobox_set(g->controls.tilt_profile, _conf_mapping_profile(DRAWLAYER_CONF_TILT_PROFILE));
-  if(g->controls.accel_profile)
-    dt_bauhaus_combobox_set(g->controls.accel_profile, _conf_mapping_profile(DRAWLAYER_CONF_ACCEL_PROFILE));
+  dt_drawlayer_mapping_row_t mapping[DT_DRAWLAYER_MAPPING_ROWS];
+  dt_drawlayer_mapping_rows(g, mapping);
+  for(int r = 0; r < DT_DRAWLAYER_MAPPING_ROWS; r++)
+  {
+    for(int c = 0; c < DT_DRAWLAYER_MAPPING_TARGETS; c++)
+    {
+      GtkWidget *target = *mapping[r].targets[c].widget;
+      if(GTK_IS_TOGGLE_BUTTON(target))
+        gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(target), dt_conf_get_bool(mapping[r].targets[c].conf_key));
+    }
+    if(*mapping[r].profile.widget)
+      dt_bauhaus_combobox_set(*mapping[r].profile.widget,
+                              dt_drawlayer_conf_mapping_profile(mapping[r].profile.conf_key));
+  }
 
   _sync_mode_sensitive_widgets(self);
   _sync_preview_bg_buttons(self);
-  _populate_layer_list(self);
-  _sync_layer_controls(self);
+  dt_drawlayer_refresh_layer_widgets(self);
 
   if(self->dev)
   {
-    drawlayer_runtime_host_context_t runtime_host = {
-      .runtime = {
-        .self = self,
-        .runtime_params = (const dt_iop_drawlayer_params_t *)self->params,
-        .gui = g,
-        .manager = &g->manager,
-        .process_state = &g->process,
-      },
-    };
-    const dt_drawlayer_runtime_host_t runtime_manager = {
-      .user_data = &runtime_host,
-      .collect_inputs = _drawlayer_runtime_collect_inputs,
-      .perform_action = _drawlayer_runtime_perform_action,
-    };
-    dt_drawlayer_runtime_manager_update(
-        &g->manager,
-        &(dt_drawlayer_runtime_update_request_t){
-          .event = DT_DRAWLAYER_RUNTIME_EVENT_GUI_RESYNC,
-          .raw_input_kind = DT_DRAWLAYER_RUNTIME_RAW_INPUT_NONE,
-        },
-        &runtime_manager);
+    _update_gui_runtime_manager(self, g, DT_DRAWLAYER_RUNTIME_EVENT_GUI_RESYNC, FALSE);
   }
 }
 
@@ -3344,25 +3349,7 @@ void change_image(dt_iop_module_t *self)
   {
     dt_iop_drawlayer_gui_data_t *g = (dt_iop_drawlayer_gui_data_t *)dt_iop_gui_data(self);
     g->session.missing_layer_error[0] = '\0';
-    drawlayer_runtime_host_context_t runtime_host = {
-      .runtime = {
-        .self = self,
-        .runtime_params = (const dt_iop_drawlayer_params_t *)self->params,
-        .gui = g,
-        .manager = &g->manager,
-        .process_state = &g->process,
-      },
-    };
-    const dt_drawlayer_runtime_host_t runtime_manager = {
-      .user_data = &runtime_host,
-      .collect_inputs = _drawlayer_runtime_collect_inputs,
-      .perform_action = _drawlayer_runtime_perform_action,
-    };
-    const dt_drawlayer_runtime_update_request_t update = {
-      .event = DT_DRAWLAYER_RUNTIME_EVENT_GUI_CHANGE_IMAGE,
-      .raw_input_kind = DT_DRAWLAYER_RUNTIME_RAW_INPUT_NONE,
-    };
-    dt_drawlayer_runtime_manager_update(&g->manager, &update, &runtime_manager);
+    _update_gui_runtime_manager(self, g, DT_DRAWLAYER_RUNTIME_EVENT_GUI_CHANGE_IMAGE, FALSE);
   }
 }
 
@@ -3376,28 +3363,10 @@ void gui_focus(dt_iop_module_t *self, gboolean in)
     const int pending_samples = g ? (int)g->stroke.stroke_sample_count : 0;
     const gboolean had_pending_edits
         = (g && (g->process.cache_dirty || g->stroke.stroke_sample_count > 0));
-    drawlayer_runtime_host_context_t runtime_host = {
-      .runtime = {
-        .self = self,
-        .runtime_params = (const dt_iop_drawlayer_params_t *)self->params,
-        .gui = g,
-        .manager = &g->manager,
-        .process_state = &g->process,
-      },
-    };
-    const dt_drawlayer_runtime_host_t runtime_manager = {
-      .user_data = &runtime_host,
-      .collect_inputs = _drawlayer_runtime_collect_inputs,
-      .perform_action = _drawlayer_runtime_perform_action,
-    };
-    const dt_drawlayer_runtime_update_request_t update = {
-      .event = DT_DRAWLAYER_RUNTIME_EVENT_GUI_FOCUS_LOSS,
-      .raw_input_kind = DT_DRAWLAYER_RUNTIME_RAW_INPUT_NONE,
-    };
     dt_control_set_cursor_visible(TRUE);
-    if(g) dt_drawlayer_runtime_manager_update(&g->manager, &update, &runtime_manager);
+    _update_gui_runtime_manager(self, g, DT_DRAWLAYER_RUNTIME_EVENT_GUI_FOCUS_LOSS, FALSE);
     if(had_pending_edits && params)
-      _touch_stroke_commit_hash(params, pending_samples, g->stroke.last_dab_valid, g->stroke.last_dab_x,
+      dt_drawlayer_touch_stroke_commit_hash(params, pending_samples, g->stroke.last_dab_valid, g->stroke.last_dab_x,
                                 g->stroke.last_dab_y, 0u);
     if(had_pending_edits && self->dev && !IS_NULL_PTR(params))
     {
@@ -3415,25 +3384,7 @@ void gui_focus(dt_iop_module_t *self, gboolean in)
   else if(dt_iop_gui_data(self))
   {
     dt_iop_drawlayer_gui_data_t *g = (dt_iop_drawlayer_gui_data_t *)dt_iop_gui_data(self);
-    drawlayer_runtime_host_context_t runtime_host = {
-      .runtime = {
-        .self = self,
-        .runtime_params = (const dt_iop_drawlayer_params_t *)self->params,
-        .gui = g,
-        .manager = &g->manager,
-        .process_state = &g->process,
-      },
-    };
-    const dt_drawlayer_runtime_host_t runtime_manager = {
-      .user_data = &runtime_host,
-      .collect_inputs = _drawlayer_runtime_collect_inputs,
-      .perform_action = _drawlayer_runtime_perform_action,
-    };
-    const dt_drawlayer_runtime_update_request_t update = {
-      .event = DT_DRAWLAYER_RUNTIME_EVENT_GUI_FOCUS_GAIN,
-      .raw_input_kind = DT_DRAWLAYER_RUNTIME_RAW_INPUT_NONE,
-    };
-    dt_drawlayer_runtime_manager_update(&g->manager, &update, &runtime_manager);
+    _update_gui_runtime_manager(self, g, DT_DRAWLAYER_RUNTIME_EVENT_GUI_FOCUS_GAIN, FALSE);
   }
 }
 
@@ -3461,7 +3412,7 @@ void gui_cleanup(dt_iop_module_t *self)
 
   DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(dt_control_signal_get_global(), G_CALLBACK(_develop_ui_pipe_finished_callback), self);
 
-  _release_all_base_patch_extra_refs(g);
+  dt_drawlayer_release_all_base_patch_extra_refs(g);
   dt_drawlayer_process_state_cleanup(&g->process);
   dt_drawlayer_runtime_manager_cleanup(&g->manager);
   memset(&g->session.live_patch, 0, sizeof(g->session.live_patch));
@@ -3492,17 +3443,17 @@ static void _compute_hud_brush_state(const dt_control_pointer_input_t *pointer_i
       = _clamp01((pointer_input && pointer_input->has_pressure) ? pointer_input->pressure : 1.0f);
   const float tilt_norm = _clamp01((pointer_input && pointer_input->has_tilt) ? pointer_input->tilt : 0.0f);
   const float accel_norm = _clamp01(pointer_input ? pointer_input->acceleration : 0.0f);
-  const drawlayer_mapping_profile_t pressure_profile = _conf_mapping_profile(DRAWLAYER_CONF_PRESSURE_PROFILE);
-  const drawlayer_mapping_profile_t tilt_profile = _conf_mapping_profile(DRAWLAYER_CONF_TILT_PROFILE);
-  const drawlayer_mapping_profile_t accel_profile = _conf_mapping_profile(DRAWLAYER_CONF_ACCEL_PROFILE);
+  const drawlayer_mapping_profile_t pressure_profile = dt_drawlayer_conf_mapping_profile(DRAWLAYER_CONF_PRESSURE_PROFILE);
+  const drawlayer_mapping_profile_t tilt_profile = dt_drawlayer_conf_mapping_profile(DRAWLAYER_CONF_TILT_PROFILE);
+  const drawlayer_mapping_profile_t accel_profile = dt_drawlayer_conf_mapping_profile(DRAWLAYER_CONF_ACCEL_PROFILE);
   const float pressure_coeff = _mapping_profile_value(pressure_profile, pressure_norm);
   const float tilt_coeff = _mapping_profile_value(tilt_profile, tilt_norm);
   const float accel_coeff = _mapping_profile_value(accel_profile, accel_norm);
 
-  float radius = _conf_size();
-  float opacity = _conf_opacity() / 100.0f;
-  float flow = _conf_flow() / 100.0f;
-  float hardness = _conf_hardness();
+  float radius = dt_drawlayer_conf_size();
+  float opacity = dt_drawlayer_conf_opacity() / 100.0f;
+  float flow = dt_drawlayer_conf_flow() / 100.0f;
+  float hardness = dt_drawlayer_conf_hardness();
 
   if(dt_conf_get_bool(DRAWLAYER_CONF_MAP_PRESSURE_SIZE)) radius *= pressure_coeff;
   if(dt_conf_get_bool(DRAWLAYER_CONF_MAP_PRESSURE_OPACITY)) opacity *= pressure_coeff;
@@ -3603,8 +3554,7 @@ void gui_post_expose(dt_iop_module_t *self, cairo_t *cr, int32_t width, int32_t 
     _compute_hud_brush_state(&pointer_input, &hud);
 
     float radius = hud.radius;
-    const int brush_mode = _conf_brush_mode();
-    const gboolean show_paint_fill = (brush_mode == DT_DRAWLAYER_BRUSH_MODE_PAINT);
+    const gboolean show_paint_fill = _brush_paints_color();
 
     float draw_x = widget_x;
     float draw_y = widget_y;
@@ -3618,7 +3568,7 @@ void gui_post_expose(dt_iop_module_t *self, cairo_t *cr, int32_t width, int32_t 
         .y = ly,
         .radius = radius,
       };
-      if(!_layer_to_widget_coords(self, lx, ly, &draw_x, &draw_y))
+      if(!dt_drawlayer_layer_to_widget_coords(self, lx, ly, &draw_x, &draw_y))
       {
         draw_x = widget_x;
         draw_y = widget_y;
@@ -3664,25 +3614,7 @@ int mouse_leave(dt_iop_module_t *self)
 {
   dt_iop_drawlayer_gui_data_t *g = (dt_iop_drawlayer_gui_data_t *)dt_iop_gui_data(self);
   if(IS_NULL_PTR(g)) return 0;
-  drawlayer_runtime_host_context_t runtime_host = {
-    .runtime = {
-      .self = self,
-      .runtime_params = (const dt_iop_drawlayer_params_t *)self->params,
-      .gui = g,
-      .manager = &g->manager,
-      .process_state = &g->process,
-    },
-  };
-  const dt_drawlayer_runtime_host_t runtime_manager = {
-    .user_data = &runtime_host,
-    .collect_inputs = _drawlayer_runtime_collect_inputs,
-    .perform_action = _drawlayer_runtime_perform_action,
-  };
-  const dt_drawlayer_runtime_update_request_t update = {
-    .event = DT_DRAWLAYER_RUNTIME_EVENT_GUI_MOUSE_LEAVE,
-    .raw_input_kind = DT_DRAWLAYER_RUNTIME_RAW_INPUT_NONE,
-  };
-  dt_drawlayer_runtime_manager_update(&g->manager, &update, &runtime_manager);
+  _update_gui_runtime_manager(self, g, DT_DRAWLAYER_RUNTIME_EVENT_GUI_MOUSE_LEAVE, FALSE);
   return 0;
 }
 
@@ -3697,30 +3629,9 @@ int mouse_moved(dt_iop_module_t *self, double x, double y, double pressure, int 
     /* When the standard image color picker is active, drawlayer must stop
      * capturing the pointer entirely so darkroom can drive the picker overlay
      * and sampling path without competing cursor state from the brush tool. */
-    drawlayer_runtime_host_context_t runtime_host = {
-      .runtime = {
-        .self = self,
-        .runtime_params = (const dt_iop_drawlayer_params_t *)self->params,
-        .gui = g,
-        .manager = &g->manager,
-        .process_state = &g->process,
-      },
-    };
-    const dt_drawlayer_runtime_host_t runtime_manager = {
-      .user_data = &runtime_host,
-      .collect_inputs = _drawlayer_runtime_collect_inputs,
-      .perform_action = _drawlayer_runtime_perform_action,
-    };
-    const dt_drawlayer_runtime_update_request_t leave_update = {
-      .event = DT_DRAWLAYER_RUNTIME_EVENT_GUI_MOUSE_LEAVE,
-      .raw_input_kind = DT_DRAWLAYER_RUNTIME_RAW_INPUT_NONE,
-    };
-    const dt_drawlayer_runtime_update_request_t update = {
-      .event = DT_DRAWLAYER_RUNTIME_EVENT_GUI_STROKE_ABORT,
-      .raw_input_kind = DT_DRAWLAYER_RUNTIME_RAW_INPUT_NONE,
-    };
-    if(g->session.pointer_valid) dt_drawlayer_runtime_manager_update(&g->manager, &leave_update, &runtime_manager);
-    dt_drawlayer_runtime_manager_update(&g->manager, &update, &runtime_manager);
+    if(g->session.pointer_valid)
+      _update_gui_runtime_manager(self, g, DT_DRAWLAYER_RUNTIME_EVENT_GUI_MOUSE_LEAVE, FALSE);
+    _update_gui_runtime_manager(self, g, DT_DRAWLAYER_RUNTIME_EVENT_GUI_STROKE_ABORT, FALSE);
     return 0;
   }
 
@@ -3737,8 +3648,6 @@ int mouse_moved(dt_iop_module_t *self, double x, double y, double pressure, int 
     };
     const dt_drawlayer_runtime_host_t enter_manager = {
       .user_data = &enter_host,
-      .collect_inputs = _drawlayer_runtime_collect_inputs,
-      .perform_action = _drawlayer_runtime_perform_action,
     };
     dt_drawlayer_runtime_manager_update(
         &g->manager,
@@ -3764,8 +3673,6 @@ int mouse_moved(dt_iop_module_t *self, double x, double y, double pressure, int 
     };
     const dt_drawlayer_runtime_host_t runtime_manager = {
       .user_data = &runtime_host,
-      .collect_inputs = _drawlayer_runtime_collect_inputs,
-      .perform_action = _drawlayer_runtime_perform_action,
     };
     const dt_drawlayer_runtime_update_request_t update = {
       .event = DT_DRAWLAYER_RUNTIME_EVENT_GUI_RAW_INPUT,
@@ -3803,8 +3710,6 @@ int mouse_moved(dt_iop_module_t *self, double x, double y, double pressure, int 
     };
     const dt_drawlayer_runtime_host_t runtime_manager = {
       .user_data = &runtime_host,
-      .collect_inputs = _drawlayer_runtime_collect_inputs,
-      .perform_action = _drawlayer_runtime_perform_action,
     };
     const dt_drawlayer_runtime_update_request_t update = {
       .event = DT_DRAWLAYER_RUNTIME_EVENT_GUI_RAW_INPUT,
@@ -3823,7 +3728,7 @@ int button_pressed(dt_iop_module_t *self, double x, double y, double pressure, i
   dt_iop_drawlayer_gui_data_t *g = (dt_iop_drawlayer_gui_data_t *)dt_iop_gui_data(self);
   dt_iop_drawlayer_params_t *params = (dt_iop_drawlayer_params_t *)self->params;
   if(IS_NULL_PTR(g) || IS_NULL_PTR(self->dev) || which != 1) return 0;
-  if(!_layer_name_non_empty(params ? params->layer_name : NULL)) return 0;
+  if(!dt_drawlayer_layer_name_non_empty(params ? params->layer_name : NULL)) return 0;
 
   if(self->dev->gui_module != self)
   {
@@ -3863,8 +3768,6 @@ int button_pressed(dt_iop_module_t *self, double x, double y, double pressure, i
   };
   const dt_drawlayer_runtime_host_t runtime_manager = {
     .user_data = &runtime_host,
-    .collect_inputs = _drawlayer_runtime_collect_inputs,
-    .perform_action = _drawlayer_runtime_perform_action,
   };
   const dt_drawlayer_runtime_update_request_t update = {
     .event = DT_DRAWLAYER_RUNTIME_EVENT_GUI_RAW_INPUT,
@@ -3918,8 +3821,6 @@ int button_released(dt_iop_module_t *self, double x, double y, int which, uint32
     };
     const dt_drawlayer_runtime_host_t runtime_manager = {
       .user_data = &runtime_host,
-      .collect_inputs = _drawlayer_runtime_collect_inputs,
-      .perform_action = _drawlayer_runtime_perform_action,
     };
     const dt_drawlayer_runtime_update_request_t update = {
       .event = DT_DRAWLAYER_RUNTIME_EVENT_GUI_RAW_INPUT,
@@ -3948,34 +3849,71 @@ int scrolled(dt_iop_module_t *self, double x, double y, int up, uint32_t state)
 
   const gboolean increase = dt_mask_scroll_increases(up);
   const float factor = increase ? 1.1f : 0.9f;
-  const float new_size = CLAMP(_conf_size() * factor, 1.0f, 2048.0f);
+  const float new_size = CLAMP(dt_drawlayer_conf_size() * factor, 1.0f, 2048.0f);
+  /* The wheel changes the brush mid-stroke, which is exactly the case a per-event cache
+   * must not miss. */
+  dt_drawlayer_invalidate_brush_settings_cache((dt_iop_drawlayer_gui_data_t *)dt_iop_gui_data(self));
   dt_conf_set_float(DRAWLAYER_CONF_SIZE, new_size);
 
   if(dt_iop_gui_data(self))
   {
     dt_iop_drawlayer_gui_data_t *g = (dt_iop_drawlayer_gui_data_t *)dt_iop_gui_data(self);
     dt_bauhaus_slider_set(g->controls.size, new_size);
-    drawlayer_runtime_host_context_t runtime_host = {
-      .runtime = {
-        .self = self,
-        .runtime_params = (const dt_iop_drawlayer_params_t *)self->params,
-        .gui = g,
-        .manager = &g->manager,
-        .process_state = &g->process,
-      },
-    };
-    const dt_drawlayer_runtime_host_t runtime_manager = {
-      .user_data = &runtime_host,
-      .collect_inputs = _drawlayer_runtime_collect_inputs,
-      .perform_action = _drawlayer_runtime_perform_action,
-    };
-    const dt_drawlayer_runtime_update_request_t update = {
-      .event = DT_DRAWLAYER_RUNTIME_EVENT_GUI_SCROLL,
-      .raw_input_kind = DT_DRAWLAYER_RUNTIME_RAW_INPUT_NONE,
-    };
-    dt_drawlayer_runtime_manager_update(&g->manager, &update, &runtime_manager);
+    _update_gui_runtime_manager(self, g, DT_DRAWLAYER_RUNTIME_EVENT_GUI_SCROLL, FALSE);
   }
   return 1;
+}
+
+/**
+ * @brief Everything process() and process_cl() must do identically before they diverge.
+ *
+ * Binds this piece to its runtime manager, refreshes the layer's base cache, and builds the
+ * request both paths hand to the runtime state machine. The only thing that legitimately
+ * differs between the two is @p use_opencl, and the pair of event ids each keeps for itself.
+ *
+ * It used to be written out twice, and the two copies were still exact -- checked line by
+ * line before they were merged, so nothing is being quietly normalised here. Keeping it that
+ * way was the problem: a condition duplicated between process() and process_cl() is the
+ * standing invitation to drift that CLAUDE.md names by name, and this module's own history
+ * has paid for it three times over (the CFA phase, retouch's mask preview, and display
+ * encoding's per-frame conf reads, each a branch one path grew and the other did not).
+ *
+ * @param have_gui Passed in rather than recomputed, so the caller and this function cannot
+ *                 disagree about what "the GUI is attached" meant for this frame.
+ */
+static drawlayer_runtime_request_t _process_bind_runtime(dt_iop_module_t *self,
+                                                         const dt_dev_pixelpipe_t *pipe,
+                                                         const dt_dev_pixelpipe_iop_t *piece,
+                                                         dt_iop_drawlayer_gui_data_t *gui,
+                                                         const gboolean have_gui,
+                                                         const dt_iop_roi_t *const roi_in,
+                                                         const dt_iop_roi_t *const roi_out,
+                                                         const gboolean use_opencl)
+{
+  const gboolean display_pipe = have_gui && (pipe == self->dev->pipe || pipe == self->dev->preview_pipe);
+  dt_iop_drawlayer_data_t *data = (dt_iop_drawlayer_data_t *)piece->data;
+  dt_drawlayer_runtime_manager_bind_piece(&data->headless_manager, &data->process, gui ? &gui->manager : NULL,
+                                          gui ? &gui->process : NULL, display_pipe, &data->runtime_manager,
+                                          &data->runtime_process, &data->runtime_display_pipe);
+
+  const dt_iop_drawlayer_params_t *runtime_params = &data->params;
+  if(runtime_params->layer_name[0] != '\0')
+    _refresh_piece_base_cache(self, data, runtime_params, (dt_dev_pixelpipe_t *)pipe,
+                              (dt_dev_pixelpipe_iop_t *)piece);
+
+  return (drawlayer_runtime_request_t){
+    .self = self,
+    .pipe = pipe,
+    .piece = (dt_dev_pixelpipe_iop_t *)piece,
+    .runtime_params = runtime_params,
+    .gui = gui,
+    .manager = data->runtime_manager,
+    .process_state = data->runtime_process,
+    .display_pipe = data->runtime_display_pipe,
+    .roi_in = roi_in,
+    .roi_out = roi_out,
+    .use_opencl = use_opencl,
+  };
 }
 
 #ifdef HAVE_OPENCL
@@ -3988,39 +3926,15 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
   const dt_iop_drawlayer_global_data_t *global = (const dt_iop_drawlayer_global_data_t *)self->global_data;
   dt_iop_drawlayer_gui_data_t *gui = (dt_iop_drawlayer_gui_data_t *)dt_iop_gui_data(self);
   const gboolean have_gui = (!IS_NULL_PTR(gui));
-  {
-    const gboolean display_pipe = have_gui && (pipe == self->dev->pipe || pipe == self->dev->preview_pipe);
-    dt_iop_drawlayer_data_t *data = (dt_iop_drawlayer_data_t *)piece->data;
-    dt_drawlayer_runtime_manager_bind_piece(&data->headless_manager, &data->process, gui ? &gui->manager : NULL,
-                                            gui ? &gui->process : NULL, display_pipe, &data->runtime_manager,
-                                            &data->runtime_process, &data->runtime_display_pipe);
-  }
+  const drawlayer_runtime_request_t runtime_request
+      = _process_bind_runtime(self, pipe, piece, gui, have_gui, roi_in, roi_out, TRUE);
   dt_iop_drawlayer_data_t *runtime_data = (dt_iop_drawlayer_data_t *)piece->data;
-  const dt_iop_drawlayer_params_t *runtime_params
-      = &runtime_data->params;
-  if(runtime_params->layer_name[0] != '\0')
-    _refresh_piece_base_cache(self, runtime_data, runtime_params, (dt_dev_pixelpipe_t *)pipe,
-                              (dt_dev_pixelpipe_iop_t *)piece);
-  const drawlayer_runtime_request_t runtime_request = {
-    .self = self,
-    .pipe = pipe,
-    .piece = (dt_dev_pixelpipe_iop_t *)piece,
-    .runtime_params = runtime_params,
-    .gui = gui,
-    .manager = runtime_data->runtime_manager,
-    .process_state = runtime_data->runtime_process,
-    .display_pipe = runtime_data->runtime_display_pipe,
-    .roi_in = roi_in,
-    .roi_out = roi_out,
-    .use_opencl = TRUE,
-  };
+  const dt_iop_drawlayer_params_t *runtime_params = &runtime_data->params;
   drawlayer_runtime_host_context_t runtime_host = {
     .runtime = runtime_request,
   };
   const dt_drawlayer_runtime_host_t runtime_manager = {
     .user_data = &runtime_host,
-    .collect_inputs = _drawlayer_runtime_collect_inputs,
-    .perform_action = _drawlayer_runtime_perform_action,
   };
   const dt_drawlayer_runtime_update_request_t process_pre = {
     .event = DT_DRAWLAYER_RUNTIME_EVENT_PROCESS_CL_BEFORE,
@@ -4049,6 +3963,12 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
 
   dt_drawlayer_runtime_source_t source = { 0 };
   if(!fallback) fallback = !_update_runtime_state(&runtime_request, &source);
+  /* Everything above -- bind_piece, _refresh_piece_base_cache, the runtime state machine and
+   * _update_runtime_state's source resolution -- is prologue. The pipeline reports `Drawing'
+   * at 53 ms a frame while the composite inside it measures 15, so ~38 ms is somewhere else:
+   * either here, or in the blend op the pipe runs AFTER process_cl returns. Splitting the two
+   * is the difference between optimising drawlayer and optimising blend.c. */
+  const gint64 prologue_end = g_get_monotonic_time();
   if(!fallback)
   {
     const gboolean realtime = dt_dev_pixelpipe_get_realtime(pipe);
@@ -4057,7 +3977,6 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
     dt_iop_roi_t source_roi = source.source_roi;
     int source_width = source.width;
     int source_height = source.height;
-    gboolean direct_copy = source.direct_copy;
     const float *source_pixels = source.pixels;
     dt_pixel_cache_entry_t *source_entry = source.cache_entry;
 
@@ -4078,16 +3997,37 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
     const gboolean g_hash = pstate && layer_hash != 0 && pstate->last_composite_layer_hash == layer_hash;
     const gboolean g_roi = pstate && !memcmp(&pstate->last_composite_target_roi, &target_roi, sizeof(dt_iop_roi_t));
     const gboolean allow_partial = realtime && g_valid && g_devout && g_hash && g_roi;
-    if(realtime && pstate && !allow_partial && (dt_get_debug_flags() & DT_DEBUG_VERBOSE))
+    /* Once per composite, not per dab, so it belongs under -d perf rather than -d verbose:
+     * asking for verbose to find out why a frame was slow also turns on a per-dab print, and
+     * at the default 1 px spacing that is thousands of lines a second drowning the answer.
+     * Which of the four conditions declined is the whole diagnosis when the full path runs
+     * every frame. */
+    if(realtime && pstate && !allow_partial)
       dt_print(DT_DEBUG_PERF,
-               "[drawlayer] partial gate declined: valid=%d devout=%d hash=%d roi=%d\n",
-               g_valid, g_devout, g_hash, g_roi);
+               "[drawlayer] partial gate declined: valid=%d devout=%d hash=%d roi=%d "
+               "(cache_on_ram=%d bypass=%d)\n",
+               g_valid, g_devout, g_hash, g_roi, piece->cache_output_on_ram ? 1 : 0,
+               piece->bypass_cache ? 1 : 0);
 
-    gboolean ok = _blend_layer_over_input_cl(
-        pipe->devid, global->kernel_premult_over, dev_out, dev_in, scratch, source_pixels, source_entry, NULL,
-        source_width, source_height, runtime_request.process_state, &target_roi, &source_roi, direct_copy,
-        preview_bg.enabled, preview_bg.value,
-        reuse_device_buffers, FALSE, allow_partial);
+    const drawlayer_blend_cl_request_t blend = {
+      .devid = pipe->devid,
+      .kernel_premult_over = global->kernel_premult_over,
+      .dev_out = dev_out,
+      .dev_in = dev_in,
+      .scratch = scratch,
+      .layer_pixels = source_pixels,
+      .source_entry = source_entry,
+      .source_w = source_width,
+      .source_h = source_height,
+      .process = runtime_request.process_state,
+      .target_roi = &target_roi,
+      .source_roi = &source_roi,
+      .use_preview_bg = preview_bg.enabled,
+      .preview_bg = preview_bg.value,
+      .realtime_reuse = reuse_device_buffers,
+      .allow_partial = allow_partial,
+    };
+    gboolean ok = _blend_layer_over_input_cl(&blend);
 
     if(pstate)
     {
@@ -4111,8 +4051,11 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
       .process = runtime_request.process_state,
       .source = &source,
     };
-    if(dt_get_debug_flags() & DT_DEBUG_VERBOSE)
-      dt_print(DT_DEBUG_PERF, "[drawlayer] process_cl step=blend-base total=%.3f ok=%d\n",
+    if(dt_get_debug_flags() & DT_DEBUG_PERF)
+      dt_print(DT_DEBUG_PERF,
+               "[drawlayer] process_cl prologue=%.2f ms composite+epilogue=%.2f ms total=%.2f ms ok=%d\n",
+               (prologue_end - process_t0) / 1000.0,
+               (g_get_monotonic_time() - prologue_end) / 1000.0,
                (g_get_monotonic_time() - process_t0) / 1000.0, ok ? 1 : 0);
     dt_drawlayer_runtime_manager_update(manager, &process_post, &runtime_manager);
     return ok;
@@ -4138,39 +4081,15 @@ int process(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_
   const dt_iop_roi_t *const roi_out = &piece->roi_out;
   dt_iop_drawlayer_gui_data_t *gui = (dt_iop_drawlayer_gui_data_t *)dt_iop_gui_data(self);
   const gboolean have_gui = (!IS_NULL_PTR(gui));
-  {
-    const gboolean display_pipe = have_gui && (pipe == self->dev->pipe || pipe == self->dev->preview_pipe);
-    dt_iop_drawlayer_data_t *data = (dt_iop_drawlayer_data_t *)piece->data;
-    dt_drawlayer_runtime_manager_bind_piece(&data->headless_manager, &data->process, gui ? &gui->manager : NULL,
-                                            gui ? &gui->process : NULL, display_pipe, &data->runtime_manager,
-                                            &data->runtime_process, &data->runtime_display_pipe);
-  }
+  const drawlayer_runtime_request_t runtime_request
+      = _process_bind_runtime(self, pipe, piece, gui, have_gui, roi_in, roi_out, FALSE);
   dt_iop_drawlayer_data_t *runtime_data = (dt_iop_drawlayer_data_t *)piece->data;
-  const dt_iop_drawlayer_params_t *runtime_params
-      = &runtime_data->params;
-  if(runtime_params->layer_name[0] != '\0')
-    _refresh_piece_base_cache(self, runtime_data, runtime_params, (dt_dev_pixelpipe_t *)pipe,
-                              (dt_dev_pixelpipe_iop_t *)piece);
-  const drawlayer_runtime_request_t runtime_request = {
-    .self = self,
-    .pipe = pipe,
-    .piece = (dt_dev_pixelpipe_iop_t *)piece,
-    .runtime_params = runtime_params,
-    .gui = gui,
-    .manager = runtime_data->runtime_manager,
-    .process_state = runtime_data->runtime_process,
-    .display_pipe = runtime_data->runtime_display_pipe,
-    .roi_in = roi_in,
-    .roi_out = roi_out,
-    .use_opencl = FALSE,
-  };
+  const dt_iop_drawlayer_params_t *runtime_params = &runtime_data->params;
   drawlayer_runtime_host_context_t runtime_host = {
     .runtime = runtime_request,
   };
   const dt_drawlayer_runtime_host_t runtime_manager = {
     .user_data = &runtime_host,
-    .collect_inputs = _drawlayer_runtime_collect_inputs,
-    .perform_action = _drawlayer_runtime_perform_action,
   };
   const dt_drawlayer_runtime_update_request_t process_pre = {
     .event = DT_DRAWLAYER_RUNTIME_EVENT_PROCESS_CPU_BEFORE,
@@ -4198,33 +4117,30 @@ int process(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_
   if(!fallback)
   {
     const float *layer_pixels = source.pixels;
-    if(!source.direct_copy)
-    {
-      drawlayer_process_scratch_t *scratch = _get_process_scratch();
-      if(IS_NULL_PTR(scratch)) fallback = TRUE;
+    drawlayer_process_scratch_t *scratch = _get_process_scratch();
+    if(IS_NULL_PTR(scratch)) fallback = TRUE;
 
-      float *layerbuf = NULL;
-      if(!fallback)
-        layerbuf = dt_drawlayer_cache_ensure_scratch_buffer(&scratch->layerbuf, &scratch->layerbuf_pixels, pixels,
-                                                            "drawlayer process scratch");
-      if(!fallback && IS_NULL_PTR(layerbuf)) fallback = TRUE;
-      if(fallback)
-      {
-        process_post.release = (dt_drawlayer_runtime_release_t){
-          .process = runtime_request.process_state,
-          .source = &source,
-        };
-        goto fallback_pass_through;
-      }
-      /* Bilinear (not the user pref) for the layer matte — see the OpenCL path in
-       * _drawlayer_copy_or_resample_layer_roi: no negative lobes => no overshoot,
-       * so no edge halos / out-of-range premultiplied alpha. */
-      {
-        const struct dt_interpolation *const itor = dt_interpolation_new(DT_INTERPOLATION_BILINEAR);
-        dt_interpolation_resample(itor, layerbuf, &source.target_roi, source.pixels, &source.source_roi);
-      }
-      layer_pixels = layerbuf;
+    float *layerbuf = NULL;
+    if(!fallback)
+      layerbuf = dt_drawlayer_cache_ensure_scratch_buffer(&scratch->layerbuf, &scratch->layerbuf_pixels, pixels,
+                                                          "drawlayer process scratch");
+    if(!fallback && IS_NULL_PTR(layerbuf)) fallback = TRUE;
+    if(fallback)
+    {
+      process_post.release = (dt_drawlayer_runtime_release_t){
+        .process = runtime_request.process_state,
+        .source = &source,
+      };
+      goto fallback_pass_through;
     }
+    /* Bilinear (not the user pref) for the layer matte — see the OpenCL path in
+     * _drawlayer_copy_or_resample_layer_roi: no negative lobes => no overshoot,
+     * so no edge halos / out-of-range premultiplied alpha. */
+    {
+      const struct dt_interpolation *const itor = dt_interpolation_new(DT_INTERPOLATION_BILINEAR);
+      dt_interpolation_resample(itor, layerbuf, &source.target_roi, source.pixels, &source.source_roi);
+    }
+    layer_pixels = layerbuf;
 
     _blend_layer_over_input(output, input, layer_pixels, pixels, preview_bg.enabled, preview_bg.value);
     if(dt_get_debug_flags() & DT_DEBUG_VERBOSE)

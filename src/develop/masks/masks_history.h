@@ -69,6 +69,9 @@ void dt_masks_replace_current_forms(struct dt_develop_t *dev, GList *forms);
  *  Optionally reset dev->forms_changed. */
 GList *dt_masks_snapshot_current_forms(struct dt_develop_t *dev, gboolean reset_changed);
 
+/** Drop every reference a snapshot holds and set it to NULL. NULL-safe. */
+void dt_masks_forms_snapshot_release(GList **snapshot);
+
 /** Release every reference this dev holds on any form, and empty both lists.
  *
  *  dev->forms and dev->allforms are INDEPENDENT claims on possibly-shared objects

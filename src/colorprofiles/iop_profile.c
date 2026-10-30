@@ -392,7 +392,7 @@ static inline void _transform_rgb_to_lab_matrix(const float *const restrict imag
                       profile_info->lut_in[2], profile_info->unbounded_coeffs_in[0],
                       profile_info->unbounded_coeffs_in[1], profile_info->unbounded_coeffs_in[2],
                       profile_info->lutsize);
-    __OMP_PARALLEL_FOR_SIMD__(aligned(image_out:64))
+    __OMP_PARALLEL_FOR_SIMD__(aligned(image_in, image_out:64))
     for(size_t y = 0; y < stride; y += ch)
     {
       float *const restrict in = __builtin_assume_aligned(image_out + y, 16);
@@ -400,6 +400,8 @@ static inline void _transform_rgb_to_lab_matrix(const float *const restrict imag
       const dt_aligned_pixel_simd_t vin = dt_load_simd_aligned(in);
       dt_store_simd_aligned(xyz, dt_mat3x4_mul_vec4(vin, m0, m1, m2));
       dt_XYZ_to_Lab(xyz, in);
+      // the tone curves wrote RGB only: alpha comes from the source, as in _transform_lab_to_rgb_matrix()
+      in[3] = image_in[y + 3];
     }
   }
   else
@@ -411,9 +413,11 @@ static inline void _transform_rgb_to_lab_matrix(const float *const restrict imag
       float *const restrict out = __builtin_assume_aligned(image_out + y, 16);
 
       dt_aligned_pixel_t xyz;
+      const float alpha = in[3]; // a mask preview carries its mask there, and may convert in place
       const dt_aligned_pixel_simd_t vin = dt_load_simd_aligned(in);
       dt_store_simd_aligned(xyz, dt_mat3x4_mul_vec4(vin, m0, m1, m2));
       dt_XYZ_to_Lab(xyz, out);
+      out[3] = alpha;
     }
   }
 }

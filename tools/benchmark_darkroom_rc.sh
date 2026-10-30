@@ -102,13 +102,27 @@ set_ansel_defaults()
 
   # Use the highest-quality interpolators available in the shared code path so
   # transforms and final scaling don't benchmark lower-quality shortcuts.
+  #
+  # Ansel has NO Lanczos: it was removed on purpose (large negative side-lobes ->
+  # halos at high-contrast edges, and it pushes premultiplied alpha out of [0,1]).
+  # The kernels are bilinear, bicubic (Catmull-Rom) and mitchell -- see
+  # doc/interpolation.md. These keys resolve by strcmp against the kernel's own
+  # .name, so "lanczos2"/"lanczos3" here did not error: they SILENTLY fell back to
+  # the default, and every run of this script benchmarked Ansel on mitchell while
+  # the block below set darktable to lanczos and claimed the two were matched.
+  #
+  # They cannot be matched. mitchell is Ansel's best and darktable has no such
+  # kernel; lanczos3 is darktable's and Ansel has none. Note the tap counts differ
+  # (lanczos3 is 6-tap against mitchell's 4), so this pairing flatters Ansel on
+  # speed. If you want a like-for-like tap count instead of each fork's best,
+  # set BOTH sides to "bicubic" -- the one kernel both forks have.
   set_rc_key "$ANSEL_RC" "codepaths/openmp_simd" "true"
   set_rc_key "$ANSEL_RC" "opencl_devid_darkroom" "+0"
   set_rc_key "$ANSEL_RC" "opencl_devid_preview" "+0"
   set_rc_key "$ANSEL_RC" "opencl_devid_export" "+0"
   set_rc_key "$ANSEL_RC" "opencl_devid_thumbnail" "+0"
-  set_rc_key "$ANSEL_RC" "plugins/lighttable/export/pixel_interpolator_warp" "lanczos2"
-  set_rc_key "$ANSEL_RC" "plugins/lighttable/export/pixel_interpolator" "lanczos3"
+  set_rc_key "$ANSEL_RC" "plugins/lighttable/export/pixel_interpolator_warp" "mitchell"
+  set_rc_key "$ANSEL_RC" "plugins/lighttable/export/pixel_interpolator" "mitchell"
   set_rc_key "$ANSEL_RC" "plugins/lighttable/export/force_lcms2" "false"
 }
 
@@ -135,7 +149,8 @@ set_darktable_defaults()
   set_rc_key "$DARKTABLE_RC" "plugins/lighttable/export/high_quality_processing" "true"
   set_rc_key "$DARKTABLE_RC" "plugins/lighttable/export/force_lcms2" "false"
 
-  # Match interpolation quality with Ansel.
+  # darktable's best available kernels. NOT the same as Ansel's -- see the note in
+  # set_ansel_defaults(); there is no kernel both forks share at this quality tier.
   set_rc_key "$DARKTABLE_RC" "plugins/lighttable/export/pixel_interpolator_warp" "lanczos2"
   set_rc_key "$DARKTABLE_RC" "plugins/lighttable/export/pixel_interpolator" "lanczos3"
 }

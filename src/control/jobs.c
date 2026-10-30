@@ -9,6 +9,7 @@
     Copyright (C) 2020 Pascal Obry.
     Copyright (C) 2022, 2025-2026 Aurélien PIERRE.
     Copyright (C) 2022 Martin Bařinka.
+    Copyright (C) 2026 Guillaume Stutin.
     
     darktable is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -203,6 +204,11 @@ void dt_control_job_wait(_dt_job_t *job)
   }
 }
 
+// The job each reserved worker runs, from the moment it takes it off job_res[] until it disposes
+// of it. Guarded by res_mutex. Nothing else refers to it meanwhile, and
+// dt_control_running_jobs_foreach() reports it.
+static _dt_job_t *_job_res_running[DT_CTL_WORKER_RESERVED] = { NULL };
+
 static int32_t dt_control_run_job_res(dt_control_t *control, int32_t res)
 {
   if(((unsigned int)res) >= DT_CTL_WORKER_RESERVED) return -1;
@@ -213,6 +219,7 @@ static int32_t dt_control_run_job_res(dt_control_t *control, int32_t res)
   {
     job = control->job_res[res];
     control->job_res[res] = NULL; // this job belongs to us now, the queue may not touch it any longer
+    _job_res_running[res] = job;
   }
   control->new_res[res] = 0;
   dt_pthread_mutex_unlock(&control->res_mutex);
@@ -236,6 +243,11 @@ static int32_t dt_control_run_job_res(dt_control_t *control, int32_t res)
     dt_print(DT_DEBUG_CONTROL, "\n");
   }
   dt_pthread_mutex_unlock(&job->wait_mutex);
+
+  dt_pthread_mutex_lock(&control->res_mutex);
+  _job_res_running[res] = NULL;
+  dt_pthread_mutex_unlock(&control->res_mutex);
+
   dt_control_job_dispose(job);
   return 0;
 }
@@ -525,6 +537,52 @@ int dt_control_add_job(dt_control_t *control, dt_job_queue_t queue_id, _dt_job_t
 
 static __thread int threadid = -1;
 
+// Threads of this file -- pool, reserved and kicker -- that have started and not returned yet.
+// dt_control_shutdown() joins every one of them, so this is what that join still waits for.
+static gint _workers_alive = 0;
+
+int32_t dt_control_workers_alive(void)
+{
+  return g_atomic_int_get(&_workers_alive);
+}
+
+void dt_control_running_jobs_foreach(dt_control_t *control, dt_control_running_jobs_foreach_callback_t callback,
+                                     void *data)
+{
+  // A running job is disposed only after it has left control->job[] or _job_res_running[], which
+  // it leaves under the mutex held around each here: its description outlives the callback.
+  dt_pthread_mutex_lock(&control->queue_mutex);
+  for(int k = 0; k < control->num_threads; k++)
+  {
+    const _dt_job_t *job = control->job[k];
+    if(!IS_NULL_PTR(job)) callback(job->description, job->queue, FALSE, data);
+  }
+  dt_pthread_mutex_unlock(&control->queue_mutex);
+
+  dt_pthread_mutex_lock(&control->res_mutex);
+  for(int k = 0; k < DT_CTL_WORKER_RESERVED; k++)
+  {
+    const _dt_job_t *job = _job_res_running[k];
+    if(!IS_NULL_PTR(job)) callback(job->description, job->queue, TRUE, data);
+  }
+  dt_pthread_mutex_unlock(&control->res_mutex);
+}
+
+int32_t dt_control_queued_jobs_count(dt_control_t *control)
+{
+  size_t count = 0;
+  dt_pthread_mutex_lock(&control->queue_mutex);
+  for(int i = 0; i < DT_JOB_QUEUE_MAX; i++) count += control->queue_length[i];
+  dt_pthread_mutex_unlock(&control->queue_mutex);
+
+  dt_pthread_mutex_lock(&control->res_mutex);
+  for(int k = 0; k < DT_CTL_WORKER_RESERVED; k++)
+    if(control->new_res[k] && !IS_NULL_PTR(control->job_res[k])) count++;
+  dt_pthread_mutex_unlock(&control->res_mutex);
+
+  return (int32_t)count;
+}
+
 int32_t dt_control_get_threadid()
 {
   if(threadid > -1) return threadid;
@@ -550,21 +608,24 @@ static void *dt_control_work_res(void *ptr)
   dt_pthread_setname(name);
   dt_free(params);
   int32_t threadid_res = dt_control_get_threadid_res();
+  g_atomic_int_inc(&_workers_alive);
   while(dt_control_running())
   {
     // dt_print(DT_DEBUG_CONTROL, "[control_work] %d\n", threadid_res);
     if(dt_control_run_job_res(s, threadid_res) < 0)
     {
-      // wait for a new job.
+      // wait for a new job. `running' is read under the mutex it is cleared under: a quit that
+      // lands between the loop test above and this wait would otherwise broadcast to nobody.
       int old;
       pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, &old);
       dt_pthread_mutex_lock(&s->cond_mutex);
-      dt_pthread_cond_wait(&s->cond, &s->cond_mutex);
+      if(dt_control_running()) dt_pthread_cond_wait(&s->cond, &s->cond_mutex);
       dt_pthread_mutex_unlock(&s->cond_mutex);
       int tmp;
       pthread_setcancelstate(old, &tmp);
     }
   }
+  g_atomic_int_add(&_workers_alive, -1);
   return NULL;
 }
 
@@ -572,13 +633,23 @@ static void *dt_control_worker_kicker(void *ptr)
 {
   dt_control_t *control = (dt_control_t *)ptr;
   dt_pthread_setname("kicker");
+  g_atomic_int_inc(&_workers_alive);
+  dt_pthread_mutex_lock(&control->cond_mutex);
   while(dt_control_running())
   {
-    sleep(2);
-    dt_pthread_mutex_lock(&control->cond_mutex);
+    // Two seconds spent on the condition, not in sleep(): the broadcast of a quit ends them at
+    // once, so dt_control_shutdown() never joins a thread that is asleep. Any other broadcast
+    // goes back to waiting for the same deadline, so the kicks keep their pace.
+    const gint64 end = g_get_real_time() + 2 * G_USEC_PER_SEC;
+    const struct timespec deadline = { .tv_sec = end / G_USEC_PER_SEC,
+                                       .tv_nsec = (end % G_USEC_PER_SEC) * 1000 };
+    int timed_out = 0;
+    while(!timed_out && dt_control_running())
+      timed_out = pthread_cond_timedwait(&control->cond, &control->cond_mutex.mutex, &deadline);
     pthread_cond_broadcast(&control->cond);
-    dt_pthread_mutex_unlock(&control->cond_mutex);
   }
+  dt_pthread_mutex_unlock(&control->cond_mutex);
+  g_atomic_int_add(&_workers_alive, -1);
   return NULL;
 }
 
@@ -595,17 +666,19 @@ static void *dt_control_work(void *ptr)
   dt_pthread_setname(name);
   dt_free(params);
   // int32_t threadid = dt_control_get_threadid();
+  g_atomic_int_inc(&_workers_alive);
   while(dt_control_running())
   {
     // dt_print(DT_DEBUG_CONTROL, "[control_work] %d\n", threadid);
     if(dt_control_run_job(control) < 0)
     {
-      // wait for a new job.
+      // wait for a new job, unless a quit landed since the loop test: see dt_control_work_res().
       dt_pthread_mutex_lock(&control->cond_mutex);
-      dt_pthread_cond_wait(&control->cond, &control->cond_mutex);
+      if(dt_control_running()) dt_pthread_cond_wait(&control->cond, &control->cond_mutex);
       dt_pthread_mutex_unlock(&control->cond_mutex);
     }
   }
+  g_atomic_int_add(&_workers_alive, -1);
   return NULL;
 }
 

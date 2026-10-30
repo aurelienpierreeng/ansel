@@ -1,6 +1,7 @@
 /*
  *    This file is part of Ansel,
  *    Copyright (C) 2026 Aurélien PIERRE.
+ *    Copyright (C) 2026 Guillaume Stutin.
  *
  *    Ansel is free software: you can redistribute it and/or modify
  *    it under the terms of the GNU General Public License as published by
@@ -276,7 +277,8 @@ static void _resizable_scroll_apply(GtkWidget *w)
 
   if(state->mode == DT_UI_RESIZE_STATIC)
   {
-    // Fixed height: the user's persisted size, or min_size as the default. Independent of content,
+    // Fixed height: the persisted size -- the key's default in anselconfig.xml.in when it has one,
+    // since such a key is never unset -- or min_size without one. Independent of content,
     // so a content refresh (e.g. on hovering another thumbnail) never shifts the layout.
     height = CLAMP(has_conf ? stored : min_size, min_size, max_height);
   }
@@ -302,6 +304,11 @@ static void _resizable_scroll_apply(GtkWidget *w)
     {
       gtk_widget_get_preferred_height(w, NULL, &content);
     }
+
+    /* One blank row past the last one, when the caller asked for it: a list filled edge to edge
+     * cannot be told from one with more rows hidden below, the blank row says it ends there. It
+     * only counts while everything fits -- a capped list snaps to its rows below and scrolls. */
+    if(row_based && state->trailing_row) content += increment;
 
     const gint cap = has_conf ? CLAMP(stored, min_size, max_height) : max_height;
     height = CLAMP(MIN(content, cap), min_size, max_height);
@@ -533,7 +540,7 @@ static void _widget_auto_height_free(gpointer data)
  * scrolled window (e.g. to tweak its scroll policy) must use dt_ui_scroll_wrap_get_scrolled_window().
  *
  * @param w content widget (treeview, textview or any container)
- * @param min_size minimum height floor in device pixels (also the static default before the user drags)
+ * @param min_size minimum height floor in device pixels (also the static default, for a key without one)
  * @param config_str conf key persisting the user-chosen height (copied internally)
  * @param mode DT_UI_RESIZE_DYNAMIC (auto-fit) or DT_UI_RESIZE_STATIC (fixed height)
  */
@@ -616,9 +623,14 @@ GtkWidget *dt_ui_scroll_wrap_get_scrolled_window(GtkWidget *wrapper)
   return sw;
 }
 
-gint dt_ui_scroll_wrap_row_height(GtkWidget *content_widget)
+void dt_ui_scroll_wrap_reserve_trailing_row(GtkWidget *content_widget)
 {
-  return _get_container_row_heigth(content_widget);
+  dt_gui_widget_auto_height_t *state
+      = IS_NULL_PTR(content_widget) ? NULL : g_object_get_data(G_OBJECT(content_widget), DT_GUI_WIDGET_AUTO_HEIGHT_KEY);
+  if(IS_NULL_PTR(state)) return;
+
+  state->trailing_row = TRUE;
+  _widget_auto_update(content_widget);
 }
 
 static void _resizable_area_free(gpointer data)

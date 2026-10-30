@@ -88,7 +88,7 @@ typedef struct dt_masks_functions_t
   /** Rasterise into a freshly allocated buffer covering the shape's own bounding box.
    * Same three outcomes as get_mask_roi. On anything but OK the out-parameters are still
    * written (NULL buffer, zero geometry): callers read them unconditionally. */
-  dt_masks_raster_result_t (*get_mask)(const dt_iop_module_t *const module, struct dt_dev_pixelpipe_t *pipe,
+  dt_masks_raster_result_t (*get_mask)(const dt_iop_module_t *const module, const struct dt_dev_pixelpipe_t *pipe,
                   const dt_dev_pixelpipe_iop_t *const piece,
                   struct dt_masks_form_t *const form,
                   float **buffer, int *width, int *height, int *posx, int *posy);
@@ -103,18 +103,18 @@ typedef struct dt_masks_functions_t
    * NOT a failure: the group fold skips such a shape and keeps folding. Every implementation
    * must agree on which is which -- see dt_masks_raster_result_t.
    */
-  dt_masks_raster_result_t (*get_mask_roi)(const dt_iop_module_t *const fmodule, struct dt_dev_pixelpipe_t *pipe,
+  dt_masks_raster_result_t (*get_mask_roi)(const dt_iop_module_t *const fmodule, const struct dt_dev_pixelpipe_t *pipe,
                       const dt_dev_pixelpipe_iop_t *const piece,
                       struct dt_masks_form_t *const form,
                       const dt_iop_roi_t *roi, float *buffer, dt_iop_roi_t *touched);
   /** The shape's bounding box. Same three outcomes; the out-parameters are always written. */
-  dt_masks_raster_result_t (*get_area)(const dt_iop_module_t *const module, struct dt_dev_pixelpipe_t *pipe,
+  dt_masks_raster_result_t (*get_area)(const dt_iop_module_t *const module, const struct dt_dev_pixelpipe_t *pipe,
                   const dt_dev_pixelpipe_iop_t *const piece,
                   struct dt_masks_form_t *const form,
                   int *width, int *height, int *posx, int *posy);
   /** The clone source's bounding box. Same three outcomes; out-parameters always written. */
-  dt_masks_raster_result_t (*get_source_area)(dt_iop_module_t *module, struct dt_dev_pixelpipe_t *pipe,
-                         dt_dev_pixelpipe_iop_t *piece, struct dt_masks_form_t *form,
+  dt_masks_raster_result_t (*get_source_area)(const dt_iop_module_t *module, const struct dt_dev_pixelpipe_t *pipe,
+                         const dt_dev_pixelpipe_iop_t *piece, struct dt_masks_form_t *form,
                          int *width, int *height, int *posx, int *posy);
   gboolean (*get_gravity_center)(struct dt_develop_t *dev, const struct dt_masks_form_t *form, float center[2], float *area);
   float (*get_interaction_value)(const struct dt_masks_form_t *form, dt_masks_interaction_t interaction);
@@ -150,11 +150,15 @@ typedef struct dt_masks_functions_t
 /* Rasterisation entry points, dispatched only from inside the masks module: the group fold
  * calls get_mask_roi on its children, and the GUI outline builder calls get_points_border.
  * They were declared in the public header with no caller outside this directory. */
-dt_masks_raster_result_t dt_masks_get_mask_roi(const dt_iop_module_t *const module, dt_dev_pixelpipe_t *pipe,
+dt_masks_raster_result_t dt_masks_get_mask_roi(const dt_iop_module_t *const module, const dt_dev_pixelpipe_t *pipe,
                                                const dt_dev_pixelpipe_iop_t *const piece,
                                                dt_masks_form_t *const form, const dt_iop_roi_t *roi,
                                                float *buffer, dt_iop_roi_t *touched);
 
+/* The outline is sampled at the density the dev's GUI shows -- dt_masks_gui_outline_step(),
+ * read by dt_masks_distort_for_gui() -- so that it is built at the density it is drawn and
+ * hit-tested at. The brush and the polygon sample their curves, arcs and stamps at it; the
+ * circle, the ellipse and the gradient have their own sampling. */
 dt_masks_raster_result_t dt_masks_get_points_border(struct dt_develop_t *dev, dt_masks_form_t *form,
                                float **points, int *points_count,
                                float **border, int *border_count,
@@ -174,6 +178,35 @@ gboolean dt_masks_outline_short_way(const float *const centre, const float *cons
 /** A border sample at @p radius from @p centre in the direction (dx, dy); (1, 0) if none. */
 void dt_masks_outline_offset_along(const float *const centre, float dx, float dy, const float radius,
                                    float *const border);
+
+/** How far off the normal a border sample may tilt, as the sine of the angle: the rate of the
+ * radius along the spine, |dr/ds|, up to which the envelope is followed. At 1 the discs nest
+ * and there is no envelope beyond it, so this is the exact envelope and the clamp only keeps
+ * the square root real. A first version capped it at 0.7 to keep the spokes painted from the
+ * samples reaching across the stroke, on the argument that a family tilted further leans too
+ * far along the spine to paint the width. Measured, the raster oracle reports no missing pixel
+ * anywhere in the corpus at the exact envelope, while the cap left a real hole: a segment whose
+ * rate peaks near 1 -- a brush flaring from a 132 px node to a 342 px one over 287 px -- has its
+ * union's top on the rear envelope of the flare, 40 px outside the wide node's circle at a tilt
+ * of 64 degrees, and no sample reached it, so the outline lost the whole top of the shape. */
+#define DT_MASKS_OUTLINE_TILT_MAX 1.0f
+
+/** Place the border sample of a disc of @p radius centred at @p centre, when the disc belongs
+ * to a family whose centre moves along the tangent (@p dx, @p dy) -- any length, the derivative
+ * of the spine by its parameter -- and whose radius changes by @p radius_rate per unit of that
+ * same parameter.
+ *
+ * A border sample on the NORMAL of its spine sample is on the boundary of the union only while
+ * the radius is constant. Where the radius grows or shrinks along the spine the boundary is the
+ * envelope of the discs, c + r * (-r' T + sqrt(1 - r'^2) N) with r' = dr/ds, tilted off the
+ * normal by asin(r'); the normal sample sits inside the union by about r'^2 r / 2 -- a fraction
+ * of a pixel at the rates a pen draws, invisible to the eye and exactly what the boundary
+ * detector rejects, so the outline of a stroke whose radius varied lost whole stretches of both
+ * sides (a 37% skipped border on the #1313 corpus brush, most of it along the sides). The
+ * tilt is capped at DT_MASKS_OUTLINE_TILT_MAX. The normal is (dy, -dx), the side every
+ * border in this module offsets to. */
+void dt_masks_outline_envelope_offset(const float *centre, float dx, float dy, float radius, float radius_rate,
+                                      float *out);
 
 
 /** Is @p index inside one of the excluded spans? For a consumer that SEARCHES the outline rather
@@ -204,7 +237,7 @@ typedef struct dt_masks_sample_grid_t
 void dt_masks_points_bounding_box(const float *const points, const int num_points,
                                   int *width, int *height, int *posx, int *posy);
 
-float *dt_masks_sample_grid_backtransform(struct dt_dev_pixelpipe_t *pipe, const double iop_order,
+float *dt_masks_sample_grid_backtransform(const struct dt_dev_pixelpipe_t *pipe, const double iop_order,
                                           const dt_masks_sample_grid_t *const grid,
                                           const char *const shape, const char *const form_name);
 

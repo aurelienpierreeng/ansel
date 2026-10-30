@@ -1,7 +1,7 @@
 #   This file is part of the Ansel project.
 #   Copyright (C) 2022-2026 Aurélien PIERRE.
 #   Copyright (C) 2023-2024 Alynx Zhou.
-#   Copyright (C) 2025 Guillaume Stutin.
+#   Copyright (C) 2025-2026 Guillaume Stutin.
 #   
 #   Ansel is free software: you can redistribute it and/or modify
 #   it under the terms of the GNU General Public License as published by
@@ -33,8 +33,46 @@ on:
   workflow_dispatch:
 
 jobs:
-  Linux:
+  # The cron fires whether master moved or not. Before this job, every night on an unchanged
+  # head rebuilt the AppImage and then failed to publish it, the release already holding that
+  # commit's package. The release is asked first; tools/nightly_published.sh matches the commit
+  # hash in the asset names. A manual dispatch builds anyway, since rebuilding on purpose is
+  # what someone dispatching wants.
+  #
+  # The build checks out the commit judged here, not the branch again, so a push landing in
+  # between cannot have one commit checked and another built.
+  published:
     if: github.repository == 'aurelienpierreeng/ansel' || github.event_name == 'workflow_dispatch'
+    name: Is this commit already published
+    runs-on: ubuntu-latest
+    outputs:
+      sha: ${{ steps.check.outputs.sha }}
+      build: ${{ steps.check.outputs.build }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.ref_name }}
+          fetch-depth: 1
+          submodules: false
+      - name: Ask the release
+        id: check
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          EVENT: ${{ github.event_name }}
+        run: |
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          if [ "${EVENT}" != "workflow_dispatch" ] && tools/nightly_published.sh \
+            'Ansel-@VERSION@-x86_64.AppImage' \
+            'Ansel-@VERSION@-x86_64.AppImage.zsync'; then
+            echo "already published for this commit, not rebuilt"
+            echo "build=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "build=true" >> "$GITHUB_OUTPUT"
+          fi
+
+  Linux:
+    needs: published
+    if: ${{ needs.published.outputs.build == 'true' }}
     name: Nightly Ansel Linux build
     runs-on: ubuntu-22.04
     strategy:
@@ -50,7 +88,7 @@ jobs:
         generator:
           - Ninja
         branch:
-          - { code: "${{ github.ref_name }}", label: stable }
+          - { label: stable }
     env:
       CC: ${{ matrix.compiler.CC }}
       CXX: ${{ matrix.compiler.CXX }}
@@ -64,7 +102,6 @@ jobs:
       GENERATOR: ${{ matrix.generator }}
       TARGET: ${{ matrix.target }}
       DARKTABLE_CLI: ${{ github.workspace }}/AppDir/usr/bin/ansel-cli
-      BRANCH: ${{ matrix.branch.code }}
       BUILD_NAME: ${{ matrix.branch.label }}
     steps:
       - name: Enable Ubuntu repositories
@@ -76,7 +113,7 @@ jobs:
       - name: Checkout ansel source
         uses: actions/checkout@v6
         with:
-          ref: ${{ env.BRANCH }}
+          ref: ${{ needs.published.outputs.sha }}
           fetch-depth: 5000
           fetch-tags: true
           submodules: true
@@ -133,7 +170,7 @@ jobs:
     env:
       REPO: "https://github.com/aurelienpierreeng/ansel"
       ROOM: "!SgRYbzspwqwwUgSQHC:matrix.org"
-    needs: Linux
+    needs: [published, Linux]
     steps:
       # One pre-release per month instead of one for all time: GitHub caps a release at
       # 1000 assets, and five formats a night filled the rolling v0.0.0 in under a year.
@@ -151,6 +188,20 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: ansel.stable.AppImage
+      # GitHub stores an asset name reduced to [A-Za-z0-9._-], so the `~' a version string
+      # carries is filed as `.'. tip decides what to REPLACE by comparing its local filenames
+      # with the release's assets, so a file still spelled with `~' never matches the asset it
+      # should replace: tip uploads it as new and GitHub answers 422 already_exists. Renaming
+      # here hands tip the name the release will use, so a dispatched rebuild of a published
+      # commit replaces its package instead of failing.
+      - name: Name the packages the way the release will
+        run: |
+          for f in Ansel-*.AppImage*; do
+            [ -e "${f}" ] || continue
+            case "${f}" in
+              *'~'*) mv -- "${f}" "${f//\~/.}" ;;
+            esac
+          done
       - name: Update nightly release
         uses: aurelienpierreeng/tip@master
         with:

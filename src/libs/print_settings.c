@@ -22,6 +22,7 @@
     Copyright (C) 2022 Martin Bařinka.
     Copyright (C) 2022 Miloš Komarčević.
     Copyright (C) 2022 Victor Forsiuk.
+    Copyright (C) 2026 Guillaume Stutin.
     
     darktable is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -369,11 +370,11 @@ static int _export_image(dt_job_t *job, dt_image_box *img)
   dt_control_log(_("processing `%s' for `%s'"), params->job_title, params->prt.printer.name);
 
   const gboolean export_masks = FALSE;
-  const gboolean is_scaling = FALSE;
+  const double no_scale_factor = 0.0; // the print size is fitted in dat's max_width x max_height
 
   dt_imageio_export_with_flags
     (img->imgid, "unused", &buf, (dt_imageio_module_data_t *)&dat, TRUE, FALSE,
-     TRUE, is_scaling, FALSE, NULL, FALSE, export_masks, params->buf_icc_type,
+     TRUE, no_scale_factor, FALSE, FALSE, NULL, FALSE, export_masks, params->buf_icc_type,
      params->buf_icc_profile, params->buf_icc_intent,  NULL, NULL, 1, 1, NULL, NULL);
 
   img->exp_width = dat.head.width;
@@ -392,8 +393,7 @@ static int _export_image(dt_job_t *job, dt_image_box *img)
                                  DT_PROFILE_ROLE_OUTPUT);
     if(IS_NULL_PTR(pprof))
     {
-      dt_control_log(_("cannot open printer profile `%s'"), params->p_icc_profile);
-      fprintf(stderr, "cannot open printer profile `%s'\n", params->p_icc_profile);
+      dt_control_alert(_("Printing failed"), _("cannot open printer profile"), params->p_icc_profile);
       dt_control_queue_redraw();
       return 1;
     }
@@ -410,8 +410,7 @@ static int _export_image(dt_job_t *job, dt_image_box *img)
          ((void **)&(params->buf), dat.head.width, dat.head.height, dat.bpp, buf_profile->profile,
           pprof->profile, params->p_icc_intent, params->black_point_compensation))
       {
-        dt_control_log(_("cannot apply printer profile `%s'"), params->p_icc_profile);
-        fprintf(stderr, "cannot apply printer profile `%s'\n", params->p_icc_profile);
+        dt_control_alert(_("Printing failed"), _("cannot apply printer profile"), params->p_icc_profile);
         dt_control_queue_redraw();
         return 1;
       }
@@ -562,8 +561,7 @@ static int _print_job_run(dt_job_t *job)
   const gint fd = g_mkstemp(params->pdf_filename);
   if(fd == -1)
   {
-    dt_control_log(_("failed to create temporary pdf for printing"));
-    fprintf(stderr, "failed to create temporary pdf for printing\n");
+    dt_control_alert(_("Printing failed"), _("failed to create temporary pdf for printing"), NULL);
     return 1;
   }
   close(fd);

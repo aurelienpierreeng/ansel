@@ -288,7 +288,7 @@ static void _clear_histogram_backbuf(dt_backbuf_t *backbuf)
 
   /* Global histogram backbuffers keep one structural ref on top of the module-output lifetime.
    * Clearing that published view therefore means releasing the extra GUI-side keepalive ref here. */
-  dt_dev_pixelpipe_cache_unref_hash(dt_dev_backbuf_get_hash(backbuf));
+  dt_dev_backbuf_release_keepalive(backbuf);
   dt_dev_set_backbuf(backbuf, 0, 0, 0, DT_PIXELPIPE_CACHE_HASH_INVALID, DT_PIXELPIPE_CACHE_HASH_INVALID);
 }
 
@@ -356,21 +356,19 @@ static gboolean _refresh_global_histogram_backbuf_for_hash(dt_develop_t *dev, co
     return FALSE;
   }
 
-  const uint64_t previous_hash = dt_dev_backbuf_get_hash(backbuf);
-  if(previous_hash != hash)
-  {
-    /* The module output already owns its producer ref. Tagging it as a global histogram backbuffer
-     * reserves one additional consumer ref so GUI readers only need `peek()` and read locks later --
-     * and that consumer ref is precisely the one the retained lookup above just took, handed over
-     * rather than taken a second time. `_clear_histogram_backbuf()` and the next publication release
-     * it through `dt_dev_pixelpipe_cache_unref_hash()`. */
-    dt_dev_pixelpipe_cache_unref_hash(previous_hash);
-  }
-  else
-  {
-    /* Already published under this very hash, so the keepalive is held: ours is one too many. */
-    dt_dev_pixelpipe_cache_ref_count_entry(FALSE, entry);
-  }
+  /* The module output already owns its producer ref. Tagging it as a global histogram backbuffer
+   * reserves one additional consumer ref so GUI readers only need `peek()` and read locks later.
+   *
+   * The retained lookup above is already holding that reference, so give the backbuffer its own
+   * and then drop ours. The helper is idempotent, which collapses the two cases this used to
+   * branch on: a different cacheline leaves the backbuffer holding exactly one reference, and
+   * re-publishing the one it already holds leaves that one untouched while our extra goes.
+   *
+   * Keyed on the ENTRY throughout. Releasing the previous keepalive by its hash was correct only
+   * while an entry's hash could not move under its holder, which rekey reuse does not promise --
+   * see dt_dev_pixelpipe_cache_unref_entry(). */
+  dt_dev_backbuf_take_keepalive(backbuf, entry);
+  dt_dev_pixelpipe_cache_unref_entry(entry);
 
   dt_dev_set_backbuf(backbuf, roi.width, roi.height, dsc.bpp, hash, DT_PIXELPIPE_CACHE_HASH_INVALID);
   return TRUE;

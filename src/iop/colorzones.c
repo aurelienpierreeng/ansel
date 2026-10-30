@@ -666,7 +666,7 @@ void init_presets(dt_iop_module_so_t *self)
     p.curve_type[c] = CATMULL_ROM;
   }
   dt_gui_presets_add_generic(_("red black white"), self->op,
-                             version, &p, sizeof(p), 1, DEVELOP_BLEND_CS_RGB_DISPLAY);
+                             version, &p, sizeof(p), 1);
 
   // black white and skin tones
   p.channel = DT_IOP_COLORZONES_h;
@@ -689,7 +689,7 @@ void init_presets(dt_iop_module_so_t *self)
     p.curve_type[c] = CATMULL_ROM;
   }
   dt_gui_presets_add_generic(_("black white and skin tones"), self->op,
-                             version, &p, sizeof(p), 1, DEVELOP_BLEND_CS_RGB_DISPLAY);
+                             version, &p, sizeof(p), 1);
 
   // polarizing filter
   p.channel = DT_IOP_COLORZONES_C;
@@ -712,7 +712,7 @@ void init_presets(dt_iop_module_so_t *self)
     p.curve_type[c] = CATMULL_ROM;
   }
   dt_gui_presets_add_generic(_("polarizing filter"), self->op,
-                             version, &p, sizeof(p), 1, DEVELOP_BLEND_CS_RGB_DISPLAY);
+                             version, &p, sizeof(p), 1);
 
   // natural skin tone
   p.channel = DT_IOP_COLORZONES_h;
@@ -733,7 +733,7 @@ void init_presets(dt_iop_module_so_t *self)
     p.curve_type[c] = CATMULL_ROM;
   }
   dt_gui_presets_add_generic(_("natural skin tones"), self->op,
-                             version, &p, sizeof(p), 1, DEVELOP_BLEND_CS_RGB_DISPLAY);
+                             version, &p, sizeof(p), 1);
 
   // black and white film
   p.channel = DT_IOP_COLORZONES_h;
@@ -764,7 +764,7 @@ void init_presets(dt_iop_module_so_t *self)
     p.curve_type[c] = CATMULL_ROM;
   }
   dt_gui_presets_add_generic(_("black & white film"), self->op,
-                             version, &p, sizeof(p), 1, DEVELOP_BLEND_CS_RGB_DISPLAY);
+                             version, &p, sizeof(p), 1);
 
   // neutral preset with just a set of nodes uniformly distributed along the hue axis
   const int colorzones_bands_hsl = 8;
@@ -784,7 +784,7 @@ void init_presets(dt_iop_module_so_t *self)
     p.curve_type[c] = MONOTONE_HERMITE;
   }
   dt_gui_presets_add_generic(_("HSL base setting"), self->op,
-                             version, &p, sizeof(p), 1, DEVELOP_BLEND_CS_RGB_DISPLAY);
+                             version, &p, sizeof(p), 1);
 
   dt_database_release_transaction();
 }

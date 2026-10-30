@@ -15,6 +15,7 @@
     Copyright (C) 2022 Martin Bařinka.
     Copyright (C) 2023, 2025 Alynx Zhou.
     Copyright (C) 2025 Aurélien PIERRE.
+    Copyright (C) 2026 Guillaume Stutin.
     
     darktable is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -43,6 +44,12 @@ extern "C" {
 /** returns the users home directory */
 gchar *dt_loc_get_home_dir(const gchar *user);
 
+/** @brief Resolve the locale directory the way dt_loc_init() does, creating it if missing, but
+ * set no global and check nothing: dt_init() checks it right after.
+ * For the command-line tools, which bind their text domain before dt_init(). dt_init() zeroes
+ * every path before resolving them all, so whatever an earlier dt_loc_init() set would leak. */
+void dt_loc_resolve_localedir(char *localedir, size_t bufsize);
+
 /** initializes all dirs */
 void dt_loc_init(const char *datadir, const char *moduledir, const char *localedir, const char *configdir, const char *cachedir, const char *tmpdir, const char *kerneldir);
 /** init systemwide data dir */
@@ -57,6 +64,15 @@ void dt_loc_init_sharedir(const char* application_directory);
 void dt_loc_init_tmp_dir(const char *tmpdir);
 /** init user config dir */
 void dt_loc_init_user_config_dir(const char *configdir);
+/** @brief Resolve the default user cache directory the way dt_loc_init_user_cache_dir() does,
+ * without setting any global and without honouring --cachedir.
+ *
+ * For the two callers that need the path BEFORE dt_loc_init() has run -- the Windows log
+ * redirection in main() and the usage text that prints where that log goes. Everything else must
+ * read dt_loc_cachedir(), which is this unless the user passed --cachedir.
+ *
+ * @return a newly allocated path; release with dt_free(). */
+gchar *dt_loc_default_user_cache_dir(void);
 /** init user cache dir */
 void dt_loc_init_user_cache_dir(const char *cachedir);
 /** init OpenCL kernels dir */

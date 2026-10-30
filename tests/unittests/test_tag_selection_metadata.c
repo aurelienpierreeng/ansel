@@ -25,6 +25,10 @@
 #include "common/image.h" // UNKNOWN_IMAGE
 #include "metadata/tags.h"  // DT_TF_CATEGORY
 
+#ifdef _WIN32
+#include "win/main_wrapper.h"
+#endif
+
 
 static void test_selection_lowest_id(void **state)
 {
@@ -151,7 +155,7 @@ static void test_metadata_foreach_selected(void **state)
   dt_selection_repository_clear();
 }
 
-int main(void)
+int main(int argc, char *argv[])
 {
   const struct CMUnitTest tests[] = {
     cmocka_unit_test(test_selection_lowest_id),

@@ -83,9 +83,11 @@
 #endif
 #include <gdk/gdkkeysyms.h>
 #include "widgets/container.h"
+#include "widgets/dialog.h"
 #include "widgets/label.h"
 
 #include <gtk/gtk.h>
+#include <limits.h>
 #include <stdlib.h>
 
 #include <glib.h>
@@ -128,73 +130,87 @@ static void _update_formats_combobox(dt_lib_export_t *d);
 static void _update_dimensions(dt_lib_export_t *d);
 /** get the max output dimension supported by combination of storage and format.. */
 static void _get_max_output_dimension(dt_lib_export_t *d, uint32_t *width, uint32_t *height);
-static void _resync_print_dimensions(dt_lib_export_t *self);
-static void _resync_pixel_dimensions(dt_lib_export_t *self);
+static void _print_size_display(dt_lib_export_t *d);
 
 #define INCH_TO_CM (2.54f)
 
-static inline float pixels2cm(dt_lib_export_t *self, const uint32_t pix)
+/* Each size mode keeps settings of its own, so switching modes loses none of them: the pixel box
+ * in "width"/"height", the print size in "print_width"/"print_height" -- always in cm, shown in
+ * the unit selected -- at "print_dpi", the factor in "resizing_factor". "original resolution"
+ * has none. The export resolves the selected mode into one size when it is dispatched
+ * (_resolve_export_size()), and nothing downstream reads these keys. */
+#define CONF_PRINT_WIDTH CONFIG_PREFIX "print_width"
+#define CONF_PRINT_HEIGHT CONFIG_PREFIX "print_height"
+
+static dt_dimensions_type_t _dimensions_type(void)
 {
-  const int dpi = atoi(gtk_entry_get_text(GTK_ENTRY(self->print_dpi)));
-  return ((float)pix * INCH_TO_CM) / (float)dpi;
+  return (dt_dimensions_type_t)dt_conf_get_int(CONFIG_PREFIX "dimensions_type");
 }
 
-static inline float pixels2inch(dt_lib_export_t *self, const uint32_t pix)
+static int _print_dpi(void)
 {
-  const int dpi = atoi(gtk_entry_get_text(GTK_ENTRY(self->print_dpi)));
-  return (float)pix / (float)dpi;
+  const int dpi = dt_conf_get_int(CONFIG_PREFIX "print_dpi");
+  return dpi > 0 ? dpi : 300;
 }
 
-static inline uint32_t cm2pixels(dt_lib_export_t *self, const float cm)
+// centimeters per unit the print size is shown in
+static float _print_unit_in_cm(const dt_dimensions_type_t d_type)
 {
-  const int dpi = atoi(gtk_entry_get_text(GTK_ENTRY(self->print_dpi)));
-  return ceilf((cm * (float)dpi) / INCH_TO_CM);
+  return d_type == DT_DIMENSIONS_INCH ? INCH_TO_CM : 1.f;
 }
 
-static inline uint32_t inch2pixels(dt_lib_export_t *self, const float inch)
+static uint32_t _cm_to_pixels(const float cm, const int dpi)
 {
-  const int dpi = atoi(gtk_entry_get_text(GTK_ENTRY(self->print_dpi)));
-  return ceilf(inch * (float)dpi);
+  return cm > 0.f ? (uint32_t)ceilf(cm * (float)dpi / INCH_TO_CM) : 0;
 }
 
-static inline uint32_t print2pixels(dt_lib_export_t *self, const float value)
+static void _print_size_from_pixels(const uint32_t width, const uint32_t height)
 {
-  const dt_dimensions_type_t d_type = (dt_dimensions_type_t)dt_bauhaus_combobox_get(self->dimensions_type);
-  switch(d_type)
+  const int dpi = _print_dpi();
+  dt_conf_set_float(CONF_PRINT_WIDTH, (float)width * INCH_TO_CM / (float)dpi);
+  dt_conf_set_float(CONF_PRINT_HEIGHT, (float)height * INCH_TO_CM / (float)dpi);
+}
+
+static void _ensure_print_size_conf(void)
+{
+  // settings written before the print size had keys of its own start from the pixel box
+  if(!dt_conf_key_exists(CONF_PRINT_WIDTH) || !dt_conf_key_exists(CONF_PRINT_HEIGHT))
+    _print_size_from_pixels(dt_conf_get_int(CONFIG_PREFIX "width"), dt_conf_get_int(CONFIG_PREFIX "height"));
+}
+
+/* The size the selected mode asks for: with *scale_factor > 0 the image is reduced by it,
+ * otherwise it fits in *max_width x *max_height, 0 x 0 meaning full size. */
+static void _resolve_export_size(int *max_width, int *max_height, double *scale_factor)
+{
+  *max_width = 0;
+  *max_height = 0;
+  *scale_factor = 0.0;
+
+  switch(_dimensions_type())
   {
-    case(DT_DIMENSIONS_PIXELS):
-    case(DT_DIMENSIONS_ORIGINAL):
-      return ceilf(value);
-    case(DT_DIMENSIONS_CM):
-      return cm2pixels(self, value);
-    case(DT_DIMENSIONS_INCH):
-      return inch2pixels(self, value);
-    case(DT_DIMENSIONS_SCALE):
-      ;
+    case DT_DIMENSIONS_PIXELS:
+      *max_width = MAX(dt_conf_get_int(CONFIG_PREFIX "width"), 0);
+      *max_height = MAX(dt_conf_get_int(CONFIG_PREFIX "height"), 0);
+      break;
+    case DT_DIMENSIONS_CM:
+    case DT_DIMENSIONS_INCH:
+    {
+      const int dpi = _print_dpi();
+      *max_width = (int)_cm_to_pixels(dt_conf_get_float(CONF_PRINT_WIDTH), dpi);
+      *max_height = (int)_cm_to_pixels(dt_conf_get_float(CONF_PRINT_HEIGHT), dpi);
+      break;
+    }
+    case DT_DIMENSIONS_SCALE:
+    {
+      double num = 1.0;
+      double denum = 1.0;
+      dt_imageio_resizing_factor_parse(dt_conf_get_string_const(CONFIG_PREFIX "resizing_factor"), &num, &denum);
+      *scale_factor = num / denum;
+      break;
+    }
+    case DT_DIMENSIONS_ORIGINAL:
+      break;
   }
-
-  // should never run this
-  return ceilf(value);
-}
-
-static inline float pixels2print(dt_lib_export_t *self, const uint32_t pix)
-{
-  const dt_dimensions_type_t d_type = (dt_dimensions_type_t)dt_bauhaus_combobox_get(self->dimensions_type);
-  switch(d_type)
-  {
-    case(DT_DIMENSIONS_PIXELS):
-    case(DT_DIMENSIONS_ORIGINAL):
-      return (float)pix;
-    case(DT_DIMENSIONS_CM):
-      return pixels2cm(self, pix);
-    case(DT_DIMENSIONS_INCH):
-      return pixels2inch(self, pix);
-    case(DT_DIMENSIONS_SCALE):
-      ;
-  }
-
-  // should never run this
-  return (float)pix;
 }
 
 const char *name(struct dt_lib_module_t *self)
@@ -241,67 +257,54 @@ static void _collection_updated_callback(gpointer instance, dt_collection_change
   _update(self);
 }
 
-gboolean _is_int(double value)
+// a positive whole number that fits the int it is printed as
+static gboolean _is_int(const double value)
 {
-  return (value == (int)value);
+  return value > 0.0 && value <= (double)INT_MAX && value == (int)value;
 }
 
+// rewrite the resizing factor in its shortest spelling: "2.0/4" becomes "2/4"
 static void _scale_optim()
 {
-  double num = 1.0, denum = 1.0;
-  dt_imageio_resizing_factor_get_and_parsing(&num, &denum);
+  double num = 1.0;
+  double denum = 1.0;
   gchar *scale_str = dt_conf_get_string(CONFIG_PREFIX "resizing_factor");
-  gchar _str[6] = "";
-
-  gchar *pdiv = strchr(scale_str, '/');
+  dt_imageio_resizing_factor_parse(scale_str, &num, &denum);
+  const gchar *pdiv = strchr(scale_str, '/');
 
   gchar scale_buf[64] = "";
+  gchar num_str[16] = "";
+  gchar denum_str[16] = "";
+  if(_is_int(num)) snprintf(num_str, sizeof(num_str), "%d", (int)num);
+  if(_is_int(denum)) snprintf(denum_str, sizeof(denum_str), "%d", (int)denum);
+
   if(IS_NULL_PTR(pdiv))
   {
-    if(_is_int(num) && num > 0.0)
-    {
-      sprintf(_str, "%d", (int) num);
-      g_strlcat(scale_buf, _str, sizeof(scale_buf));
-    }
-    else
-    {
-      g_strlcat(scale_buf, scale_str, sizeof(scale_buf));
-    }
+    g_strlcat(scale_buf, num_str[0] ? num_str : scale_str, sizeof(scale_buf));
   }
-  else if(pdiv-scale_str == 0)
+  else if(pdiv == scale_str)
   {
-    if(_is_int(denum) && denum > 0.0)
-    {
-      sprintf(_str, "%d", (int) denum);
-      g_strlcat(scale_buf, _str, sizeof(scale_buf));
-    }
+    if(denum_str[0])
+      g_strlcat(scale_buf, denum_str, sizeof(scale_buf));
     else
     {
       g_strlcat(scale_buf, "1/", sizeof(scale_buf));
-      g_strlcat(scale_buf, pdiv+1, sizeof(scale_buf));
+      g_strlcat(scale_buf, pdiv + 1, sizeof(scale_buf));
     }
   }
   else
   {
-    if(_is_int(num) && num > 0.0)
-    {
-      sprintf(_str, "%d", (int) num);
-      g_strlcat(scale_buf, _str, sizeof(scale_buf));
-    }
+    if(num_str[0])
+      g_strlcat(scale_buf, num_str, sizeof(scale_buf));
     else
     {
-      g_strlcat(scale_buf, scale_str, sizeof(scale_buf));
+      // the numerator alone, not the whole "num/denum" string
+      gchar *num_part = g_strndup(scale_str, pdiv - scale_str);
+      g_strlcat(scale_buf, num_part, sizeof(scale_buf));
+      dt_free(num_part);
     }
     g_strlcat(scale_buf, "/", sizeof(scale_buf));
-    if(_is_int(denum) && denum > 0.0)
-    {
-      sprintf(_str, "%d", (int) denum);
-      g_strlcat(scale_buf, _str, sizeof(scale_buf));
-    }
-    else
-    {
-      g_strlcat(scale_buf, pdiv+1, sizeof(scale_buf));
-    }
+    g_strlcat(scale_buf, denum_str[0] ? denum_str : pdiv + 1, sizeof(scale_buf));
   }
   dt_conf_set_string(CONFIG_PREFIX "resizing_factor", scale_buf);
 
@@ -349,7 +352,9 @@ static void _export_button_clicked(GtkWidget *widget, dt_lib_export_t *d)
 
     gtk_window_set_title(GTK_WINDOW(dialog), _("export to disk"));
     const gint res = gtk_dialog_run(GTK_DIALOG(dialog));
+    GtkWindow *dialog_parent = gtk_window_get_transient_for(GTK_WINDOW(dialog));
     gtk_widget_destroy(dialog);
+    dt_gui_refocus_parent(dialog_parent);
     dt_free(confirm_message);
 
     if(res != GTK_RESPONSE_YES)
@@ -358,24 +363,26 @@ static void _export_button_clicked(GtkWidget *widget, dt_lib_export_t *d)
     }
   }
 
-  // Let's get the max dimension restriction if any...
-  uint32_t max_width = dt_conf_get_int(CONFIG_PREFIX "width");
-  uint32_t max_height = dt_conf_get_int(CONFIG_PREFIX "height");
+  // the size the selected mode asks for, resolved now: the job keeps it whatever happens to the settings
+  dt_control_export_request_t request = { .format_index = format_index, .storage_index = storage_index };
+  _resolve_export_size(&request.max_width, &request.max_height, &request.scale_factor);
 
-  const gboolean export_masks = dt_conf_get_bool(CONFIG_PREFIX "export_masks");
+  request.export_masks = dt_conf_get_bool(CONFIG_PREFIX "export_masks");
   const char *tmp = dt_conf_get_string_const(CONFIG_PREFIX "style");
   if(tmp)
   {
     g_strlcpy(style, tmp, sizeof(style));
   }
+  request.style = style;
 
-  const dt_colorspaces_color_profile_type_t icc_type = sanitize_colorspaces(dt_conf_get_int(CONFIG_PREFIX "icctype"));
+  request.icc_type = sanitize_colorspaces(dt_conf_get_int(CONFIG_PREFIX "icctype"));
   gchar *icc_filename = dt_conf_get_string(CONFIG_PREFIX "iccprofile");
-  const dt_iop_color_intent_t icc_intent = dt_conf_get_int(CONFIG_PREFIX "iccintent");
+  request.icc_filename = icc_filename;
+  request.icc_intent = dt_conf_get_int(CONFIG_PREFIX "iccintent");
+  request.metadata_export = d->metadata_export;
 
   GList *list = dt_act_on_get_images();
-  dt_control_export(list, max_width, max_height, format_index, storage_index, TRUE, export_masks,
-                    style, icc_type, icc_filename, icc_intent, d->metadata_export);
+  dt_control_export(list, &request);
 
   dt_free(icc_filename);
 
@@ -388,9 +395,10 @@ static void _scale_changed(GtkEntry *spin, dt_lib_export_t *d)
   const char *validSign = ",.0123456789";
   const gchar *value = gtk_entry_get_text(spin);
 
-  const int len = sizeof(value);
-  int i, j = 0, idec = 0, idiv = 0, pdiv = 0;
   char new_value[30] = "";
+  // each character read writes at most one: keep room for the terminator
+  const int len = MIN((int)strlen(value), (int)sizeof(new_value) - 1);
+  int i, j = 0, idec = 0, idiv = 0, pdiv = 0;
 
   for (i = 0; i < len; i++)
   {
@@ -444,58 +452,19 @@ static void _scale_changed(GtkEntry *spin, dt_lib_export_t *d)
   gtk_entry_set_text(spin, new_value);
 }
 
-static void _width_changed(GtkEditable *entry, gpointer user_data);
-static void _height_changed(GtkEditable *entry, gpointer user_data);
-
-static gboolean _scale_mdlclick(GtkEntry *spin, GdkEventButton *event, dt_lib_export_t *d)
+/* A middle click resets a size entry to the value that means "no limit"; the entry's own "changed"
+ * handler stores it. The click is taken, or GTK would paste the primary selection right after the
+ * reset. Any other click is the entry's own: it is how it gets the focus and the cursor. */
+static gboolean _size_entry_reset_click(GtkEntry *entry, const GdkEventButton *event, gpointer reset_text)
 {
-  if(event->button == 2)
-  {
-    dt_conf_set_string(CONFIG_PREFIX "resizing_factor", "1");
-    g_signal_handlers_block_by_func(spin, _scale_changed, d);
-    gtk_entry_set_text(GTK_ENTRY(spin), "1");
-    g_signal_handlers_unblock_by_func(spin, _scale_changed, d);
-  }
-  else
-  {
-    _scale_changed(spin, d);
-  }
-  return FALSE;
-}
-
-static void _widht_mdlclick(GtkEntry *spin, GdkEventButton *event, gpointer user_data)
-{
-  if(event->button == 2)
-  {
-    dt_conf_set_int(CONFIG_PREFIX "width", 0);
-    g_signal_handlers_block_by_func(spin, _width_changed, user_data);
-    gtk_entry_set_text(GTK_ENTRY(spin), "0");
-    g_signal_handlers_unblock_by_func(spin, _width_changed, user_data);
-  }
-  else
-  {
-    _width_changed(GTK_EDITABLE(spin), user_data);
-  }
-}
-
-static void _height_mdlclick(GtkEntry *spin, GdkEventButton *event, gpointer user_data)
-{
-  if(event->button == 2)
-  {
-    dt_conf_set_int(CONFIG_PREFIX "height", 0);
-    g_signal_handlers_block_by_func(spin, _height_changed, user_data);
-    gtk_entry_set_text(GTK_ENTRY(spin), "0");
-    g_signal_handlers_unblock_by_func(spin, _height_changed, user_data);
-  }
-  else
-  {
-    _height_changed(GTK_EDITABLE(spin), user_data);
-  }
+  if(event->button != 2) return FALSE;
+  gtk_entry_set_text(entry, (const char *)reset_text);
+  return TRUE;
 }
 
 static void _size_in_px_update(dt_lib_export_t *d)
 {
-  const dt_dimensions_type_t d_type = (dt_dimensions_type_t)dt_bauhaus_combobox_get(d->dimensions_type);
+  const dt_dimensions_type_t d_type = _dimensions_type();
 
   if((d_type == DT_DIMENSIONS_SCALE) || (d_type == DT_DIMENSIONS_PIXELS) || (d_type == DT_DIMENSIONS_ORIGINAL))
   {
@@ -504,9 +473,16 @@ static void _size_in_px_update(dt_lib_export_t *d)
   else
   {
     gtk_widget_show(d->size_in_px);
+    int max_width = 0;
+    int max_height = 0;
+    double scale_factor = 0.0;
+    _resolve_export_size(&max_width, &max_height, &scale_factor);
+    gchar width_txt[16];
+    gchar height_txt[16];
+    snprintf(width_txt, sizeof(width_txt), "%d", max_width);
+    snprintf(height_txt, sizeof(height_txt), "%d", max_height);
     gchar size_in_px_txt[120];
-    snprintf(size_in_px_txt, sizeof(size_in_px_txt) / sizeof(size_in_px_txt[0]), _("which is equal to %s \303\227 %s px"),
-             gtk_entry_get_text(GTK_ENTRY(d->width)), gtk_entry_get_text(GTK_ENTRY(d->height)));
+    snprintf(size_in_px_txt, sizeof(size_in_px_txt), _("which is equal to %s \303\227 %s px"), width_txt, height_txt);
     gtk_label_set_text(GTK_LABEL(d->size_in_px), size_in_px_txt);
   }
 }
@@ -527,7 +503,6 @@ void _set_dimensions(dt_lib_export_t *d, uint32_t max_width, uint32_t max_height
 
   dt_free(max_width_char);
   dt_free(max_height_char);
-  _resync_print_dimensions(d);
 }
 
 
@@ -541,6 +516,8 @@ void _size_update_display(dt_lib_export_t *self)
 
   gtk_label_set_text(GTK_LABEL(self->unit_label),
                      d_type == DT_DIMENSIONS_CM ? _("cm") : C_("unit", "in"));
+  // the print size is stored in cm and shown in the unit just selected
+  if(d_type == DT_DIMENSIONS_CM || d_type == DT_DIMENSIONS_INCH) _print_size_display(self);
   _size_in_px_update(self);
 }
 
@@ -551,6 +528,8 @@ void gui_reset(dt_lib_module_t *self)
   dt_lib_export_t *d = (dt_lib_export_t *)self->data;
   gtk_entry_set_text(GTK_ENTRY(d->width), dt_confgen_get(CONFIG_PREFIX "width", DT_DEFAULT));
   gtk_entry_set_text(GTK_ENTRY(d->height), dt_confgen_get(CONFIG_PREFIX "height", DT_DEFAULT));
+  _print_size_from_pixels(dt_confgen_get_int(CONFIG_PREFIX "width", DT_DEFAULT),
+                          dt_confgen_get_int(CONFIG_PREFIX "height", DT_DEFAULT));
   dt_bauhaus_combobox_set(d->dimensions_type, dt_confgen_get_int(CONFIG_PREFIX "dimensions_type", DT_DEFAULT));
   _size_update_display(d);
 
@@ -809,15 +788,13 @@ static void _dimensions_type_changed(GtkWidget *widget, dt_lib_export_t *d)
 
   const dt_dimensions_type_t d_type = (dt_dimensions_type_t)dt_bauhaus_combobox_get(widget);
 
+  // only the mode changes: each one keeps its own size settings
   dt_conf_set_int(CONFIG_PREFIX "dimensions_type", d_type);
-  dt_conf_set_string(CONFIG_PREFIX "resizing",
-                     d_type == DT_DIMENSIONS_SCALE ? "scaling" : "max_size");
 
   if(d_type == DT_DIMENSIONS_CM || d_type == DT_DIMENSIONS_INCH)
   {
     // set dpi to user-set dpi
-    dt_conf_set_int("metadata/resolution", dt_conf_get_int(CONFIG_PREFIX "print_dpi"));
-    _resync_print_dimensions(d);
+    dt_conf_set_int("metadata/resolution", _print_dpi());
   }
   else
   {
@@ -825,63 +802,26 @@ static void _dimensions_type_changed(GtkWidget *widget, dt_lib_export_t *d)
     dt_conf_set_int("metadata/resolution", dt_confgen_get_int("metadata/resolution", DT_DEFAULT));
   }
 
-  if(d_type == DT_DIMENSIONS_ORIGINAL)
-  {
-    // The "same as original" is really just an user-friendly alias
-    // for size = 0x0 pixels, which we read as "full size"
-    dt_conf_set_int(CONFIG_PREFIX "width", 0);
-    dt_conf_set_int(CONFIG_PREFIX "height", 0);
-    dt_conf_set_string(CONFIG_PREFIX "resizing_factor", "1");
-  }
-
   _size_update_display(d);
 }
 
-static void _resync_print_dimensions(dt_lib_export_t *self)
+// show the stored print size in the unit selected, and the dpi
+static void _print_size_display(dt_lib_export_t *d)
 {
-  if(dt_gui_widgets_suppressed()) return;
-
-  const uint32_t width = dt_conf_get_int(CONFIG_PREFIX "width");
-  const uint32_t height = dt_conf_get_int(CONFIG_PREFIX "height");
-  const int dpi = atoi(gtk_entry_get_text(GTK_ENTRY(self->print_dpi)));
-
-  const float p_width = pixels2print(self, width);
-  const float p_height = pixels2print(self, height);
+  const float unit = _print_unit_in_cm(_dimensions_type());
+  gchar *pwidth = g_strdup_printf("%.2f", dt_conf_get_float(CONF_PRINT_WIDTH) / unit);
+  gchar *pheight = g_strdup_printf("%.2f", dt_conf_get_float(CONF_PRINT_HEIGHT) / unit);
+  gchar *pdpi = g_strdup_printf("%d", _print_dpi());
 
   dt_gui_freeze_begin();
-  gchar *pwidth = g_strdup_printf("%.2f", p_width);
-  gchar *pheight = g_strdup_printf("%.2f", p_height);
-  gchar *pdpi = g_strdup_printf("%d", dpi);
-  gtk_entry_set_text(GTK_ENTRY(self->print_width), pwidth);
-  gtk_entry_set_text(GTK_ENTRY(self->print_height), pheight);
-  gtk_entry_set_text(GTK_ENTRY(self->print_dpi), pdpi);
+  gtk_entry_set_text(GTK_ENTRY(d->print_width), pwidth);
+  gtk_entry_set_text(GTK_ENTRY(d->print_height), pheight);
+  gtk_entry_set_text(GTK_ENTRY(d->print_dpi), pdpi);
+  dt_gui_freeze_end();
+
   dt_free(pwidth);
   dt_free(pheight);
   dt_free(pdpi);
-  dt_gui_freeze_end();
-}
-
-static void _resync_pixel_dimensions(dt_lib_export_t *self)
-{
-  if(dt_gui_widgets_suppressed()) return;
-
-  const float p_width = atof(gtk_entry_get_text(GTK_ENTRY(self->print_width)));
-  const float p_height = atof(gtk_entry_get_text(GTK_ENTRY(self->print_height)));
-
-  const uint32_t width = print2pixels(self, p_width);
-  const uint32_t height = print2pixels(self, p_height);
-
-  dt_conf_set_int(CONFIG_PREFIX "width", width);
-  dt_conf_set_int(CONFIG_PREFIX "height", height);
-
-  dt_gui_freeze_begin();
-  gchar *pwidth = g_strdup_printf("%d", width);
-  gchar *pheight = g_strdup_printf("%d", height);
-  gtk_entry_set_text(GTK_ENTRY(self->width), pwidth);
-  gtk_entry_set_text(GTK_ENTRY(self->height), pheight);
-  dt_free(pwidth);
-  dt_free(pheight);
-  dt_gui_freeze_end();
 }
 
 static void _width_changed(GtkEditable *entry, gpointer user_data)
@@ -893,22 +833,18 @@ static void _width_changed(GtkEditable *entry, gpointer user_data)
   dt_conf_set_int(CONFIG_PREFIX "width", width);
 }
 
+// the print size is stored in cm, whatever unit it is typed in
+static void _print_size_changed(GtkEntry *entry, const char *key, dt_lib_export_t *d)
+{
+  const float value = atof(gtk_entry_get_text(entry));
+  dt_conf_set_float(key, MAX(value, 0.f) * _print_unit_in_cm(_dimensions_type()));
+  _size_in_px_update(d);
+}
+
 static void _print_width_changed(GtkEditable *entry, gpointer user_data)
 {
   if(dt_gui_widgets_suppressed()) return;
-
-  dt_lib_export_t *d = (dt_lib_export_t *)user_data;
-
-  const float p_width = atof(gtk_entry_get_text(GTK_ENTRY(d->print_width)));
-  const uint32_t width = print2pixels(d, p_width);
-  dt_conf_set_int(CONFIG_PREFIX "width", width);
-
-  dt_gui_freeze_begin();
-  gchar *pwidth = g_strdup_printf("%d", width);
-  gtk_entry_set_text(GTK_ENTRY(d->width), pwidth);
-  dt_free(pwidth);
-  _size_in_px_update(d);
-  dt_gui_freeze_end();
+  _print_size_changed(GTK_ENTRY(entry), CONF_PRINT_WIDTH, (dt_lib_export_t *)user_data);
 }
 
 static void _height_changed(GtkEditable *entry, gpointer user_data)
@@ -923,19 +859,7 @@ static void _height_changed(GtkEditable *entry, gpointer user_data)
 static void _print_height_changed(GtkEditable *entry, gpointer user_data)
 {
   if(dt_gui_widgets_suppressed()) return;
-
-  dt_lib_export_t *d = (dt_lib_export_t *)user_data;
-
-  const float p_height = atof(gtk_entry_get_text(GTK_ENTRY(d->print_height)));
-  const uint32_t height = print2pixels(d, p_height);
-  dt_conf_set_int(CONFIG_PREFIX "height", height);
-
-  dt_gui_freeze_begin();
-  gchar *pheight = g_strdup_printf("%d", height);
-  gtk_entry_set_text(GTK_ENTRY(d->height), pheight);
-  dt_free(pheight);
-  _size_in_px_update(d);
-  dt_gui_freeze_end();
+  _print_size_changed(GTK_ENTRY(entry), CONF_PRINT_HEIGHT, (dt_lib_export_t *)user_data);
 }
 
 static void _print_dpi_changed(GtkWidget *widget, gpointer user_data)
@@ -948,7 +872,7 @@ static void _print_dpi_changed(GtkWidget *widget, gpointer user_data)
   dt_conf_set_int(CONFIG_PREFIX "print_dpi", dpi);
   dt_conf_set_int("metadata/resolution", dpi);
 
-  _resync_pixel_dimensions(d);
+  // the print size stays what it is: its pixel equivalent is what moves
   _size_in_px_update(d);
 }
 
@@ -1322,15 +1246,12 @@ void gui_init(dt_lib_module_t *self)
   g_signal_connect(G_OBJECT(d->print_height), "changed", G_CALLBACK(_print_height_changed), (gpointer)d);
   g_signal_connect(G_OBJECT(d->print_dpi), "changed", G_CALLBACK(_print_dpi_changed), (gpointer)d);
 
-  g_signal_connect(G_OBJECT(d->width), "changed", G_CALLBACK(_width_changed), (gpointer)d);
-  g_signal_connect(G_OBJECT(d->height), "changed", G_CALLBACK(_height_changed), (gpointer)d);
+  g_signal_connect(G_OBJECT(d->width), "button-press-event", G_CALLBACK(_size_entry_reset_click), (gpointer)"0");
+  g_signal_connect(G_OBJECT(d->height), "button-press-event", G_CALLBACK(_size_entry_reset_click), (gpointer)"0");
+  g_signal_connect(G_OBJECT(d->print_width), "button-press-event", G_CALLBACK(_size_entry_reset_click), (gpointer)"0");
+  g_signal_connect(G_OBJECT(d->print_height), "button-press-event", G_CALLBACK(_size_entry_reset_click), (gpointer)"0");
 
-  g_signal_connect(G_OBJECT(d->width), "button-press-event", G_CALLBACK(_widht_mdlclick), (gpointer)d);
-  g_signal_connect(G_OBJECT(d->height), "button-press-event", G_CALLBACK(_height_mdlclick), (gpointer)d);
-  g_signal_connect(G_OBJECT(d->print_width), "button-press-event", G_CALLBACK(_widht_mdlclick), (gpointer)d);
-  g_signal_connect(G_OBJECT(d->print_height), "button-press-event", G_CALLBACK(_height_mdlclick), (gpointer)d);
-
-  g_signal_connect(G_OBJECT(d->scale), "button-press-event", G_CALLBACK(_scale_mdlclick), (gpointer)d);
+  g_signal_connect(G_OBJECT(d->scale), "button-press-event", G_CALLBACK(_size_entry_reset_click), (gpointer)"1");
   g_signal_connect(G_OBJECT(d->scale), "changed", G_CALLBACK(_scale_changed), (gpointer)d);
 
   // this takes care of keeping hidden widgets hidden
@@ -1342,6 +1263,7 @@ void gui_init(dt_lib_module_t *self)
   setting = dt_conf_get_string_const(CONFIG_PREFIX "height");
   gtk_entry_set_text(GTK_ENTRY(d->height), setting);
 
+  _ensure_print_size_conf();
   _size_update_display(d);
 
   // Set storage
@@ -1804,14 +1726,23 @@ void *get_params(dt_lib_module_t *self, int *size)
   // also store icc profile/intent here.
   const int32_t iccintent = dt_conf_get_int(CONFIG_PREFIX "iccintent");
   const int32_t icctype = dt_conf_get_int(CONFIG_PREFIX "icctype");
-  const int32_t max_width = dt_conf_get_int(CONFIG_PREFIX "width");
-  const int32_t max_height = dt_conf_get_int(CONFIG_PREFIX "height");
+  // the blob holds a pixel box: the size the selected mode resolves to, or, for a factor it cannot
+  // hold, the pixel mode's own box
+  int32_t max_width = 0;
+  int32_t max_height = 0;
+  double scale_factor = 0.0;
+  _resolve_export_size(&max_width, &max_height, &scale_factor);
+  if(scale_factor > 0.0)
+  {
+    max_width = dt_conf_get_int(CONFIG_PREFIX "width");
+    max_height = dt_conf_get_int(CONFIG_PREFIX "height");
+  }
   const int32_t upscale = FALSE;
   const int32_t high_quality = TRUE;
   const int32_t export_masks = dt_conf_get_bool(CONFIG_PREFIX "export_masks") ? 1 : 0;
   gchar *iccfilename = dt_conf_get_string(CONFIG_PREFIX "iccprofile");
   gchar *style = dt_conf_get_string(CONFIG_PREFIX "style");
-  const char *metadata_export = d->metadata_export;
+  const char *metadata_export = IS_NULL_PTR(d->metadata_export) ? "" : d->metadata_export;
 
   if(fdata)
   {
@@ -1824,7 +1755,6 @@ void *get_params(dt_lib_module_t *self, int *size)
   }
 
   if(!iccfilename) iccfilename = g_strdup("");
-  if(IS_NULL_PTR(metadata_export)) metadata_export = g_strdup("");
 
   const char *fname = mformat->plugin_name;
   const char *sname = mstorage->plugin_name;
@@ -1886,33 +1816,65 @@ void *get_params(dt_lib_module_t *self, int *size)
   return params;
 }
 
+// the NUL-terminated string at *buf, or NULL if the blob ends before its terminator
+static const char *_blob_string(const char **buf, const char *const end)
+{
+  const char *str = *buf;
+  const char *nul = memchr(str, '\0', end - str);
+  if(IS_NULL_PTR(nul)) return NULL;
+  *buf = nul + 1;
+  return str;
+}
+
 int set_params(dt_lib_module_t *self, const void *params, int size)
 {
   dt_lib_export_t *d = (dt_lib_export_t *)self->data;
-  // apply these stored presets again (parse blob)
-  const char *buf = (const char *)params;
+  if(IS_NULL_PTR(params) || size < 0) return 1;
 
-  const int max_width = *(const int *)buf;
-  buf += sizeof(int32_t);
-  const int max_height = *(const int *)buf;
-  buf += sizeof(int32_t);
-  // const int upscale = *(const int *)buf; // unused now
-  buf += sizeof(int32_t);
-  //const int high_quality = *(const int *)buf; // unused now
-  buf += sizeof(int32_t);
-  const int export_masks = *(const int *)buf;
-  buf += sizeof(int32_t);
-  const int iccintent = *(const int *)buf;
-  buf += sizeof(int32_t);
-  const int icctype = *(const int *)buf;
-  buf += sizeof(int32_t);
-  const char *metadata_export = buf;
-  buf += strlen(metadata_export) + 1;
+  // parse and validate the whole blob before applying anything of it
+  const char *buf = (const char *)params;
+  const char *const end = buf + size;
+
+  // max_width, max_height, upscale (unused now), high_quality (unused now), export_masks, iccintent, icctype
+  int32_t header[7];
+  if((size_t)(end - buf) < sizeof(header)) return 1;
+  memcpy(header, buf, sizeof(header));
+  buf += sizeof(header);
+  const int max_width = header[0];
+  const int max_height = header[1];
+  const int export_masks = header[4];
+  const int iccintent = header[5];
+  const int icctype = header[6];
+
+  const char *metadata_export = _blob_string(&buf, end);
+  const char *iccfilename = metadata_export ? _blob_string(&buf, end) : NULL;
+  const char *fname = iccfilename ? _blob_string(&buf, end) : NULL;
+  const char *sname = fname ? _blob_string(&buf, end) : NULL;
+  if(IS_NULL_PTR(sname)) return 1;
+
+  // fversion, sversion, fsize, ssize
+  int32_t modules[4];
+  if((size_t)(end - buf) < sizeof(modules)) return 1;
+  memcpy(modules, buf, sizeof(modules));
+  buf += sizeof(modules);
+  const int32_t fversion = modules[0];
+  const int32_t sversion = modules[1];
+  const int32_t fsize = modules[2];
+  const int32_t ssize = modules[3];
+  if(fsize < 0 || ssize < 0 || (size_t)(end - buf) != (size_t)fsize + (size_t)ssize) return 1;
+
+  // get module by name and fail if not there.
+  dt_imageio_module_format_t *fmod = dt_imageio_get_format_by_name(fname);
+  dt_imageio_module_storage_t *smod = dt_imageio_get_storage_by_name(sname);
+  if(!fmod || !smod) return 1;
+  if(fversion != fmod->version() || sversion != smod->version()) return 1;
+
+  const dt_imageio_module_data_t *fdata = (const dt_imageio_module_data_t *)buf;
+  const void *sdata = buf + fsize;
+
   dt_free(d->metadata_export);
   d->metadata_export = g_strdup(metadata_export);
   dt_lib_export_metadata_set_conf(d->metadata_export);
-  const char *iccfilename = buf;
-  buf += strlen(iccfilename) + 1;
 
   // reverse these by setting the gui, not the conf vars!
   dt_bauhaus_combobox_set(d->intent, iccintent + 1);
@@ -1925,49 +1887,29 @@ int set_params(dt_lib_module_t *self, const void *params, int size)
     if(pos > -1) dt_bauhaus_combobox_set(d->profile, pos + 1);
   }
 
-  // parse both names to '\0'
-  const char *fname = buf;
-  buf += strlen(fname) + 1;
-  const char *sname = buf;
-  buf += strlen(sname) + 1;
-
-  // get module by name and fail if not there.
-  dt_imageio_module_format_t *fmod = dt_imageio_get_format_by_name(fname);
-  dt_imageio_module_storage_t *smod = dt_imageio_get_storage_by_name(sname);
-  if(!fmod || !smod) return 1;
-
-  const int32_t fversion = *(const int32_t *)buf;
-  buf += sizeof(int32_t);
-  const int32_t sversion = *(const int32_t *)buf;
-  buf += sizeof(int32_t);
-
-  const int fsize = *(const int *)buf;
-  buf += sizeof(int32_t);
-  const int ssize = *(const int *)buf;
-  buf += sizeof(int32_t);
-
-  if(size
-     != strlen(fname) + strlen(sname) + 2 + 4 * sizeof(int32_t) + fsize + ssize + 7 * sizeof(int32_t)
-        + strlen(iccfilename) + 1 + strlen(metadata_export) + 1)
-    return 1;
-  if(fversion != fmod->version() || sversion != smod->version()) return 1;
-
-  const dt_imageio_module_data_t *fdata = (const dt_imageio_module_data_t *)buf;
-
-  if(fdata->style[0] == '\0')
-    dt_bauhaus_combobox_set(d->style, 0);
-  else
-    dt_bauhaus_combobox_set_from_text(d->style, fdata->style);
-
-  buf += fsize;
-  const void *sdata = buf;
+  // the style travels in the format's params: a preset saved while the format had none carries
+  // no style, and the current one is left alone.
+  if((size_t)fsize >= sizeof(dt_imageio_module_data_t))
+  {
+    char style[sizeof(fdata->style)];
+    memcpy(style, fdata->style, sizeof(style));
+    style[sizeof(style) - 1] = '\0';
+    if(style[0] == '\0')
+      dt_bauhaus_combobox_set(d->style, 0);
+    else
+      dt_bauhaus_combobox_set_from_text(d->style, style);
+  }
 
   // switch modules
   set_storage_by_name(d, sname);
   set_format_by_name(d, fname);
 
-  // set dimensions after switching, to have new range ready.
+  // set dimensions after switching, to have new range ready. The preset holds a pixel box: the
+  // print mode gets its equivalent at the current dpi.
   _set_dimensions(d, max_width, max_height);
+  _print_size_from_pixels(max_width, max_height);
+  _print_size_display(d);
+  _size_in_px_update(d);
   dt_bauhaus_combobox_set(d->export_masks, export_masks ? 1 : 0);
 
   // propagate to modules

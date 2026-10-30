@@ -1,0 +1,283 @@
+# Quitting — what the process waits for once the window is gone
+
+> **Measured 2026-09-30 on top of `cc0cd199d6`**, RelWithDebInfo, clang 19, 8 cores, 4 pool
+> workers. Every figure below says how it was obtained. Re-measure before acting on one older than
+> the code you are changing, and re-date this line when you do.
+
+Closing the main window hides it at once. The process ends later: when the jobs that were running
+have returned, and the rest of `dt_cleanup()` has run. This file is about that interval — what
+fills it, what the user sees during it, and what it still gets wrong.
+
+## The sequence
+
+`dt_control_quit()` (`control/control.c:452`) is how a quit starts. The window's `delete-event`,
+the Quit menu entry and the macOS dock reach it through `dt_gui_closing_quit()` (`gui/closing.c`),
+which may first ask (see *Before the quit* below); the D-Bus `Quit` method calls it directly,
+since no one is there to answer. It hides the main window
+(`dt_gui_gtk_quit()`), clears `running`, broadcasts the workers' condition and stops `gtk_main()`.
+`dt_gui_gtk_run()` then calls `dt_cleanup()`, which — for the part that matters here — asks its
+last questions (database maintenance and snapshot), leaves the current view, and calls
+`dt_control_shutdown()` (`control/control.c:475`). That is where the workers are joined.
+
+**Clearing `running` cancels nothing.** A worker finishes the job it is running and takes no
+other; the jobs still queued are disposed of, unrun, by `dt_control_jobs_drain()`. So a quit waits
+for the running jobs, for as long as they run: a thumbnail pipeline goes to its end, and an export
+of N images goes to its last image, since `dt_control_export_job_run()` loops on the job's
+cancelled state alone (`control/jobs/control_jobs.c:1413`) and nothing sets it.
+
+The two thumbnail-preloading jobs are the exception: *Preload selected thumbnails in cache*
+(`preload_image_cache()`, `gui/actions/run.c`) and the collections module's *pre-render
+thumbnails* (`_prerender_job()`, `libs/collect.c`) stop at the next thumbnail once
+`dt_control_running()` reads false, as they do when cancelled. The thumbnail being rendered is
+finished and written to disc; the rest of the list is not started. Measured 2026-10-01 on top of
+`3c35ec6042`, with `-d control`, a quit by hand during a preload: before the change, the closing
+wait lasted **60.51 s**, and ended with the preload's `[run_job-]` line. After it, with nothing
+else running, **4.54 s**, the preload returning 4.47 s into the wait — the thumbnail it was on.
+Of the 295 selected images, 259 still had no size-0 thumbnail on disc afterwards (the selection
+read from `selected_images`, each image's file tested in the cache directory), so the job had
+not reached the end of its list.
+
+## Before the quit
+
+While jobs are running or queued, `dt_gui_closing_quit()` asks before it quits. The reasons are
+those of the closing window: the running jobs — exports, preloads, thumbnails — counted with
+`dt_control_running_jobs_foreach()`, are what the quit would wait for; the queued ones, from
+`dt_control_queued_jobs_count()`, are what it would drop. The workers' count cannot serve here:
+before the quit, every worker is alive, idle or not.
+
+The reserved worker's job is left out of the question, count and list alike. It is *develop
+process image*, the darkroom's service loop (`dt_dev_darkroom_pipeline()`), and it runs from
+entering the darkroom to leaving it: `while(!dev->exit && dt_control_running())`, napping when
+there is nothing to do. Neither condition can change while the question is up — `running` is
+cleared by the quit, `dev->exit` set by leaving the view, inside `dt_cleanup()` — so, counted, it
+kept the question open for as long as the darkroom was, and the question never closed on its own.
+Read from the code on 2026-10-02 against `9dea2adcc3`, after the report of a question that would
+not go away from the darkroom; not traced with `-d control`. During the quit it is still counted:
+leaving the view ends it, in the 0.49 – 0.51 s of the darkroom row below. It is the only reserved
+job (`DT_CTL_WORKER_RESERVED` is 1); a second one that did real work would need telling apart.
+
+The question is the closing window in another mode (`DT_CLOSING_CONFIRM`): a warning icon in
+place of the spinner, *Tasks are still running*, the count of running jobs, the progress messages
+of the jobs that publish one in italics, the same *Details* list — whose line about queued jobs
+says they *would be* dropped — and two buttons, *Go back* and *Quit anyway*. *Go back* has the
+focus, so Enter does not quit; Escape and the window's close button go back too. It is modal over
+the main window and runs its own `GMainLoop`, which refreshes it every 100 ms. Once nothing runs
+and nothing is queued any more, it closes and the quit goes on, as if *Quit anyway* had been
+clicked. A second request while it is open — the shortcut again, the dock — is ignored.
+
+Nothing is cancelled either way. The text says what a quit does: the tasks not started are
+dropped, and Ansel closes once the running ones are done. Cancelling the cancellable tasks on
+*Quit anyway* was considered and declined: an export goes to its last image, as before. Checked
+2026-10-01 on top of `fbed8b059f`, by hand, during a preload, on a version that asked about
+background tasks only: the question named it, *Go back* left Ansel running with the preload
+going on, and *Quit anyway* from the window's close button quit.
+
+## What it costs
+
+The quit is requested by calling `dt_control_quit()` on the GUI thread, from an idle source armed
+by an `LD_PRELOAD`ed shim N seconds after start — what `delete-event` does, without driving the
+window. "Quit to exit" runs from that call to the shim's destructor. The library is a scratch one:
+60 copies of a 24 MP NEF, each with a 14-module history, so that every thumbnail is a pipeline.
+
+| Situation | Quit to exit | Of which, joining the workers |
+|---|---|---|
+| Lighttable, nothing running | **0.32 – 0.35 s** (five quits, 0.5 s apart) | none |
+| Darkroom, nothing running | **0.49 – 0.51 s** (three quits) | none |
+| Lighttable, four thumbnails rendering | **1.4 – 7.6 s** (six quits) | all but 0.5 – 0.6 s |
+
+The third row is the job, not the quit: the wait ends with the last `[run_job-]` line of `-d
+control`, to within 0.1 s, every time. Under gdb, with a breakpoint on each stage of
+`dt_cleanup()`, one such quit took 4.98 s of which `dt_control_shutdown()` held 3.94 s; leaving
+the view took 0.21 s, `dt_lib_cleanup()` 0.23 s, and the stretch from `dt_conf_cleanup()` to
+`dt_opencl_cleanup()` 0.31 s.
+
+Twelve further start-and-quit cycles, the quit 2.0 to 5.3 s after launch in steps of 0.3 s so
+that it lands at every stage of the startup jobs, all exited with status 0, in 0.23 to 1.84 s.
+
+**Not measured:** a quit during an export, which cannot be started without the GUI. That it runs
+to the last image is read from the loop above, not timed. Nor the network flushes of
+`dt_cleanup()` (`dt_telemetry_shutdown()` at its top, `dt_sentry_shutdown()` at its end), which a
+self-build compiles out.
+
+## What reaches the disk before the teardown
+
+*Measured 2026-10-26 on top of `f6f82cbf45`.*
+
+Right after its last question to the user, before it leaves the view and joins the workers,
+`dt_cleanup()` writes two things:
+
+- the settings, with `dt_conf_flush()` (see `preferences.md`, *When the settings reach the disk*);
+- the thumbnails resident in RAM, with `dt_mipmap_cache_flush_to_disk()`: `dt_cache_gc()` at
+  fill ratio 0 on `mip_thumbs`, whose cleanup callback writes each entry that was not read from
+  its file.
+
+A crash later in the teardown no longer loses them. Both are written once more at the end of
+`dt_cleanup()`, by `dt_conf_cleanup()` and `dt_mipmap_cache_cleanup()`: the settings the teardown
+itself sets, and the thumbnails the flush skipped. It skips an entry another thread holds, so a
+thumbnail still rendering at the quit reaches the disk only at the end.
+
+`dt_sentry_shutdown()` runs just before `dt_conf_cleanup()`, so the crash handler stays installed
+for the whole teardown. It has to precede `dt_conf_cleanup()`: it writes the clean-session counter
+and the session duration through `dt_conf_set_*()`.
+
+Measured with a shim like the one above that pages through the lighttable and then quits, probes
+timing the flush and counting what the cleanup callback did with each entry; Xephyr at
+1920×1080, default 1000 MB thumbnail budget:
+
+| At the quit | In RAM | Flush | Written by the flush | Left for the end |
+|---|---|---|---|---|
+| 400 JPEG, 4 per row, empty disk cache | 400, 124 MB | 259 ms | 400 | 0 |
+| 400 JPEG, 2 per row, empty disk cache | 400, 494 MB | 817 ms | 400 | 0 |
+| the same, quit 0.2 s after the last page | 400, 494 MB | 776 ms | 400 | 0 |
+| the same, thumbnails read from the disk cache | 400, 494 MB | 64 ms | 0 | 0 |
+| 60 NEF with a history, quit while rendering | 12, 14.8 MB | 30 ms | 8 | 4 |
+
+The flush holds the `mip_thumbs` cache lock throughout, about 1.65 ms per MB written. The work is
+moved, not added: in the four JPEG rows the end-of-teardown cleanup wrote nothing. No thread
+waited on that lock during a flush (a probe logged every wait over 2 ms): after the quit, workers
+take no new job.
+
+The disk cache directory, `mipmaps-<hash>.d`, is named after the SHA-1 of the library database's
+real path (`caches/mipmap_cache.c:308`): a copy of a configdir does not find the thumbnails of the
+original, and renders them all again.
+
+## The wait is spent in the main loop
+
+`dt_control_shutdown()` does not go straight to `pthread_join()`. It first calls the handler
+installed with `dt_control_set_shutdown_wait_handler()` (`control/control.h:323`), which returns
+once `dt_control_workers_alive()` (`control/jobs.c:544`) reads 0 — after which the joins return
+at once. The GUI registers `dt_gui_closing_wait()` (`gui/closing.c`) next to its other handlers
+(`gui/application.c:1412`); a headless run registers nothing, and its joins block as they always
+did. `control/` reaches the GUI through that pointer and includes nothing of it.
+
+`dt_gui_closing_wait()` runs a `GMainLoop` on the default context and polls the count every
+100 ms. Two things follow from the loop turning rather than the thread blocking.
+
+**The user is told.** After one second of waiting, a small window comes up — *Ansel is finishing
+its work before closing* — with the number of jobs still running and, for those that publish a
+progress (`dt_control_progress_foreach()`, `control/progress.c:411`), what they say they are
+doing: `exporting 3 / 20 to disk`. It cannot be closed and it goes away with the last job. A quit
+that is over within the second shows nothing.
+
+Under *Details*, folded by default, a list names the running jobs, one row each, from
+`dt_control_running_jobs_foreach()` (`control/jobs.c:549`), in two columns, *Type* and
+*Description*. The queued jobs are not listed but counted, from `dt_control_queued_jobs_count()`
+(`control/jobs.c:571`), in a line under the list that says they were not started and are dropped;
+the line shows only when there are some. The list sits in the recessed
+frame of Ansel's other lists (`.dt_recessed_scroll`), dark behind a tree view the theme leaves
+transparent, and scrolls past 300 px (at 96 dpi). It is rebuilt only when what it lists changes. A
+job's kind is the queue it was added to: *Image operation*, *Thumbnail*, *Background task*,
+*Export* (prints share that queue), *Maintenance*, and *Darkroom rendering* for the reserved
+worker. Its description is the one it was created with, written for the debug log in English, and
+translated only where it is also a catalog string, as the generic image jobs' are. A reserved
+worker's running job is held nowhere else, so `dt_control_run_job_res()` records it in
+`_job_res_running[]`, under `res_mutex`, for as long as it runs.
+
+Measured on top of `cc1400c7b9`, with the method of *What it costs* and the quit 5 s after
+launch, on a version of the list that also counted the queued jobs: at 1.03 s into the wait it
+read three running thumbnails (`get image 2`, `3`, `4`), then 19 queued `save xmp` jobs of the
+import and 16 queued thumbnails. The details as they stand, the running jobs listed and the queued
+ones counted, were compiled and not run.
+
+**A job that needs the GUI thread gets it.** Two waits in the tree block a worker until the GUI
+thread has run something for it: a synchronous signal raised from a worker (`control/signal.c`,
+the `g_cond_wait()` after `g_main_context_invoke()`), and the deletion job's error dialog
+(`control/jobs/control_jobs.c`, `_dt_delete_file_display_modal_dialog()`). Against a GUI thread
+sitting in `pthread_join()` on that very worker, either one never returns: the window is gone and
+the process stays. This is read from the code, not reproduced — it needs the quit to land inside
+a window a few instructions wide.
+
+The loop turning has a cost, and a grab pays it. The windows the main one may leave on screen —
+the tag manager, the shape manager's popup, the module order window, the supervisor — could not
+answer while the GUI thread was blocked. `dt_gui_closing_wait()` holds a GTK grab on an invisible
+widget for as long as it waits, so they still cannot: input events and `delete-event` alike go
+to the grab. The widget is realised, because GTK delivers events to realised widgets only, and
+never shown, because a mapped one is a window on screen.
+
+A grab holds a window group, and every window of ours is in the default one. The closing window is
+given a group of its own, so the grab leaves its clicks alone and its details can be unfolded; in
+return nothing discards its `delete-event` any more, so a handler refuses it. Checked on
+`53ae424a69` and on the change, with synthetic events passed to `gtk_main_do_event()`, where grabs
+apply, from an `LD_PRELOAD`ed shim: before the change, a click on the expander left it folded;
+after it, three quits out of three unfolded it, the closing window survived a `delete-event`, and
+a window opened before the quit got neither a click nor a `delete-event` during the wait, though
+both reached it just before.
+
+Sources already queued on the main context — idles posted by the jobs, timers — are dispatched
+during the wait, with the view left and `running` cleared. That is the state in which
+`dt_cleanup()` has always drained them, right after the joins; what changes is that the timers
+that fall due during a long wait fire too.
+
+## macOS
+
+Nothing here has been run on macOS. What follows is read from the code of this tree and from
+what GTK's Quartz backend is known to do.
+
+**The quit arrives the same way.** Cmd+Q, the application menu and the Dock's Quit all reach
+`applicationShouldTerminate:`, which gtk-mac-integration turns into the `NSApplicationBlockTermination`
+signal; `_osx_quit_callback()` (`gui/application.c:301`) calls `dt_control_quit()` and returns
+TRUE, which cancels the Cocoa termination and leaves the exit to `dt_cleanup()`. So the wait is
+reached, and a second Cmd+Q during it is harmless: it hides a window already hidden, clears a
+flag already clear, finds no `gtk_main()` to stop, and cancels the termination again.
+
+**The loop turns there too.** Quartz drives its event loop from a poll function installed on the
+default main context, so any loop on that context dispatches it, not only `gtk_main()`. The
+database-maintenance question that `dt_cleanup()` asks runs a nested `gtk_main()` at the same
+point, which is the precedent.
+
+**The window is brought forward.** A quit from the Dock, or from the application switcher, leaves
+another application active, and a window opened by an inactive application opens behind the
+active one's windows. The notice is therefore presented and the application activated
+(`dt_osx_focus_window()`), as `dt_gui_refocus_parent()` does for dialogs. It also gets
+`dt_osx_disallow_fullscreen()`, as every other window does: it must not become a full-screen space
+of its own, and must show over the one the main window may have left.
+
+**Open on macOS:** a quit while Ansel is hidden (Cmd+H). Activation unhides the application;
+whether AppKit then brings back the main window it had recorded at hide time, although it has
+since been ordered out, has not been checked.
+
+## The scheduler's side
+
+`dt_control_workers_alive()` counts the threads of `control/jobs.c` — pool, reserved, kicker —
+that have started and not returned. Once `running` is cleared it only falls, and it is the number
+of jobs still running. Two things had to hold for it to reach 0 on its own.
+
+**A quit wakes every thread that is waiting.** A worker reads `running` at the top of its loop,
+finds no job, then waits on the condition. A quit landing between the two used to broadcast to
+nobody; the worker slept until the kicker's next turn. The workers now re-read `running` under
+`cond_mutex` — the mutex it is cleared under — right before waiting (`control/jobs.c:622`,
+`:677`), so the quit either finds them waiting or stops them from starting to.
+
+**The kicker does not sleep through a quit.** It used to `sleep(2)` between two broadcasts, and
+`dt_control_shutdown()` joined it first: every quit waited for what was left of those two
+seconds. Measured on an idle lighttable before the change, quits requested 0.5 s apart took 0.90,
+0.37, 1.86, 1.39 and 0.89 s — a sawtooth of period 2 s. The kicker now spends its two seconds in
+`pthread_cond_timedwait()` on the workers' condition (`control/jobs.c:632`): the quit's broadcast
+ends the wait, any other broadcast resumes it against the same deadline, so the kicks keep their
+pace. The same five quits take 0.32 to 0.35 s.
+
+The kicker still exists, and so does the race it papers over: a job queued between a worker's
+empty-handed `dt_control_run_job()` and its wait is not seen until the next kick. Closing that
+needs the queue test under `cond_mutex`, which is PR 13 of `control-split.md`.
+
+## Open
+
+- **Queued jobs are dropped.** A second export queued behind the first never runs if
+  the user quits, and neither do the sidecar writes an import leaves queued: in the measurement
+  above, 41 of the 60 `save xmp` jobs had run, counted by their `[run_job-]` lines, and the 19
+  others never did. The window says how many, under its list, once it is up; a quit over within
+  the second drops them unseen, and nowhere does it say which. Whether a quit should run some
+  queues to their end is a decision nobody has taken.
+- **A thumbnail being rendered cannot be abandoned.** The 1.4 – 7.6 s above are spent finishing
+  four images nobody will look at. `dt_dev_pixelpipe_has_shutdown()` is what a pipeline polls,
+  and nothing raises it for a thumbnail pipe at quit.
+- **The window offers no way to stop the work.** An export shown there runs to its end. The
+  progress objects of the cancellable jobs carry what a button would need
+  (`dt_control_progress_cancel()`).
+- **What comes after the joins is still silent**: about 0.3 s of `dt_cleanup()` on the GUI
+  thread, with no window. Nothing can be shown there without pumping the loop from
+  `darktable.c`.
+- **A quit under a nested main loop does not end the process.** `dt_control_quit()` calls
+  `gtk_main_quit()` only when `gtk_main_level() > 0`. Seen once: asked to quit while the privacy
+  consent dialog of a first launch was up inside `dt_init()`, the main window was hidden,
+  `running` cleared, and `gtk_main()` then started and never returned.

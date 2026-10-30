@@ -189,7 +189,7 @@ void init_presets(dt_iop_module_so_t *self)
   p.midtone = 0.5f;
 
   dt_gui_presets_add_generic(_("clarity"), self->op,
-                             self->version(), &p, sizeof(p), 1, DEVELOP_BLEND_CS_RGB_SCENE);
+                             self->version(), &p, sizeof(p), 1);
 
   p.mode = s_mode_local_laplacian;
   p.sigma_r = 0.f;
@@ -198,7 +198,7 @@ void init_presets(dt_iop_module_so_t *self)
   p.midtone = 0.25f;
 
   dt_gui_presets_add_generic(_("HDR local tone-mapping"), self->op,
-                             self->version(), &p, sizeof(p), 1, DEVELOP_BLEND_CS_RGB_SCENE);
+                             self->version(), &p, sizeof(p), 1);
 }
 
 

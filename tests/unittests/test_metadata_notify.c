@@ -42,6 +42,10 @@
 
 #include <glib.h>
 
+#ifdef _WIN32
+#include "win/main_wrapper.h"
+#endif
+
 typedef struct _seen_t
 {
   int toasts;
@@ -165,7 +169,7 @@ static void test_channels_are_independent(void **state)
   assert_int_equal(_seen.tag_changes, 1);
 }
 
-int main(void)
+int main(int argc, char *argv[])
 {
   const struct CMUnitTest tests[] = {
     cmocka_unit_test_setup_teardown(test_no_handler_is_silent, _setup, _teardown),

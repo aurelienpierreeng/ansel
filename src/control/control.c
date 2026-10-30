@@ -452,14 +452,24 @@ int dt_control_running()
 void dt_control_quit()
 {
   dt_gui_gtk_quit();
-  // thread safe quit, 1st pass:
+  // thread safe quit, 1st pass. The broadcast sends the idle workers and the kicker home now,
+  // so that what is still alive when dt_control_shutdown() comes is what is still working.
   dt_pthread_mutex_lock(&darktable.control->cond_mutex);
   dt_pthread_mutex_lock(&darktable.control->run_mutex);
   darktable.control->running = 0;
   dt_pthread_mutex_unlock(&darktable.control->run_mutex);
+  pthread_cond_broadcast(&darktable.control->cond);
   dt_pthread_mutex_unlock(&darktable.control->cond_mutex);
 
   if(gtk_main_level() > 0) gtk_main_quit();
+}
+
+// Set once at GUI startup, never cleared. NULL in every headless run.
+static dt_control_shutdown_wait_t _shutdown_wait = NULL;
+
+void dt_control_set_shutdown_wait_handler(dt_control_shutdown_wait_t handler)
+{
+  _shutdown_wait = handler;
 }
 
 void dt_control_shutdown(dt_control_t *s)
@@ -470,6 +480,11 @@ void dt_control_shutdown(dt_control_t *s)
   dt_pthread_mutex_unlock(&s->run_mutex);
   dt_pthread_mutex_unlock(&s->cond_mutex);
   pthread_cond_broadcast(&s->cond);
+
+  // The joins below last as long as the jobs still running. Whoever owns a main loop spends
+  // that time in it: it can then say what is going on, and a job waiting for the GUI thread
+  // -- a synchronous signal, a dialog -- gets its answer instead of waiting for it forever.
+  if(_shutdown_wait) _shutdown_wait();
 
   /* then wait for kick_on_workers_thread */
   pthread_join(s->kick_on_workers_thread, NULL);
@@ -583,23 +598,23 @@ gboolean dt_control_button_down(int which)
   }
 }
 
-void *dt_control_expose(void *voidptr)
+/* The centre used to be painted three times per frame: into a full-window ARGB surface
+ * allocated and freed on every expose, from there into a persistent pixmap, and from the pixmap
+ * into GTK's own double buffer -- with the pixmap's whole area filled first. Measured at a
+ * 2560x1440 window on a 2x screen (a 59 MB buffer): 29.5 ms to allocate and first-touch the
+ * throwaway surface, 5.9 ms per full fill, 5.8 ms per full blit, around 59 ms a frame before a
+ * single overlay was drawn, against the 16.7 ms a 60 fps frame allows. GTK's cr is already a
+ * double buffer, and it arrives clipped to the region that was invalidated, so painting into it
+ * directly costs one pass over that region and nothing over the rest of the window. */
+void dt_control_expose(cairo_t *cr, const int width, const int height)
 {
+  if(IS_NULL_PTR(cr) || width <= 0 || height <= 0) return;
   int pointerx, pointery;
-  if(IS_NULL_PTR(dt_gui_get_global()->surface)) return NULL;
-  const int width = dt_cairo_image_surface_get_width(dt_gui_get_global()->surface);
-  const int height = dt_cairo_image_surface_get_height(dt_gui_get_global()->surface);
   GtkWidget *widget = dt_gui_center_widget();
   gdk_window_get_device_position(gtk_widget_get_window(widget),
       gdk_seat_get_pointer(gdk_display_get_default_seat(gtk_widget_get_display(widget))),
       &pointerx, &pointery, NULL);
 
-  // create a gtk-independent surface to draw on
-  cairo_surface_t *cst = dt_cairo_image_surface_create(CAIRO_FORMAT_ARGB32, width, height);
-  cairo_t *cr = cairo_create(cst);
-
-  // TODO: control_expose: only redraw the part not overlapped by temporary control panel show!
-  //
   darktable.control->width = width;
   darktable.control->height = height;
 
@@ -608,12 +623,17 @@ void *dt_control_expose(void *voidptr)
   // look up some colors once
   GdkRGBA bg_color = lookup_color(context, "bg_color");
 
-  gdk_cairo_set_source_rgba(cr, &bg_color);
   cairo_save(cr);
   cairo_rectangle(cr, 0, 0, width, height);
-  cairo_paint(cr);
   cairo_clip(cr);
   cairo_new_path(cr);
+  /* the background, only for a view that does not paint every pixel itself: the darkroom
+   * composes its own, and a fill under it was a full pass over the window for nothing */
+  if(!(dt_view_manager_current_flags(darktable.view_manager) & VIEW_FLAGS_PAINTS_WHOLE_AREA))
+  {
+    gdk_cairo_set_source_rgba(cr, &bg_color);
+    cairo_paint(cr);
+  }
   // draw view
   dt_view_manager_expose(darktable.view_manager, cr, width, height, pointerx, pointery);
   cairo_restore(cr);
@@ -642,15 +662,6 @@ void *dt_control_expose(void *voidptr)
     cairo_set_source_rgba(cr, 0., 0., 0., 0.33);
     cairo_fill(cr);
   }
-  cairo_destroy(cr);
-
-  cairo_t *cr_pixmap = cairo_create(dt_gui_get_global()->surface);
-  cairo_set_source_surface(cr_pixmap, cst, 0, 0);
-  cairo_paint(cr_pixmap);
-  cairo_destroy(cr_pixmap);
-
-  cairo_surface_destroy(cst);
-  return NULL;
 }
 
 void dt_control_mouse_leave()
@@ -846,6 +857,37 @@ void dt_control_log(const char *msg, ...)
   dt_pthread_mutex_unlock(&darktable.control->log_mutex);
   // redraw center later in gui thread:
   g_idle_add(_redraw_center, 0);
+}
+
+// Installed by dt_gui_gtk_init() before any worker runs, and never changed after: read without
+// a lock, like the other handlers the orchestrator installs.
+static dt_control_alert_handler_t _alert_handler = NULL;
+
+void dt_control_set_alert_handler(dt_control_alert_handler_t handler)
+{
+  _alert_handler = handler;
+}
+
+// Without a GUI, stderr: a dt_control_log() there goes to a log no view ever draws.
+static void _alert(const char *title, const char *message, const char *item, const int once)
+{
+  if(IS_NULL_PTR(message)) return;
+  if(!IS_NULL_PTR(_alert_handler))
+    _alert_handler(title, message, item, once);
+  else if(!IS_NULL_PTR(item))
+    fprintf(stderr, "%s: %s\n  %s\n", title, message, item);
+  else
+    fprintf(stderr, "%s: %s\n", title, message);
+}
+
+void dt_control_alert(const char *title, const char *message, const char *item)
+{
+  _alert(title, message, item, FALSE);
+}
+
+void dt_control_alert_once(const char *title, const char *message, const char *item)
+{
+  _alert(title, message, item, TRUE);
 }
 
 static void _toast_log(const gboolean markup, const char *msg, va_list ap)

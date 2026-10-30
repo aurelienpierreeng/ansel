@@ -156,6 +156,35 @@ typedef struct dt_iop_gamma_mask_preview_t
 } dt_iop_gamma_mask_preview_t;
 
 /**
+ * @brief Everything the two process() paths need, settled once per commit_params().
+ *
+ * Display encoding is the LAST node of every darkroom frame, so whatever it reads is paid at
+ * the frame rate, on every interaction. All of this describes the mask-preview checkerboard
+ * and the false-colour channel display, and every field of it used to be read from conf
+ * inside process()/process_cl() -- six of them through dt_conf_get_float(), which runs
+ * dt_calculator_solve() over the stored string on EVERY call: an expression parser, per
+ * value, per frame, for a checkerboard an ordinary frame never draws.
+ *
+ * Reading application-level configuration is not a pipeline filter's job in the first place.
+ * commit_params() is where a node's effective contract is settled, and iop/colorbalancergb.c
+ * already settles these same keys there; this module is the other half of the same preview
+ * and had simply never been moved.
+ *
+ * What makes that safe is runtime_data_hash() (iop/iop_api.h): it folds the first
+ * piece->data_size bytes into the cache key, so a settled value that changes re-keys this
+ * node instead of being silently served from a cacheline that no longer describes it. The
+ * struct therefore holds CONTENT only and no pointers at all -- see the api doc for why a
+ * pointer in the hashed prefix is wrong in both directions (issue #1145).
+ *
+ * `preview.width` is the ROI's, not a setting: it stays 0 here and is filled per call.
+ */
+typedef struct dt_iop_gamma_data_t
+{
+  dt_iop_gamma_mask_preview_t preview;
+  gboolean false_color;
+} dt_iop_gamma_data_t;
+
+/**
  * @brief Blend one linear RGB pixel with its mask checker and encode it for display.
  */
 __OMP_DECLARE_SIMD__(uniform(preview))
@@ -376,32 +405,24 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
     return 0;
   }
 
+  /* Settled in commit_params(); nothing here reads conf. A node whose allocation failed is
+   * normally disabled by dt_iop_commit_params(), but this one is the last of the pipe and a
+   * disabled display encoding is a black window -- so fall back to the plain copy, which is
+   * what an ordinary frame does anyway, and lose only the preview. */
+  const dt_iop_gamma_data_t *const d = (const dt_iop_gamma_data_t *)piece->data;
+  if(IS_NULL_PTR(d))
+  {
+    _copy_output((const float *const restrict)i, (uint8_t *const restrict)o, buffsize);
+    return 0;
+  }
+
   const float alpha = (mask_display & DT_DEV_PIXELPIPE_DISPLAY_MASK) ? 1.0f : 0.0f;
-  const size_t checker_1
-      = MAX((size_t)DT_PIXEL_APPLY_DPI(dt_conf_get_int("plugins/darkroom/colorbalancergb/checker/size")), 2);
-  const dt_iop_gamma_mask_preview_t preview = {
-    .checker_color_1 = {
-      CLAMP(dt_conf_get_float("plugins/darkroom/colorbalancergb/checker1/red"), 0.0f, 1.0f),
-      CLAMP(dt_conf_get_float("plugins/darkroom/colorbalancergb/checker1/green"), 0.0f, 1.0f),
-      CLAMP(dt_conf_get_float("plugins/darkroom/colorbalancergb/checker1/blue"), 0.0f, 1.0f),
-      0.0f
-    },
-    .checker_color_2 = {
-      CLAMP(dt_conf_get_float("plugins/darkroom/colorbalancergb/checker2/red"), 0.0f, 1.0f),
-      CLAMP(dt_conf_get_float("plugins/darkroom/colorbalancergb/checker2/green"), 0.0f, 1.0f),
-      CLAMP(dt_conf_get_float("plugins/darkroom/colorbalancergb/checker2/blue"), 0.0f, 1.0f),
-      0.0f
-    },
-    .checker_1 = checker_1,
-    .checker_2 = 2 * checker_1,
-    .width = roi_out->width,
-    .black_and_white
-        = dt_conf_get_bool("plugins/darkroom/colorbalancergb/mask_preview/greyscaled")
-  };
+  dt_iop_gamma_mask_preview_t preview = d->preview;
+  preview.width = roi_out->width;
 
   if((mask_display & DT_DEV_PIXELPIPE_DISPLAY_CHANNEL) && (mask_display & DT_DEV_PIXELPIPE_DISPLAY_ANY))
   {
-    if(dt_conf_is_equal("channel_display", "false color"))
+    if(d->false_color)
     {
       _channel_display_false_color((const float *const restrict)i, (uint8_t *const restrict)o, buffsize, alpha,
                                    mask_display, &preview);
@@ -471,32 +492,37 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
   size_t sizes[] = { ROUNDUPDWD(width, devid), ROUNDUPDHT(height, devid), 1 };
 
   const dt_dev_pixelpipe_display_mask_t mask_display = pipe->mask_display;
-  const gboolean fcolor = dt_conf_is_equal("channel_display", "false color");
+
+  /* Settled in commit_params(), exactly as the CPU path above reads it -- the two used to read
+   * conf separately, which is how a GUI-only condition duplicated between process() and
+   * process_cl() drifts (CLAUDE.md names this class by name). One source now, one commit. */
+  const dt_iop_gamma_data_t *const d = (const dt_iop_gamma_data_t *)piece->data;
+  if(IS_NULL_PTR(d)) return FALSE;
+
   int mode = DT_IOP_GAMMA_KERNEL_COPY;
   int channel = DT_IOP_GAMMA_FALSE_COLOR_MONO;
   float alpha = (mask_display & DT_DEV_PIXELPIPE_DISPLAY_MASK) ? 1.0f : 0.0f;
-  const dt_aligned_pixel_t checker_color_1 = {
-    CLAMP(dt_conf_get_float("plugins/darkroom/colorbalancergb/checker1/red"), 0.0f, 1.0f),
-    CLAMP(dt_conf_get_float("plugins/darkroom/colorbalancergb/checker1/green"), 0.0f, 1.0f),
-    CLAMP(dt_conf_get_float("plugins/darkroom/colorbalancergb/checker1/blue"), 0.0f, 1.0f),
-    0.0f
-  };
-  const dt_aligned_pixel_t checker_color_2 = {
-    CLAMP(dt_conf_get_float("plugins/darkroom/colorbalancergb/checker2/red"), 0.0f, 1.0f),
-    CLAMP(dt_conf_get_float("plugins/darkroom/colorbalancergb/checker2/green"), 0.0f, 1.0f),
-    CLAMP(dt_conf_get_float("plugins/darkroom/colorbalancergb/checker2/blue"), 0.0f, 1.0f),
-    0.0f
-  };
-  const int checker_1
-      = MAX(DT_PIXEL_APPLY_DPI(dt_conf_get_int("plugins/darkroom/colorbalancergb/checker/size")), 2);
-  const int checker_2 = 2 * checker_1;
-  const int black_and_white
-      = dt_conf_get_bool("plugins/darkroom/colorbalancergb/mask_preview/greyscaled");
+  /* These two MUST stay arrays, not pointers to d->preview's. The kernel argument below is
+   * sized with sizeof(), so a pointer passes 8 bytes of host address where the kernel wants a
+   * 16-byte float4 -- CL_INVALID_KERNEL_ARGS (-52) on every frame, the GPU path failing over
+   * to a CPU fallback that reads host input the RAM-caching policy never populated, i.e. the
+   * previous life of a rekeyed cacheline: an older frame, drawn silently. Nothing warns,
+   * because sizeof() on a pointer is perfectly legal. */
+  dt_aligned_pixel_t checker_color_1;
+  dt_aligned_pixel_t checker_color_2;
+  for(int c = 0; c < 4; c++)
+  {
+    checker_color_1[c] = d->preview.checker_color_1[c];
+    checker_color_2[c] = d->preview.checker_color_2[c];
+  }
+  const int checker_1 = (int)d->preview.checker_1;
+  const int checker_2 = (int)d->preview.checker_2;
+  const int black_and_white = d->preview.black_and_white ? 1 : 0;
 
   if((mask_display & DT_DEV_PIXELPIPE_DISPLAY_CHANNEL)
      && (mask_display & DT_DEV_PIXELPIPE_DISPLAY_ANY))
   {
-    if(fcolor)
+    if(d->false_color)
     {
       mode = DT_IOP_GAMMA_KERNEL_CHANNEL_FALSE_COLOR;
       channel = _false_color_channel_to_kernel_code(mask_display);
@@ -518,6 +544,11 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
   dt_opencl_set_kernel_arg(devid, gd->kernel_gamma_pack, 4, sizeof(int), (void *)&mode);
   dt_opencl_set_kernel_arg(devid, gd->kernel_gamma_pack, 5, sizeof(int), (void *)&channel);
   dt_opencl_set_kernel_arg(devid, gd->kernel_gamma_pack, 6, sizeof(float), (void *)&alpha);
+  /* The kernel wants a float4 for each; sizeof() on a decayed pointer would quietly pass 8
+   * bytes of host address instead, which the compiler cannot warn about. Checked here rather
+   * than trusted, because the runtime symptom is an older frame drawn silently. */
+  _Static_assert(sizeof(checker_color_1) == 4 * sizeof(float), "checker colour 1 must be a float4, not a pointer");
+  _Static_assert(sizeof(checker_color_2) == 4 * sizeof(float), "checker colour 2 must be a float4, not a pointer");
   dt_opencl_set_kernel_arg(devid, gd->kernel_gamma_pack, 7, sizeof(checker_color_1), (void *)&checker_color_1);
   dt_opencl_set_kernel_arg(devid, gd->kernel_gamma_pack, 8, sizeof(checker_color_2), (void *)&checker_color_2);
   dt_opencl_set_kernel_arg(devid, gd->kernel_gamma_pack, 9, sizeof(int), (void *)&checker_1);
@@ -558,14 +589,27 @@ void init(dt_iop_module_t *module)
   module->default_enabled = 1;
 }
 
+/* The settled mask-preview appearance is part of this node's effective contract, so it has to
+ * be part of its cache key: the values come from conf, which no history carries, and without
+ * this a changed checkerboard would be served from a cacheline keyed on the old one. The whole
+ * struct is content -- no pointers -- so the full sizeof() is the hashed prefix. */
+gboolean runtime_data_hash(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe,
+                           const dt_dev_pixelpipe_iop_t *piece)
+{
+  return TRUE;
+}
+
 void init_pipe(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece)
 {
-  piece->data = NULL;
-  piece->data_size = 0;
+  piece->data = dt_calloc_align(sizeof(dt_iop_gamma_data_t));
+  piece->data_size = IS_NULL_PTR(piece->data) ? 0 : sizeof(dt_iop_gamma_data_t);
 }
 
 void cleanup_pipe(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece)
 {
+  dt_free_align(piece->data);
+  piece->data = NULL;
+  piece->data_size = 0;
 }
 
 void commit_params(dt_iop_module_t *self, dt_iop_params_t *params, dt_dev_pixelpipe_t *pipe,
@@ -576,6 +620,60 @@ void commit_params(dt_iop_module_t *self, dt_iop_params_t *params, dt_dev_pixelp
     piece->enabled = 1;
   else
     piece->enabled = 0;
+
+  dt_iop_gamma_data_t *const d = (dt_iop_gamma_data_t *)piece->data;
+  if(IS_NULL_PTR(d)) return;
+
+  /* commit_params() runs for EVERY node of EVERY pipe, disabled ones included -- thumbnails,
+   * exports, the navigation preview -- so anything read here is charged to all of them. This
+   * module is enabled in the two GUI pipes only (just above), and the settled values below
+   * describe a mask preview that cannot exist anywhere else.
+   *
+   * The cost is not the arithmetic: each dt_conf_get_* takes the application-wide
+   * darktable.conf->mutex, and dt_conf_get_float additionally runs dt_calculator_solve() over
+   * the stored string. Nine acquisitions of a lock the GUI thread holds constantly, per node
+   * resync, on every thumbnail worker at once, is contention charged to the whole application
+   * for a checkerboard no thumbnail can draw. */
+  if(!piece->enabled) return;
+
+  /* Settle the mask-preview appearance here, once, rather than in the two process() paths --
+   * see dt_iop_gamma_data_t. The keys keep Color Balance's historical namespace because
+   * views/darkroom.c's "Mask preview settings" toolbox writes them under those names, and it
+   * is that toolbox (not this module) that owns them: its four writers bump
+   * dev->mask_preview_settings_revision and call dt_dev_pixelpipe_resync_history_main(),
+   * which re-runs commit_params() for EVERY node -- with default params where history has
+   * none, which is this module's case, it carrying IOP_FLAGS_NO_HISTORY_STACK. */
+  const float checker_1_rgb[3] = {
+    CLAMP(dt_conf_get_float("plugins/darkroom/colorbalancergb/checker1/red"), 0.0f, 1.0f),
+    CLAMP(dt_conf_get_float("plugins/darkroom/colorbalancergb/checker1/green"), 0.0f, 1.0f),
+    CLAMP(dt_conf_get_float("plugins/darkroom/colorbalancergb/checker1/blue"), 0.0f, 1.0f)
+  };
+  const float checker_2_rgb[3] = {
+    CLAMP(dt_conf_get_float("plugins/darkroom/colorbalancergb/checker2/red"), 0.0f, 1.0f),
+    CLAMP(dt_conf_get_float("plugins/darkroom/colorbalancergb/checker2/green"), 0.0f, 1.0f),
+    CLAMP(dt_conf_get_float("plugins/darkroom/colorbalancergb/checker2/blue"), 0.0f, 1.0f)
+  };
+
+  for(int c = 0; c < 3; c++)
+  {
+    d->preview.checker_color_1[c] = checker_1_rgb[c];
+    d->preview.checker_color_2[c] = checker_2_rgb[c];
+  }
+  d->preview.checker_color_1[3] = 0.0f;
+  d->preview.checker_color_2[3] = 0.0f;
+
+  const size_t checker_size
+      = MAX((size_t)DT_PIXEL_APPLY_DPI(dt_conf_get_int("plugins/darkroom/colorbalancergb/checker/size")), 2);
+  d->preview.checker_1 = checker_size;
+  d->preview.checker_2 = 2 * checker_size;
+
+  // The ROI's, not a setting: filled by process(), and deliberately left 0 here so it cannot
+  // reach the hash -- dt_pixelpipe_get_global_hash() already folds piece->roi_out in.
+  d->preview.width = 0;
+
+  d->preview.black_and_white
+      = dt_conf_get_bool("plugins/darkroom/colorbalancergb/mask_preview/greyscaled");
+  d->false_color = dt_conf_is_equal("channel_display", "false color");
 }
 
 // clang-format off

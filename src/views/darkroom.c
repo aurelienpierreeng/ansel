@@ -238,6 +238,12 @@ uint32_t view(const dt_view_t *self)
   return DT_VIEW_DARKROOM;
 }
 
+uint32_t flags()
+{
+  /* expose() composes background and image over the whole centre itself */
+  return VIEW_FLAGS_PAINTS_WHOLE_AREA;
+}
+
 static void _reset_edge_pan()
 {
   dt_gui_gtk_t *gui = dt_gui_get_global();
@@ -624,7 +630,6 @@ static gboolean _build_preview_fallback_surface(dt_develop_t *dev, const int wid
   }
 
   cairo_t *cr = cairo_create(_darkroom_preview_fallback_surface);
-  cairo_pattern_set_filter(cairo_get_source(cr), CAIRO_FILTER_NEAREST);
 
   cairo_set_source_rgb(cr, bg_color[0], bg_color[1], bg_color[2]);
   cairo_paint(cr);
@@ -672,6 +677,12 @@ static gboolean _build_preview_fallback_surface(dt_develop_t *dev, const int wid
   cairo_scale(cr, preview_scale, preview_scale);
   cairo_rectangle(cr, 0, 0, preview_wd, preview_ht);
   cairo_set_source_surface(cr, _darkroom_preview_locked.surface, 0, 0);
+  /* A placeholder while the main pipe catches up, resampled by the zoom: nearest neighbour,
+   * on the pattern that actually scales. This filter used to be set on the context's default
+   * solid source before the surface replaced it, so the scaling ran with cairo's default GOOD
+   * filter -- measured at a 2560x1440 window on a 2x screen: 262 ms per frame zooming out,
+   * 120 ms zooming in, against 4 and 8 ms with the filter that was meant. */
+  cairo_pattern_set_filter(cairo_get_source(cr), CAIRO_FILTER_NEAREST);
   cairo_fill(cr);
   dt_dev_pixelpipe_cache_rdlock_entry(FALSE, _darkroom_preview_locked.entry);
   cairo_destroy(cr);
@@ -689,6 +700,7 @@ static gboolean _render_preview_fallback_surface(cairo_t *cr)
   cairo_paint(cr);
   return TRUE;
 }
+
 
 static void _paint_all(cairo_t *cri, cairo_t *cr, cairo_surface_t *image_surface)
 {
@@ -712,7 +724,29 @@ typedef struct darkroom_expose_state_t
    * not spin the center redraw at frame-clock rate while we show the preview
    * fallback. Reset whenever a main frame is rendered successfully. */
   uint64_t pending_main_hash;
+  /* What dev->image_surface currently holds: the source frame, the viewport, the colours and
+   * the frame size it was composed for. A frame with the same key is already on it, and an
+   * expose that only moved an overlay repaints from it without composing again -- composing
+   * was a full-window fill and a full-window blit on every frame, for an image that had not
+   * changed. */
+  uint64_t composed_key;
 } darkroom_expose_state_t;
+
+/* Everything the composed image depends on, and nothing else. */
+static uint64_t _darkroom_compose_key(const uint64_t source_hash, const uint64_t zoom_hash,
+                                      const dt_aligned_pixel_t bg_color, const int border, const gboolean iso,
+                                      const int width, const int height)
+{
+  uint64_t key = 5381;
+  key = dt_hash(key, (const char *)&source_hash, sizeof(source_hash));
+  key = dt_hash(key, (const char *)&zoom_hash, sizeof(zoom_hash));
+  key = dt_hash(key, (const char *)bg_color, 3 * sizeof(float));
+  key = dt_hash(key, (const char *)&border, sizeof(border));
+  key = dt_hash(key, (const char *)&iso, sizeof(iso));
+  key = dt_hash(key, (const char *)&width, sizeof(width));
+  key = dt_hash(key, (const char *)&height, sizeof(height));
+  return key;
+}
 
 static inline gboolean _darkroom_preview_fallback_valid(const dt_develop_t *dev, const int width,
                                                         const int height, const uint64_t zoom_hash)
@@ -780,6 +814,56 @@ static inline void _darkroom_reset_expose_state(darkroom_expose_state_t *state)
   state->image_surface_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
   state->main_zoom_hash = 0;
   state->pending_main_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
+  state->composed_key = 0;
+}
+
+/* One expose's composition: the context of the image surface, the frame and the colours it
+ * is composed for, and the state that remembers what it holds. */
+typedef struct _darkroom_compose_t
+{
+  cairo_t *cr;
+  const dt_develop_t *dev;
+  darkroom_expose_state_t *state;
+  int width;
+  int height;
+  int border;
+  uint64_t zoom_hash;
+  const float *bg_color;
+} _darkroom_compose_t;
+
+static uint64_t _darkroom_compose_key_of(const _darkroom_compose_t *const c, const uint64_t source_hash)
+{
+  return _darkroom_compose_key(source_hash, c->zoom_hash, c->bg_color, c->border, c->dev->iso_12646.enabled,
+                               c->width, c->height);
+}
+
+static gboolean _darkroom_composed_already(const _darkroom_compose_t *const c, const uint64_t key)
+{
+  return c->state->composed_key == key && c->state->image_surface_imgid == c->dev->image_storage.id;
+}
+
+/* Compose @p locked into the image surface unless the frame it would compose is already
+ * there. */
+static gboolean _darkroom_compose_locked(const _darkroom_compose_t *const c, dt_dev_locked_surface_t *locked)
+{
+  if(IS_NULL_PTR(locked) || IS_NULL_PTR(locked->surface)) return FALSE;
+  const uint64_t key = _darkroom_compose_key_of(c, locked->hash);
+  if(_darkroom_composed_already(c, key)) return TRUE;
+  if(!dt_dev_render_locked_surface(c->cr, c->dev, locked, c->width, c->height, c->border, c->bg_color)) return FALSE;
+  c->state->composed_key = key;
+  return TRUE;
+}
+
+/* Copy the cached fallback into the image surface unless it is already the frame there. */
+static gboolean _darkroom_compose_fallback(const _darkroom_compose_t *const c)
+{
+  /* salted: a fallback is not the same frame as a main backbuf that happened to hash alike */
+  const uint64_t source = _darkroom_preview_fallback_backbuf_hash ^ 0x9e3779b97f4a7c15ULL;
+  const uint64_t key = _darkroom_compose_key_of(c, source);
+  if(_darkroom_composed_already(c, key)) return TRUE;
+  if(!_render_preview_fallback_surface(c->cr)) return FALSE;
+  c->state->composed_key = key;
+  return TRUE;
 }
 
 static void _darkroom_prepare_image_surface(dt_develop_t *dev, const int width, const int height,
@@ -806,6 +890,7 @@ static void _darkroom_prepare_image_surface(dt_develop_t *dev, const int width, 
   state->image_surface_imgid = UNKNOWN_IMAGE;
   state->image_surface_has_main = FALSE;
   state->image_surface_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
+  state->composed_key = 0;
   _release_preview_fallback_surface();
 }
 
@@ -842,6 +927,7 @@ void expose(
     .image_surface_hash = DT_PIXELPIPE_CACHE_HASH_INVALID,
     .main_zoom_hash = 0,
     .pending_main_hash = DT_PIXELPIPE_CACHE_HASH_INVALID,
+    .composed_key = 0,
   };
   const uint64_t zoom_hash = _darkroom_zoom_hash(dev);
   const gboolean roi_changed = !_darkroom_locked_main_valid_for_zoom(&expose_state, zoom_hash);
@@ -886,8 +972,9 @@ void expose(
   gboolean drawn_from_main = FALSE;
 
   dt_dev_get_background_color(dev, bg_color);
-
-  cairo_pattern_set_filter(cairo_get_source(cr), CAIRO_FILTER_NEAREST);
+  const _darkroom_compose_t compose = { .cr = cr, .dev = dev, .state = &expose_state, .width = width,
+                                        .height = height, .border = border, .zoom_hash = zoom_hash,
+                                        .bg_color = bg_color };
 
   /* Selection policy, kept intentionally linear:
    * 1. Prefer the main pipe whenever it already has the backbuf for the
@@ -916,7 +1003,7 @@ void expose(
   {
     if(dt_dev_lock_pipe_surface(dev, dev->pipe, &_darkroom_main_locked, &_darkroom_main_wait, "darkroom-main", FALSE)
        && _darkroom_main_locked.surface
-       && dt_dev_render_locked_surface(cr, dev, &_darkroom_main_locked, width, height, border, bg_color))
+       && _darkroom_compose_locked(&compose, &_darkroom_main_locked))
     {
       expose_state.main_zoom_hash = zoom_hash;
       expose_state.image_surface_imgid = dev->image_storage.id;
@@ -949,7 +1036,7 @@ void expose(
     if(dt_dev_lock_pipe_surface(dev, dev->preview_pipe, &_darkroom_preview_locked, &_darkroom_preview_wait,
                                 "darkroom-preview", FALSE)
        && _darkroom_preview_locked.surface
-       && dt_dev_render_locked_surface(cr, dev, &_darkroom_preview_locked, width, height, border, bg_color))
+       && _darkroom_compose_locked(&compose, &_darkroom_preview_locked))
     {
       // This frame validates the composed image, not the locked main surface. Keep main_zoom_hash
       // unchanged so the old main backbuffer cannot be reused as if it had been rendered at fit.
@@ -971,7 +1058,7 @@ void expose(
     if(dt_dev_lock_pipe_surface(dev, dev->preview_pipe, &_darkroom_preview_locked, &_darkroom_preview_wait,
                                 "darkroom-preview", TRUE)
        && _build_preview_fallback_surface(dev, width, height, border, bg_color, zoom_hash)
-       && _render_preview_fallback_surface(cr))
+       && _darkroom_compose_fallback(&compose))
     {
       expose_state.image_surface_imgid = dev->image_storage.id;
       expose_state.image_surface_has_main = FALSE;
@@ -987,7 +1074,7 @@ void expose(
    * is still catching up. */
   if(!drawn && roi_changed && !full_image_backbuf_ready
      && _darkroom_preview_fallback_valid(dev, width, height, zoom_hash)
-     && _render_preview_fallback_surface(cr))
+     && _darkroom_compose_fallback(&compose))
   {
     expose_state.image_surface_imgid = dev->image_storage.id;
     expose_state.image_surface_has_main = FALSE;
@@ -1001,7 +1088,7 @@ void expose(
    * the same zoom/pan. History-only changes should not glitch to preview or
    * background while the new main backbuf is still being produced. */
   if(!drawn && _darkroom_locked_main_valid_for_zoom(&expose_state, zoom_hash)
-     && dt_dev_render_locked_surface(cr, dev, &_darkroom_main_locked, width, height, border, bg_color))
+     && _darkroom_compose_locked(&compose, &_darkroom_main_locked))
   {
     expose_state.image_surface_imgid = dev->image_storage.id;
     expose_state.image_surface_has_main = TRUE;
@@ -1039,6 +1126,7 @@ void expose(
     /* Cold-start / no valid frame cached anywhere yet. */
     cairo_set_source_rgb(cr, bg_color[0], bg_color[1], bg_color[2]);
     cairo_paint(cr);
+    expose_state.composed_key = 0;
     _paint_all(cri, cr, dev->image_surface);
     dt_print(DT_DEBUG_DEV, "[darkroom] expose drew %s (backbuf hash=%" PRIu64 ")\n",
              draw_source, draw_hash);
@@ -1141,13 +1229,14 @@ static void _darkroom_log_image_load_error(const int ret)
   switch(ret)
   {
     case DT_DEV_IMAGE_STORAGE_MIPMAP_NOT_FOUND:
-      dt_control_log(_("Could not load the image source data."));
+      dt_control_alert(_("Image could not be opened"), _("Could not load the image source data."), NULL);
       break;
     case DT_DEV_IMAGE_STORAGE_DB_NOT_READ:
-      dt_control_log(_("Could not read image information from the database."));
+      dt_control_alert(_("Image could not be opened"),
+                       _("Could not read image information from the database."), NULL);
       break;
     default:
-      dt_control_log(_("We could not load the image."));
+      dt_control_alert(_("Image could not be opened"), _("We could not load the image."), NULL);
       break;
   }
 }
@@ -1480,6 +1569,61 @@ gboolean _switch_to_prev_picture(GtkAccelGroup *accel_group, GObject *accelerabl
   return TRUE;
 }
 
+static gboolean _zoom_to_fit(GtkAccelGroup *accel_group __attribute__((unused)),
+                             GObject *accelerable __attribute__((unused)),
+                             guint keyval __attribute__((unused)),
+                             GdkModifierType modifier __attribute__((unused)), gpointer data)
+{
+  dt_develop_t *dev = (dt_develop_t *)data;
+  float center[2] = { 0.0f };
+  dt_dev_get_widget_center(dev, center);
+  _change_scaling(dev, center, 1.f);
+  return TRUE;
+}
+
+static gboolean _zoom_to_100(GtkAccelGroup *accel_group __attribute__((unused)),
+                             GObject *accelerable __attribute__((unused)),
+                             guint keyval __attribute__((unused)),
+                             GdkModifierType modifier __attribute__((unused)), gpointer data)
+{
+  dt_develop_t *dev = (dt_develop_t *)data;
+
+  // The viewport scaling is relative to the fit-to-screen scale, so 100% is its inverse. That
+  // scale is the -1 sentinel until an image has been fitted into the view.
+  const float natural_scale = dt_dev_roi_request_natural_scale(dev);
+  if(natural_scale <= 0.f) return TRUE;
+
+  float center[2] = { 0.0f };
+  dt_dev_get_widget_center(dev, center);
+  _change_scaling(dev, center, 1.f / natural_scale);
+  return TRUE;
+}
+
+/**
+ * @brief Re-settle every node against the preferences that were just changed.
+ *
+ * A module settles its effective contract in commit_params(), and several read application
+ * preferences there rather than per frame -- iop/colorbalancergb.c and iop/gamma.c both do,
+ * for the same mask-preview appearance. Nothing carries those values in history, so only a
+ * resync re-reads them, and the four "Mask preview settings" writers below each trigger one
+ * themselves for exactly that reason.
+ *
+ * The Preferences dialog had no such path. A key reachable only from it -- `channel_display',
+ * which picks false colour against greyscale for the channel display -- would therefore keep
+ * whatever it held at the last resync: toggling the channel display raises TOP_CHANGED, which
+ * re-commits the focused node alone and never reaches iop/gamma.c, so the preference read as
+ * doing nothing until an unrelated edit happened to resync the pipe.
+ *
+ * One resync per dialog interaction, which is the same cost the render-size and mask
+ * rasterisation combos in this file already pay for a settings change.
+ */
+static void _preferences_changed(gpointer instance, gpointer user_data)
+{
+  dt_develop_t *dev = (dt_develop_t *)user_data;
+  if(IS_NULL_PTR(dev)) return;
+  dt_dev_pixelpipe_resync_history_all(dev);
+}
+
 static void _preview_pipe_finished(gpointer instance, gpointer user_data)
 {
   // Get the mip size that is at most as big as our pipeline backbuf
@@ -1600,6 +1744,10 @@ void gui_init(dt_view_t *self)
   DT_DEBUG_CONTROL_SIGNAL_CONNECT(dt_control_signal_get_global(), DT_SIGNAL_DEVELOP_PREVIEW_PIPE_FINISHED,
                                   G_CALLBACK(_preview_pipe_finished), self);
 
+  // Both resync entry points early-out on !dev->gui_attached, so this is inert outside darkroom.
+  DT_DEBUG_CONTROL_SIGNAL_CONNECT(dt_control_signal_get_global(), DT_SIGNAL_PREFERENCES_CHANGE,
+                                  G_CALLBACK(_preferences_changed), dev);
+
   dt_accels_new_darkroom_action(_switch_to_next_picture, self, NULL, N_("Darkroom/Actions"),
                                 N_("Switch to the next picture"), GDK_KEY_Right, GDK_MOD1_MASK, _("Triggers the action"));
   dt_accels_new_darkroom_action(_switch_to_prev_picture, self, NULL, N_("Darkroom/Actions"),
@@ -1679,6 +1827,13 @@ void gui_init(dt_view_t *self)
   dt_accels_new_virtual_shortcut(dt_gui_get_accels(), dt_gui_get_accels()->darkroom_accels,
                                  path, dt_gui_center_widget(), GDK_KEY_minus, DT_PRIMARY_MASK);
   dt_free(path);
+
+  dt_accels_new_darkroom_action(_zoom_to_fit, dev, NULL, _("Darkroom/Main image"), _("Zoom to fit"),
+                                GDK_KEY_0, DT_PRIMARY_MASK,
+                                _("Zooms the main image to fit the window"));
+  dt_accels_new_darkroom_action(_zoom_to_100, dev, NULL, _("Darkroom/Main image"), _("Zoom to 100%"),
+                                GDK_KEY_1, DT_PRIMARY_MASK,
+                                _("Zooms the main image to 100%"));
   /*
    * Add view specific tool buttons
    */
@@ -2075,13 +2230,13 @@ void leave(dt_view_t *self)
   // before destroying the actual modules being referenced.
   dt_pthread_mutex_lock(&dev->pipe->busy_mutex);
   dt_dev_pixelpipe_cleanup_nodes(dev->pipe);
-  dt_dev_pixelpipe_cache_unref_hash(dt_dev_backbuf_get_hash(&dev->pipe->backbuf));
+  dt_dev_backbuf_release_keepalive(&dev->pipe->backbuf);
   dt_dev_set_backbuf(&dev->pipe->backbuf, 0, 0, 0, DT_PIXELPIPE_CACHE_HASH_INVALID, DT_PIXELPIPE_CACHE_HASH_INVALID);
   dt_pthread_mutex_unlock(&dev->pipe->busy_mutex);
 
   dt_pthread_mutex_lock(&dev->preview_pipe->busy_mutex);
   dt_dev_pixelpipe_cleanup_nodes(dev->preview_pipe);
-  dt_dev_pixelpipe_cache_unref_hash(dt_dev_backbuf_get_hash(&dev->preview_pipe->backbuf));
+  dt_dev_backbuf_release_keepalive(&dev->preview_pipe->backbuf);
   dt_dev_set_backbuf(&dev->preview_pipe->backbuf, 0, 0, 0, DT_PIXELPIPE_CACHE_HASH_INVALID,
                      DT_PIXELPIPE_CACHE_HASH_INVALID);
   dt_pthread_mutex_unlock(&dev->preview_pipe->busy_mutex);
@@ -2131,13 +2286,13 @@ void leave(dt_view_t *self)
   dt_dev_get_global()->image_storage.id = -1;
 
   // Release the cache entries for histogram buffers
-  dt_dev_pixelpipe_cache_unref_hash(dt_dev_backbuf_get_hash(&dev->raw_histogram));
+  dt_dev_backbuf_release_keepalive(&dev->raw_histogram);
   dt_dev_backbuf_set_hash(&dev->raw_histogram, -1);
 
-  dt_dev_pixelpipe_cache_unref_hash(dt_dev_backbuf_get_hash(&dev->output_histogram));
+  dt_dev_backbuf_release_keepalive(&dev->output_histogram);
   dt_dev_backbuf_set_hash(&dev->output_histogram, -1);
 
-  dt_dev_pixelpipe_cache_unref_hash(dt_dev_backbuf_get_hash(&dev->display_histogram));
+  dt_dev_backbuf_release_keepalive(&dev->display_histogram);
   dt_dev_backbuf_set_hash(&dev->display_histogram, -1);
 
   /* GUI backbuffers were already released when each pipeline was quiesced above. Keep the view-side teardown
@@ -2548,6 +2703,7 @@ void mouse_moved(dt_view_t *self, double x, double y, double pressure, int which
   // change cursor appearance by default
   _darkroom_set_default_cursor(self, x, y);
   gboolean handled = FALSE;
+  gboolean masks_handled = FALSE;
 
   if(picker_active && dt_control_button_down(1))
   {
@@ -2603,6 +2759,7 @@ void mouse_moved(dt_view_t *self, double x, double y, double pressure, int which
   else if(dt_masks_get_visible_form(dev)
           && dt_masks_events_mouse_moved(dev, dev->gui_module, x, y, pressure, which))
   {
+    masks_handled = TRUE;
     // There is no shape dragging in creation mode, so no need to commit history.
     if(!dev->form_gui->creation)
     {
@@ -2687,7 +2844,12 @@ void mouse_moved(dt_view_t *self, double x, double y, double pressure, int which
 
   if(handled)
   {
-    dt_control_queue_redraw_center();
+    /* a motion the masks handled changed the overlay and nothing else: repaint what it touched,
+     * not the image under the whole window */
+    if(masks_handled)
+      dt_masks_overlay_queue_redraw(dt_gui_center_widget());
+    else
+      dt_control_queue_redraw_center();
     return;
   }
 
@@ -2957,16 +3119,18 @@ int button_pressed(dt_view_t *self, double x, double y, double pressure, int whi
   return 0;
 }
 
+/* A zoom step that lands closer to fit (1.0) than its own size lands on fit, so stepping through
+ * fit stops there. Only steps snap: a jump to an absolute level is usually farther from where it
+ * starts than from fit, and would land on fit instead -- 100% from 200%, or from below fit. */
+static float _snap_step_to_fit(const float old_scaling, const float new_scaling)
+{
+  return (fabsf(new_scaling - 1.0f) < fabsf(old_scaling - new_scaling)) ? 1.0f : new_scaling;
+}
+
 static int _change_scaling(dt_develop_t *dev, const float point[2], const float new_scaling)
 {
   const float old_scaling = dt_dev_viewport_scaling(dev);
-
-  // Round scaling to 1.0 (fit) if close enough
-  const float epsilon = fabsf(old_scaling - new_scaling);
-  if(fabsf(new_scaling - 1.0f) < epsilon)
-    dt_dev_viewport_set_scaling(dev, 1.0f);
-  else
-    dt_dev_viewport_set_scaling(dev, new_scaling);
+  dt_dev_viewport_set_scaling(dev, new_scaling);
 
   if(!dt_dev_check_zoom_scale_bounds(dev))
   { 
@@ -3014,7 +3178,8 @@ static gboolean _center_view_free_zoom(dt_view_t *self, double x, double y, int 
 
   // Commit the new scaling
   const float step = 1.02f;
-  const float new_scaling = dt_dev_viewport_scaling(dev) * powf(step, (float)-flow);
+  const float old_scaling = dt_dev_viewport_scaling(dev);
+  const float new_scaling = _snap_step_to_fit(old_scaling, old_scaling * powf(step, (float)-flow));
   const float point[2] = { x, y };
   return _change_scaling(dev, point, new_scaling);
 }
@@ -3099,15 +3264,16 @@ int key_pressed(dt_view_t *self, GdkEventKey *event)
   if(ctrl_any)
   {
     const float zoom_step = 1.1f;
+    const float old_scaling = dt_dev_viewport_scaling(dev);
     float center[2] = { 0.0f };
     dt_dev_get_widget_center(dev, center);
 
     switch(key)
     {
       case GDK_KEY_plus:
-        return _change_scaling(dev, center, dt_dev_viewport_scaling(dev) * zoom_step);
+        return _change_scaling(dev, center, _snap_step_to_fit(old_scaling, old_scaling * zoom_step));
       case GDK_KEY_minus:
-        return _change_scaling(dev, center, dt_dev_viewport_scaling(dev) / zoom_step);
+        return _change_scaling(dev, center, _snap_step_to_fit(old_scaling, old_scaling / zoom_step));
     }
   }
 

@@ -35,28 +35,83 @@ on:
   workflow_dispatch:
 
 jobs:
-  MacOS:
+  # The cron fires whether master moved or not, and a macOS nightly is expensive: the Intel
+  # job builds much of Homebrew from source and runs up to GitHub's 6-hour ceiling. Before this
+  # job, every night on an unchanged head rebuilt both DMGs and `tip' then REPLACED the ones
+  # already in the release with identical packages -- f484018567 was built and republished on
+  # 2026-09-18, 19, 20 and 21. The release is asked first, and only the architectures it does not
+  # hold for this commit are built. tools/nightly_published.sh matches the commit hash in the
+  # asset names and explains why it does not rebuild the version string.
+  #
+  # Per architecture, not all or nothing: an Intel job killed at the ceiling leaves the arm64 DMG
+  # published, and the next night must build Intel alone. A manual dispatch builds everything,
+  # since rebuilding on purpose is what someone dispatching wants.
+  #
+  # The matrix therefore lives here, as the list this job filters. Each entry is one runner;
+  # `package' is the release asset it produces, `@VERSION@' standing for the version string.
+  #
+  # The build checks out the commit judged here, not the branch again, so a push landing in
+  # between cannot have one commit checked and another built.
+  published:
     if: github.repository == 'aurelienpierreeng/ansel' || github.event_name == 'workflow_dispatch'
+    name: Packages this commit still lacks
+    runs-on: ubuntu-latest
+    outputs:
+      sha: ${{ steps.select.outputs.sha }}
+      builds: ${{ steps.select.outputs.builds }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.ref_name }}
+          fetch-depth: 1
+          submodules: false
+      - name: Select the architectures to build
+        id: select
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          EVENT: ${{ github.event_name }}
+        run: |
+          # arm64: AppleClang 17.
+          # intel64: TESTBUILD_OPENCL_PROGRAMS needs llvm, which install-deps-macos.sh skips
+          # there: Homebrew has no Intel bottle for it any more and it is a ~4 h source build,
+          # for a check the arm64 CI performs on every commit. Stated rather than left to
+          # CMake's absent-LLVM fallback, which reaches the same result through warnings.
+          all='[
+            { "os": "macos-15", "xcode": "26.3", "deployment": "15.0", "tag": "arm64",
+              "package": "Ansel-@VERSION@-arm64.dmg",
+              "eco": "-DBINARY_PACKAGE_BUILD=ON -DBUILD_CHANNEL=nightly -DDT_APPLE_X86_TARGET_CLONES=0" },
+            { "os": "macos-15-intel", "xcode": "26.3", "deployment": "15.0", "tag": "intel64",
+              "package": "Ansel-@VERSION@-i386.dmg",
+              "eco": "-DBINARY_PACKAGE_BUILD=ON -DBUILD_CHANNEL=nightly -DDT_APPLE_X86_TARGET_CLONES=1 -DTESTBUILD_OPENCL_PROGRAMS=OFF" }
+          ]'
+          selected='[]'
+          while IFS= read -r build; do
+            tag="$(jq -r .tag <<< "${build}")"
+            if [ "${EVENT}" != "workflow_dispatch" ] \
+               && tools/nightly_published.sh "$(jq -r .package <<< "${build}")"; then
+              echo "${tag}: already published for this commit, not rebuilt"
+            else
+              echo "${tag}: to build"
+              selected="$(jq -c --argjson b "${build}" '. + [$b]' <<< "${selected}")"
+            fi
+          done < <(jq -c '.[]' <<< "${all}")
+          {
+            echo "sha=$(git rev-parse HEAD)"
+            echo "builds=${selected}"
+          } >> "$GITHUB_OUTPUT"
+
+  MacOS:
+    needs: published
+    # An empty matrix is an error, not a no-op, so a night with nothing left to build skips the job.
+    # The result is asked as well, so a skipped `published' (a fork's cron) never reaches
+    # fromJSON with an empty output.
+    if: ${{ needs.published.result == 'success' && needs.published.outputs.builds != '[]' }}
     name: Nightly Ansel Mac OS build
     runs-on: ${{ matrix.build.os }}
     strategy:
       fail-fast: false
       matrix:
-        build:
-          - { 
-            os: macos-15, 
-            xcode: 26.3, 
-            deployment: 15.0, 
-            tag: "arm64",
-            eco: "-DBINARY_PACKAGE_BUILD=ON -DBUILD_CHANNEL=nightly -DDT_APPLE_X86_TARGET_CLONES=0",
-            } # AppleClang 17, arm64
-          - { 
-            os: macos-15-intel, 
-            xcode: 26.3, 
-            deployment: 15.0, 
-            tag: "intel64",
-            eco: "-DBINARY_PACKAGE_BUILD=ON -DBUILD_CHANNEL=nightly -DDT_APPLE_X86_TARGET_CLONES=1",
-             } # AppleClang 17, intel64
+        build: ${{ fromJSON(needs.published.outputs.builds) }}
         btype:
           - RelWithDebInfo
         compiler:
@@ -67,7 +122,7 @@ jobs:
         generator:
           - Ninja
         branch:
-          - { code: "${{ github.ref_name }}", label: stable }
+          - { label: stable }
     env:
       DEVELOPER_DIR: /Applications/Xcode_${{ matrix.build.xcode }}.app/Contents/Developer
       CC: ${{ matrix.compiler.CC }}
@@ -80,16 +135,111 @@ jobs:
       CMAKE_BUILD_TYPE: ${{ matrix.btype }}
       GENERATOR: ${{ matrix.generator }}
       TARGET: ${{ matrix.target }}
-      BRANCH: ${{ matrix.branch.code }}
       BUILD_NAME: ${{ matrix.branch.label }}
     steps:
       - uses: actions/checkout@v6
         with:
-          ref: ${{ env.BRANCH }}
+          ref: ${{ needs.published.outputs.sha }}
           fetch-depth: 5000
           submodules: true
           fetch-tags: true
           path: ${{ env.SRC_DIR }}
+      # Homebrew publishes no bottles for Intel macOS any more, so a large part of the tree
+      # is built from source there, and two formulae eat the job's 6-hour budget: llvm
+      # (3h43 to over 4h54, measured as llvm@22) and rust (1h05 to 1h29). Both are librsvg's --
+      # it is written in Rust, and since rust 1.99.0 rust builds against the unversioned llvm
+      # rather than llvm@22 -- so neither can be dropped. Their kegs are cached between
+      # runs; tools/brew_cache_key.sh carries the reasoning and owns the keys. arm64 pours
+      # bottles in 77 seconds and needs none of it, so the cache steps are Intel-only and the
+      # quota is left to the architecture that cannot do without it.
+      #
+      # Each formula gets its own entry, keyed on its own version, so a bump in one does not
+      # discard the other.
+      #
+      # This job only READS that cache. mac-brew-cache.yml is the one writer: a cold keg is
+      # handed to it below and this job stops, rather than building it here.
+      - name: Resolve the Homebrew keg cache keys
+        id: brewcache
+        if: ${{ runner.arch == 'X64' }}
+        run: |
+          brew update
+          "${SRC_DIR}/tools/brew_cache_key.sh" llvm rust
+          {
+            echo "cellar=$(brew --cellar)"
+            echo "opt=$(brew --prefix)/opt"
+          } >> "$GITHUB_OUTPUT"
+      - name: Restore the llvm keg
+        id: keg-llvm
+        if: ${{ runner.arch == 'X64' }}
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            ${{ steps.brewcache.outputs.cellar }}/llvm
+            ${{ steps.brewcache.outputs.opt }}/llvm
+          key: ${{ steps.brewcache.outputs.llvm_key }}
+      - name: Restore the rust keg
+        id: keg-rust
+        if: ${{ runner.arch == 'X64' }}
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            ${{ steps.brewcache.outputs.cellar }}/rust
+            ${{ steps.brewcache.outputs.opt }}/rust
+          key: ${{ steps.brewcache.outputs.rust_key }}
+      # A cold keg does not fit in this job, and building it here only burns the job. On
+      # 2026-10-15 homebrew-core had moved to llvm 23.1.3_1 and rust 1.99.0_1, both keys missed,
+      # and llvm's `cmake --build' ran from 11:18 until the 6-hour ceiling killed the job at 15:34
+      # without finishing -- after 1h41 of other formulae. Even with both kegs warm the dependency
+      # step took 1h48 to 3h36 on 2026-10-03 to 07, so neither fits beside the rest.
+      #
+      # So a miss dispatches mac-brew-cache.yml for the cold kegs, in dependency order -- it
+      # builds one per run and chains to the next -- and this job fails within minutes, saying
+      # so. The next nightly finds the kegs warm and builds Intel, since its DMG is still
+      # missing for the commit. That workflow runs on the default branch, which `gh workflow
+      # run' targets when no ref is given: only a cache saved there is visible to every branch.
+      - name: Hand the cold kegs to the keg cache workflow
+        if: ${{ runner.arch == 'X64' && (steps.keg-llvm.outputs.cache-hit != 'true' || steps.keg-rust.outputs.cache-hit != 'true') }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          LLVM_HIT: ${{ steps.keg-llvm.outputs.cache-hit }}
+          RUST_HIT: ${{ steps.keg-rust.outputs.cache-hit }}
+          LLVM_KEY: ${{ steps.brewcache.outputs.llvm_key }}
+          RUST_KEY: ${{ steps.brewcache.outputs.rust_key }}
+        run: |
+          cold=""
+          [ "${LLVM_HIT}" = "true" ] || { cold="llvm"; echo "not cached: ${LLVM_KEY}"; }
+          [ "${RUST_HIT}" = "true" ] || { cold="${cold:+${cold} }rust"; echo "not cached: ${RUST_KEY}"; }
+          gh workflow run mac-brew-cache.yml -f formulae="${cold}"
+          echo "::error title=Homebrew kegs not cached::${cold} not in the keg cache; mac-brew-cache.yml was dispatched to build them, and the next nightly builds the Intel package."
+          exit 1
+      # Two different situations used to collapse into one tolerated `brew link' failure, and
+      # both printed `Error:' lines that read like a broken step: a keg that was never restored
+      # (a cache miss, the ordinary cold case) and a keg-only formula, which needs no link at
+      # all because its opt link travelled inside the cached keg. llvm is keg-only, so even a
+      # cache HIT produced an error. Each case is now asked about before brew is called, so the
+      # log says what happened and a genuine link failure is a genuine failure of the step.
+      #
+      # NEVER add --force. llvm is keg-only on purpose: forcing it would put its clang in the
+      # prefix's bin ahead of Xcode's, and this build compiles with CC=cc.
+      - name: Relink the restored kegs
+        if: ${{ runner.arch == 'X64' }}
+        run: |
+          cellar="$(brew --cellar)"
+          for f in llvm rust; do
+            if [ ! -d "${cellar}/${f}" ]; then
+              echo "${f}: not in the cache -- it will be built"
+              continue
+            fi
+            keg_only="$(brew info --json=v2 --formula "${f}" \
+              | python3 -c 'import json,sys; print("yes" if json.load(sys.stdin)["formulae"][0]["keg_only"] else "no")')"
+            if [ "${keg_only}" = "yes" ]; then
+              echo "${f}: restored, keg-only -- its opt link came with the keg"
+              continue
+            fi
+            brew link --overwrite "${f}"
+            echo "${f}: restored and linked"
+          done
       - name: Install Base Dependencies
         run: |
           "${SRC_DIR}/packaging/install-deps-macos.sh"
@@ -124,10 +274,15 @@ jobs:
       - name: Build macOS package
         run: |
           ./src/packaging/macosx/3_make_hb_ansel_package.sh
+      # Nothing before this point looks at the .app: the steps above test the install tree,
+      # which had both of the binaries the bundle used to drop. This reads the bundle itself --
+      # every installed executable present, every load command resolving inside it.
+      - name: Check macOS bundle
+        run: |
+          "${SRC_DIR}/tools/check_macos_bundle.sh" "${INSTALL_PREFIX}"
       - name: Create DMG file
         run: |
           ./src/packaging/macosx/4_make_hb_ansel_dmg.sh
-      # TODO: check if dmg file runs too, for proper libs bundling
       - name: Package upload
         if: ${{ success() }}
         uses: actions/upload-artifact@v6
@@ -138,7 +293,24 @@ jobs:
 
   upload_to_release:
     runs-on: ubuntu-latest
-    needs: MacOS
+    needs: [published, MacOS]
+    # Publishing must not be all-or-nothing. This job carried `needs: MacOS' with no `if:',
+    # which defaults to success() over the WHOLE matrix -- and fail-fast is off, so the two
+    # architectures run independently and either one dying took the other's package with it.
+    # Measured: arm64 succeeded on 2026-09-10, 09-11, 09-12, 09-13 and 09-14 and all five of
+    # its DMGs were discarded, because the Intel job was killed at GitHub's 6-hour ceiling
+    # each of those nights. No macOS nightly shipped at all for five days, Apple Silicon
+    # included.
+    #
+    # always() rather than the usually-preferred !cancelled(): a job killed by the ceiling is
+    # reported as cancelled, which is precisely the case this has to publish through. The cost
+    # is that a run someone cancels by hand also publishes whatever was already built, which
+    # for a nightly is the lesser harm.
+    #
+    # Not when nothing was to be built, though: always() alone would run this on a night whose
+    # packages were all already published, find no DMG and fail. Nor on a fork, where the
+    # `published' job is skipped and its output is empty rather than '[]'.
+    if: ${{ always() && needs.published.result == 'success' && needs.published.outputs.builds != '[]' }}
     env:
       REPO: "https://github.com/aurelienpierreeng/ansel"
       ROOM: "!SgRYbzspwqwwUgSQHC:matrix.org"
@@ -154,32 +326,136 @@ jobs:
         with:
           fetch-depth: 1
           submodules: false
-      - name: Download artifact
+      # Each architecture is fetched on its own and allowed to be missing -- that one of them
+      # may have produced nothing is the whole point.
+      - name: Download the Intel package
+        continue-on-error: true
         uses: actions/download-artifact@v4
         with:
           name: ansel.stable-intel64.mac
-      - name: Download artifact
+      - name: Download the Apple Silicon package
+        continue-on-error: true
         uses: actions/download-artifact@v4
         with:
           name: ansel.stable-arm64.mac
-      - name: Update nightly release
+      # GitHub stores an asset name reduced to [A-Za-z0-9._-], so the `~' a version string
+      # carries is filed as `.'. tip decides what to REPLACE by comparing its local filenames
+      # against the release's assets (`asset.name == Path(artifact).name'), so a file still
+      # spelled with `~' never matches the asset it is meant to replace: tip treats it as new,
+      # GitHub normalises the name onto the one already there and answers 422 already_exists,
+      # and that exception is not caught on the new-asset path. The step then dies and takes
+      # the OTHER architecture's package with it, though that one had nothing to collide with
+      # -- measured on 2026-09-15, where a good Intel DMG was lost to the arm64 name.
+      #
+      # Renaming here hands tip the name the release will actually use, and its own
+      # replace-by-name works as documented. It is also the one place that knows this
+      # spelling, so nothing downstream has to convert it again.
+      - name: Name the packages the way the release will
+        run: |
+          for f in Ansel-*.dmg; do
+            [ -e "${f}" ] || continue
+            case "${f}" in
+              *'~'*) mv -- "${f}" "${f//\~/.}" ;;
+            esac
+          done
+
+      # Publishing nothing is not a success. With both downloads allowed to fail, an empty
+      # workspace would otherwise reach `tip' as an empty file list and the run would pass
+      # having shipped nothing -- the failure this job exists to make visible.
+      - name: Check that something was built
+        run: |
+          mapfile -t dmgs < <(find . -type f -iname 'Ansel-*.dmg' -printf '%f\n' | sort)
+          if [ "${#dmgs[@]}" -eq 0 ]; then
+            echo "Neither architecture produced a DMG; there is nothing to publish." >&2
+            exit 1
+          fi
+          printf 'Publishing %d package(s):\n' "${#dmgs[@]}"
+          printf '  %s\n' "${dmgs[@]}"
+      # One package per step, so one of them failing cannot take the other with it. tip ends on
+      # a bare loop -- `for artifact in artifacts: gh_release.upload_asset(artifact)', with no
+      # try/except -- so the first upload to raise kills the process and every file still
+      # queued behind it is never attempted. Handing it both packages at once made that order
+      # decide which architecture was lost: on 2026-09-15 arm64 came first alphabetically,
+      # collided with itself, and the Intel package behind it was never tried at all, though it
+      # was new and had nothing to collide with.
+      #
+      # continue-on-error on each, because whether the run as a whole succeeded is not this
+      # step's to decide: the check below asks the release what actually arrived, which is the
+      # only answer that cannot be wrong, and it runs after BOTH have been attempted.
+      #
+      # Each is skipped when its package was not built, since tip raises on an empty file list
+      # and an architecture that did not build is the ordinary case this job exists to survive.
+      - name: Publish the Apple Silicon package
+        if: ${{ hashFiles('Ansel-*-arm64.dmg') != '' }}
+        continue-on-error: true
         uses: aurelienpierreeng/tip@master
         with:
           tag: ${{ env.TAG }}
           rm: false
           token: ${{ secrets.GITHUB_TOKEN }}
-          files: Ansel-*.dmg
+          files: Ansel-*-arm64.dmg
+      - name: Publish the Intel package
+        if: ${{ hashFiles('Ansel-*-i386.dmg') != '' }}
+        continue-on-error: true
+        uses: aurelienpierreeng/tip@master
+        with:
+          tag: ${{ env.TAG }}
+          rm: false
+          token: ${{ secrets.GITHUB_TOKEN }}
+          files: Ansel-*-i386.dmg
 
+      # The release is asked what it holds, rather than the upload steps being believed. This
+      # is what makes continue-on-error above safe: a package that did not arrive fails the
+      # job here, by name, after every package has had its turn. The packages that did arrive
+      # are its output, and the only ones the Matrix message may announce.
+      - name: Check every package reached the release
+        id: arrived
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          published="$(gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${TAG}" --jq '.assets[].name')"
+          arrived=()
+          missing=()
+          for f in Ansel-*.dmg; do
+            [ -e "${f}" ] || continue
+            if grep -Fxq -- "${f}" <<< "${published}"; then
+              echo "published: ${f}"
+              arrived+=("${f}")
+            else
+              missing+=("${f}")
+            fi
+          done
+          printf 'names=%s\n' "${arrived[*]}" >> "$GITHUB_OUTPUT"
+          if [ "${#missing[@]}" -gt 0 ]; then
+            printf 'NOT published: %s\n' "${missing[@]}" >&2
+            exit 1
+          fi
+
+      # A package that reached the release is announced even when the other did not: the job
+      # still fails for the missing one, and the message only ever names what was sent. No
+      # package sent, no message.
       - name: Install dependencies
+        if: ${{ !cancelled() && steps.arrived.outputs.names != '' }}
         run: |
           python -m pip install simplematrixbotlib
 
+      # The names arrive through the environment rather than expanded into the script body.
       - name: Notify Matrix
-        if: ${{ success() }}
+        if: ${{ !cancelled() && steps.arrived.outputs.names != '' }}
+        env:
+          NAMES: ${{ steps.arrived.outputs.names }}
         run: |
-          FILENAME1=$(tr '~' '.' <<< "$(find . -type f -iname "Ansel-*arm64.dmg")")
-          FILENAME2=$(tr '~' '.' <<< "$(find . -type f -iname "Ansel-*i386.dmg")")
-          MESSAGE="New dmg packages [${FILENAME1}](${{ env.REPO }}/releases/download/${{ env.TAG }}/${FILENAME1}) and [${FILENAME2}](${{ env.REPO }}/releases/download/${{ env.TAG }}/${FILENAME2}) built"
+          links=""
+          count=0
+          for f in ${NAMES}; do
+            links="${links}${links:+ and }[${f}](${REPO}/releases/download/${TAG}/${f})"
+            count=$((count + 1))
+          done
+          if [ "${count}" -eq 1 ]; then
+            MESSAGE="New dmg package ${links} built"
+          else
+            MESSAGE="New dmg packages ${links} built"
+          fi
           python .ci/matrix.py \
           -m "$MESSAGE" \
           -s ${{ secrets.MATRIX_SERVER }} \

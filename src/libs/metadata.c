@@ -46,7 +46,6 @@
 
 #include "metadata/metadata.h"
 #include "common/act_on.h"
-#include "common/selection.h"
 #include "system/macros.h"
 #include "system/mem_alloc.h"
 #include "common/module_versioning.h"
@@ -104,6 +103,7 @@ uint32_t container(dt_lib_module_t *self)
 }
 
 void _textbuffer_changed(GtkTextBuffer *textbuffer, dt_lib_module_t *self);
+static void _write_metadata(GtkTextView *textview, dt_lib_module_t *self);
 
 static gboolean _is_leave_unchanged(GtkTextView *textview)
 {
@@ -190,6 +190,28 @@ static void _selected_metadata_row(void *user_data, const int keyid, const char 
   ctx->metadata[keyid] = g_list_append(ctx->metadata[keyid], g_strdup(value));
 }
 
+/* Write the field being typed in, if any, to the images the panel shows. What was typed is
+ * written as soon as it stops being edited -- a click elsewhere, another image, Tab or Enter --
+ * the way any text field behaves; only Escape discards it. */
+static void _commit_pending_edit(dt_lib_module_t *self)
+{
+  dt_lib_metadata_t *d = (dt_lib_metadata_t *)self->data;
+  if(!d->editing) return;
+
+  for(unsigned int i = 0; i < DT_METADATA_NUMBER; i++)
+  {
+    if(!IS_NULL_PTR(d->textview[i]) && gtk_widget_has_focus(GTK_WIDGET(d->textview[i])))
+    {
+      _write_metadata(d->textview[i], self);
+      return;
+    }
+  }
+}
+
+static void _refresh(dt_lib_module_t *self);
+
+/* Follow the images to act on: when they change, commit the field being edited to the images
+ * it was typed for, then show the new ones. */
 static void _update(dt_lib_module_t *self)
 {
   dt_lib_cancel_postponed_update(self);
@@ -202,29 +224,36 @@ static void _update(dt_lib_module_t *self)
   if(IS_NULL_PTR(imgs) && IS_NULL_PTR(d->last_act_on)) return;
   if(imgs && d->last_act_on)
   {
-    gboolean changed = FALSE;
-    GList *l = d->last_act_on;
-    GList *ll = (GList *)imgs;
-    while(l && ll)
+    const GList *l = d->last_act_on;
+    const GList *ll = imgs;
+    while(l && ll && GPOINTER_TO_INT(l->data) == GPOINTER_TO_INT(ll->data))
     {
-      if(GPOINTER_TO_INT(l->data) != GPOINTER_TO_INT(ll->data))
-      {
-        changed = TRUE;
-        break;
-      }
       l = g_list_next(l);
       ll = g_list_next(ll);
     }
-    if(!changed)
+    // The same images only if both lists end together: one being the start of the other -- a
+    // selection grown by a click -- is a change.
+    if(IS_NULL_PTR(l) && IS_NULL_PTR(ll))
     {
       g_list_free(imgs);
-      imgs = NULL;
       return;
     }
   }
+
+  // A field still being typed in belongs to the images it was typed for: write it to them
+  // before the panel moves on, as a click elsewhere would.
+  _commit_pending_edit(self);
+
   g_list_free(d->last_act_on);
-  d->last_act_on = NULL;
   d->last_act_on = imgs;
+  _refresh(self);
+}
+
+/* Read what the images the panel shows hold into its fields. Called when they change, and after
+ * a write, since a field shared by several images may have become one common value. */
+static void _refresh(dt_lib_module_t *self)
+{
+  dt_lib_metadata_t *d = (dt_lib_metadata_t *)self->data;
 
   GList *metadata[DT_METADATA_NUMBER];
   uint32_t metadata_count[DT_METADATA_NUMBER];
@@ -237,7 +266,7 @@ static void _update(dt_lib_module_t *self)
 
   // using dt_metadata_get() is not possible here. we want to do all this in a single pass, everything else
   // takes ages.
-  const uint32_t imgs_count = g_list_length((GList *)imgs);
+  const uint32_t imgs_count = g_list_length(d->last_act_on);
 
   if(imgs_count > 0)
   {
@@ -290,6 +319,8 @@ static void _metadata_set_list(const int i, GList **key_value, dt_lib_metadata_t
 static void _write_metadata(GtkTextView *textview, dt_lib_module_t *self)
 {
   dt_lib_metadata_t *d = (dt_lib_metadata_t *)self->data;
+  // First: a focus-out raised while this runs must not write the same field a second time.
+  d->editing = FALSE;
 
   GList *key_value = NULL;
   if(textview)
@@ -303,9 +334,16 @@ static void _write_metadata(GtkTextView *textview, dt_lib_module_t *self)
       _metadata_set_list(i, &key_value, d);
   }
 
-  GList *imgs = dt_selection_get_list(dt_selection_get_global());
-
-  dt_metadata_set_list(imgs, key_value, TRUE);
+  // The images the panel shows, not the selection: they are the ones whose values were edited,
+  // and by the time a click on another image commits the field, the selection has moved on.
+  const GList *imgs = d->last_act_on;
+  if(!IS_NULL_PTR(imgs) && !IS_NULL_PTR(key_value))
+  {
+    dt_metadata_set_list(imgs, key_value, TRUE);
+    DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_METADATA_CHANGED,
+                                  DT_METADATA_SIGNAL_NEW_VALUE);
+    dt_image_synch_xmps(imgs);
+  }
 
   for(GList *l = key_value; l; l = l->next)
   {
@@ -315,13 +353,7 @@ static void _write_metadata(GtkTextView *textview, dt_lib_module_t *self)
   g_list_free(key_value);
   key_value = NULL;
 
-  DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_METADATA_CHANGED, DT_METADATA_SIGNAL_NEW_VALUE);
-
-  dt_image_synch_xmps(imgs);
-  g_list_free(imgs);
-  imgs = NULL;
-  _update(self);
-  d->editing = FALSE;
+  _refresh(self);
 }
 
 static void _apply_button_clicked(GtkButton *button, dt_lib_module_t *self)
@@ -365,9 +397,11 @@ static gboolean _key_pressed(GtkWidget *textview, GdkEventKey *event, dt_lib_mod
       {
         if(dt_modifier_is(event->state, 0))
         {
-          _update(self);
-          gtk_window_set_focus(GTK_WINDOW(dt_gui_main_window()), NULL);
+          // Discard: cleared before the focus leaves, so the focus-out writes nothing, then the
+          // fields get back what the images hold.
           d->editing = FALSE;
+          _refresh(self);
+          gtk_window_set_focus(GTK_WINDOW(dt_gui_main_window()), NULL);
           return TRUE;
         }
         break;
@@ -414,6 +448,9 @@ static gboolean _got_focus(GtkWidget *textview, dt_lib_module_t *self)
 static gboolean _lost_focus(GtkWidget *textview, GdkEventFocus *event, dt_lib_module_t *self)
 {
   dt_lib_metadata_t *d = (dt_lib_metadata_t *)self->data;
+  // Clicking elsewhere validates, as in any text field: what was typed is written. Escape is the
+  // way to discard it, and clears the flag before the focus leaves.
+  if(d->editing) _write_metadata(GTK_TEXT_VIEW(textview), self);
   d->editing = FALSE;
   if(_is_leave_unchanged(GTK_TEXT_VIEW(textview)))
   {
@@ -729,7 +766,6 @@ void gui_init(dt_lib_module_t *self)
               "\npress escape to exit the popup window"));
 
     GtkWidget *textview = gtk_text_view_new();
-    dt_accels_disconnect_on_text_input(textview);
     dt_gui_textview_set_padding(GTK_TEXT_VIEW(textview));
 
     GtkTextBuffer *buffer = gtk_text_view_get_buffer(GTK_TEXT_VIEW(textview));
@@ -745,6 +781,10 @@ void gui_init(dt_lib_module_t *self)
     gtk_widget_add_events(textview, GDK_FOCUS_CHANGE_MASK);
 
     g_signal_connect(textview, "key-press-event", G_CALLBACK(_key_pressed), self);
+    /* After _key_pressed, not before: handlers run in connection order, and the text-input one
+     * takes Escape to hand the focus back and stops the emission. Escape would then reach this
+     * module only as a focus-out -- which writes the field -- instead of the discard it means. */
+    dt_accels_disconnect_on_text_input(textview);
     g_signal_connect(textview, "focus", G_CALLBACK(_textview_focus), self);
     g_signal_connect(textview, "populate-popup", G_CALLBACK(_populate_popup_multi), self);
     g_signal_connect(textview, "grab-focus", G_CALLBACK(_got_focus), self);

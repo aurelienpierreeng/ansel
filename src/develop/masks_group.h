@@ -212,6 +212,23 @@ dt_masks_result_t dt_masks_group_first_use(struct dt_develop_t *dev, int root_id
 int dt_masks_group_find_holder(struct dt_develop_t *dev, int formid);
 
 /**
+ * @brief Describe every group of the live list, in dev->forms order, into caller storage.
+ *
+ * The catalogue a caller offers a destination group from -- the shape manager's "Attach to the
+ * group" -- BY VALUE, so the caller neither walks dev->forms nor holds a pointer into a
+ * refcounted form. Retouch and spot groups come too; a caller that must not offer them filters on
+ * dt_masks_form_info_t.is_retouch.
+ *
+ * Takes the masks lock for reading across the walk.
+ *
+ * @param out caller storage, or NULL to query the count only.
+ * @param out_max capacity of @p out in elements.
+ * @return the TOTAL number of groups, which may exceed @p out_max; exactly MIN(total, out_max)
+ *         elements are written. 0 for a NULL dev.
+ */
+guint dt_masks_group_list(struct dt_develop_t *dev, dt_masks_form_info_t *out, guint out_max);
+
+/**
  * @brief Set a group member's opacity.
  *
  * Same id-keyed contract as dt_masks_group_set_member_operation() above, and it exists for a
@@ -233,6 +250,37 @@ int dt_masks_group_find_holder(struct dt_develop_t *dev, int formid);
  */
 dt_masks_result_t dt_masks_group_set_member_opacity(struct dt_develop_t *dev, int group_id, int formid,
                                                     float opacity, dt_masks_member_t *out);
+
+/**
+ * @brief The name a module's own mask group carries: "Group <module>", after the module's
+ * multi-instance name when it has one, its own name otherwise.
+ *
+ * The convention belongs to the masks module because the string it builds is a form's name. It is
+ * published because two callers need the text without a form to write it into: the blend panel
+ * shows it as the name entry's placeholder, and puts it back when the user empties the entry.
+ *
+ * Thread-neutral: reads only @p module. Takes no lock and does not copy-on-write.
+ *
+ * @return a newly allocated string the caller frees, NULL for a NULL module. NOT translated: it is
+ *         stored in the form and persisted to the database and the XMP, so it may not depend on
+ *         the language the user happened to run when the group was created.
+ */
+gchar *dt_masks_group_name_for_module(const struct dt_iop_module_t *module);
+
+/**
+ * @brief Name a group after the module that renders it, by id.
+ *
+ * The write half of dt_masks_group_name_for_module(), and id-keyed for the reason the whole write
+ * API is: a group is refcounted and shared with every history snapshot referencing it, so a rename
+ * is a mutation that must copy on write. A caller holding the form cannot do that correctly --
+ * cloning replaces the object wholesale, and the pointer it wrote through belongs to the copy that
+ * was just abandoned.
+ *
+ * @return OK when the name changed, UNCHANGED when the group already carried it, NOT_FOUND for no
+ *         such group or an id naming a shape, INVALID for a NULL dev or module.
+ */
+dt_masks_result_t dt_masks_group_set_name_from_module(struct dt_develop_t *dev, int group_id,
+                                                      struct dt_iop_module_t *module);
 
 #ifdef __cplusplus
 }

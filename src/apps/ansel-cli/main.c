@@ -25,6 +25,7 @@
     Copyright (C) 2022 Martin Bařinka.
     Copyright (C) 2022 Miloš Komarčević.
     Copyright (C) 2023 Alynx Zhou.
+    Copyright (C) 2026 Guillaume Stutin.
     
     darktable is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -203,9 +204,8 @@ int main(int argc, char *arg[])
 #endif
 
   // get valid locale dir
-  dt_loc_init(NULL, NULL, NULL, NULL, NULL, NULL, NULL);
   char localedir[DT_PATH_MAX] = { 0 };
-  dt_loc_get_localedir(localedir, sizeof(localedir));
+  dt_loc_resolve_localedir(localedir, sizeof(localedir));
   bindtextdomain(GETTEXT_PACKAGE, localedir);
 
   // gtk_parse_args may trigger GTK initialization, so disable GTK locale handling first.
@@ -663,20 +663,24 @@ int main(int argc, char *arg[])
     {
       int id = GPOINTER_TO_INT(iter->data);
       dt_image_t *image = dt_image_cache_get(id, 'w');
-      if(dt_exif_xmp_read(image, xmp_filename, 1) != 0)
-      {
+      if(IS_NULL_PTR(image))
+        fprintf(stderr, "%s", _("Could not read image information from the database."));
+      else if(dt_exif_xmp_read(image, xmp_filename, 1) != 0)
         fprintf(stderr, _("error: can't open xmp file %s"), xmp_filename);
-        fprintf(stderr, "\n");
-        dt_free(m_arg);
-        dt_free(output_filename);
-        if(output_ext)
-        {
-          dt_free(output_ext);
-        }
-        exit(1);
+      else
+      {
+        // don't write new xmp:
+        dt_image_cache_write_release(image, DT_IMAGE_CACHE_RELAXED);
+        continue;
       }
-      // don't write new xmp:
-      dt_image_cache_write_release(image, DT_IMAGE_CACHE_RELAXED);
+      fprintf(stderr, "\n");
+      dt_free(m_arg);
+      dt_free(output_filename);
+      if(output_ext)
+      {
+        dt_free(output_ext);
+      }
+      exit(1);
     }
   }
 
@@ -834,7 +838,8 @@ int main(int argc, char *arg[])
     dt_export_metadata_t metadata;
     metadata.flags = dt_lib_export_metadata_default_flags();
     metadata.list = NULL;
-    if(storage->store(storage, sdata, id, format, fdata, num, total, TRUE, export_masks,
+    // the size is the command line's: no scale factor, whatever the GUI's export module is set to
+    if(storage->store(storage, sdata, id, format, fdata, 0.0, num, total, TRUE, export_masks,
                       icc_type, icc_filename, icc_intent, &metadata) != 0)
       res = 1;
   }
@@ -845,6 +850,7 @@ int main(int argc, char *arg[])
   format->free_params(format, fdata);
   g_list_free(id_list);
   id_list = NULL;
+  dt_free(output_ext);
 
   if(icc_filename)
   {

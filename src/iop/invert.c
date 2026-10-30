@@ -26,6 +26,7 @@
     Copyright (C) 2021 Chris Elston.
     Copyright (C) 2022 Martin Bařinka.
     Copyright (C) 2022 Philipp Lutz.
+    Copyright (C) 2026 Guillaume Stutin.
     
     darktable is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -113,8 +114,9 @@ int legacy_params(dt_iop_module_t *self, const void *const old_params, const int
                                                  self->dev->image_storage.d65_color_matrix, NULL))
       {
         const char *camera = self->dev->image_storage.camera_makermodel;
-        fprintf(stderr, "[invert] `%s' color matrix not found for 4bayer image\n", camera);
-        dt_control_log(_("`%s' color matrix not found for 4bayer image"), camera);
+        gchar *item = g_strdup_printf("%s (%s)", self->dev->image_storage.fullpath, camera);
+        dt_control_alert(_("Camera data missing"), _("color matrix not found for 4bayer image"), item);
+        dt_free(item);
       }
       else
       {
@@ -363,8 +365,7 @@ void gui_update(dt_iop_module_t *self)
                                                  img->d65_color_matrix, NULL))
       {
         const char *camera = img->camera_makermodel;
-        fprintf(stderr, "[invert] `%s' color matrix not found for 4bayer image\n", camera);
-        dt_control_log(_("`%s' color matrix not found for 4bayer image"), camera);
+        dt_control_alert(_("Camera data missing"), _("color matrix not found for 4bayer image"), camera);
       }
     }
   }

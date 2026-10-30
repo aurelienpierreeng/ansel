@@ -122,32 +122,6 @@ void dt_drawlayer_runtime_manager_note_buffer_lock(dt_drawlayer_runtime_manager_
   dt_pthread_mutex_unlock(&priv->mutex);
 }
 
-void dt_drawlayer_runtime_manager_note_sidecar_io(dt_drawlayer_runtime_manager_t *state, const gboolean active)
-{
-  dt_drawlayer_runtime_private_t *priv = _runtime_private(state);
-  if(IS_NULL_PTR(priv)) return;
-  dt_pthread_mutex_lock(&priv->mutex);
-  priv->sidecar_io_active = active;
-  priv->threads[DT_DRAWLAYER_RUNTIME_ACTOR_TIFF_IO].active = active;
-  priv->threads[DT_DRAWLAYER_RUNTIME_ACTOR_TIFF_IO].waiting = FALSE;
-  dt_pthread_mutex_unlock(&priv->mutex);
-}
-
-void dt_drawlayer_runtime_manager_note_thread(dt_drawlayer_runtime_manager_t *state,
-                                              const dt_drawlayer_runtime_actor_t actor,
-                                              const gboolean active,
-                                              const gboolean waiting,
-                                              const guint queued)
-{
-  dt_drawlayer_runtime_private_t *priv = _runtime_private(state);
-  if(IS_NULL_PTR(priv) || actor <= DT_DRAWLAYER_RUNTIME_ACTOR_NONE || actor >= DT_DRAWLAYER_RUNTIME_ACTOR_COUNT) return;
-  dt_pthread_mutex_lock(&priv->mutex);
-  priv->threads[actor].active = active;
-  priv->threads[actor].waiting = waiting;
-  priv->threads[actor].queued = queued;
-  dt_pthread_mutex_unlock(&priv->mutex);
-}
-
 static void _fill_runtime_inputs(const dt_drawlayer_runtime_context_t *runtime,
                                  const dt_drawlayer_worker_snapshot_t *worker_snapshot,
                                  dt_drawlayer_runtime_inputs_t *inputs)
@@ -208,14 +182,12 @@ static void _sync_runtime_state_from_inputs(dt_drawlayer_runtime_manager_t *stat
                                             const dt_drawlayer_runtime_inputs_t *inputs)
 {
   dt_drawlayer_runtime_private_t *priv = _runtime_private(state);
-  const dt_drawlayer_session_state_t *session = inputs ? inputs->session : NULL;
   const dt_drawlayer_process_state_t *process = inputs ? inputs->process : NULL;
   const dt_drawlayer_worker_snapshot_t *worker = inputs ? inputs->worker : NULL;
   const dt_drawlayer_cache_patch_t *base_patch = inputs ? inputs->base_patch : NULL;
 
   if(IS_NULL_PTR(priv)) return;
   state->painting_active = inputs && inputs->painting_active;
-  state->background_job_running = session && session->background_job_running;
 
   if(!IS_NULL_PTR(process))
   {
@@ -786,7 +758,7 @@ dt_drawlayer_runtime_result_t dt_drawlayer_runtime_manager_update(dt_drawlayer_r
         _update_manager_information(state, &begin, host, NULL);
         if(self && !dt_drawlayer_flush_layer_cache(self))
         {
-          dt_control_log(_("failed to write drawing layer sidecar"));
+          dt_control_alert(_("Drawing not saved"), _("failed to write drawing layer sidecar"), NULL);
           result.ok = FALSE;
         }
         const dt_drawlayer_runtime_update_request_t end = {

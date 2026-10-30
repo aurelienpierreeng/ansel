@@ -6,6 +6,7 @@
     Copyright (C) 2022 Martin Bařinka.
     Copyright (C) 2022 Miloš Komarčević.
     Copyright (C) 2025 Aurélien PIERRE.
+    Copyright (C) 2026 Guillaume Stutin.
     
     darktable is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -74,7 +75,6 @@ static gboolean _iop_plugin_focus_accel(GtkAccelGroup *accel_group, GObject *acc
 #ifdef GDK_WINDOWING_QUARTZ
 #endif
 
-#include <assert.h>
 #include <math.h>
 #include <stdlib.h>
 #include <string.h>
@@ -416,14 +416,23 @@ static void _iop_color_picker_data_ready_callback(gpointer instance, gpointer us
   GtkWidget *picker = NULL;
   dt_dev_pixelpipe_t *pipe = NULL;
   const dt_dev_pixelpipe_iop_t *piece = NULL;
-  if(IS_NULL_PTR(module) || IS_NULL_PTR(module->color_picker_apply)) return;
+  if(IS_NULL_PTR(module)) return;
   if(dt_iop_color_picker_get_ready_data(module, &picker, &pipe, &piece)) return;
 
   dt_print(DT_DEBUG_DEV, "[picker] dispatch module=%s picker=%p pipe=%p hash=%" PRIu64 "\n",
            module->op, (void *)picker, (void *)pipe, piece ? piece->global_hash : 0);
 
-  if(!module->gui->blend_data || !blend_color_picker_apply(module, picker, pipe, (dt_dev_pixelpipe_iop_t *)piece))
+  if((!module->gui->blend_data || !blend_color_picker_apply(module, picker, pipe, (dt_dev_pixelpipe_iop_t *)piece))
+     && module->color_picker_apply)
     module->color_picker_apply(module, picker, pipe, (dt_dev_pixelpipe_iop_t *)piece);
+}
+
+/* The pickers of the blending panel are fed by the same signal as a module's own. A module with no
+ * picker of its own still has those as soon as it blends, so both kinds subscribe: gating on
+ * color_picker_apply alone left every such module's blend picker updated only when (re)activated. */
+static gboolean _iop_listens_to_picker_data(const dt_iop_module_t *module)
+{
+  return module->color_picker_apply || (module->flags() & IOP_FLAGS_SUPPORTS_BLENDING);
 }
 
 static void _gui_delete_callback(GtkButton *button, dt_iop_module_t *module)
@@ -928,24 +937,25 @@ static void _iop_panel_label(dt_iop_module_t *module)
     return;
 
   dt_gui_module_t *mod = (dt_gui_module_t *)module;
-  if(mod->instance_name)
+  if(!IS_NULL_PTR(mod->instance_accel_path))
   {
-    char *instance_path = dt_accels_build_path(_("Darkroom/Modules/Instances"), mod->instance_name);
-    dt_accels_remove_shortcut(dt_gui_get_accels(), instance_path);
-    dt_free(instance_path);
-    dt_free(mod->instance_name);
+    dt_accels_remove_shortcut(dt_gui_get_accels(), mod->instance_accel_path);
+    dt_free(mod->instance_accel_path);
   }
 
   gchar *clean_name = delete_underscore(module->name());
   dt_capitalize_label(clean_name);
 
-  mod->instance_name
-      = g_strdup_printf("%s/%s", clean_name, (module->multi_name[0] != '\0') ? module->multi_name : "0");
+  // The module name and the instance name, which the user types, are two levels of the path:
+  // each one goes through dt_accels_build_path() on its own, so that neither can split into more.
+  gchar *module_path = dt_accels_build_path(_("Darkroom/Modules/Instances"), clean_name);
+  const char *instance = (module->multi_name[0] != '\0') ? module->multi_name : "0";
+  mod->instance_accel_path = dt_accels_build_path(module_path, instance);
 
   dt_accels_new_virtual_instance_shortcut(dt_gui_get_accels(), _iop_plugin_focus_accel, module,
-                                          dt_gui_get_accels()->darkroom_accels, _("Darkroom/Modules/Instances"),
-                                          mod->instance_name);
+                                          dt_gui_get_accels()->darkroom_accels, module_path, instance);
 
+  dt_free(module_path);
   dt_free(clean_name);
 
   gtk_label_set_ellipsize(GTK_LABEL(lab), !module->multi_name[0] ? PANGO_ELLIPSIZE_END: PANGO_ELLIPSIZE_MIDDLE);
@@ -1024,9 +1034,6 @@ void dt_iop_gui_init(dt_iop_module_t *module)
     gchar *clean_name = delete_underscore(module->name());
     dt_capitalize_label(clean_name);
 
-    // slash is not allowed in module names because that makes accel pathes fail
-    assert(g_strrstr(clean_name, "/") == NULL);
-
     dt_gui_module_t *mod = (dt_gui_module_t *)module;
     const gchar *const main_scope = _("Darkroom/Modules");
     mod->accel_path =  dt_accels_build_path(main_scope, clean_name);
@@ -1046,7 +1053,7 @@ void dt_iop_gui_init(dt_iop_module_t *module)
 
   // We absolutely need to init the module controls after the module object
   if(module->gui_init) module->gui_init(module);
-  if(module->color_picker_apply)
+  if(_iop_listens_to_picker_data(module))
   {
     DT_DEBUG_CONTROL_SIGNAL_CONNECT(dt_control_signal_get_global(), DT_SIGNAL_CONTROL_PICKERDATA_READY,
                                     G_CALLBACK(_iop_color_picker_data_ready_callback), module);
@@ -1102,14 +1109,10 @@ void dt_iop_gui_cleanup_module(dt_iop_module_t *module)
     dt_free(mod->accel_path);
   }
 
-  if(mod->instance_name)
-  {
-    char *instance_path = dt_accels_build_path(_("Darkroom/Modules/Instances"), mod->instance_name);
-    dt_accels_remove_shortcut(dt_gui_get_accels(), instance_path);
-    dt_free(instance_path);
-  }
+  if(!IS_NULL_PTR(mod->instance_accel_path))
+    dt_accels_remove_shortcut(dt_gui_get_accels(), mod->instance_accel_path);
 
-  dt_free(mod->instance_name);
+  dt_free(mod->instance_accel_path);
 
   // widget_list doesn't own the widget referenced, so don't deep_free
   dt_gui_module_t *m = DT_GUI_MODULE(module);
@@ -1122,7 +1125,7 @@ void dt_iop_gui_cleanup_module(dt_iop_module_t *module)
   dt_free(m->view);
   m->view = NULL;
 
-  if(module->color_picker_apply)
+  if(_iop_listens_to_picker_data(module))
   {
     DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(dt_control_signal_get_global(), G_CALLBACK(_iop_color_picker_data_ready_callback), module);
   }
@@ -1201,11 +1204,11 @@ void dt_iop_gui_update(dt_iop_module_t *module)
   dt_gui_freeze_end();
 }
 
-static void _gui_reset_callback(GtkButton *button, GdkEventButton *event, dt_iop_module_t *module)
+static gboolean _gui_reset_callback(GtkButton *button, GdkEventButton *event, dt_iop_module_t *module)
 {
   // never use the callback if module is always disabled
   const gboolean disabled = !module->default_enabled && module->hide_enable_button;
-  if(disabled) return;
+  if(disabled) return FALSE;
 
   //Ctrl is used to apply any auto-presets to the current module
   //If Ctrl was not pressed, or no auto-presets were applied, reset the module parameters
@@ -1242,6 +1245,7 @@ static void _gui_reset_callback(GtkButton *button, GdkEventButton *event, dt_iop
 
     dt_dev_add_history_item(module->dev, module, TRUE, TRUE);
   }
+  return TRUE;
 }
 
 static void _presets_popup_callback(GtkButton *button, dt_iop_module_t *module)

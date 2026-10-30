@@ -42,6 +42,7 @@
     Copyright (C) 2022 Nicolas Auffray.
     Copyright (C) 2022 Philipp Lutz.
     Copyright (C) 2022 Victor Forsiuk.
+    Copyright (C) 2026 Guillaume Stutin.
     
     darktable is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -1169,9 +1170,8 @@ static void prepare_matrices(dt_iop_module_t *module)
                                               module->dev->image_storage.d65_color_matrix,
                                               g->XYZ_to_CAM, g->CAM_to_XYZ))
   {
-    char *camera = module->dev->image_storage.camera_makermodel;
-    fprintf(stderr, "[temperature] `%s' color matrix not found for image\n", camera);
-    dt_control_log(_("`%s' color matrix not found for image"), camera);
+    const char *camera = module->dev->image_storage.camera_makermodel;
+    dt_control_alert(_("Camera data missing"), _("color matrix not found for image"), camera);
   }
 }
 
@@ -1205,10 +1205,11 @@ static void find_coeffs(dt_iop_module_t *module, double coeffs[4])
     //  on screen the more important message about missing sample and the way
     //  to contribute.
     if(!img->camera_missing_sample)
-      dt_control_log(_("failed to read camera white balance information from `%s'!"),
-                     img->filename);
-    fprintf(stderr, "[temperature] failed to read camera white balance information from `%s'!\n",
-            img->filename);
+      dt_control_alert(_("Camera data missing"), _("failed to read camera white balance information!"),
+                       img->filename);
+    else
+      fprintf(stderr, "[temperature] failed to read camera white balance information from `%s'!\n",
+              img->filename);
   }
 
   double bwb[4];

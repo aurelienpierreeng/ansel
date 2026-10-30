@@ -809,12 +809,12 @@ void init_presets(dt_iop_module_so_t *self)
                                                          { 0.0f, 0.0f, 0.0f },
                                                          TRUE };
   dt_gui_presets_add_generic(_("15:10 postcard white"), self->op,
-                             self->version(), &p, sizeof(p), 1, DEVELOP_BLEND_CS_NONE);
+                             self->version(), &p, sizeof(p), 1);
 
   p.color[0] = p.color[1] = p.color[2] = 0.0f;
   p.frame_color[0] = p.frame_color[1] = p.frame_color[2] = 1.0f;
   dt_gui_presets_add_generic(_("15:10 postcard black"), self->op,
-                             self->version(), &p, sizeof(p), 1, DEVELOP_BLEND_CS_NONE);
+                             self->version(), &p, sizeof(p), 1);
 }
 
 void color_picker_apply(dt_iop_module_t *self, GtkWidget *picker, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece)

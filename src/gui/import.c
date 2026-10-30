@@ -814,7 +814,7 @@ static void _set_help_string(dt_lib_import_t *d, gboolean copy)
 
 static void _set_test_path(dt_lib_import_t *d, dt_image_t *img)
 {
-  if(IS_NULL_PTR(d->path_file) || IS_NULL_PTR(d->path_file))
+  if(IS_NULL_PTR(d->path_file))
     return;
 
   const gboolean duplicate = dt_conf_get_bool("ui_last/import_copy");
@@ -826,69 +826,71 @@ static void _set_test_path(dt_lib_import_t *d, dt_image_t *img)
 
   char datetime_override[DT_DATETIME_LENGTH] = { 0 };
   const char *date = gtk_entry_get_text(GTK_ENTRY(d->datetime));
-  GList *file = g_list_prepend(NULL, g_strdup(d->path_file));
 
+  // Both guards below run BEFORE the file list is built: the list is only ever released
+  // through dt_control_import_data_free() at the end, so anything returning between the two
+  // would have to free it by hand.
   if(date[0] && !dt_datetime_entry_to_exif(datetime_override, sizeof(datetime_override), date))
   {
     dt_control_log(_("invalid date/time format for import"));
+    gtk_label_set_text(GTK_LABEL(d->test_path), _("Please check the date."));
     return;
   }
 
-  if(IS_NULL_PTR(file->data) || !dt_supported_image(file->data))
+  if(!dt_supported_image(d->path_file))
   {
     gtk_label_set_text(GTK_LABEL(d->test_path), _("Choose a file to see the result..."));
     return;
   }
-  else
+
+  GList *file = g_list_prepend(NULL, g_strdup(d->path_file));
+  gchar *basedir = dt_conf_get_string("session/base_directory_pattern");
+  dt_control_import_t data = {.imgs = file,
+                              .datetime = dt_string_to_datetime(date),
+                              .copy = 1,
+                              .jobcode = dt_conf_get_string("ui_last/import_jobcode"),
+                              .base_folder = basedir,
+                              .target_subfolder_pattern = dt_conf_get_string("session/sub_directory_pattern"),
+                              .target_file_pattern = dt_conf_get_string("session/filename_pattern"),
+                              .target_dir = NULL,
+                              .elements = 1,
+                              .discarded = NULL,
+                              };
+
+  gboolean free_after = FALSE;
+  if(IS_NULL_PTR(img))
   {
-    gchar *basedir = dt_conf_get_string("session/base_directory_pattern");
-    dt_control_import_t data = {.imgs = file,
-                                .datetime = dt_string_to_datetime(date),
-                                .copy = 1,
-                                .jobcode = dt_conf_get_string("ui_last/import_jobcode"),
-                                .base_folder = basedir,
-                                .target_subfolder_pattern = dt_conf_get_string("session/sub_directory_pattern"),
-                                .target_file_pattern = dt_conf_get_string("session/filename_pattern"),
-                                .target_dir = NULL,
-                                .elements = 1,
-                                .discarded = NULL,
-                                };
+    img = dt_alloc_align(sizeof(dt_image_t)); // dt_image_t is 64-aligned, see #1212
+    dt_image_init(img);
 
-    gboolean free_after = FALSE;
-    if(IS_NULL_PTR(img))
-    {
-      img = dt_alloc_align(sizeof(dt_image_t)); // dt_image_t is 64-aligned, see #1212
-      dt_image_init(img);
+    // Generate file I/O only if the pattern is using EXIF variables.
+    // Otherwise, discard it since it's really expensive if the file is on external/remote storage.
+    // This is mandatory BEFORE expanding variables in pattern
+    if(strstr(data.target_file_pattern, "$(EXIF") != NULL
+      || strstr(data.target_subfolder_pattern, "$(EXIF") != NULL )
+      dt_exif_read(img, (const char*)file->data);
 
-      // Generate file I/O only if the pattern is using EXIF variables.
-      // Otherwise, discard it since it's really expensive if the file is on external/remote storage.
-      // This is mandatory BEFORE expanding variables in pattern
-      if(strstr(data.target_file_pattern, "$(EXIF") != NULL
-        || strstr(data.target_subfolder_pattern, "$(EXIF") != NULL )
-        dt_exif_read(img, (const char*)file->data);
-
-      free_after = TRUE;
-    }
-
-    gchar *_path = dt_build_filename_from_pattern((const char *const)file->data, 1, img, &data);
-    gchar * cut = g_strdup(g_strrstr(basedir, G_DIR_SEPARATOR_S));
-    gchar *fake_path = g_strdup(g_strrstr(_path, cut));
-
-    if(free_after)
-    {
-      dt_free_align(img);
-    }
-
-    if(fake_path && fake_path[0] != 0)
-      _gtk_label_set_and_free(d->test_path, g_strdup_printf(_("...%s"), fake_path));
-    else
-      gtk_label_set_text(GTK_LABEL(d->test_path), _("Can't build a valid path."));
-
-    dt_free(cut);
-    dt_free(_path);
-    dt_free(fake_path);
-    dt_control_import_data_free(&data);
+    free_after = TRUE;
   }
+
+  gchar *_path = dt_build_filename_from_pattern((const char *const)file->data, 1, img, &data);
+  gchar * cut = g_strdup(g_strrstr(basedir, G_DIR_SEPARATOR_S));
+  gchar *fake_path = g_strdup(g_strrstr(_path, cut));
+
+  if(free_after)
+  {
+    dt_free_align(img);
+  }
+
+  if(fake_path && fake_path[0] != 0)
+    _gtk_label_set_and_free(d->test_path, g_strdup_printf(_("...%s"), fake_path));
+  else
+    gtk_label_set_text(GTK_LABEL(d->test_path), _("Can't build a valid path."));
+
+  dt_free(cut);
+  dt_free(_path);
+  dt_free(fake_path);
+  dt_control_import_data_free(&data);
 }
 
 // Words the selected-files label according to the active GUI filter (raw/raster get called out

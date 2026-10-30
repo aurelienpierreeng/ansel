@@ -1,6 +1,7 @@
 /*
    This file is part of Ansel,
    Copyright (C) 2026 Aurélien PIERRE.
+   Copyright (C) 2026 Guillaume Stutin.
 
    Ansel is free software: you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -104,11 +105,12 @@ static inline int _knee_p2(const int chan_a, const int chan_b)
 }
 
 __DT_CLONE_TARGETS__
-void _hl_knee_estimate(const float *const restrict input, const size_t width, const size_t height,
-                       const uint32_t filters, const dt_iop_roi_t *const roi_in, const uint8_t (*const xtrans)[6],
-                       const dt_aligned_pixel_t clipval_raw, _hl_knee_curve_t curves[3],
-                       const dt_dev_pixelpipe_t *pipe)
+int _hl_knee_estimate(const float *const restrict input, const size_t width, const size_t height,
+                      const uint32_t filters, const dt_iop_roi_t *const roi_in, const uint8_t (*const xtrans)[6],
+                      const dt_aligned_pixel_t clipval_raw, _hl_knee_curve_t curves[3],
+                      const dt_dev_pixelpipe_t *pipe)
 {
+  int abandoned = 0;
   for(int c = 0; c < 3; c++)
   {
     curves[c].engaged = 0;
@@ -126,7 +128,7 @@ void _hl_knee_estimate(const float *const restrict input, const size_t width, co
   const size_t bin_w = width / quad_size;
   const size_t bin_h = height / quad_size;
   const size_t bin_pixels = bin_w * bin_h;
-  if(bin_w < 16 || bin_h < 16) return;
+  if(bin_w < 16 || bin_h < 16) return 0;
 
   float *const restrict binned
       = dt_pixelpipe_cache_alloc_align_float(bin_pixels * 3, pipe); // planar, clip-normalized
@@ -194,6 +196,13 @@ void _hl_knee_estimate(const float *const restrict input, const size_t width, co
 
   for(int sigma_index = 0; sigma_index < DT_HL_KNEE_NSIGMAS; sigma_index++)
   {
+    // The pipe abandoned this run: stop between two scales. The estimate can take half of the CPU
+    // harmonic driver, all of it ahead of the first region.
+    if(dt_dev_pixelpipe_has_shutdown(pipe))
+    {
+      abandoned = 1;
+      goto cleanup;
+    }
     const float sigma = sigmas[sigma_index];
 
     // ---- joint moments: weight w = 1 only where all three channels are trusted (< LO), so clipped
@@ -511,6 +520,7 @@ cleanup:;
   dt_pixelpipe_cache_free_align(pk_in);
   dt_pixelpipe_cache_free_align(pk_out);
   free(done);
+  return abandoned;
 }
 
 __DT_CLONE_TARGETS__

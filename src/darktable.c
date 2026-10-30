@@ -261,7 +261,10 @@ static GLogWriterOutput _gtk_log_writer_filter(GLogLevelFlags log_level, const G
 static int usage(const char *argv0)
 {
 #ifdef _WIN32
-  char *logfile = g_build_filename(g_get_user_cache_dir(), "ansel", "ansel-log.txt", NULL);
+  /* Same resolution as main()'s redirection, so the two cannot name different files. */
+  char *logdir = dt_loc_default_user_cache_dir();
+  char *logfile = g_build_filename(logdir, "ansel-log.txt", NULL);
+  dt_free(logdir);
 #endif
   // clang-format off
   printf("usage: %s [options] [IMG_1234.{RAW,..}|image_folder/]\n", argv0);
@@ -454,7 +457,8 @@ int dt_load_from_string(const gchar *input, gboolean open_image_in_dr, gboolean 
   return id;
 }
 
-// Returns total system memory in kiloBytes
+// Returns total system memory in KiB: /proc/meminfo's "kB" is 1024 bytes, and the other
+// platforms divide a byte count by 1024.
 static inline size_t _get_total_memory()
 {
 #if defined(__linux__)
@@ -1554,15 +1558,6 @@ int dt_init(int argc, char *argv[], const gboolean init_gui, const gboolean load
   // This handler reloads dt_image_t from DB so all downstream callbacks see fresh metadata.
   dt_image_cache_connect_info_changed_first(darktable.signals);
 
-  // Make sure that the database and xmp files are in sync
-  // We need conf and db to be up and running for that which is the case here.
-  // FIXME: is this also useful in non-gui mode?
-  GList *changed_xmp_files = NULL;
-  if(init_gui && dt_conf_get_bool("run_crawler_on_start"))
-  {
-    changed_xmp_files = dt_control_crawler_run();
-  }
-
   if(init_gui)
   {
     dt_control_init(darktable.control);
@@ -1797,11 +1792,15 @@ int dt_init(int argc, char *argv[], const gboolean init_gui, const gboolean load
 #endif
   }
 
-  // last but not least construct the popup that asks the user about images whose xmp files are newer than the
-  // db entry
-  if(init_gui && changed_xmp_files)
+  // Make sure that the database and xmp files are in sync. This is a background job on
+  // purpose: it costs one directory listing per film roll, so on a network-mounted library it
+  // takes seconds to minutes, and it used to run to completion right here on the startup
+  // path -- before dt_control_init(), before the main window existed. It asks the user about
+  // images whose xmp files are newer than the db entry itself, once it knows of any.
+  // FIXME: is this also useful in non-gui mode?
+  if(init_gui && dt_conf_get_bool("run_crawler_on_start"))
   {
-    dt_control_crawler_show_image_list(changed_xmp_files);
+    dt_control_crawler_run_in_background();
   }
 
   if(init_gui)
@@ -1869,11 +1868,6 @@ void dt_cleanup()
 {
   const int init_gui = (!IS_NULL_PTR(darktable.gui));
 
-  // Flush crash reporting and mark this session as a clean exit. Done early so
-  // events are sent while the rest of the app is still up; the clean-session
-  // counter it writes is persisted later by dt_conf_cleanup().
-  dt_sentry_shutdown();
-
   // Stop the update check first: it is the one that may still post to the GUI thread.
   dt_updates_shutdown();
 
@@ -1903,16 +1897,17 @@ void dt_cleanup()
 
   // anything that asks user for input should be placed before this line
 
+  /* Everything below this line can fail: the settings and the thumbnails resident in RAM go to
+   * disk now. dt_conf_cleanup() and dt_mipmap_cache_cleanup() write again at the end what the
+   * teardown itself sets and the thumbnails another thread still held. */
+  dt_conf_flush();
+  dt_mipmap_cache_flush_to_disk();
+
   if(init_gui)
   {
     if(!IS_NULL_PTR(darktable.gui->ui))
       dt_ui_cleanup_titlebar(darktable.gui->ui);
 
-    if(darktable.gui->surface)
-    {
-      cairo_surface_destroy(darktable.gui->surface);
-      darktable.gui->surface = NULL;
-    }
 
     // hide main window and do rest of the cleanup in the background
     gtk_widget_hide(dt_ui_main_window(darktable.gui->ui));
@@ -1979,6 +1974,11 @@ void dt_cleanup()
   dt_gui_throttle_cleanup();
   // Needs conf alive: a clean exit with OpenCL running is what clears the driver-crash streak.
   dt_opencl_clear_driver_crash_streak();
+
+  /* Last, so that the crash handler covers the whole teardown, but before dt_conf_cleanup(),
+   * which saves the session counters this writes through dt_conf_set_*(). */
+  dt_sentry_shutdown();
+
   dt_conf_cleanup(darktable.conf);
   dt_free(darktable.conf);
   dt_points_cleanup(darktable.points);
@@ -2431,7 +2431,7 @@ size_t dt_get_memory_pressure_floor(void)
 
 void dt_configure_runtime_performance(dt_sys_resources_t *resources, gboolean init_gui)
 {
-  size_t physical_memory = _get_total_memory() * 1000;
+  size_t physical_memory = _get_total_memory() * 1024;
 
   // A container/cgroup memory limit (Flatpak sandbox, systemd slice, docker...) is
   // the envelope the kernel actually OOM-enforces on us: inside it, the machine's
@@ -2547,8 +2547,8 @@ void dt_configure_runtime_performance(dt_sys_resources_t *resources, gboolean in
   dt_print(DT_DEBUG_MEMORY | DT_DEBUG_CACHE, _("[MEMORY CONFIGURATION] Worker threads: %i\n"), dt_worker_threads());
 
   if(resources->total_memory < resources->headroom_memory + resources->mipmap_memory + resources->pixelpipe_memory)
-    dt_control_log(_("CRITICAL WARNING: Ansel will not be able to use the RAM you allocated it.\n"
-                     "Review your memory settings or add more RAM to your system."));
+    dt_control_alert(_("Not enough memory"), _("CRITICAL WARNING: Ansel will not be able to use the RAM you allocated it.\n"
+                     "Review your memory settings or add more RAM to your system."), NULL);
 }
 
 int dt_capabilities_check(char *capability)

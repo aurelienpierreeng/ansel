@@ -56,7 +56,8 @@
 #                            to compare against.
 #   --keep                  Keep this run's outputs/logs even on full success
 #   --if-configured         Exit 0 silently instead of erroring when no bank is
-#                            configured (used by the pre-commit hook)
+#                            configured, and with a warning when no ansel-cli is
+#                            installed or it does not start (used by the pre-commit hook)
 #   -q, --quiet             Only print the summary and failures
 #   -h, --help              Show this help
 #
@@ -140,7 +141,7 @@ err() { echo "$*" >&2; }
 # the remaining arguments are counted without expanding $2 first.
 need_arg() { [ $# -ge 2 ] || { err "option $1 needs a value"; usage; exit 2; }; }
 
-usage() { sed -n '2,61p' "$0" | sed 's/^#$//; s/^# //'; }
+usage() { sed -n '2,62p' "$0" | sed 's/^#$//; s/^# //'; }
 
 if [ -t 1 ]; then
   C_GREEN=$'\033[32m'
@@ -267,14 +268,12 @@ find_cli() {
   # over guessing a repo-relative layout below.
   local from_path
   from_path="$(command -v ansel-cli 2>/dev/null)" && { printf '%s\n' "$from_path"; return 0; }
-  # Fallback for a build that was never `--install`ed system-wide (e.g. a
-  # relocatable "cmake --install <builddir> --prefix <builddir>" done by hand):
-  # ansel-cli resolves its plugin moduledir relative to its own binary path,
-  # which only lines up correctly once install has populated <builddir>/bin +
-  # <builddir>/lib together. The raw ninja output in build*/src/cli/ansel-cli
-  # looks for its bundled plugins (views/libs/imageio backends) in the wrong
-  # place and silently fails to init (e.g. "can't init develop system") --
-  # kept below only as a last resort.
+  # Everything below names an INSTALLED binary, and that is the whole rule: a raw
+  # ninja binary resolves its plugin moduledir relative to itself, so it looks for
+  # <its own dir>/../lib/ansel/views/modules.manifest -- a layout only `install`
+  # ever creates. It starts, prints its version, and then refuses the first export
+  # with "can't init develop system, aborting". Offering one as a last resort buys
+  # nothing but a CRASH verdict on a bank that passes, blamed on the raws.
   local candidates=(
     "$REPO_ROOT/build/bin/ansel-cli"
     "$REPO_ROOT/install/bin/ansel-cli"
@@ -284,16 +283,22 @@ find_cli() {
     "$REPO_ROOT/build_debug/bin/ansel-cli"
     "$REPO_ROOT/build_ASAN/bin/ansel-cli"
     "$REPO_ROOT/install_ASAN/bin/ansel-cli"
-    "$REPO_ROOT/build/src/cli/ansel-cli"
-    "$REPO_ROOT/build_Release/src/cli/ansel-cli"
-    "$REPO_ROOT/build_Debug/src/cli/ansel-cli"
-    "$REPO_ROOT/build_release/src/cli/ansel-cli"
-    "$REPO_ROOT/build_debug/src/cli/ansel-cli"
-    "$REPO_ROOT/build_ASAN/src/cli/ansel-cli"
+    # build.sh's own INSTALL_PREFIX_DEFAULT, same value on every platform.
+    "/opt/ansel/bin/ansel-cli"
   )
   local c
   for c in "${candidates[@]}"; do
     [ -x "$c" ] && { printf '%s\n' "$c"; return 0; }
+  done
+  # Last, ask each build tree where IT was installed. This is what keeps a custom
+  # --prefix reachable -- a build installed under $HOME by someone without sudo,
+  # so nothing landed in /usr/local/bin and none of the well-known paths above
+  # match. `installed_cli_for` takes any path inside the tree and reads the
+  # CMAKE_INSTALL_PREFIX its CMakeCache.txt recorded.
+  local d
+  for d in "$REPO_ROOT"/build "$REPO_ROOT"/build_*; do
+    [ -f "$d/CMakeCache.txt" ] || continue
+    c="$(installed_cli_for "$d/CMakeCache.txt")" && [ -x "$c" ] && { printf '%s\n' "$c"; return 0; }
   done
   return 1
 }
@@ -330,9 +335,14 @@ toolchain_bin_dir_for() {
   # unrelated /mingw64 vs. a standalone C:\msys64\ucrt64 build) -- guessing a
   # flavor dir name off the current shell's own PATH doesn't reliably land on the
   # right install, so read the compiler path CMake recorded for this exact build.
-  local bin="$1" d cache compiler compiler_dir
+  local bin="$1" d prev="" cache compiler compiler_dir
   d="$(dirname "$bin")"
-  while [ "$d" != "/" ] && [ -n "$d" ]; do
+  # Stop when dirname stops making progress, not only at "/". A path can be
+  # drive-rooted on Windows ("C:/msys64/..."), and dirname's fixed point there is
+  # "C:" -- never "/", never empty -- so a walk guarded on "/" alone spins
+  # forever, forking one dirname per turn. The pre-commit hook hands this script
+  # exactly such a path, since git rev-parse --show-toplevel answers in that form.
+  while [ -n "$d" ] && [ "$d" != "/" ] && [ "$d" != "$prev" ]; do
     cache="$d/CMakeCache.txt"
     if [ -f "$cache" ]; then
       compiler="$(sed -n 's/^CMAKE_C_COMPILER:FILEPATH=//p' "$cache")"
@@ -342,6 +352,7 @@ toolchain_bin_dir_for() {
       printf '%s\n' "$compiler_dir"
       return 0
     fi
+    prev="$d"
     d="$(dirname "$d")"
   done
   return 1
@@ -356,9 +367,10 @@ installed_cli_for() {
   # can't find its views/libs/imageio plugins. If this build was ever installed
   # (CMAKE_INSTALL_PREFIX recorded in its CMakeCache.txt has a populated bin/),
   # prefer that binary over the raw, not-installed one found by find_cli().
-  local bin="$1" d cache prefix prefix_dir candidate
+  local bin="$1" d prev="" cache prefix prefix_dir candidate
   d="$(dirname "$bin")"
-  while [ "$d" != "/" ] && [ -n "$d" ]; do
+  # Same termination rule as toolchain_bin_dir_for() above, for the same reason.
+  while [ -n "$d" ] && [ "$d" != "/" ] && [ "$d" != "$prev" ]; do
     cache="$d/CMakeCache.txt"
     if [ -f "$cache" ]; then
       prefix="$(sed -n 's/^CMAKE_INSTALL_PREFIX:PATH=//p' "$cache")"
@@ -370,14 +382,27 @@ installed_cli_for() {
       done
       return 1
     fi
+    prev="$d"
     d="$(dirname "$d")"
   done
   return 1
 }
 
+# No usable ansel-cli means the test cannot run, which is not a regression: under
+# --if-configured (the pre-commit hook) that is a warning and the commit goes on, as it does
+# when no bank is configured; run by hand, it is an error.
+cli_unusable() {
+  if [ "$IF_CONFIGURED" = yes ]; then
+    err "${C_ORANGE}image_test: skipped -- $1${C_RESET}"
+    exit 0
+  fi
+  err "${C_RED}$1${C_RESET}"
+  exit 1
+}
+
 CLI_WAS_EXPLICIT=no
 [ -n "$CLI_BIN" ] && CLI_WAS_EXPLICIT=yes
-CLI_BIN="$(find_cli)" || { err "ansel-cli not found; build it or pass --cli <path>"; exit 1; }
+CLI_BIN="$(find_cli)" || cli_unusable "no installed ansel-cli found; run build.sh --install, or pass --cli <path>"
 # toolchain_bin_dir_for() below needs the raw build tree (it walks up looking for
 # CMakeCache.txt) -- capture it before installed_cli_for() potentially swaps
 # CLI_BIN to an installed binary that lives outside any build tree entirely.
@@ -412,6 +437,40 @@ if [ -n "$LIBDIR" ]; then
 fi
 if TOOLCHAIN_BIN="$(toolchain_bin_dir_for "$RAW_CLI_BIN")" && [ -d "$TOOLCHAIN_BIN" ]; then
   export PATH="$TOOLCHAIN_BIN:$PATH"
+fi
+
+# --- does it start, and what was it built from ------------------------------
+
+# Establish ONCE that the binary starts, before exporting anything. One that cannot load used
+# to surface as every image reporting CRASH(127) with an empty log -- a fleet of crashes blamed
+# on the raws, when the export never began. Seen 2026-10-02: no build was installed any more,
+# and find_cli() fell back to a month-old ASAN install whose libraries had since been upgraded.
+CLI_VERSION_OUT="$(timeout --kill-after=10 60 "$CLI_BIN" --version 2>&1)"
+CLI_RC=$?
+if [ "$CLI_RC" -ne 0 ]; then
+  why="it exits with status $CLI_RC"
+  # 127 with no output is the loader refusing the binary: a library, or a symbol in one, that
+  # is not there -- typically a build older than the libraries it was linked against.
+  [ "$CLI_RC" -eq 127 ] && why+=", before running anything: a library or one of its symbols could not be loaded -- rebuild it"
+  [ -n "$CLI_VERSION_OUT" ] && why+=$'\n'"$(printf '%s\n' "$CLI_VERSION_OUT" | head -5)"
+  cli_unusable "$CLI_BIN does not start ($why)"
+fi
+CLI_VERSION="$(printf '%s\n' "$CLI_VERSION_OUT" | sed -n 's/^this is ansel-cli //p' | head -1)"
+
+# The results describe the build, not the tree: warn when the build is not from HEAD. The
+# version carries its commit after "~g" (tools/get_git_version_string.sh). At pre-commit time
+# HEAD is the previous commit, so a build of the changes being committed reads as HEAD too.
+cli_commit="$(printf '%s\n' "$CLI_VERSION" | sed -n 's/.*~g\([0-9a-f]\{7,\}\).*/\1/p')"
+if [ -n "$cli_commit" ] && head_commit="$(git -C "$REPO_ROOT" rev-parse -q --verify HEAD 2>/dev/null)"; then
+  if built_commit="$(git -C "$REPO_ROOT" rev-parse -q --verify "$cli_commit^{commit}" 2>/dev/null)"; then
+    if [ "$built_commit" != "$head_commit" ]; then
+      behind="$(git -C "$REPO_ROOT" rev-list --count "$built_commit..$head_commit")"
+      built_date="$(git -C "$REPO_ROOT" log -1 --format=%cs "$built_commit")"
+      err "${C_ORANGE}warning: $CLI_BIN was built from $cli_commit ($built_date), $behind commit(s) behind HEAD -- these results test that build, not this tree${C_RESET}"
+    fi
+  else
+    err "${C_ORANGE}warning: $CLI_BIN was built from $cli_commit, a commit this repository does not have -- these results may not describe this tree${C_RESET}"
+  fi
 fi
 
 # --- per-image export + verdict -------------------------------------------
@@ -680,7 +739,7 @@ run_bank() {
   fi
 
   log "Testing ${#raws[@]} raw file(s) from $BANK_DIR"
-  log "  cli:      $CLI_BIN"
+  log "  cli:      $CLI_BIN${CLI_VERSION:+ ($CLI_VERSION)}"
   log "  jobs:     $jobs (x $THREADS threads)"
   [ -d "$BASELINE_DIR" ] && log "  baseline: $BASELINE_DIR"
 

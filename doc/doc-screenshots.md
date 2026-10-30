@@ -1,5 +1,10 @@
 # Documentation screenshots (`--doc`)
 
+> **Corrected against `fa8e8b86fa` on 2026-09-29.** The audit before that found 4 claim(s)
+> in this file wrong of the tree and 6 stale. The two that matter: darkroom module rows DISAPPEAR outside darkroom rather than greying out, and a map key must be copied from the tree (uncapitalised), not from the module panel. Re-measure
+> before acting on a claim older than the code you are changing, and re-date this line when
+> you do.
+
 Refreshing the manual's illustrations used to mean taking a full-screen capture and cropping
 each widget out of it by hand, once per language. This mode lets the application draw the
 widgets itself, straight into the documentation tree, with the language code already in the
@@ -21,12 +26,25 @@ Nothing else changes, and without the flag the entry does not exist.
 The panel is a tree going from the whole window down to a single slider:
 
 * the top level lists the entry points a manual actually starts from — the tool modules, the
-  darkroom modules, the panels, the window;
+  darkroom modules, the panels, the windows;
+* the *Windows* section holds the main window and every other window the application has
+  built — the shape manager, the module order graph, the tag manager, the event supervisor —
+  named by their title. They are found by asking GTK for every titled toplevel, not listed by
+  hand, so a new window appears without the panel knowing about it. Menus, tooltips, the
+  splash screen and this panel's own windows are left out. A window hidden on close (the shape
+  manager) stays listed and greyed out while closed; one built on demand appears at the first
+  *Refresh* after it is opened;
 * every row unfolds into the real GTK children of its widget, built on demand the first time
-  it is opened;
-* a row whose widget is not currently displayed is greyed out. Modules belonging to the view
-  you are not in stay listed, so the inventory reads the same in lighttable and in darkroom —
-  but you have to be in the right view to capture them.
+  it is opened — and a list or a tree into its items too, see below;
+* a row whose widget is not currently displayed is greyed out. **The two inventories behave
+  differently here, and the code says so at each callback.** *Tool modules* come from
+  `dt_lib_get_global()->plugins`, which holds every view's, so the ones belonging to the view
+  you are not in stay listed and merely grey out — the inventory reads the same in lighttable
+  and in darkroom, and you have to be in the right view to capture them. *Darkroom modules*
+  come from `dt_dev_get_global()->iop`, and that list "is only populated while an image is open
+  in darkroom" (`darktable.c:853`): `views/darkroom.c:2234` sets `dev->iop = dev->alliop = NULL`
+  on `leave()`, so those rows **disappear** from the inventory rather than greying out. Capture
+  them with an image open.
 
 Selecting a row draws it into the **preview** beside the tree, with its pixel size. That is
 the reliable way to tell rows apart: names can only go so far on anonymous toolkit plumbing,
@@ -67,17 +85,48 @@ its name and its children from the innermost. Only boxes, grids, scrolled window
 and overlays are folded away: a `GtkButton` also holds a single child, and folding it would
 delete the very row someone wants.
 
+### Items of a list or a tree
+
+The rows of a `GtkTreeView` are not widgets — the view paints them from its cell renderers —
+so walking GTK children never reaches them. A tree view therefore unfolds into its **items**,
+and an item with children into those, built lazily like the rest. An item is named after the
+text its cells show, read from the renderers the way the view draws it (a model column may
+hold an id or a sort key), followed by `(GtkTreeView row)` — which keeps an item reading
+"Exposure" from taking the map key of the module.
+
+Capturing an item draws the whole view and keeps the item's band: the view's full width and
+the row's height, indentation and selection highlight as they are on screen. An item is
+capturable only while it is **wholly visible** — a collapsed parent, a row scrolled out of
+sight or cut by the edge of the list all count as not displayed, and the capture reports it
+as skipped. The panel does not scroll or unfold the application's lists itself, for the same
+reason it does not call `gtk_widget_show_all()`.
+
+An item stays tied to the model its view showed when the row was built, because
+`_tree_row_area()` is resolved once, when the row is written (`doc_screenshot.c:661`, the only
+write of `COL_ENABLED` for an item row). A list that rebuilds itself into a new model — the
+shape manager calls `gtk_tree_view_set_model()` on every change (`libs/shape_manager.c:2721`) —
+therefore greys its items out until *Refresh*.
+
 ## The widget-to-page map
 
 Put a file named `screenshots.map` at the root of the destination folder:
 
 ```
 # <row label as the tree shows it> = <path of the illustration, relative to this file>
-Exposure          = content/modules/exposure/exposure.jpg
-Tone equalizer    = content/modules/tone-equalizer/tone-equalizer.jpg
+exposure          = content/modules/exposure/exposure.jpg
+tone equalizer    = content/modules/tone-equalizer/tone-equalizer.jpg
 Left panel        = content/interface/left-panel.png
 Main window       = content/interface/overview.jpg
 ```
+
+**Copy the key from the tree, not from the module panel.** The lookup is a plain
+`g_hash_table_lookup` on the label string, so it is case-sensitive, and a darkroom module's
+label in this tree is `module->common_fields.name` — `delete_underscore(module->name())`,
+**uncapitalised** (`develop/imageop.c:579`). The name you read on the module's own header in
+the darkroom is a different string: `imageop_gui.c:930-931` runs it through
+`dt_capitalize_label()` for display. So `Exposure = …` silently matches nothing while
+`exposure = …` works. A module with several instances is keyed `name (multi_name)`
+(`darktable.c:861-863`), which is why the instances get separate file names.
 
 The value carries the documentation's **own** extension, and that is the point: a tree that
 ships `.jpg` illustrations has to be refreshable in place — a `.png` dropped beside them
@@ -150,5 +199,16 @@ left to do: switch view, capture again.
 ## Where it lives
 
 `src/gui/actions/doc_screenshot.{h,c}` — the module owns the flag, the directory and the
-panel; `src/darktable.c` only announces the command line, and `src/gui/actions/run.c` asks
-whether to offer the menu entry. Nothing else in the application knows the mode exists.
+panel. `src/darktable.c` announces the command line **and holds both module inventories**
+(`_doc_screenshot_lib_modules`, `_doc_screenshot_iop_modules`, `darktable.c:828-868`,
+registered at `:1260-1261`), and `src/gui/actions/run.c` asks whether to offer the menu entry.
+Nothing else in the application knows the mode exists.
+
+The inventories live in the orchestrator deliberately, and the comment at `darktable.c:828-838`
+is the reason to leave them there: they read `dt_lib_module_t` and `dt_iop_module_t`, two and
+three layers above `gui/` where the panel is, and reading them from the panel "inverted the
+include graph four times over". The orchestrator is the one place that sits above every module
+by construction, so it is the only place that may legally see both lists; the panel asks for
+(widget, name) pairs and these hand them over. They are called on **every refresh**, so they
+read the live lists rather than a snapshot — which is what makes the darkroom list's
+disappearance above a property of the refresh, not a stale row.

@@ -24,7 +24,7 @@
 #include "system/macros.h"
 #include "system/mem_alloc.h"
 
-#include "iop/drawlayer/paint.h"
+#include "iop/drawlayer/brush.h"  // dt_drawlayer_brush_dab_t, _rasterize_dab_rgbaf
 #include "gui/application.h"
 
 #include <float.h>
@@ -272,8 +272,6 @@ static void _render_brush_profile_cell(unsigned char *dst, const int stride, con
   dt_drawlayer_brush_dab_t dab = {
     .x = 0.0f,
     .y = 0.0f,
-    .wx = 0.0f,
-    .wy = 0.0f,
     .radius = fmaxf(radius, 1.0f),
     .dir_x = 0.0f,
     .dir_y = 1.0f,
@@ -380,13 +378,6 @@ gboolean dt_drawlayer_widgets_get_display_color(const dt_drawlayer_widgets_t *wi
 {
   if(!widgets || !display_rgb) return FALSE;
   return _picker_project_opponent_to_display_rgb(widgets->picker_m, widgets->picker_u, widgets->picker_v, display_rgb) == 0;
-}
-
-/** @brief Mark picker surface dirty for regeneration on next draw. */
-void dt_drawlayer_widgets_mark_picker_dirty(dt_drawlayer_widgets_t *widgets)
-{
-  if(IS_NULL_PTR(widgets)) return;
-  widgets->color_surface_dirty = TRUE;
 }
 
 /** @brief Replace full color-history content and validity flags. */

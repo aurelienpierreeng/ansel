@@ -1,5 +1,7 @@
 # IOP modules are linked in, not dlopen'd
 
+> **First checked 2026-09-29.** This file was mechanically checked against `8f4638a04e` on 2026-09-29 — every `file:line` citation resolved, every backticked symbol looked up in the tree, every OPEN/planned status claim tested, and every gate or baseline number it quotes compared with `tools/check_module_boundaries.sh` and `tools/include_baseline.txt`. **No per-claim semantic read was done**: a citation that resolves can still describe the wrong thing, so this is a floor, not a verification. Nothing was found wrong by those checks.
+
 ## Why this changed
 
 `src/iop` was loaded the same way `src/libs` and `src/views` are: one shared object per
@@ -198,7 +200,7 @@ cancel — and in each workload the total is dominated by one module (`highlight
 `diffuse`) that barely moved.
 
 The likely reason there is nothing to win: this codebase already inlines the hot paths
-through headers. `pixel/colorspaces_inline_conversions.h`, `math/*.h`, `pixel/*.h` are full
+through headers. `common/colorspaces_inline_conversions.h`, `math/*.h`, `pixel/*.h` are full
 of `static inline`, so a module's pixel loop had already inlined everything it calls before
 LTO was ever asked. What crossing the boundary newly exposes is mostly cold glue.
 

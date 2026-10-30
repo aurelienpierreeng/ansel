@@ -55,7 +55,7 @@
   Copyright (C) 2022 paolodepetrillo.
   Copyright (C) 2022 Victor Forsiuk.
   Copyright (C) 2023 Ricky Moon.
-  Copyright (C) 2024-2025 Guillaume Stutin.
+  Copyright (C) 2024-2026 Guillaume Stutin.
   
   darktable is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -201,46 +201,44 @@ gboolean dt_image_is_monochrome(const dt_image_t *img)
 
 static void _image_set_monochrome_flag(const int32_t imgid, gboolean monochrome, gboolean undo_on)
 {
-  dt_image_t *img = NULL;
-  gboolean changed = FALSE;
-
-  img = dt_image_cache_get(imgid, 'r');
-  if(img)
+  const dt_image_t *rimg = dt_image_cache_get(imgid, 'r');
+  if(IS_NULL_PTR(rimg))
   {
-    const int mask_bw = dt_image_monochrome_flags(img);
-    dt_image_cache_read_release(img);
-
-    if((!monochrome) && (mask_bw & DT_IMAGE_MONOCHROME_PREVIEW))
-    {
-      // wanting it to be color found preview
-      img = dt_image_cache_get(imgid, 'w');
-      img->flags &= ~(DT_IMAGE_MONOCHROME_PREVIEW | DT_IMAGE_MONOCHROME_WORKFLOW);
-      changed = TRUE;
-    }
-    if(monochrome && ((mask_bw == 0) || (mask_bw == DT_IMAGE_MONOCHROME_PREVIEW)))
-    {
-      // wanting monochrome and found color or just preview without workflow activation
-      img = dt_image_cache_get(imgid, 'w');
-      img->flags |= (DT_IMAGE_MONOCHROME_PREVIEW | DT_IMAGE_MONOCHROME_WORKFLOW);
-      changed = TRUE;
-    }
-    if(changed)
-    {
-      const int mask = dt_image_monochrome_flags(img);
-      dt_image_cache_write_release(img, DT_IMAGE_CACHE_RELAXED);
-
-      if(undo_on)
-      {
-        dt_undo_monochrome_t *undomono = (dt_undo_monochrome_t *)malloc(sizeof(dt_undo_monochrome_t));
-        undomono->imgid = imgid;
-        undomono->before = mask_bw;
-        undomono->after = mask;
-        dt_undo_record(dt_undo_get_global(), NULL, DT_UNDO_FLAGS, undomono, _pop_undo, g_free);
-      }
-    }
+    fprintf(stderr, "[_image_set_monochrome_flag] could not load image %i, its monochrome flag is unchanged\n",
+            imgid);
+    return;
   }
+  const int mask_bw = dt_image_monochrome_flags(rimg);
+  dt_image_cache_read_release(rimg);
+
+  // wanting it to be color and found preview
+  const gboolean to_color = !monochrome && (mask_bw & DT_IMAGE_MONOCHROME_PREVIEW);
+  // wanting monochrome and found color or just preview without workflow activation
+  const gboolean to_monochrome = monochrome && (mask_bw == 0 || mask_bw == DT_IMAGE_MONOCHROME_PREVIEW);
+  if(!to_color && !to_monochrome) return;
+
+  dt_image_t *img = dt_image_cache_get(imgid, 'w');
+  if(IS_NULL_PTR(img))
+  {
+    fprintf(stderr, "[_image_set_monochrome_flag] could not load image %i, its monochrome flag is unchanged\n",
+            imgid);
+    return;
+  }
+  if(to_monochrome)
+    img->flags |= (DT_IMAGE_MONOCHROME_PREVIEW | DT_IMAGE_MONOCHROME_WORKFLOW);
   else
-    fprintf(stderr,"[image] could not dt_image_cache_get imgid %i\n", imgid);
+    img->flags &= ~(DT_IMAGE_MONOCHROME_PREVIEW | DT_IMAGE_MONOCHROME_WORKFLOW);
+  const int mask = dt_image_monochrome_flags(img);
+  dt_image_cache_write_release(img, DT_IMAGE_CACHE_RELAXED);
+
+  if(undo_on)
+  {
+    dt_undo_monochrome_t *undomono = (dt_undo_monochrome_t *)malloc(sizeof(dt_undo_monochrome_t));
+    undomono->imgid = imgid;
+    undomono->before = mask_bw;
+    undomono->after = mask;
+    dt_undo_record(dt_undo_get_global(), NULL, DT_UNDO_FLAGS, undomono, _pop_undo, g_free);
+  }
 }
 
 void dt_image_set_monochrome_flag(const int32_t imgid, gboolean monochrome)
@@ -842,31 +840,47 @@ void dt_image_set_xmp_rating(dt_image_t *img, const int rating)
 
 void dt_image_get_location(const int32_t imgid, dt_image_geoloc_t *geoloc)
 {
+  *geoloc = (dt_image_geoloc_t){ NAN, NAN, NAN };
   const dt_image_t *img = dt_image_cache_get(imgid, 'r');
+  if(IS_NULL_PTR(img)) return;
   geoloc->longitude = img->geoloc.longitude;
   geoloc->latitude = img->geoloc.latitude;
   geoloc->elevation = img->geoloc.elevation;
   dt_image_cache_read_release(img);
 }
 
-static void _set_location(const int32_t imgid, const dt_image_geoloc_t *geoloc)
+// 0 on success, 1 when the image cannot be read: nothing is written then
+static int _set_location(const int32_t imgid, const dt_image_geoloc_t *geoloc)
 {
   /* fetch image from cache */
   dt_image_t *image = dt_image_cache_get(imgid, 'w');
+  if(IS_NULL_PTR(image))
+  {
+    fprintf(stderr, "[_set_location] could not load image %i, its location is unchanged\n", imgid);
+    return 1;
+  }
 
   memcpy(&image->geoloc, geoloc, sizeof(dt_image_geoloc_t));
 
   dt_image_cache_write_release(image, DT_IMAGE_CACHE_SAFE);
+  return 0;
 }
 
-static void _set_datetime(const int32_t imgid, const char *datetime)
+// 1 when the image cannot be read, as _set_location()
+static int _set_datetime(const int32_t imgid, const char *datetime)
 {
   /* fetch image from cache */
   dt_image_t *image = dt_image_cache_get(imgid, 'w');
+  if(IS_NULL_PTR(image))
+  {
+    fprintf(stderr, "[_set_datetime] could not load image %i, its date/time is unchanged\n", imgid);
+    return 1;
+  }
 
   dt_datetime_exif_to_img(image, datetime);
 
   dt_image_cache_write_release(image, DT_IMAGE_CACHE_SAFE);
+  return 0;
 }
 
 static void _pop_undo(gpointer user_data, const dt_undo_type_t type, dt_undo_data_t data, const dt_undo_action_t action, GList **imgs)
@@ -880,7 +894,7 @@ static void _pop_undo(gpointer user_data, const dt_undo_type_t type, dt_undo_dat
       dt_undo_geotag_t *undogeotag = (dt_undo_geotag_t *)list->data;
       const dt_image_geoloc_t *geoloc = (action == DT_ACTION_UNDO) ? &undogeotag->before : &undogeotag->after;
 
-      _set_location(undogeotag->imgid, geoloc);
+      if(_set_location(undogeotag->imgid, geoloc)) continue;
 
       *imgs = g_list_prepend(*imgs, GINT_TO_POINTER(undogeotag->imgid));
       i++;
@@ -900,8 +914,9 @@ static void _pop_undo(gpointer user_data, const dt_undo_type_t type, dt_undo_dat
     {
       dt_undo_datetime_t *undodatetime = (dt_undo_datetime_t *)list->data;
 
-      _set_datetime(undodatetime->imgid, (action == DT_ACTION_UNDO)
-                                         ? undodatetime->before : undodatetime->after);
+      if(_set_datetime(undodatetime->imgid, (action == DT_ACTION_UNDO)
+                                            ? undodatetime->before : undodatetime->after))
+        continue;
 
       *imgs = g_list_prepend(*imgs, GINT_TO_POINTER(undodatetime->imgid));
       i++;
@@ -1005,18 +1020,16 @@ static void _image_set_location(GList *imgs, const dt_image_geoloc_t *geoloc, GL
   {
     const int32_t imgid = GPOINTER_TO_INT(images->data);
 
-    if(undo_on)
-    {
-      dt_undo_geotag_t *undogeotag = (dt_undo_geotag_t *)malloc(sizeof(dt_undo_geotag_t));
-      undogeotag->imgid = imgid;
-      dt_image_get_location(imgid, &undogeotag->before);
+    dt_image_geoloc_t before = { NAN, NAN, NAN };
+    if(undo_on) dt_image_get_location(imgid, &before);
 
-      memcpy(&undogeotag->after, geoloc, sizeof(dt_image_geoloc_t));
+    if(_set_location(imgid, geoloc) || !undo_on) continue;
 
-      *undo = g_list_append(*undo, undogeotag);
-    }
-
-    _set_location(imgid, geoloc);
+    dt_undo_geotag_t *undogeotag = (dt_undo_geotag_t *)malloc(sizeof(dt_undo_geotag_t));
+    undogeotag->imgid = imgid;
+    undogeotag->before = before;
+    memcpy(&undogeotag->after, geoloc, sizeof(dt_image_geoloc_t));
+    *undo = g_list_append(*undo, undogeotag);
   }
 }
 
@@ -1058,19 +1071,18 @@ static void _image_set_images_locations(const GList *img, const GArray *gloc,
   {
     const int32_t imgid = GPOINTER_TO_INT(imgs->data);
     const dt_image_geoloc_t *geoloc = &g_array_index(gloc, dt_image_geoloc_t, i);
-    if(undo_on)
-    {
-      dt_undo_geotag_t *undogeotag = (dt_undo_geotag_t *)malloc(sizeof(dt_undo_geotag_t));
-      undogeotag->imgid = imgid;
-      dt_image_get_location(imgid, &undogeotag->before);
-
-      memcpy(&undogeotag->after, geoloc, sizeof(dt_image_geoloc_t));
-
-      *undo = g_list_prepend(*undo, undogeotag);
-    }
-
-    _set_location(imgid, geoloc);
     i++;
+
+    dt_image_geoloc_t before = { NAN, NAN, NAN };
+    if(undo_on) dt_image_get_location(imgid, &before);
+
+    if(_set_location(imgid, geoloc) || !undo_on) continue;
+
+    dt_undo_geotag_t *undogeotag = (dt_undo_geotag_t *)malloc(sizeof(dt_undo_geotag_t));
+    undogeotag->imgid = imgid;
+    undogeotag->before = before;
+    memcpy(&undogeotag->after, geoloc, sizeof(dt_image_geoloc_t));
+    *undo = g_list_prepend(*undo, undogeotag);
   }
 }
 
@@ -1410,10 +1422,15 @@ static int32_t _image_duplicate_with_version(const int32_t imgid, const int32_t 
        || dt_tag_detach_by_string("darktable|exported", newid, FALSE, FALSE))
       dt_metadata_tags_changed();
 
+    // the duplicate's row is a copy of the original's, group_id included, so an original that
+    // cannot be read leaves it in that group
     const dt_image_t *img = dt_image_cache_get(imgid, 'r');
-    const int grpid = img->group_id;
-    dt_image_cache_read_release(img);
-    dt_grouping_add_to_group(grpid, newid);
+    if(!IS_NULL_PTR(img))
+    {
+      const int grpid = img->group_id;
+      dt_image_cache_read_release(img);
+      dt_grouping_add_to_group(grpid, newid);
+    }
 
     // Reloading here exposes newid to the lighttable grid: it becomes eligible for thumbnail
     // generation immediately, against whatever history it has *right now*. Callers still about
@@ -1696,15 +1713,18 @@ static int32_t _image_import_internal(const int32_t film_id, const char *filenam
     dt_free(normalized_filename);
     return 0;
   }
-  const char *cc = normalized_filename + strlen(normalized_filename);
-  for(; *cc != '.' && cc > normalized_filename; cc--)
-    ;
-  if(!strcasecmp(cc, ".dt") || !strcasecmp(cc, ".dttags") || !strcasecmp(cc, ".xmp"))
+  const char *extension = dt_util_path_get_extension(normalized_filename);
+  if(IS_NULL_PTR(extension))
   {
     dt_free(normalized_filename);
     return 0;
   }
-  char *ext = g_ascii_strdown(cc + 1, -1);
+  if(!strcasecmp(extension, "dt") || !strcasecmp(extension, "dttags") || !strcasecmp(extension, "xmp"))
+  {
+    dt_free(normalized_filename);
+    return 0;
+  }
+  char *ext = g_ascii_strdown(extension, -1);
   if(!dt_image_ext_is_supported(ext))
   {
     dt_free(normalized_filename);
@@ -1727,8 +1747,8 @@ static int32_t _image_import_internal(const int32_t film_id, const char *filenam
   uint32_t flags = 0;
   flags |= DT_IMAGE_NO_LEGACY_PRESETS;
   // and we set the type of image flag (from extension for now)
-  gchar *extension = g_strrstr(imgfname, ".");
-  flags |= dt_image_flags_from_extension(extension);
+  const char *image_extension = dt_util_path_get_extension(imgfname);
+  flags |= dt_image_flags_from_extension(image_extension - 1);
   // set the bits in flags that indicate if any of the extra files (.txt, .wav) are present
   char *extra_file = dt_image_get_audio_path_from_path(normalized_filename);
   if(extra_file)
@@ -1749,28 +1769,20 @@ static int32_t _image_import_internal(const int32_t film_id, const char *filenam
   id = dt_image_get_id(film_id, imgfname);
 
   // Try to find out if this should be grouped already.
-  gchar *basename = g_strdup(imgfname);
-  gchar *cc2 = basename + strlen(basename);
-  for(; *cc2 != '.' && cc2 > basename; cc2--)
-    ;
-  *cc2 = '\0';
+  gchar *basename = g_strndup(imgfname, image_extension - imgfname - 1);
   gchar *sql_pattern = g_strconcat(basename, ".%", NULL);
   int group_id;
   // in case we are not a jpg check if we need to change group representative
   if(strcmp(ext, "jpg") != 0 && strcmp(ext, "jpeg") != 0)
   {
     const int32_t other_group = dt_image_repository_find_group_for_pattern(film_id, sql_pattern, TRUE, id);
-    // if we have a group already
-    if(other_group != -1)
+    // if we have a group already, and its representative can be read
+    dt_image_t *other_img = (other_group != -1) ? dt_image_cache_get(other_group, 'w') : NULL;
+    if(!IS_NULL_PTR(other_img))
     {
       int other_id = other_group;
-      dt_image_t *other_img = dt_image_cache_get(other_id, 'w');
-      gchar *other_basename = g_strdup(other_img->filename);
-      gchar *cc3 = other_basename + strlen(other_img->filename);
-      for(; *cc3 != '.' && cc3 > other_basename; cc3--)
-        ;
-      ++cc3;
-      gchar *ext_lowercase = g_ascii_strdown(cc3, -1);
+      const char *other_extension = dt_util_path_get_extension(other_img->filename);
+      gchar *ext_lowercase = g_ascii_strdown(other_extension, -1);
       // if the group representative is a jpg, change group representative to this new imported image
       if(!strcmp(ext_lowercase, "jpg") || !strcmp(ext_lowercase, "jpeg"))
       {
@@ -1781,6 +1793,7 @@ static int32_t _image_import_internal(const int32_t film_id, const char *filenam
         {
           other_id = GPOINTER_TO_INT(l->data);
           dt_image_t *group_img = dt_image_cache_get(other_id, 'w');
+          if(IS_NULL_PTR(group_img)) continue;
           group_img->group_id = id;
           dt_image_cache_write_release(group_img, DT_IMAGE_CACHE_SAFE);
         }
@@ -1793,7 +1806,6 @@ static int32_t _image_import_internal(const int32_t film_id, const char *filenam
         group_id = other_id;
       }
       dt_free(ext_lowercase);
-      dt_free(other_basename);
     }
     else
     {
@@ -1811,6 +1823,18 @@ static int32_t _image_import_internal(const int32_t film_id, const char *filenam
 
   // lock as shortly as possible:
   dt_image_t *img = dt_image_cache_get(id, 'w');
+  if(IS_NULL_PTR(img))
+  {
+    // a row whose Exif was never read would stay in the library and block a new import of the file
+    fprintf(stderr, "[image_import] could not load image %i for `%s', removing it\n", id, normalized_filename);
+    if(id > 0) dt_image_remove(id);
+    dt_free(ext);
+    dt_free(imgfname);
+    dt_free(basename);
+    dt_free(sql_pattern);
+    dt_free(normalized_filename);
+    return 0;
+  }
   img->group_id = group_id;
 
   // read dttags and exif for database queries!
@@ -2061,137 +2085,150 @@ int32_t dt_image_rename(const int32_t imgid, const int32_t filmid, const gchar *
     dt_free(newdir);
   }
 
-  if(new)
+  // no destination: the film roll has no folder, or the new name reached outside it
+  if(IS_NULL_PTR(new)) return result;
+
+  // get current local copy if any
+  dt_image_t *img = dt_image_cache_get(imgid, 'r');
+  if(!IS_NULL_PTR(img))
   {
-    // get current local copy if any
-    dt_image_t *img = dt_image_cache_get(imgid, 'r');
-    if(img)
+    dt_image_choose_input_path(img, copysrcpath, sizeof(copysrcpath), TRUE);
+    dt_image_cache_read_release(img);
+  }
+
+  // move image
+  GError *moveError = NULL;
+  gboolean moveStatus = g_file_move(old, new, 0, NULL, NULL, NULL, &moveError);
+
+  if(moveStatus)
+  {
+    _move_text_sidecar_if_present(oldimg, newimg, FALSE);
+
+    // first move xmp files of image and duplicates
+    GList *dup_list = dt_image_repository_get_duplicate_ids(imgid);
+    for(GList *l = dup_list; l; l = g_list_next(l))
     {
-      dt_image_choose_input_path(img, copysrcpath, sizeof(copysrcpath), TRUE);
-      dt_image_cache_read_release(img);
+      const int32_t id = GPOINTER_TO_INT(l->data);
+      gchar oldxmp[DT_PATH_MAX] = { 0 };
+      gchar newxmp[DT_PATH_MAX] = { 0 };
+      g_strlcpy(oldxmp, oldimg, sizeof(oldxmp));
+      g_strlcpy(newxmp, newimg, sizeof(newxmp));
+      dt_image_path_append_version(id, oldxmp, sizeof(oldxmp));
+      dt_image_path_append_version(id, newxmp, sizeof(newxmp));
+      g_strlcat(oldxmp, ".xmp", sizeof(oldxmp));
+      g_strlcat(newxmp, ".xmp", sizeof(newxmp));
+
+      GFile *goldxmp = g_file_new_for_path(oldxmp);
+      GFile *gnewxmp = g_file_new_for_path(newxmp);
+
+      g_file_move(goldxmp, gnewxmp, 0, NULL, NULL, NULL, NULL);
+
+      g_object_unref(goldxmp);
+      g_object_unref(gnewxmp);
     }
 
-    // move image
-    GError *moveError = NULL;
-    gboolean moveStatus = g_file_move(old, new, 0, NULL, NULL, NULL, &moveError);
-
-    if(moveStatus)
+    // then update database and cache
+    // if update was performed in above loop, dt_image_path_append_version()
+    // would return wrong version!
+    while(dup_list)
     {
-      _move_text_sidecar_if_present(oldimg, newimg, FALSE);
-
-      // first move xmp files of image and duplicates
-      GList *dup_list = dt_image_repository_get_duplicate_ids(imgid);
-      for(GList *l = dup_list; l; l = g_list_next(l))
+      const int id = GPOINTER_TO_INT(dup_list->data);
+      dup_list = g_list_delete_link(dup_list, dup_list);
+      img = dt_image_cache_get(id, 'w');
+      if(IS_NULL_PTR(img))
       {
-        const int32_t id = GPOINTER_TO_INT(l->data);
-        gchar oldxmp[DT_PATH_MAX] = { 0 }, newxmp[DT_PATH_MAX] = { 0 };
-        g_strlcpy(oldxmp, oldimg, sizeof(oldxmp));
-        g_strlcpy(newxmp, newimg, sizeof(newxmp));
-        dt_image_path_append_version(id, oldxmp, sizeof(oldxmp));
-        dt_image_path_append_version(id, newxmp, sizeof(newxmp));
-        g_strlcat(oldxmp, ".xmp", sizeof(oldxmp));
-        g_strlcat(newxmp, ".xmp", sizeof(newxmp));
-
-        GFile *goldxmp = g_file_new_for_path(oldxmp);
-        GFile *gnewxmp = g_file_new_for_path(newxmp);
-
-        g_file_move(goldxmp, gnewxmp, 0, NULL, NULL, NULL, NULL);
-
-        g_object_unref(goldxmp);
-        g_object_unref(gnewxmp);
+        // the file and its sidecars have moved, the row of this duplicate has not
+        dt_control_alert(_("File operation failed"),
+                         _("the file was moved, but the library could not record its new place"), newimg);
+        continue;
       }
-
-      // then update database and cache
-      // if update was performed in above loop, dt_image_path_append_version()
-      // would return wrong version!
-      while(dup_list)
-      {
-        const int id = GPOINTER_TO_INT(dup_list->data);
-        img = dt_image_cache_get(id, 'w');
-        img->film_id = filmid;
-        if(newname) g_strlcpy(img->filename, newname, DT_MAX_FILENAME_LEN);
-        // write through to db and queue xmp write
-        dt_image_cache_write_release(img, DT_IMAGE_CACHE_SAFE);
-        dup_list = g_list_delete_link(dup_list, dup_list);
-      }
-      g_list_free(dup_list);
-      dup_list = NULL;
-
-      // finally, rename local copy if any
-      if(g_file_test(copysrcpath, G_FILE_TEST_EXISTS))
-      {
-        // get new name
-        img = dt_image_cache_get(imgid, 'r');
-        if(img)
-        {
-          dt_image_choose_input_path(img, copydestpath, sizeof(copydestpath), TRUE);
-          dt_image_cache_read_release(img);
-        }
-
-        GFile *cold = g_file_new_for_path(copysrcpath);
-        GFile *cnew = g_file_new_for_path(copydestpath);
-
-        g_clear_error(&moveError);
-        moveStatus = g_file_move(cold, cnew, 0, NULL, NULL, NULL, &moveError);
-        if(!moveStatus)
-        {
-          fprintf(stderr, "[dt_image_rename] error moving local copy `%s' -> `%s'\n", copysrcpath, copydestpath);
-
-          if(g_error_matches(moveError, G_IO_ERROR, G_IO_ERROR_NOT_FOUND))
-          {
-            gchar *oldBasename = g_path_get_basename(copysrcpath);
-            dt_control_log(_("cannot access local copy `%s'"), oldBasename);
-            dt_free(oldBasename);
-          }
-          else if(g_error_matches(moveError, G_IO_ERROR, G_IO_ERROR_EXISTS)
-                  || g_error_matches(moveError, G_IO_ERROR, G_IO_ERROR_IS_DIRECTORY))
-          {
-            gchar *newBasename = g_path_get_basename(copydestpath);
-            dt_control_log(_("cannot write local copy `%s'"), newBasename);
-            dt_free(newBasename);
-          }
-          else
-          {
-            gchar *oldBasename = g_path_get_basename(copysrcpath);
-            gchar *newBasename = g_path_get_basename(copydestpath);
-            dt_control_log(_("error moving local copy `%s' -> `%s'"), oldBasename, newBasename);
-            dt_free(oldBasename);
-            dt_free(newBasename);
-          }
-        }
-
-        g_object_unref(cold);
-        g_object_unref(cnew);
-      }
-
-      result = 0;
+      img->film_id = filmid;
+      if(newname) g_strlcpy(img->filename, newname, DT_MAX_FILENAME_LEN);
+      // write through to db and queue xmp write
+      dt_image_cache_write_release(img, DT_IMAGE_CACHE_SAFE);
     }
-    else
+    g_list_free(dup_list);
+    dup_list = NULL;
+
+    // finally, rename local copy if any
+    if(g_file_test(copysrcpath, G_FILE_TEST_EXISTS))
     {
+      // get new name
+      img = dt_image_cache_get(imgid, 'r');
+      if(!IS_NULL_PTR(img))
+      {
+        dt_image_choose_input_path(img, copydestpath, sizeof(copydestpath), TRUE);
+        dt_image_cache_read_release(img);
+      }
+
+      GFile *cold = g_file_new_for_path(copysrcpath);
+      GFile *cnew = g_file_new_for_path(copydestpath);
+
+      g_clear_error(&moveError);
+      moveStatus = g_file_move(cold, cnew, 0, NULL, NULL, NULL, &moveError);
+      if(!moveStatus)
+        fprintf(stderr, "[dt_image_rename] error moving local copy `%s' -> `%s'\n", copysrcpath, copydestpath);
+
+      // moveError is set only when the move failed
       if(g_error_matches(moveError, G_IO_ERROR, G_IO_ERROR_NOT_FOUND))
       {
-        dt_control_log(_("error moving `%s': file not found"), oldimg);
+        gchar *oldBasename = g_path_get_basename(copysrcpath);
+        dt_control_alert(_("File operation failed"), _("cannot access local copy"), oldBasename);
+        dt_free(oldBasename);
       }
-      // only display error message if newname is set (renaming and
-      // not moving) as when moving it can be the case where a
-      // duplicate is being moved, so only the .xmp are present but
-      // the original file may already have been moved.
-      else if(newname
-              && (g_error_matches(moveError, G_IO_ERROR, G_IO_ERROR_EXISTS)
-                  || g_error_matches(moveError, G_IO_ERROR, G_IO_ERROR_IS_DIRECTORY)))
+      else if(g_error_matches(moveError, G_IO_ERROR, G_IO_ERROR_EXISTS)
+              || g_error_matches(moveError, G_IO_ERROR, G_IO_ERROR_IS_DIRECTORY))
       {
-        dt_control_log(_("error moving `%s' -> `%s': file exists"), oldimg, newimg);
+        gchar *newBasename = g_path_get_basename(copydestpath);
+        dt_control_alert(_("File operation failed"), _("cannot write local copy"), newBasename);
+        dt_free(newBasename);
       }
-      else if(newname)
+      else if(!moveStatus)
       {
-        dt_control_log(_("error moving `%s' -> `%s'"), oldimg, newimg);
+        gchar *oldBasename = g_path_get_basename(copysrcpath);
+        gchar *newBasename = g_path_get_basename(copydestpath);
+        gchar *item = g_strdup_printf("%s -> %s", oldBasename, newBasename);
+        dt_control_alert(_("File operation failed"), _("error moving local copy"), item);
+        dt_free(item);
+        dt_free(oldBasename);
+        dt_free(newBasename);
       }
+
+      g_object_unref(cold);
+      g_object_unref(cnew);
     }
 
-    g_clear_error(&moveError);
-    g_object_unref(old);
-    g_object_unref(new);
+    result = 0;
   }
+  else
+  {
+    if(g_error_matches(moveError, G_IO_ERROR, G_IO_ERROR_NOT_FOUND))
+    {
+      dt_control_alert(_("File operation failed"), _("error moving file: file not found"), oldimg);
+    }
+    // only display error message if newname is set (renaming and
+    // not moving) as when moving it can be the case where a
+    // duplicate is being moved, so only the .xmp are present but
+    // the original file may already have been moved.
+    else if(newname
+            && (g_error_matches(moveError, G_IO_ERROR, G_IO_ERROR_EXISTS)
+                || g_error_matches(moveError, G_IO_ERROR, G_IO_ERROR_IS_DIRECTORY)))
+    {
+      gchar *item = g_strdup_printf("%s -> %s", oldimg, newimg);
+      dt_control_alert(_("File operation failed"), _("error moving file: file exists"), item);
+      dt_free(item);
+    }
+    else if(newname)
+    {
+      gchar *item = g_strdup_printf("%s -> %s", oldimg, newimg);
+      dt_control_alert(_("File operation failed"), _("error moving file"), item);
+      dt_free(item);
+    }
+  }
+
+  g_clear_error(&moveError);
+  g_object_unref(old);
+  g_object_unref(new);
 
   return result;
 }
@@ -2324,7 +2361,8 @@ int dt_image_local_copy_set(const int32_t imgid)
   // check that the src file is readable
   if(!g_file_test(srcpath, G_FILE_TEST_IS_REGULAR))
   {
-    dt_control_log(_("cannot create local copy when the original file is not accessible."));
+    dt_control_alert(_("File operation failed"),
+                     _("cannot create local copy when the original file is not accessible."), srcpath);
     return 1;
   }
 
@@ -2338,7 +2376,7 @@ int dt_image_local_copy_set(const int32_t imgid)
 
     if(!g_file_copy(src, dest, G_FILE_COPY_NONE, NULL, NULL, NULL, &gerror))
     {
-      dt_control_log(_("cannot create local copy."));
+      dt_control_alert(_("File operation failed"), _("cannot create local copy."), srcpath);
       g_object_unref(dest);
       g_object_unref(src);
       return 1;
@@ -2353,6 +2391,12 @@ int dt_image_local_copy_set(const int32_t imgid)
   // update cache local copy flags, do this even if the local copy already exists as we need to set the flags
   // for duplicate
   img = dt_image_cache_get(imgid, 'w');
+  if(IS_NULL_PTR(img))
+  {
+    // the copy is written but not flagged, so nothing reads it; asking again flags it
+    dt_control_alert(_("File operation failed"), _("cannot create local copy."), srcpath);
+    return 1;
+  }
   img->flags |= DT_IMAGE_LOCAL_COPY;
   dt_image_cache_write_release(img, DT_IMAGE_CACHE_RELAXED);
 
@@ -2375,6 +2419,10 @@ int dt_image_local_copy_reset(const int32_t imgid)
   dt_image_t *imgr = dt_image_cache_get(imgid, 'r');
   if(!imgr) return 0;
   const gboolean local_copy_exists = (imgr->flags & DT_IMAGE_LOCAL_COPY) == DT_IMAGE_LOCAL_COPY ? TRUE : FALSE;
+  // The original's path even when it is gone, which dt_image_full_path() does not give: it names
+  // the image in the alert below.
+  char fullpath[DT_PATH_MAX] = { 0 };
+  g_strlcpy(fullpath, imgr->fullpath, sizeof(fullpath));
   dt_image_cache_read_release(imgr);
 
   if(!local_copy_exists)
@@ -2394,7 +2442,8 @@ int dt_image_local_copy_reset(const int32_t imgid)
 
   if(g_file_test(locppath, G_FILE_TEST_EXISTS) && !g_file_test(destpath, G_FILE_TEST_EXISTS))
   {
-    dt_control_log(_("cannot remove local copy when the original file is not accessible."));
+    dt_control_alert(_("File operation failed"),
+                     _("cannot remove local copy when the original file is not accessible."), fullpath);
     return 1;
   }
 
@@ -2446,6 +2495,12 @@ int dt_image_local_copy_reset(const int32_t imgid)
   // or is not present.
 
   img = dt_image_cache_get(imgid, 'w');
+  if(IS_NULL_PTR(img))
+  {
+    // the copy is gone already, and a stale flag falls back to the original (dt_image_choose_input_path())
+    fprintf(stderr, "[dt_image_local_copy_reset] could not load image %i, its local copy flag stays\n", imgid);
+    return 0;
+  }
   img->flags &= ~DT_IMAGE_LOCAL_COPY;
   dt_image_cache_write_release(img, DT_IMAGE_CACHE_RELAXED);
 
@@ -2653,19 +2708,18 @@ static void _image_set_datetimes(const GList *img, const GArray *dtime,
     const int32_t imgid = GPOINTER_TO_INT(imgs->data);
     // if char *datetime, the returned pointer is not correct => use of _datetime_t
     const _datetime_t *datetime = &g_array_index(dtime, _datetime_t, i);
-    if(undo_on)
-    {
-      dt_undo_datetime_t *undodatetime = (dt_undo_datetime_t *)malloc(sizeof(dt_undo_datetime_t));
-      undodatetime->imgid = imgid;
-      dt_image_get_datetime(imgid, undodatetime->before);
-
-      memcpy(&undodatetime->after, datetime->dt, DT_DATETIME_LENGTH);
-
-      *undo = g_list_prepend(*undo, undodatetime);
-    }
-
-    _set_datetime(imgid, datetime->dt);
     i++;
+
+    char before[DT_DATETIME_LENGTH] = { 0 };
+    if(undo_on) dt_image_get_datetime(imgid, before);
+
+    if(_set_datetime(imgid, datetime->dt) || !undo_on) continue;
+
+    dt_undo_datetime_t *undodatetime = (dt_undo_datetime_t *)malloc(sizeof(dt_undo_datetime_t));
+    undodatetime->imgid = imgid;
+    memcpy(&undodatetime->before, before, DT_DATETIME_LENGTH);
+    memcpy(&undodatetime->after, datetime->dt, DT_DATETIME_LENGTH);
+    *undo = g_list_prepend(*undo, undodatetime);
   }
 }
 
@@ -2691,18 +2745,17 @@ static void _image_set_datetime(const GList *img, const char *datetime,
   for(GList *imgs = (GList *)img; imgs;  imgs = g_list_next(imgs))
   {
     const int32_t imgid = GPOINTER_TO_INT(imgs->data);
-    if(undo_on)
-    {
-      dt_undo_datetime_t *undodatetime = (dt_undo_datetime_t *)malloc(sizeof(dt_undo_datetime_t));
-      undodatetime->imgid = imgid;
-      dt_image_get_datetime(imgid, undodatetime->before);
 
-      memcpy(&undodatetime->after, datetime, DT_DATETIME_LENGTH);
+    char before[DT_DATETIME_LENGTH] = { 0 };
+    if(undo_on) dt_image_get_datetime(imgid, before);
 
-      *undo = g_list_prepend(*undo, undodatetime);
-    }
+    if(_set_datetime(imgid, datetime) || !undo_on) continue;
 
-    _set_datetime(imgid, datetime);
+    dt_undo_datetime_t *undodatetime = (dt_undo_datetime_t *)malloc(sizeof(dt_undo_datetime_t));
+    undodatetime->imgid = imgid;
+    memcpy(&undodatetime->before, before, DT_DATETIME_LENGTH);
+    memcpy(&undodatetime->after, datetime, DT_DATETIME_LENGTH);
+    *undo = g_list_prepend(*undo, undodatetime);
   }
 }
 

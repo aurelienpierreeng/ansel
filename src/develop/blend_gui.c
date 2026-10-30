@@ -1419,19 +1419,16 @@ static dt_masks_form_t *_blendop_masks_group_create(dt_iop_module_t *module)
   dt_masks_form_t *group_form = dt_masks_create(DT_MASKS_GROUP);
   if(IS_NULL_PTR(group_form)) return NULL;
 
-  //gchar *module_label = dt_history_item_get_name(module);
-  gchar *module_label = g_strdup(module->multi_name);
-  if(g_strcmp0(module_label, "") == 0)
-  {
-    dt_free(module_label);
-    module_label = dt_history_item_get_name(module);
-  }
-  g_snprintf(group_form->name, sizeof(group_form->name), "%s %s", _("Mask"), module_label);
-  dt_free(module_label);
-
   _blendop_masks_check_id(module->dev, group_form);
   dt_masks_append_form(module->dev, group_form);
   module->blend_params->mask_id = group_form->formid;
+
+  // Named by id, once the group is in dev->forms and its id is settled: the masks module owns the
+  // naming convention and the copy-on-write, and nothing here writes into the form. The touch may
+  // replace the group with a clone, so the live one is resolved again rather than returned from
+  // the pointer created above.
+  dt_masks_group_set_name_from_module(module->dev, module->blend_params->mask_id, module);
+  group_form = dt_masks_get_from_id(module->dev, module->blend_params->mask_id);
 
   return group_form;
 }
@@ -1786,7 +1783,7 @@ static void _blendop_masks_group_name_commit(dt_iop_module_t *module, const gcha
   dt_masks_form_t *group_form = _blendop_masks_group_from_module(module);
   if(IS_NULL_PTR(group_form)) return;
 
-  gchar *mask_default_name = dt_dev_get_masks_group_name(module);
+  gchar *mask_default_name = dt_masks_group_name_for_module(module);
   gchar *text = (new_text && *new_text) ? g_strdup(new_text) : g_strdup(mask_default_name);
   g_free(mask_default_name);
 
@@ -2868,6 +2865,7 @@ static gboolean _blendif_change_blend_colorspace(dt_iop_module_t *module, dt_dev
       cst = dt_develop_blend_default_module_blend_colorspace(module);
       break;
   }
+  if(!dt_develop_blend_colorspace_is_compatible(module, cst)) return FALSE;
   if(cst != module->blend_params->blend_cst)
   {
     dt_develop_blend_init_blendif_parameters(module->blend_params, cst);
@@ -2943,11 +2941,28 @@ static void _blendif_hide_output_channels(GtkMenuItem *menuitem, dt_iop_module_t
   }
 }
 
-static void _blendif_options_callback(GtkButton *button, GdkEventButton *event, dt_iop_module_t *module)
+static void _blendif_append_colorspace_item(GtkMenu *menu, dt_iop_module_t *module, const char *label,
+                                            const dt_develop_blend_colorspace_t cst)
 {
-  if(event->button != 1 && event->button != 2) return;
+  GtkWidget *mi = gtk_check_menu_item_new_with_label(label);
+  const gboolean current = module->blend_params->blend_cst == cst;
+  if(current)
+  {
+    gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(mi), TRUE);
+    dt_gui_add_class(mi, "active_menu_item");
+  }
+  // the space an edit already uses stays readable as such, even where it would not be offered
+  gtk_widget_set_sensitive(mi, current || dt_develop_blend_colorspace_is_compatible(module, cst));
+  g_object_set_data_full(G_OBJECT(mi), "dt-blend-cst", GINT_TO_POINTER(cst), NULL);
+  g_signal_connect(G_OBJECT(mi), "activate", G_CALLBACK(_blendif_select_colorspace), module);
+  gtk_menu_shell_append(GTK_MENU_SHELL(menu), mi);
+}
+
+static gboolean _blendif_options_callback(GtkButton *button, GdkEventButton *event, dt_iop_module_t *module)
+{
+  if(event->button != 1 && event->button != 2) return FALSE;
   const dt_iop_gui_blend_data_t *bd = (dt_iop_gui_blend_data_t *)module->gui->blend_data;
-  if(IS_NULL_PTR(bd) || !bd->blendif_support || !bd->blendif_inited) return;
+  if(IS_NULL_PTR(bd) || !bd->blendif_support || !bd->blendif_inited) return FALSE;
 
   GtkWidget *mi;
   GtkMenu *menu = dt_gui_get_global()->presets_popup_menu;
@@ -2957,7 +2972,6 @@ static void _blendif_options_callback(GtkButton *button, GdkEventButton *event, 
 
   // add a section to switch blending color spaces
   const dt_develop_blend_colorspace_t module_cst = dt_develop_blend_default_module_blend_colorspace(module);
-  const dt_develop_blend_colorspace_t module_blend_cst = module->blend_params->blend_cst;
   if(module_cst == DEVELOP_BLEND_CS_LAB || module_cst == DEVELOP_BLEND_CS_RGB_DISPLAY
       || module_cst == DEVELOP_BLEND_CS_RGB_SCENE)
   {
@@ -2967,43 +2981,10 @@ static void _blendif_options_callback(GtkButton *button, GdkEventButton *event, 
     g_signal_connect(G_OBJECT(mi), "activate", G_CALLBACK(_blendif_select_colorspace), module);
     gtk_menu_shell_append(GTK_MENU_SHELL(menu), mi);
 
-    // only show Lab blending when the module is a Lab module to avoid using it at the wrong place (Lab blending
-    // should not be activated for RGB modules before colorin and after colorout)
-    if(module_cst == DEVELOP_BLEND_CS_LAB)
-    {
-      mi = gtk_check_menu_item_new_with_label(_("Lab"));
-
-      if(module_blend_cst == DEVELOP_BLEND_CS_LAB)
-      {
-        gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(mi), TRUE);
-        dt_gui_add_class(mi, "active_menu_item");
-      }
-      g_object_set_data_full(G_OBJECT(mi), "dt-blend-cst", GINT_TO_POINTER(DEVELOP_BLEND_CS_LAB), NULL);
-      g_signal_connect(G_OBJECT(mi), "activate", G_CALLBACK(_blendif_select_colorspace), module);
-      gtk_menu_shell_append(GTK_MENU_SHELL(menu), mi);
-    }
-
-    mi = gtk_check_menu_item_new_with_label(_("RGB (display)"));
-
-    if(module_blend_cst == DEVELOP_BLEND_CS_RGB_DISPLAY)
-    {
-      gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(mi), TRUE);
-      dt_gui_add_class(mi, "active_menu_item");
-    }
-    g_object_set_data_full(G_OBJECT(mi), "dt-blend-cst", GINT_TO_POINTER(DEVELOP_BLEND_CS_RGB_DISPLAY), NULL);
-    g_signal_connect(G_OBJECT(mi), "activate", G_CALLBACK(_blendif_select_colorspace), module);
-    gtk_menu_shell_append(GTK_MENU_SHELL(menu), mi);
-
-    mi = gtk_check_menu_item_new_with_label(_("RGB (scene)"));
-
-    if(module_blend_cst == DEVELOP_BLEND_CS_RGB_SCENE)
-    {
-      gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(mi), TRUE);
-      dt_gui_add_class(mi, "active_menu_item");
-    }
-    g_object_set_data_full(G_OBJECT(mi), "dt-blend-cst", GINT_TO_POINTER(DEVELOP_BLEND_CS_RGB_SCENE), NULL);
-    g_signal_connect(G_OBJECT(mi), "activate", G_CALLBACK(_blendif_select_colorspace), module);
-    gtk_menu_shell_append(GTK_MENU_SHELL(menu), mi);
+    // every blending space is listed, the ones this module cannot blend in are greyed out
+    _blendif_append_colorspace_item(menu, module, _("Lab"), DEVELOP_BLEND_CS_LAB);
+    _blendif_append_colorspace_item(menu, module, _("RGB (display)"), DEVELOP_BLEND_CS_RGB_DISPLAY);
+    _blendif_append_colorspace_item(menu, module, _("RGB (scene)"), DEVELOP_BLEND_CS_RGB_SCENE);
 
     gtk_menu_shell_append(GTK_MENU_SHELL(menu), gtk_separator_menu_item_new());
 
@@ -3024,6 +3005,7 @@ static void _blendif_options_callback(GtkButton *button, GdkEventButton *event, 
   dt_gui_menu_popup(dt_gui_get_global()->presets_popup_menu, GTK_WIDGET(button), GDK_GRAVITY_SOUTH_EAST, GDK_GRAVITY_NORTH_EAST);
 
   dtgtk_button_set_active(DTGTK_BUTTON(button), FALSE);
+  return TRUE;
 }
 
 // activate channel/mask view
@@ -3958,10 +3940,10 @@ void dt_iop_gui_init_masks(GtkBox *blendw, dt_iop_module_t *module)
 
     GtkWidget *group_shapes_header = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
     bd->group_shapes_label = gtk_entry_new();
-    gchar *group_placeholder = dt_dev_get_masks_group_name(module);
+    gchar *group_placeholder = dt_masks_group_name_for_module(module);
     gtk_entry_set_placeholder_text(GTK_ENTRY(bd->group_shapes_label), group_placeholder);
     g_free(group_placeholder);
-    gtk_widget_set_tooltip_text(bd->group_shapes_label, _("Edit current module mask name"));
+    gtk_widget_set_tooltip_text(bd->group_shapes_label, _("Edit current module's group name"));
     gtk_widget_set_halign(bd->group_shapes_label, GTK_ALIGN_FILL);
     gtk_widget_set_hexpand(bd->group_shapes_label, TRUE);
     g_signal_connect(bd->group_shapes_label, "activate", G_CALLBACK(_blendop_masks_group_name_activate), module);

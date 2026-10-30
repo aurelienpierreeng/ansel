@@ -33,7 +33,7 @@
    Copyright (C) 2022 Philipp Lutz.
    Copyright (C) 2022 Victor Forsiuk.
    Copyright (C) 2023 Alynx Zhou.
-   Copyright (C) 2023 Guillaume Stutin.
+   Copyright (C) 2023, 2026 Guillaume Stutin.
    Copyright (C) 2023 Luca Zulberti.
 
    darktable is free software: you can redistribute it and/or modify
@@ -527,6 +527,12 @@ int process_laplacian(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pi
 
   for(int i = 0; i < data->iterations; i++)
   {
+    // The pipe abandoned this run: stop between two of up to 512 iterations.
+    if(dt_dev_pixelpipe_has_shutdown(pipe))
+    {
+      err = 1;
+      goto error;
+    }
     const int salt = (i == data->iterations - 1); // add noise on the last iteration only
     if(wavelets_process(ds_interpolated, temp, ds_clipping_mask, ds_width, ds_height, scales, HF, LF_odd, LF_even,
                         DIFFUSE_RECONSTRUCT_RGB, noise_level, salt, data->solid_color))
@@ -945,6 +951,13 @@ cl_int process_laplacian_bayer_cl(struct dt_iop_module_t *self, const dt_dev_pix
 
   for(int i = 0; i < data->iterations; i++)
   {
+    // The pipe abandoned this run: stop between two of up to 512 iterations, once the previous one has
+    // run on the device (the host enqueues them all far ahead of it).
+    if(i > 0 && dt_opencl_finish(devid) && dt_dev_pixelpipe_has_shutdown(pipe))
+    {
+      err = DT_OPENCL_DEFAULT_ERROR;
+      goto error;
+    }
     const int salt = (i == data->iterations - 1); // add noise on the last iteration only
     err = wavelets_process_cl(devid, ds_interpolated, temp, reconstructed_scratch, ds_clipping_mask, ds_sizes,
                               ds_width, ds_height, gd, scales, HF, LF_odd, LF_even, DIFFUSE_RECONSTRUCT_RGB,
@@ -1217,6 +1230,13 @@ cl_int process_laplacian_xtrans_cl(struct dt_iop_module_t *self, const dt_dev_pi
 
   for(int i = 0; i < data->iterations; i++)
   {
+    // The pipe abandoned this run: stop between two of up to 512 iterations, once the previous one has
+    // run on the device (the host enqueues them all far ahead of it).
+    if(i > 0 && dt_opencl_finish(devid) && dt_dev_pixelpipe_has_shutdown(pipe))
+    {
+      err = DT_OPENCL_DEFAULT_ERROR;
+      goto error;
+    }
     const int salt = (i == data->iterations - 1);
     err = wavelets_process_cl(devid, ds_interpolated, temp, reconstructed_scratch, ds_clipping_mask, ds_sizes,
                               ds_width, ds_height, gd, scales, HF, LF_odd, LF_even, DIFFUSE_RECONSTRUCT_RGB,
@@ -1487,6 +1507,13 @@ cl_int process_laplacian_passthrough_cl(struct dt_iop_module_t *self, const dt_d
 
   for(int i = 0; i < data->iterations; i++)
   {
+    // The pipe abandoned this run: stop between two of up to 512 iterations, once the previous one has
+    // run on the device (the host enqueues them all far ahead of it).
+    if(i > 0 && dt_opencl_finish(devid) && dt_dev_pixelpipe_has_shutdown(pipe))
+    {
+      err = DT_OPENCL_DEFAULT_ERROR;
+      goto error;
+    }
     const int salt = (i == data->iterations - 1); // add noise on the last iteration only
     err = wavelets_process_cl(devid, ds_interpolated, temp, reconstructed_scratch, ds_clipping_mask, ds_sizes,
                               ds_width, ds_height, gd, scales, HF, LF_odd, LF_even, DIFFUSE_RECONSTRUCT_RGB,

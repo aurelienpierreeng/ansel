@@ -66,8 +66,10 @@ jobs:
 
     - name: Dispatch message - new issue
       if: ${{ github.event_name == 'issues' && github.event.action == 'opened' }}
+      env:
+        TITLE: ${{ github.event.issue.title }}
       run: |
-        MESSAGE="New issue [${{ github.event.issue.number }}](${{ github.event.issue.html_url }}) (_${{ github.event.issue.title }}_) created"
+        MESSAGE="New issue [${{ github.event.issue.number }}](${{ github.event.issue.html_url }}) (_${TITLE}_) created"
         python .ci/matrix.py \
         -m "$MESSAGE" \
         -s ${{ secrets.MATRIX_SERVER }} \
@@ -77,8 +79,10 @@ jobs:
 
     - name: Dispatch message - issue edited
       if: ${{ github.event_name == 'issues' && github.event.action == 'edited' }}
+      env:
+        TITLE: ${{ github.event.issue.title }}
       run: |
-        MESSAGE="Issue [${{ github.event.issue.number }}](${{ github.event.issue.html_url }}) (_${{ github.event.issue.title }}_) edited"
+        MESSAGE="Issue [${{ github.event.issue.number }}](${{ github.event.issue.html_url }}) (_${TITLE}_) edited"
         python .ci/matrix.py \
         -m "$MESSAGE" \
         -s ${{ secrets.MATRIX_SERVER }} \
@@ -88,8 +92,11 @@ jobs:
 
     - name: Dispatch message - issue milestoned
       if: ${{ github.event_name == 'issues' && github.event.action == 'milestoned' }}
+      env:
+        TITLE: ${{ github.event.issue.title }}
+        MILESTONE: ${{ github.event.issue.milestone.title }}
       run: |
-        MESSAGE="Issue [${{ github.event.issue.number }}](${{ github.event.issue.html_url }}) (_${{ github.event.issue.title }}_) milestoned for ${{ github.event.issue.milestone.title }}"
+        MESSAGE="Issue [${{ github.event.issue.number }}](${{ github.event.issue.html_url }}) (_${TITLE}_) milestoned for ${MILESTONE}"
         python .ci/matrix.py \
         -m "$MESSAGE" \
         -s ${{ secrets.MATRIX_SERVER }} \
@@ -99,8 +106,10 @@ jobs:
 
     - name: Dispatch message - issue closed
       if: ${{ github.event_name == 'issues' && github.event.action == 'closed' }}
+      env:
+        TITLE: ${{ github.event.issue.title }}
       run: |
-        MESSAGE="Issue [${{ github.event.issue.number }}](${{ github.event.issue.html_url }}) (_${{ github.event.issue.title }}_) closed"
+        MESSAGE="Issue [${{ github.event.issue.number }}](${{ github.event.issue.html_url }}) (_${TITLE}_) closed"
         python .ci/matrix.py \
         -m "$MESSAGE" \
         -s ${{ secrets.MATRIX_SERVER }} \
@@ -110,8 +119,10 @@ jobs:
 
     - name: Dispatch message - new PR
       if: ${{ github.event_name == 'pull_request_target' && github.event.action == 'opened' }}
+      env:
+        TITLE: ${{ github.event.pull_request.title }}
       run: |
-        MESSAGE="New PR [${{ github.event.pull_request.number }}](${{ github.event.pull_request.html_url }}) (_${{ github.event.pull_request.title }}_) created"
+        MESSAGE="New PR [${{ github.event.pull_request.number }}](${{ github.event.pull_request.html_url }}) (_${TITLE}_) created"
         python .ci/matrix.py \
         -m "$MESSAGE" \
         -s ${{ secrets.MATRIX_SERVER }} \
@@ -121,8 +132,10 @@ jobs:
 
     - name: Dispatch message - PR edited
       if: ${{ github.event_name == 'pull_request_target' && github.event.action == 'edited' }}
+      env:
+        TITLE: ${{ github.event.pull_request.title }}
       run: |
-        MESSAGE="PR [${{ github.event.pull_request.number }}](${{ github.event.pull_request.html_url }}) (_${{ github.event.pull_request.title }}_) edited"
+        MESSAGE="PR [${{ github.event.pull_request.number }}](${{ github.event.pull_request.html_url }}) (_${TITLE}_) edited"
         python .ci/matrix.py \
         -m "$MESSAGE" \
         -s ${{ secrets.MATRIX_SERVER }} \
@@ -132,8 +145,10 @@ jobs:
 
     - name: Dispatch message - PR closed
       if: ${{ github.event_name == 'pull_request_target' && github.event.action == 'closed' }}
+      env:
+        TITLE: ${{ github.event.pull_request.title }}
       run: |
-        MESSAGE="PR [${{ github.event.pull_request.number }}](${{ github.event.pull_request.html_url }}) (_${{ github.event.pull_request.title }}_) closed"
+        MESSAGE="PR [${{ github.event.pull_request.number }}](${{ github.event.pull_request.html_url }}) (_${TITLE}_) closed"
         python .ci/matrix.py \
         -m "$MESSAGE" \
         -s ${{ secrets.MATRIX_SERVER }} \

@@ -25,6 +25,7 @@
     Copyright (C) 2022 paolodepetrillo.
     Copyright (C) 2022 Philipp Lutz.
     Copyright (C) 2025-2026 Aurélien PIERRE.
+    Copyright (C) 2026 Guillaume Stutin.
     
     darktable is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -234,6 +235,12 @@ void dt_image_cache_allocate(void *data, dt_cache_entry_t *entry)
   // dt_alloc_align: dt_image_t embeds dt_aligned_pixel_t members (alignof 64); see #1212.
   dt_image_t *img = (dt_image_t *)dt_alloc_align(sizeof(dt_image_t));
   entry->data = img;
+  if(IS_NULL_PTR(img))
+  {
+    // dt_cache_get() frees the entry and answers NULL
+    fprintf(stderr, "[image_cache] could not allocate a cache entry for image %" PRId32 "\n", (int32_t)entry->key);
+    return;
+  }
   dt_image_init(img);
   _image_cache_reload_from_db(img, entry->key, DT_SV_CREATE); // emits the create event
 
@@ -339,6 +346,8 @@ dt_image_t *dt_image_cache_get(const int32_t imgid, char mode)
   dt_image_cache_t *cache = _image_cache;
   if(imgid <= 0) return NULL;
   dt_cache_entry_t *entry = dt_cache_get(&cache->cache, (uint32_t)imgid, mode);
+  if(IS_NULL_PTR(entry)) return NULL; // the payload could not be allocated
+
   ASAN_UNPOISON_MEMORY_REGION(entry->data, sizeof(dt_image_t));
   dt_image_t *img = (dt_image_t *)entry->data;
   img->cache_entry = entry;
@@ -376,6 +385,17 @@ dt_image_t *dt_image_cache_testget(const int32_t imgid, char mode)
   return img;
 }
 
+dt_image_t *dt_image_cache_get_existing(const int32_t imgid, char mode)
+{
+  dt_image_cache_t *cache = _image_cache;
+  if(imgid <= 0) return NULL;
+
+  // contains() answers "is there an entry" without taking the entry's lock, which is the one
+  // question testget() conflates with "is it free right now"
+  if(!dt_cache_contains(&cache->cache, (uint32_t)imgid)) return NULL;
+  return dt_image_cache_get(imgid, mode);
+}
+
 // Always reload the cache entry from DB before returning it.
 // This is critical for IMAGE_INFO_CHANGED: other handlers will read from the cache.
 dt_image_t *dt_image_cache_get_reload(const int32_t imgid, char mode)
@@ -385,6 +405,8 @@ dt_image_t *dt_image_cache_get_reload(const int32_t imgid, char mode)
 
   // We must take a write lock to reload in-place, then demote to read if requested.
   dt_cache_entry_t *entry = dt_cache_get(&cache->cache, (uint32_t)imgid, 'w');
+  if(IS_NULL_PTR(entry)) return NULL; // the payload could not be allocated
+
   ASAN_UNPOISON_MEMORY_REGION(entry->data, sizeof(dt_image_t));
   dt_image_t *img = (dt_image_t *)entry->data;
   _image_cache_reload_from_db(img, (uint32_t)imgid, DT_SV_UPDATE);
@@ -566,10 +588,9 @@ void dt_image_cache_write_release(dt_image_t *img, dt_image_cache_write_mode_t m
 
   if(mode == DT_IMAGE_CACHE_SAFE && dt_image_get_xmp_mode())
     dt_control_save_xmp(imgid);
-  
-  // FIXME: that a memory leak ?
-  GList *imgs = NULL;
-  imgs = g_list_prepend(imgs, GINT_TO_POINTER(img->id));
+
+  // The signal owns the list. `img` may be evicted once released, hence the saved id.
+  GList *imgs = g_list_prepend(NULL, GINT_TO_POINTER(imgid));
   DT_DEBUG_CONTROL_SIGNAL_RAISE(dt_control_signal_get_global(), DT_SIGNAL_IMAGE_INFO_CHANGED, imgs);
 }
 

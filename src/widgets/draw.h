@@ -55,6 +55,7 @@
 #include "system/mem_alloc.h"
 #include "system/openmp.h"        // __OMP_DECLARE_SIMD__, __OMP_PARALLEL_FOR_SIMD__
 #include "widgets/paint.h"          // DTGTKCairoPaintIconFunc
+#include "widgets/stroke_raster.h"  // dt_stroke_raster_path()
 #include "widgets/widget_settings.h"
 
 #include <cairo.h>
@@ -597,6 +598,26 @@ static void _fill_clear_preserve(cairo_t *cr)
   _draw_fill_clear(cr, TRUE);
 }
 
+/** The dash pattern of @p type in user units at @p zoom_scale: 0 and 0 for a solid line. */
+static inline void dt_draw_dash_lengths(const dt_draw_dash_type_t type, const float zoom_scale, double *on, double *off)
+{
+  *on = 0.0;
+  *off = 0.0;
+  switch(type)
+  {
+    case DT_MASKS_DASH_STICK:
+      *on = DT_DRAW_SCALE_DASH / zoom_scale;
+      *off = DT_DRAW_SCALE_DASH / zoom_scale;
+      break;
+    case DT_MASKS_DASH_ROUND:
+      *on = (DT_DRAW_SCALE_DASH * 0.25f) / zoom_scale;
+      *off = DT_DRAW_SCALE_DASH / zoom_scale;
+      break;
+    default:
+      break;
+  }
+}
+
 static inline void dt_draw_set_dash_style(cairo_t *cr, dt_draw_dash_type_t type, float zoom_scale)
 {
   // return early if no dash is needed
@@ -840,20 +861,48 @@ static inline void dt_draw_shape_lines(struct dt_develop_t *dev, const dt_draw_d
   const float line_width_bright = selected
                   ? DT_DRAW_SIZE_LINE_SELECTED / zoom_scale
                   : DT_DRAW_SIZE_LINE / zoom_scale;
-  
-  // OUTLINE (dark)
-  cairo_set_line_width(cr, line_width_dark);
+
   float alpha = dash_type ? 0.3f : 0.9f;
   if(source) alpha *= 0.5f;
+  const float alpha_bright = source ? 0.4f : 0.8f;
+
+  /* The path is pixels already: the outline was sampled at the resolution it is drawn at.
+   * Paint it as such wherever the surface allows -- the overlay's own canvas, any image
+   * surface, the group cairo pushed on one -- and keep the cairo strokes below for every other
+   * target. The rasteriser reproduces exactly these: the same two passes, widths, colours,
+   * dashes and caps. */
+  dt_stroke_style_t style = { 0 };
+  const dt_widget_overlay_color_t *overlay = dt_widget_overlay_color();
+  const double dark_amount = (1.0 - overlay->contrast) * 0.5;
+  const double bright_amount = 0.5 + overlay->contrast * 0.5;
+  style.dark = (dt_stroke_pass_t){ .width = line_width_dark,
+                                   .red = overlay->red * dark_amount,
+                                   .green = overlay->green * dark_amount,
+                                   .blue = overlay->blue * dark_amount,
+                                   .alpha = alpha };
+  style.bright = (dt_stroke_pass_t){ .width = line_width_bright,
+                                     .red = overlay->red * bright_amount,
+                                     .green = overlay->green * bright_amount,
+                                     .blue = overlay->blue * bright_amount,
+                                     .alpha = alpha_bright };
+  dt_draw_dash_lengths(dash, zoom_scale, &style.dash_on, &style.dash_off);
+  style.round_caps = (line_cap == CAIRO_LINE_CAP_ROUND);
+  if(dt_stroke_raster_path(cr, &style))
+  {
+    cairo_restore(cr);
+    return;
+  }
+
+  // OUTLINE (dark)
+  cairo_set_line_width(cr, line_width_dark);
   dt_draw_set_color_overlay(cr, FALSE, alpha);
   cairo_stroke_preserve(cr);
 
   // NORMAL (bright)
   cairo_set_line_width(cr, line_width_bright);
-  dt_draw_set_color_overlay(cr, TRUE, source ? 0.4f : 0.8f);
+  dt_draw_set_color_overlay(cr, TRUE, alpha_bright);
   cairo_stroke(cr);
 
-  
   cairo_restore(cr);
 }
 

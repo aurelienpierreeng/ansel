@@ -1,6 +1,7 @@
 /*
     This file is part of the Ansel project.
     Copyright (C) 2026 Aurélien PIERRE.
+    Copyright (C) 2026 Guillaume Stutin.
 
     Ansel is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -148,7 +149,7 @@ typedef struct drawlayer_tiff_export_params_t
   int shortfile;
 } drawlayer_tiff_export_params_t;
 
-static gboolean _layer_name_non_empty(const char *name)
+static gboolean dt_drawlayer_layer_name_non_empty(const char *name)
 {
   if(IS_NULL_PTR(name)) return FALSE;
   char tmp[DT_DRAWLAYER_IO_NAME_SIZE] = { 0 };
@@ -157,7 +158,7 @@ static gboolean _layer_name_non_empty(const char *name)
   return tmp[0] != '\0';
 }
 
-static int64_t _sidecar_timestamp_from_path(const char *path)
+static int64_t dt_drawlayer_sidecar_timestamp_from_path(const char *path)
 {
   if(IS_NULL_PTR(path) || path[0] == '\0' || !g_file_test(path, G_FILE_TEST_EXISTS)) return 0;
 
@@ -192,7 +193,7 @@ static gboolean _export_pre_module_fullres_to_tiff(const int32_t imgid, const ch
   }
 
   const int rc = dt_imageio_export_with_flags(
-      imgid, path, format, format_params, TRUE, FALSE, TRUE, FALSE, FALSE, (filter && filter[0]) ? filter : NULL,
+      imgid, path, format, format_params, TRUE, FALSE, TRUE, FALSE, FALSE, FALSE, (filter && filter[0]) ? filter : NULL,
       FALSE, FALSE, DT_COLORSPACE_NONE, NULL, DT_INTENT_PERCEPTUAL, NULL, NULL, 0, 0, NULL, NULL);
 
   format->free_params(format, format_params);
@@ -639,38 +640,6 @@ gboolean dt_drawlayer_io_layer_name_exists(const char *path, const char *candida
   return exists;
 }
 
-/** @brief Normalize/sanitize requested layer name with fallback handling. */
-static void _sanitize_requested_layer_name(const char *requested, const char *fallback_name, char *name,
-                                           const size_t name_size)
-{
-  if(IS_NULL_PTR(name) || name_size == 0) return;
-  name[0] = '\0';
-  if(!IS_NULL_PTR(requested) && requested[0])
-  {
-    gboolean last_was_space = FALSE;
-    size_t out = 0;
-    for(size_t in = 0; requested[in] != '\0' && out + 1 < name_size; in++)
-    {
-      const unsigned char ch = (unsigned char)requested[in];
-      if(g_ascii_isspace(ch))
-      {
-        if(out > 0 && !last_was_space)
-        {
-          name[out++] = ' ';
-          last_was_space = TRUE;
-        }
-        continue;
-      }
-
-      name[out++] = (char)ch;
-      last_was_space = FALSE;
-    }
-    name[out] = '\0';
-  }
-  g_strstrip(name);
-  if(name[0] == '\0' && !IS_NULL_PTR(fallback_name) && fallback_name[0]) g_strlcpy(name, fallback_name, name_size);
-}
-
 /** @brief Build absolute sidecar path from image id. */
 gboolean dt_drawlayer_io_sidecar_path(const int32_t imgid, char *path, const size_t path_size)
 {
@@ -968,24 +937,6 @@ gboolean dt_drawlayer_io_delete_layer(const char *path, const char *target_name,
                                      NULL);
 }
 
-/** @brief Create unique layer name with fallback if requested name is empty. */
-void dt_drawlayer_io_make_unique_name(const char *path, const char *requested, const char *fallback_name, char *name,
-                                      const size_t name_size)
-{
-  _sanitize_requested_layer_name(requested, fallback_name, name, name_size);
-  if(name[0] == '\0') return;
-  if(!dt_drawlayer_io_layer_name_exists(path, name, -1)) return;
-
-  char base[DT_DRAWLAYER_IO_NAME_SIZE] = { 0 };
-  g_strlcpy(base, name, sizeof(base));
-
-  for(int suffix = 2; suffix < 100000; suffix++)
-  {
-    g_snprintf(name, name_size, "%.*s %d", MAX((int)name_size - 12, 1), base, suffix);
-    if(!dt_drawlayer_io_layer_name_exists(path, name, -1)) return;
-  }
-}
-
 /** @brief Create unique layer name without fallback source. */
 void dt_drawlayer_io_make_unique_name_plain(const char *path, const char *requested, char *name, const size_t name_size)
 {
@@ -1118,7 +1069,7 @@ int32_t dt_drawlayer_io_background_layer_job_run(dt_job_t *job)
     char bg_name[DT_DRAWLAYER_IO_NAME_SIZE] = { 0 };
     dt_drawlayer_io_make_unique_name_plain(params->sidecar_path, params->requested_bg_name, bg_name,
                                            sizeof(bg_name));
-    if(!_layer_name_non_empty(bg_name)) break;
+    if(!dt_drawlayer_layer_name_non_empty(bg_name)) break;
 
     int final_order = -1;
     if(!dt_drawlayer_io_insert_layer(params->sidecar_path, bg_name, params->insert_after_order,
@@ -1130,7 +1081,7 @@ int32_t dt_drawlayer_io_background_layer_job_run(dt_job_t *job)
     if(!dt_drawlayer_io_find_layer(params->sidecar_path, bg_name, final_order, &io_info)) break;
 
     result->success = TRUE;
-    result->sidecar_timestamp = _sidecar_timestamp_from_path(params->sidecar_path);
+    result->sidecar_timestamp = dt_drawlayer_sidecar_timestamp_from_path(params->sidecar_path);
     g_strlcpy(result->created_bg_name, bg_name, sizeof(result->created_bg_name));
     g_snprintf(result->message, sizeof(result->message), _("created background layer `%s'"), bg_name);
   } while(0);

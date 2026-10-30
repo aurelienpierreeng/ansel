@@ -12,6 +12,7 @@
     Copyright (C) 2020 Hanno Schwalm.
     Copyright (C) 2020 Pascal Obry.
     Copyright (C) 2022 Martin Bařinka.
+    Copyright (C) 2026 Guillaume Stutin.
     
     darktable is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -229,13 +230,14 @@ static void dt_focus_draw_clusters(cairo_t *cr, int width, int height, int32_t i
                                    int buffer_height, dt_focus_cluster_t *focus, int frows, int fcols,
                                    float full_zoom, float full_x, float full_y)
 {
+  const dt_image_t *img = dt_image_cache_get(imgid, 'r');
+  if(IS_NULL_PTR(img)) return;
+  dt_image_t image = *img;
+  dt_image_cache_read_release(img);
+
   const int fs = frows * fcols;
   cairo_save(cr);
   cairo_translate(cr, width / 2.0, height / 2.0f);
-
-  const dt_image_t *img = dt_image_cache_get(imgid, 'r');
-  dt_image_t image = *img;
-  dt_image_cache_read_release(img);
 
   // FIXME: get those from rawprepare IOP somehow !!!
   int wd = buffer_width + image.crop_x;

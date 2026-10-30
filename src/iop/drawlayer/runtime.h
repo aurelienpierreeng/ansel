@@ -1,6 +1,7 @@
 #ifndef DT_IOP_DRAWLAYER_RUNTIME_H
 #define DT_IOP_DRAWLAYER_RUNTIME_H
 
+#include "iop/drawlayer/cache.h"        // dt_drawlayer_cache_patch_t, held by value below
 #include "iop/drawlayer/coordinates.h"
 #include "iop/drawlayer/widgets.h"
 #include "iop/drawlayer/worker.h"
@@ -80,6 +81,33 @@ typedef struct dt_drawlayer_stroke_state_t
   uint32_t current_stroke_batch;
 } dt_drawlayer_stroke_state_t;
 
+/**
+ * @brief The brush as the input path needs it, resolved from conf once per change.
+ *
+ * `dt_conf_get_float` runs `dt_calculator_solve` -- an expression parser -- on the stored
+ * string at EVERY call, and the motion handler read eleven floats, twelve bools and three
+ * ints per pointer event. None of it depends on where the pointer is. Cached here beside
+ * the brush colour, which already worked this way.
+ */
+typedef struct dt_drawlayer_brush_settings_t
+{
+  uint32_t map_flags;
+  uint8_t pressure_profile;
+  uint8_t tilt_profile;
+  uint8_t accel_profile;
+  float distance_percent;
+  float smoothing_percent;
+  float brush_radius;
+  float brush_opacity;
+  float brush_flow;
+  float brush_hardness;
+  float brush_sprinkles;
+  float brush_sprinkle_size;
+  float brush_sprinkle_coarseness;
+  int brush_shape;
+  int brush_mode;
+} dt_drawlayer_brush_settings_t;
+
 typedef struct dt_drawlayer_ui_state_t
 {
   dt_drawlayer_widgets_t *widgets;
@@ -94,6 +122,8 @@ typedef struct dt_drawlayer_ui_state_t
   float brush_display_color[3];
   float brush_pipeline_color[3];
   gboolean brush_color_valid;
+  dt_drawlayer_brush_settings_t brush_settings;
+  gboolean brush_settings_valid;
 } dt_drawlayer_ui_state_t;
 
 typedef struct dt_drawlayer_controls_t
@@ -136,9 +166,6 @@ typedef struct dt_drawlayer_controls_t
   GtkWidget *attach_layer;
   GtkWidget *create_background;
   GtkWidget *save_layer;
-  GtkWidget *fill_white;
-  GtkWidget *fill_black;
-  GtkWidget *fill_transparent;
   GtkWidget *map_pressure_size;
   GtkWidget *map_pressure_opacity;
   GtkWidget *map_pressure_flow;
@@ -227,7 +254,6 @@ typedef struct dt_drawlayer_runtime_manager_t
 {
   gboolean realtime_active;
   gboolean painting_active;
-  gboolean background_job_running;
   dt_drawlayer_runtime_private_t *priv;
 } dt_drawlayer_runtime_manager_t;
 
@@ -253,17 +279,18 @@ typedef struct dt_drawlayer_runtime_inputs_t
   gboolean padding_changed;
 } dt_drawlayer_runtime_inputs_t;
 
-typedef struct dt_drawlayer_runtime_action_request_t dt_drawlayer_runtime_action_request_t;
-
+/** @brief What the runtime manager is given to reach its caller's state.
+ *
+ * `user_data' is the one member: every consumer casts it back to a
+ * dt_drawlayer_runtime_context_t. It carried two callback pointers as well,
+ * `collect_inputs' and `perform_action', which were assigned NULL at all
+ * nineteen construction sites and never called from anywhere -- a host
+ * interface that was declared and never wired up. The forward-declared
+ * dt_drawlayer_runtime_action_request_t existed only in that second signature
+ * and was never defined at all. */
 typedef struct dt_drawlayer_runtime_host_t
 {
   void *user_data;
-  void (*collect_inputs)(void *user_data,
-                         dt_drawlayer_runtime_inputs_t *inputs,
-                         dt_drawlayer_worker_snapshot_t *worker_snapshot);
-  gboolean (*perform_action)(void *user_data,
-                             const dt_drawlayer_runtime_action_request_t *action,
-                             dt_drawlayer_runtime_result_t *result);
 } dt_drawlayer_runtime_host_t;
 
 typedef struct dt_iop_drawlayer_gui_data_t
@@ -316,7 +343,6 @@ typedef struct dt_drawlayer_runtime_source_t
   dt_pixel_cache_entry_t *cache_entry;
   int width;
   int height;
-  gboolean direct_copy;
   dt_iop_roi_t target_roi;
   dt_iop_roi_t source_roi;
   dt_drawlayer_runtime_buffer_t tracked_buffer;
@@ -351,12 +377,6 @@ void dt_drawlayer_runtime_manager_note_buffer_lock(dt_drawlayer_runtime_manager_
                                                    dt_drawlayer_runtime_actor_t actor,
                                                    gboolean write_lock,
                                                    gboolean acquire);
-void dt_drawlayer_runtime_manager_note_sidecar_io(dt_drawlayer_runtime_manager_t *state, gboolean active);
-void dt_drawlayer_runtime_manager_note_thread(dt_drawlayer_runtime_manager_t *state,
-                                              dt_drawlayer_runtime_actor_t actor,
-                                              gboolean active,
-                                              gboolean waiting,
-                                              guint queued);
 dt_drawlayer_runtime_result_t dt_drawlayer_runtime_manager_update(dt_drawlayer_runtime_manager_t *state,
                                                                   const dt_drawlayer_runtime_update_request_t *request,
                                                                   const dt_drawlayer_runtime_host_t *host);
@@ -368,4 +388,37 @@ void dt_drawlayer_runtime_manager_bind_piece(dt_drawlayer_runtime_manager_t *hea
                                              dt_drawlayer_runtime_manager_t **runtime_manager,
                                              dt_drawlayer_process_state_t **runtime_process,
                                              gboolean *runtime_display_pipe);
+/** @brief How many input axes the tablet mapping offers (pressure, tilt, acceleration). */
+#define DT_DRAWLAYER_MAPPING_ROWS 3
+/** @brief How many brush properties each axis can drive (size, opacity, flow, hardness). */
+#define DT_DRAWLAYER_MAPPING_TARGETS 4
+
+/** @brief One cell of the tablet-mapping grid: a widget slot and the conf key it mirrors. */
+typedef struct dt_drawlayer_mapping_cell_t
+{
+  GtkWidget **widget;
+  const char *conf_key;
+} dt_drawlayer_mapping_cell_t;
+
+/** @brief One input axis: the four properties it can drive, and its response curve. */
+typedef struct dt_drawlayer_mapping_row_t
+{
+  dt_drawlayer_mapping_cell_t targets[DT_DRAWLAYER_MAPPING_TARGETS];
+  dt_drawlayer_mapping_cell_t profile;
+} dt_drawlayer_mapping_row_t;
+
+/**
+ * @brief Pair every tablet-mapping widget with the configuration key it mirrors.
+ *
+ * Three places walk this grid and each used to spell it out: the builder that creates the
+ * fifteen widgets, gui_update reading conf into them, and sync_params_from_gui writing them
+ * back. Three unrolled copies of one list is how a fourth input axis gets added to two of
+ * them. The labels are NOT here -- they are the GUI's and are translated at build time.
+ *
+ * `dt_drawlayer_conf_ensure_defaults()` deliberately does not use this: its keys carry
+ * one-off migrations from the older `map_speed_*` spellings, so its list is not uniform.
+ */
+void dt_drawlayer_mapping_rows(dt_iop_drawlayer_gui_data_t *g,
+                                    dt_drawlayer_mapping_row_t rows[DT_DRAWLAYER_MAPPING_ROWS]);
+
 #endif // DT_IOP_DRAWLAYER_RUNTIME_H

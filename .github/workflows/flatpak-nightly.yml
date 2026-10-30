@@ -1,5 +1,6 @@
 #   This file is part of the Ansel project.
 #   Copyright (C) 2026 Aurélien PIERRE.
+#   Copyright (C) 2026 Guillaume Stutin.
 #   
 #   Ansel is free software: you can redistribute it and/or modify
 #   it under the terms of the GNU General Public License as published by
@@ -23,12 +24,52 @@ on:
   workflow_dispatch:
 
 jobs:
-  Flatpak:
+  # The cron fires whether master moved or not. Before this job, every night on an unchanged
+  # head rebuilt the bundle and then failed to publish it, the release already holding that
+  # commit's package. The release is asked first; tools/nightly_published.sh matches the commit hash in
+  # the asset names. A manual dispatch builds anyway, since rebuilding on purpose is what
+  # someone dispatching wants.
+  #
+  # The OSTree repository needs no question of its own: when R2 is configured it is published
+  # earlier in the same job, and a failure there stops the job before the bundle is uploaded,
+  # so a bundle on the release means the repository went out too.
+  #
+  # The build checks out the commit judged here, not the branch again, so a push landing in
+  # between cannot have one commit checked and another built.
+  published:
     if: github.repository == 'aurelienpierreeng/ansel' || github.event_name == 'workflow_dispatch'
+    name: Is this commit already published
+    runs-on: ubuntu-latest
+    outputs:
+      sha: ${{ steps.check.outputs.sha }}
+      build: ${{ steps.check.outputs.build }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.ref_name }}
+          fetch-depth: 1
+          submodules: false
+      - name: Ask the release
+        id: check
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          EVENT: ${{ github.event_name }}
+        run: |
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          if [ "${EVENT}" != "workflow_dispatch" ] && tools/nightly_published.sh \
+            'Ansel-@VERSION@-x86_64.flatpak'; then
+            echo "already published for this commit, not rebuilt"
+            echo "build=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "build=true" >> "$GITHUB_OUTPUT"
+          fi
+
+  Flatpak:
+    needs: published
+    if: ${{ needs.published.outputs.build == 'true' }}
     name: Nightly Ansel Flatpak build
     runs-on: ubuntu-latest
     env:
-      BRANCH: ${{ github.ref_name }}
       # Mapped here because the `secrets` context is not available inside a step's
       # `if:` -- the whole workflow failed to parse on master the first time it ran with
       # `if: secrets.X != ''`. The `env` context is, so the optional steps test these.
@@ -46,7 +87,7 @@ jobs:
       - name: Checkout ansel source
         uses: actions/checkout@v6
         with:
-          ref: ${{ env.BRANCH }}
+          ref: ${{ needs.published.outputs.sha }}
           # get_git_version_string.sh needs the tags, and enough history to
           # reach the last one, or the package is named "unknown-version".
           fetch-depth: 5000
@@ -148,6 +189,21 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: ansel.stable.flatpak
+
+      # GitHub stores an asset name reduced to [A-Za-z0-9._-], so the `~' a version string
+      # carries is filed as `.'. tip decides what to REPLACE by comparing its local filenames
+      # with the release's assets, so a file still spelled with `~' never matches the asset it
+      # should replace: tip uploads it as new and GitHub answers 422 already_exists. Renaming
+      # here hands tip the name the release will use, so a dispatched rebuild of a published
+      # commit replaces its package instead of failing.
+      - name: Name the packages the way the release will
+        run: |
+          for f in Ansel-*.flatpak; do
+            [ -e "${f}" ] || continue
+            case "${f}" in
+              *'~'*) mv -- "${f}" "${f//\~/.}" ;;
+            esac
+          done
 
       - name: Update nightly release
         uses: aurelienpierreeng/tip@master

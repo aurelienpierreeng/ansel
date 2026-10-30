@@ -869,7 +869,10 @@ static gchar *_remote_cache_path(const char *url)
 
   dt_free(hash);
 
-  gchar *cache_dir = g_build_filename(g_get_user_cache_dir(), "ansel", "downloads", NULL);
+  /* dt_loc_cachedir(), not g_get_user_cache_dir(): this built the path a download is WRITTEN to
+   * while _textnotes_download_start() created the directory under dt_loc_cachedir(), so under
+   * --cachedir the two named different places and the write went to a directory nobody made. */
+  gchar *cache_dir = g_build_filename(dt_loc_cachedir(), "downloads", NULL);
   gchar *path = g_build_filename(cache_dir, filename, NULL);
   dt_free(cache_dir);
   dt_free(filename);
@@ -1839,7 +1842,9 @@ static void _save_and_render(dt_lib_module_t *self)
   GError *error = NULL;
   if(!g_file_set_contents(d->path, text, -1, &error))
   {
-    dt_control_log(_("failed to save text notes to %s: %s"), d->path, error->message);
+    gchar *item = g_strdup_printf("%s: %s", d->path, error->message);
+    dt_control_alert(_("Could not save"), _("failed to save text notes"), item);
+    dt_free(item);
     g_clear_error(&error);
     goto done;
   }

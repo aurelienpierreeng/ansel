@@ -1,5 +1,7 @@
 # Getting GTK out of the backend {#gtk_decoupling}
 
+> **First checked 2026-09-29.** This file was mechanically checked against `8f4638a04e` on 2026-09-29 — every `file:line` citation resolved, every backticked symbol looked up in the tree, every OPEN/planned status claim tested, and every gate or baseline number it quotes compared with `tools/check_module_boundaries.sh` and `tools/include_baseline.txt`. **No per-claim semantic read was done**: a citation that resolves can still describe the wrong thing, so this is a floor, not a verification. Two baselines had moved: `toolkit_metadata` reached 0 and its counter was retired, and `toolkit_imageio` is 12, not 13. `toolkit_develop` (20) and `toolkit_iop` (97) are unmoved — Phases 3 and 5 have not started.
+
 Written 2026-08-20 from measurement, as the companion to `doc/control-split.md` and
 `doc/develop-split.md`. Those two re-stratify *directories*; this one removes a *dependency*. They
 overlap but are not the same work, and doing either does not finish the other.
@@ -25,9 +27,18 @@ So the target is not "zero toolkit hits everywhere". It is:
 
 | | GTK/GDK | cairo/pango |
 |---|---|---|
-| `src/pixel`, `src/caches`, `src/database`, `src/metadata`, `src/history`, `src/system`, `src/common` | **zero, enforced** | zero except where it renders pixels |
+| `src/pixel`, `src/caches`, `src/database` | **zero, enforced** | zero except where it renders pixels |
+| `src/metadata`, `src/history`, `src/system`, `src/common`, `src/colorprofiles` | **not zero yet, but ratcheted** | zero except where it renders pixels |
 | `src/develop`, `src/imageio`, `src/iop` | **zero in the operator half** | allowed in the panel half and in genuine rasterisers |
 | `src/gui`, `src/views`, `src/libs`, `src/widgets` | unrestricted | unrestricted |
+
+> **Corrected 2026-09-29.** That row said all seven were "zero, enforced". Neither half held:
+> four of them were absent from the loop in `tools/check_module_boundaries.sh` — it iterated
+> `develop iop imageio pixel caches database` and nothing else — and measured on the day this
+> was corrected they are **`common` 11, `system` 3, `metadata` 2, `history` 1** (and
+> `colorprofiles` 2, `math` 0). Only `pixel`, `caches` and `database` were at zero, and only
+> those three were enforced. All twelve are in the loop now, each pinned at what it actually
+> scores, so the numbers can come down but not back up. See `doc/ci.md`.
 
 ## 1. Measured shape, 2026-08-20
 
@@ -140,7 +151,10 @@ compiled only because of them (expect a handful — this is the "a header includ
 declarations need" rule, and its documented failure mode is that consumers were relying on the
 supply line).
 
-Baselines: `toolkit_metadata` 2 → 0, pin it.
+Baselines: `toolkit_metadata` 2 → 0, pin it. **Done** (2026-09-29): there is no
+`toolkit_metadata_baseline` in `tools/check_module_boundaries.sh` any more — the counter was
+retired once it reached zero, along with `toolkit_pixel`, `toolkit_caches` and
+`toolkit_database`, which are all pinned at 0 there.
 
 ### Phase 2 — split the module API in two (1 PR, the keystone)
 
@@ -207,7 +221,9 @@ X-macro headers with the same `FULL_API_H` discipline, so Phase 2's split applie
 `pdf.c` is the exception to check: it uses cairo to *write a PDF*, which is a rasteriser use like
 watermark's.
 
-Baseline: `toolkit_imageio` 13 → ~1.
+Baseline: `toolkit_imageio` 13 → ~1. (It reads **12** today, so one has already gone; the
+other two live counters are `toolkit_develop_baseline=20` and `toolkit_iop_baseline=97`,
+unmoved — Phases 3 and 5 have not started.)
 
 ### Phase 6 — the stragglers (1 PR)
 

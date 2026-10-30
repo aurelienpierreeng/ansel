@@ -112,9 +112,6 @@ gboolean dt_drawlayer_io_delete_layer(const char *path, const char *target_name,
 gboolean dt_drawlayer_io_load_flat_rgba(const char *path, float **pixels, int *width, int *height);
 /** @brief Check whether candidate layer name already exists. */
 gboolean dt_drawlayer_io_layer_name_exists(const char *path, const char *candidate, int ignore_index);
-/** @brief Build unique layer name with fallback and numeric suffixing. */
-void dt_drawlayer_io_make_unique_name(const char *path, const char *requested, const char *fallback_name, char *name,
-                                      size_t name_size);
 /** @brief Build unique layer name without fallback override. */
 void dt_drawlayer_io_make_unique_name_plain(const char *path, const char *requested, char *name, size_t name_size);
 /** @brief List all layer names from sidecar TIFF. */

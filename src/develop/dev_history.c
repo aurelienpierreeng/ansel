@@ -74,6 +74,7 @@
 #include "develop/blend.h"
 #include "develop/develop.h"
 #include "develop/imageop.h"
+#include "develop/pixelpipe_hb.h"
 #include "develop/masks.h"
 #include "develop/supervisor.h"
 #include "develop/gui_throttle.h"
@@ -886,6 +887,9 @@ gboolean dt_dev_add_history_item_ext(dt_develop_t *dev, struct dt_iop_module_t *
   // look for leaks on top of history
   _remove_history_leaks(dev);
 
+  // Enabled as it will be recorded, which is what the topology test below compares against.
+  if(enable) module->enabled = TRUE;
+
   // Check if the current module to append to history is actually the same as the last one in history,
   GList *last = g_list_last(dev->history);
   gboolean new_is_old = FALSE;
@@ -894,19 +898,14 @@ gboolean dt_dev_add_history_item_ext(dt_develop_t *dev, struct dt_iop_module_t *
     dt_dev_history_item_t *last_item = (dt_dev_history_item_t *)last->data;
     dt_iop_module_t *last_module = last_item->module;
     new_is_old = dt_iop_check_modules_equal(module, last_module);
-    add_new_pipe_node = FALSE;
   }
-  else
-  {
-    const dt_dev_history_item_t *previous_item =
-      dt_dev_history_get_last_item_by_module(dev->history, module, g_list_length(dev->history));
-    // check if NULL first or prevous_item->module will segfault
-    // We need to add a new pipeline node if:
-    add_new_pipe_node = (IS_NULL_PTR(previous_item))                         // it's the first history entry for this module
-                        || (previous_item->enabled != module->enabled); // the previous history entry is disabled
-    // if previous history entry is disabled and we don't have any other entry,
-    // it is possible the pipeline will not have this node.
-  }
+
+  // The set of active pipe nodes changes when this is the module's first history entry, or when
+  // its last one is enabled differently -- whether the top item is rewritten in place (the module
+  // toggled again right after its last edit) or a new item is appended.
+  const dt_dev_history_item_t *previous_item =
+    dt_dev_history_get_last_item_by_module(dev->history, module, g_list_length(dev->history));
+  add_new_pipe_node = IS_NULL_PTR(previous_item) || (previous_item->enabled != module->enabled);
 
   dt_dev_history_item_t *hist;
   const gboolean is_new_item = force_new_item || !new_is_old;
@@ -929,9 +928,6 @@ gboolean dt_dev_add_history_item_ext(dt_develop_t *dev, struct dt_iop_module_t *
     dt_print(DT_DEBUG_HISTORY, "[dt_dev_add_history_item_ext] history entry reused for %s at position %i\n",
              module->name(), hist->num);
   }
-
-  // Always resync history with all module internals
-  if(enable) module->enabled = TRUE;
 
   // Include masks if module supports blending and masks are in use, or if it's the mask manager.
   gboolean include_masks = dt_iop_module_needs_mask_history(module);
@@ -1104,6 +1100,13 @@ void dt_dev_history_commit_item_now(dt_develop_t *dev, dt_iop_module_t *module, 
     // Note that the blendop params (thus their hash) references the raster mask provider
     // in its consumer, and the consumer in its provider. So updating the whole pipe
     // resyncs the cumulative hashes too, and triggers a new recompute from the provider on update.
+    // A module switched on or off is the one of these the user is likely to switch back: the
+    // outputs it replaces are kept for that (dt_dev_pixelpipe_t.keep_outputs).
+    if(add_new_pipe_node)
+    {
+      dt_dev_pixelpipe_or_changed(dev->preview_pipe, DT_DEV_PIPE_SWITCHED);
+      dt_dev_pixelpipe_or_changed(dev->pipe, DT_DEV_PIPE_SWITCHED);
+    }
     dt_dev_pixelpipe_resync_history_all(dev);
   }
 
@@ -1456,6 +1459,11 @@ void dt_dev_pop_history_items(dt_develop_t *dev)
 void dt_dev_history_pixelpipe_update(dt_develop_t *dev, gboolean rebuild)
 {
   if(!dev->gui_attached) return;
+
+  // Every caller replaces the history wholesale -- undo, redo, a jump in the history list -- and
+  // going back is the likely next step: keep the outputs this replaces.
+  dt_dev_pixelpipe_or_changed(dev->preview_pipe, DT_DEV_PIPE_SWITCHED);
+  dt_dev_pixelpipe_or_changed(dev->pipe, DT_DEV_PIPE_SWITCHED);
 
   if(rebuild)
     dt_dev_pixelpipe_rebuild_all(dev);
@@ -3005,9 +3013,11 @@ void dt_dev_transient_params_clear(dt_iop_module_t *module)
 
 gboolean dt_dev_transient_params_get(dt_develop_t *dev, const dt_iop_module_t *module,
                                      void *out_params, const size_t out_params_size,
-                                     void *out_blend, const size_t out_blend_size, gboolean *out_has_blend)
+                                     void *out_blend, const size_t out_blend_size, gboolean *out_has_blend,
+                                     uint64_t *out_serial)
 {
   if(!IS_NULL_PTR(out_has_blend)) *out_has_blend = FALSE;
+  if(!IS_NULL_PTR(out_serial)) *out_serial = 0;
   if(IS_NULL_PTR(dev) || IS_NULL_PTR(module) || IS_NULL_PTR(out_params) || out_params_size == 0) return FALSE;
 
   gboolean ok = FALSE;
@@ -3016,6 +3026,10 @@ gboolean dt_dev_transient_params_get(dt_develop_t *dev, const dt_iop_module_t *m
      && dev->transient_params.params_size == (int32_t)out_params_size)
   {
     memcpy(out_params, dev->transient_params.params, out_params_size);
+    /* Fetched under the SAME lock as the blob it describes. Read separately, a publish landing
+     * in between would pair a serial with params it does not describe -- and since the serial is
+     * what advances the piece's cache identity, that pairing is a silently missed render. */
+    if(!IS_NULL_PTR(out_serial)) *out_serial = dev->transient_params.serial;
     ok = TRUE;
 
     if(!IS_NULL_PTR(out_blend) && out_blend_size > 0 && !IS_NULL_PTR(dev->transient_params.blend_params)

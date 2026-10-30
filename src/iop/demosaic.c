@@ -38,7 +38,7 @@
     Copyright (C) 2022 Philipp Lutz.
     Copyright (C) 2022 Victor Forsiuk.
     Copyright (C) 2023 Alynx Zhou.
-    Copyright (C) 2025 Guillaume Stutin.
+    Copyright (C) 2025-2026 Guillaume Stutin.
     
     darktable is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -1977,7 +1977,9 @@ void tiling_callback(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe
     tiling->overhead = sizeof(float) * RCD_TILESIZE * RCD_TILESIZE * 8 * MAX(1, dt_get_num_openmp_threads());
     tiling->xalign = 2;
     tiling->yalign = 2;
-    tiling->overlap = 10;
+    // what RCD itself discards at a tile's edges (rcd.c): a pixel closer than that to a pixel-pipe
+    // tile's edge would not be the one computed untiled
+    tiling->overlap = RCD_BORDER;
     tiling->factor_cl = tiling->factor + 3.0f;
   }
   else if(demosaicing_method == DT_IOP_DEMOSAIC_LMMSE)
@@ -2293,8 +2295,9 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *params, dt_dev
                                                self->dev->image_storage.d65_color_matrix, NULL))
     {
       const char *camera = self->dev->image_storage.camera_makermodel;
-      fprintf(stderr, "[colorspaces] `%s' color matrix not found for 4bayer image!\n", camera);
-      dt_control_log(_("`%s' color matrix not found for 4bayer image!"), camera);
+      gchar *item = g_strdup_printf("%s (%s)", self->dev->image_storage.fullpath, camera);
+      dt_control_alert(_("Camera data missing"), _("color matrix not found for 4bayer image!"), item);
+      dt_free(item);
     }
   }
 

@@ -24,9 +24,9 @@
 /** @file doc_screenshot.h
  *
  * Documentation screenshot mode: a capture panel that renders individual GUI widgets
- * (panels, tool modules, darkroom modules) to image files, so the manual's illustrations
- * can be re-generated from the running application instead of being cropped by hand out
- * of full-screen captures.
+ * (panels, tool modules, darkroom modules, the application's windows) to image files, so
+ * the manual's illustrations can be re-generated from the running application instead of
+ * being cropped by hand out of full-screen captures.
  *
  * Where the destination is a documentation tree, a plain-text map (DOC_SCREENSHOT_MAP_FILE
  * at its root) binds a widget to the illustration it stands for, and the language code the

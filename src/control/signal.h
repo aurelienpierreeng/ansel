@@ -24,6 +24,7 @@
     Copyright (C) 2022 Martin Bařinka.
     Copyright (C) 2023 Luca Zulberti.
     Copyright (C) 2025 Alynx Zhou.
+    Copyright (C) 2026 Guillaume Stutin.
     
     darktable is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -366,7 +367,10 @@ struct dt_control_signal_t *dt_control_signal_init();
 struct dt_control_signal_t *dt_control_signal_get_global(void);
 /* cleanup the signal framework */
 void dt_control_signal_cleanup(struct dt_control_signal_t *ctlsig);
-/* raises a signal */
+/** @brief Raise `signal` with its arguments.
+ * The four signals with a destructor (collection, geotag, image info and presets changed) own the
+ * list or string they are handed and release it, emitted or not: nothing is emitted in a process
+ * without a signal system, nor once the control has stopped running. */
 void dt_control_signal_raise(const struct dt_control_signal_t *ctlsig, const dt_signal_t signal, ...);
 /* connects a callback to a signal */
 void dt_control_signal_connect(const struct dt_control_signal_t *ctlsig, const dt_signal_t signal,

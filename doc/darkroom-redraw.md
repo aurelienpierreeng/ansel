@@ -1,0 +1,237 @@
+# The darkroom repaint: what a frame costs, and what it may not cost
+
+> **Corrected against `fa8e8b86fa` on 2026-09-29.** The audit before that found 3 claim(s)
+> in this file wrong of the tree and 4 stale. One was a number the outline-density work had already improved, one a cross-reference pointing the wrong way, one an over-precise description of the damage re-request. Re-measure
+> before acting on a claim older than the code you are changing, and re-date this line when
+> you do.
+
+The darkroom's centre is repainted on the GUI thread, on the CPU, and it is repainted often:
+on every pipe frame, on every mask hover and drag motion, on every guide toggle. Whatever a
+frame paints is time the GUI thread cannot give to anything else, so the floor of a frame --
+what it costs when nothing but an overlay has moved -- decides how the darkroom feels under
+a drawing tablet. Issue #1198 measured that floor at about 15.7 ms of the 16.7 ms a 60 fps
+frame allows and listed what it was made of. This is the account of what it was actually made
+of, measured, and of what was done about it.
+
+## The floor, priced
+
+Every number below is a cairo operation timed on this machine at a 2560x1440 window, once at
+device scale 1 and once at 2 (a 5120x2880 buffer of 59 MB), which is a 2x screen. The
+operations are the ones the repaint path performed, in the order it performed them, on every
+frame, whatever had changed.
+
+| operation, per frame | at 1x | at 2x |
+| --- | ---: | ---: |
+| allocate, first-touch and free a full-window ARGB surface | 2.2 ms | 29.5 ms |
+| fill the whole window with a colour | 1.8 ms | 5.9 ms |
+| blit a full-window surface onto another, pixel for pixel | 1.2 ms | 5.8 ms |
+| composite a mostly transparent full-window ARGB canvas | 0.0 ms | 0.0 ms |
+| blit a 400x300 rectangle of it, clipped | 0.03 ms | 0.12 ms |
+| scale a full-window preview by 0.73 with cairo's default filter | 66 ms | 262 ms |
+| the same with the NEAREST filter | 1.0 ms | 3.7 ms |
+| memset a full-window canvas row by row | 1.2 ms | 5.7 ms |
+
+And the path, from the GTK draw signal down, before any overlay was drawn:
+
+1. `dt_control_expose()` allocated a full-window ARGB surface and freed it at the end (row 1).
+2. It filled it with the toplevel background (row 2).
+3. The darkroom composed its image surface: a full-window background fill (row 2) and the
+   image blit from the pipe's cacheline (row 3), on every frame, for an image that had not
+   changed since the last one.
+4. With ISO 12646 on, a white rectangle the size of the image plus its border was filled
+   under the image (row 2 again, nearly).
+5. `_paint_all()` blitted the composed image surface into the throwaway surface (row 3).
+6. `dt_control_expose()` blitted the throwaway surface into a persistent pixmap (row 3).
+7. The draw handler blitted the pixmap into GTK's own double buffer (row 3).
+
+Seven passes over the window: about 10 ms at 1x, about 59 ms at 2x, before the first overlay
+pixel. During a brush creation session the overlay canvas was composited and cleared over the
+whole window as well (rows 3 and 8). And a zoom or a pan, while the main pipe catches up,
+scaled the preview with the default filter (row 6): a third of a second per frame at 2x,
+because the `CAIRO_FILTER_NEAREST` the code set was set on the context's default solid source,
+which the surface then replaced.
+
+Nothing on the request side could narrow any of it. `gtk_widget_queue_draw_area()` appeared
+nowhere in the tree; every redraw invalidated the whole widget, so the clip GTK hands the
+draw signal was always the whole window, and the draw handler discarded even that.
+
+## What was done
+
+**The centre paints into GTK's buffer.** GTK's `cr` is a double buffer already, and it
+arrives clipped to the region that was invalidated. `dt_control_expose(cr, width, height)`
+paints into it directly: rows 1, 6 and 7 are gone, and every remaining pass is clipped to the
+region GTK asked for. The persistent pixmap and its copy on resize are gone with them. A view
+whose expose paints every pixel of the centre says so with `VIEW_FLAGS_PAINTS_WHOLE_AREA`, and
+the toplevel skips its background fill under it (row 2, once): the darkroom does.
+
+**The image is composed once per source frame.** `dev->image_surface` is keyed on everything
+it depends on -- the source frame's hash, the viewport, the colours, the border, the frame size
+-- and an expose that finds the same key repaints from it without composing. A pipe frame
+still costs the compose; a frame that only moved an overlay costs one clipped blit. The
+background is filled where the image will not cover, as the four bands around it in one
+even-odd fill whose hole is a pixel inside the image so no seam shows, and the ISO 12646
+frame is a ring: 1.3 ms against 5.9 at 2x. The preview fallback sets its filter on the pattern
+that scales.
+
+**A motion the masks handled repaints what it touched.** The masks record the rectangle their
+last frame composited, in the view's coordinates (`_overlay_damage`), and the darkroom asks
+`dt_masks_overlay_queue_redraw()` for that rectangle grown by the pointer's motion since --
+a dragged shape moves with the pointer, a hovered one does not move -- when the masks handled
+the motion and nothing else did; a module's own overlay knows no rectangle and keeps the whole
+widget. The invalidation is an estimate made before the frame is drawn: when a frame outgrows
+it, `_overlay_damage_record()` (`masks_gui.c:4584-4592`) compares the composited rectangle with
+the clip of the expose and, if the clip does not cover it, asks for the **whole damage
+rectangle** again — not "the rest" — which the next, small expose paints. At worst that is one extra small
+frame; it can never leave part of an overlay unpainted.
+
+**The overlay canvas is the view, and a session frame is bounded.** The canvas was sized to
+`cr`'s clip, which a rectangle redraw narrows: it would have been reallocated on every such
+frame and held nothing beyond the clip. It covers the view and stays; what reaches the target
+is the composite, and cairo clips that. A creation session's frame took the whole canvas
+before -- a full-window composite and a full-window memset on every frame drawn -- and spans
+the session's box and the live shape's now. The session's box covers the borders and not the
+spines alone, which is also what a brush's dashed border, a radius outside its spine, needed
+from the pattern's clip after a pan.
+
+## The static layer: the members that did not change are not stroked again
+
+After the four rules a pipe frame still re-stroked every member of the visible group: 1 to
+8 ms a shape at fit zoom, and a drag makes a pipe frame per motion, so a mask-heavy edit paid
+tens of milliseconds of GUI thread per motion for shapes that had not moved. The members that
+are not the selected one are now stroked once into a view-sized surface, `_static_layer` in
+`masks_gui.c`, and composited under the live canvas with one blit, clipped to what the redraw
+asked for. Its key is the view matrix, the group, the selection, the overlay colours and a
+signature of every other member's outline -- its counts and every 32nd sample -- so a member
+an undo moved is caught, while the selected member, which a drag rebuilds on every motion, is
+not in it at all. A pan, a zoom or a change of selection pays one full stroke of the others,
+which is what every frame paid before; a rebuild also marks the whole frame dirty, so a
+selection change under a small invalidation gets its one full repaint.
+
+With it, cairo's own drawing -- nodes, handles, arrows -- is bounded to the selected member's
+header alone, which is all cairo draws for a group: bounding every member's header had made
+a spread-out group's dirty rectangle the whole window on every frame, and with it the
+composite, the clear and the rectangle a motion asks a redraw of.
+
+Measured by the harness's `group-11` case, every brush and polygon of the corpus in one group
+at fit zoom on a 2560x1440 surface, RelWithDebInfo, per frame, of which about 1.8 ms is the
+harness's own background paint:
+
+| group of 11, per full frame | before | after |
+| --- | ---: | ---: |
+| nothing selected | 14.1 ms | 4.0 ms |
+| one member selected | 16.4 ms | 5.7 ms |
+
+The first frame of that group is the rebuild of every member's outline, and the outline-density
+change has since taken most of it: the same group-11 case measures **218 ms at 1:1 and 80 ms at
+fit** in the table below, against 459 ms before. The 340 ms figure predates that change. What
+remains of #1391 is the rebuild itself, not its old size.
+
+## What a frame costs now
+
+| frame | before, 2x | after, 2x |
+| --- | ---: | ---: |
+| a mask hover or drag motion, overlay only | ~59 ms + overlay | ~0.2 ms + overlay |
+| a new pipe frame | ~59 ms | ~13 ms: bands 1.3, image 5.8, GTK blit 5.8 |
+| a zoom or pan while the main pipe catches up | ~320 ms | ~10 ms |
+
+The overlay itself -- the outlines rasterised directly, see `doc/overlay-raster.md` -- costs
+1 to 8 ms per shape at fit zoom; a group's unselected members live in a static layer (described
+above), so a frame strokes one shape.
+
+A drag motion also REBUILDS the dragged shape's outline, throttled to 60 Hz and 2 px: the
+whole walk, its distortion transform and the boundary pass, and on a large brush that was the
+frame, not the drawing. Two changes in `doc/brush-boundary.md`: the boundary pass streams
+sqrt-free disc arrays in bounded blocks and keeps its copy test in a sample hash (2-3x), and
+the outline is sampled at the density the screen shows instead of at one image pixel (another
+2-5x at fit zoom, in the build, the transform, the stroke and the hit test alike). Measured,
+first frame after a rebuild of the selected shape, corpus at 2560x1440:
+
+| shape | before, step 1 | after, 1:1 (step 1) | after, fit (step 2) | after, quarter (step 4) |
+| --- | ---: | ---: | ---: | ---: |
+| brush-1313-cusp | 29 ms | 18 ms | 4.7 ms | 2.9 ms |
+| brush-1074-flare | 103 ms | 33 ms | 12.9 ms | 5.4 ms |
+| brush-1360-pressure-ramp | 69 ms | 39 ms | 13.6 ms | 6.2 ms |
+| polygon-comb | 49 ms | 28 ms | 15.6 ms | 6.1 ms |
+| group of 11, every member | 459 ms | 218 ms | 80 ms | 30 ms |
+
+`-d masks -d perf` prints `[masks] boundary pass: ... probed in N ms` per rebuild, and
+`[masks] outline cache: held for geometry G at step S` says why a frame rebuilt.
+
+A pointer motion also HIT-TESTS the selected shape -- its nodes and handles, then every sample
+through the shape's `get_distance` -- and a button press hit-tests every member of the group
+to choose one. #1391's third item put that at a million distance tests per motion; measured
+with `ansel-test-masks-geometry --time-overlay`, which sweeps a 20x20 grid of positions over
+the image and times both events (`[HIT]` lines), that was a PRESS at the old raw density. After
+the density change a motion cost 0.01-0.17 ms at fit and 0.09-0.78 ms at 1:1 (the comb
+polygon), a press on the 11-member group 0.56 and 3.6 ms. Each cache entry now carries the box
+its samples span (`dt_masks_form_gui_points_t::bbox`, filled with the outline), and every
+sample-walking hit test asks it first (`dt_masks_gui_points_reach()`, the cursor grown by twice
+its radius): four comparisons answer "nothing here" for a shape the cursor is not near, which
+on a press is most of the group.
+
+| event | before, fit | after, fit | before, 1:1 | after, 1:1 |
+| --- | ---: | ---: | ---: | ---: |
+| motion, 1313 cusp selected | 0.017 ms | 0.003 ms | 0.166 ms | 0.029 ms |
+| motion, comb polygon selected | 0.165 ms | 0.099 ms | 0.78 ms | 0.51 ms |
+| press, group of 11 | 0.56 ms | 0.26 ms | 3.6 ms | 1.6 ms |
+
+The same positions hit the same shapes before and after. What remains is the shape the cursor
+IS near, walked at the screen's density; the comb spans most of the frame, so its box prunes
+little.
+
+## The navigation thumbnail, and a configure that changes nothing
+
+*Measured 2026-10-29 on `7d819416b4`, against master `fc54f74b5d`*: in the GUI, one config copy
+and one image for both, the pointer moved by hand, `-d perf -d dev -d signal --d-signal-act raise
+--d-signal DT_SIGNAL_CONTROL_REDRAW_ALL`, the navigation area 385x179 at device scale 1.
+
+The navigation thumbnail was seen repainting on hovers over a notebook tab or a panel edge. Two
+changes answer that report; only the first answers something that was measured.
+
+- **The navigation composes its picture once per state.** `_lib_navigation_picture_key()`
+  (`libs/navigation.c`) hashes everything the picture depends on: the preview frame's hash, the
+  widget's size, the image, the viewport state and the preview's plan. An expose with the key of
+  the picture already composed is one blit, which prints `took 0.000 secs`; a composition, which
+  is a full-size surface, a background render, the thumbnail copy and a pango layout for the zoom
+  label and the arrow, costs 2 ms with no preview frame and 13 ms (39 ms CPU) when the preview
+  frame lands. The key holds no style input: after a theme switch or a move to a screen of
+  another scale, the previous picture stays until the next state change.
+- **Most exposes are not the module's.** `-d perf` prints `[navigation] redraw: cached|composed,
+  clip WxH at x,y of WxH`. Crossing the area's bottom grip about ten times gave 22 exposes on the
+  branch, all `cached`, where master composed 29 times, `took 0.001 secs` each, with nothing
+  changed. Of the 22, 7 were clipped to `5x179 at 380,0`, the left panel's 5 px edge
+  grip floating over the area's right edge (see [`gtk-patterns.md`](gtk-patterns.md)), and 15 to
+  the whole area. None was the 5 px strip of the bottom grip that was being crossed. Read in the
+  theme, not isolated by a measurement: `*:hover { font-weight: 500; }`
+  (`data/themes/ansel.css`) matches the area itself, which the pointer leaves when it moves onto
+  the grip, and GTK repaints a restyled widget whole, the grip's strip with it. So a whole-area
+  clip does not say who asked: the area's own hover gives one as well as a request of the module.
+- **A configure that changes nothing does nothing.** `dt_dev_configure_real()` returns before it
+  re-plans both pipes, recomputes the thumbnail size and raises `DT_SIGNAL_CONTROL_REDRAW_ALL`
+  when `dt_dev_viewport_set_box()` reports the box unchanged; `-d dev` prints the request either
+  way, `unchanged` appended when it returned. The mechanism it was written against, a hovered
+  tab's heavier font weight running a layout pass that reaches the centre's configure-event,
+  **did not reproduce**: about 60 s of hovering the module-group tabs gave 0 configures and 0
+  `REDRAW_ALL` raises on either build. Over a window resize, ISO 12646 on and off, the margin
+  slider, zoom, switches between landscape and portrait images and a lighttable round trip,
+  372 configures were re-planned and 4 returned unchanged, all 4 on an image switch, where
+  `_darkroom_image_loaded_callback()` has already run `dt_dev_pixelpipe_rebuild_all()` and
+  `dt_dev_get_thumbnail_size()`; each was followed by a fresh main backbuffer. `studio_capture`
+  rebuilds the same way before it configures (read, not run).
+
+To find out who raised a redraw, the signal layer traces its raisers: `ansel -d signal
+--d-signal-act raise --d-signal-act print-trace --d-signal <name>` prints a backtrace for every
+raise of that signal (`DT_SIGNAL_CONTROL_REDRAW_ALL`, `DT_SIGNAL_CONTROL_NAVIGATION_REDRAW` and
+`DT_SIGNAL_HISTORY_RESYNC` are the ones that reach the navigation). Each `--d-signal-act` takes one
+value, compared whole (`src/darktable.c`), so `raise,print-trace` prints the usage and exits 1.
+`print-trace` is compiled in for GCC builds only (`DT_HAVE_SIGNAL_TRACE`, `src/CMakeLists.txt`):
+a clang build prints `[signal] print-trace not available, skipping` and still logs each raise. A
+redraw with no signal behind it is GTK's own: an overlay exposed, a widget restyled, an allocation
+that moved.
+
+## Reading it
+
+`-d perf` prints `[darkroom] surface prepared / image painted / overlay predicates / overlays
+drawn / redraw` per expose; `-d perf -d masks` adds `[masks] overlay composited (WxH of WxH)`,
+which now prints a small rectangle of the view on a motion frame and the whole view on a pipe
+frame. `MASKS_DUMP_OVERLAY=<dir>` writes what a frame drew.

@@ -42,8 +42,33 @@ ln -s /Applications package/ || true
 # Create a temporary rw image. Use a process-local filename so a stale mounted
 # image from a previous interrupted packaging attempt cannot make hdiutil report
 # "Resource busy" when the CI runner reuses the same install directory.
-hdiutil create -srcfolder package -volname "${PROGN}" -fs HFS+ \
-	-fsargs "-c c=64,a=16,e=16" -format UDRW "${temp_dmg}"
+#
+# Retried, because that is not the only way hdiutil says "Resource busy". What is MEASURED is
+# that this command fails intermittently on the same code: once in six nightly DMG builds, the
+# other five passing. What is INFERRED, and not observed, is which process held the folder --
+# the step before this one ends on `codesign --deep' over the whole bundle, and macOS answers a
+# newly signed application by looking at it, Spotlight indexing it and the security machinery
+# verifying it. The retry does not depend on that guess being right: it cures any transient
+# holder, whichever it was.
+#
+# A failed attempt leaves nothing behind that matters -- the image is named per process and the
+# EXIT trap removes it -- but hdiutil may have written a partial file, so each retry clears it
+# first or the next attempt fails on "file already exists" instead. The wait grows, since a
+# fixed short one is the version that would still lose to a slow indexer.
+dmg_attempts=3
+for dmg_attempt in $(seq 1 ${dmg_attempts}); do
+	if hdiutil create -srcfolder package -volname "${PROGN}" -fs HFS+ \
+		-fsargs "-c c=64,a=16,e=16" -format UDRW "${temp_dmg}"; then
+		break
+	fi
+	if [ "${dmg_attempt}" -eq "${dmg_attempts}" ]; then
+		echo "hdiutil create failed ${dmg_attempts} times; giving up." >&2
+		exit 1
+	fi
+	rm -f "${temp_dmg}"
+	echo "hdiutil create failed (attempt ${dmg_attempt}/${dmg_attempts}); retrying in $((dmg_attempt * 15)) s..." >&2
+	sleep $((dmg_attempt * 15))
+done
 
 # Mount image without autoopen to create window style params
 device=$(hdiutil attach -readwrite -noverify -autoopen "${temp_dmg}" |
@@ -69,7 +94,37 @@ echo '
 # Finalizing creation
 chmod -Rf go-w /Volumes/"${PROGN}"
 sync
-hdiutil detach "${device}"
+
+# Detached with the same retry as the creation above, and for the same reason read from the other
+# end: the flake is not a command that refuses to start, it is the system holding the image. The
+# `attach' above is given -autoopen, which hands the volume to the Finder, and the osascript block
+# then drives the Finder to lay the window out -- a layout the Finder stores in a .DS_Store it
+# writes when it sees fit. So `sync' orders our own writes and says nothing about the Finder's, and
+# a detach issued right after gets `couldn't unmount "diskN" - Resource busy', exit 16. Measured on
+# the Intel nightly of 2026-09-15: creation succeeded, every earlier step passed, and this line
+# ended the job with no DMG.
+#
+# The last attempt forces it, which is what the EXIT trap has always done to clean up after a
+# failure. Forcing is safe at this point because every write to the volume is ours and `sync' has
+# flushed them: what -force overrides is another process still having the volume open, not
+# unwritten data of ours. Each attempt sits in an `if' so neither `set -e' nor the ERR trap fires
+# on one that is going to be retried, and `device' is cleared only on success, so the trap neither
+# detaches a volume that is already gone nor skips one that is not.
+detach_attempts=3
+for detach_attempt in $(seq 1 ${detach_attempts}); do
+	if [ "${detach_attempt}" -eq "${detach_attempts}" ]; then
+		if hdiutil detach -force "${device}"; then
+			break
+		fi
+		echo "hdiutil detach failed ${detach_attempts} times, -force included; giving up." >&2
+		exit 1
+	fi
+	if hdiutil detach "${device}"; then
+		break
+	fi
+	echo "hdiutil detach failed (attempt ${detach_attempt}/${detach_attempts}); retrying in $((detach_attempt * 5)) s..." >&2
+	sleep $((detach_attempt * 5))
+done
 device=""
 # Find repo root (a parent directory that contains `tools`) and use its script.
 search_dir="${scriptDir}"

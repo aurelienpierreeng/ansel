@@ -97,6 +97,9 @@ src/colorprofiles/iop_profile.c
 src/colorprofiles/printprof.c
 src/common/collection.c
 src/common/color_vocabulary.c
+src/metadata/colorlabels.c
+src/colorprofiles/colorspaces.c
+src/common/colorchecker.h
 src/common/colorchecker.c
 src/common/colorchecker.h
 src/common/cups_print.c
@@ -169,7 +172,9 @@ src/gui/actions/run.c
 src/gui/actions/select.c
 src/gui/actions/styles.c
 src/gui/actions/supervisor_window.c
+src/gui/alert.c
 src/gui/application.c
+src/gui/closing.c
 src/gui/common/database_gui.c
 src/gui/common/film_gui.c
 src/gui/common/folder_survey_gui.c

@@ -27,6 +27,7 @@
     Copyright (C) 2022 Hanno Schwalm.
     Copyright (C) 2022 Martin Bařinka.
     Copyright (C) 2022 Philipp Lutz.
+    Copyright (C) 2026 Guillaume Stutin.
     
     darktable is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -209,7 +210,7 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
     .search_radius = K,
     .decimate = 0,
     .norm = norm2,
-    .pipetype = pipe->type,
+    .pipe = pipe,
     .kernel_init = gd->kernel_nlmeans_init,
     .kernel_dist = gd->kernel_nlmeans_dist,
     .kernel_horiz = gd->kernel_nlmeans_horiz,
@@ -306,6 +307,10 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
   for(int j = -K; j <= 0; j++)
     for(int i = -K; i <= K; i++)
     {
+      // The pipe abandoned this run: stop between two patches. The host enqueues the whole run far
+      // ahead of the device, so the killswitch is read once the previous patch has run on it.
+      if((j > -K || i > -K) && dt_opencl_finish(devid) && dt_dev_pixelpipe_has_shutdown(pipe)) goto error;
+
       int q[2] = { i, j };
 
       cl_mem dev_U4 = buckets[bucket_next(&state, NUM_BUCKETS)];
@@ -390,7 +395,8 @@ error:
     dt_opencl_release_mem_object(buckets[k]);
   }
 
-  dt_print(DT_DEBUG_OPENCL, "[opencl_nlmeans] couldn't enqueue kernel! %d\n", err);
+  // an abandoned run comes here with the last patch's CL_SUCCESS: there is no error to report
+  if(err != CL_SUCCESS) dt_print(DT_DEBUG_OPENCL, "[opencl_nlmeans] couldn't enqueue kernel! %d\n", err);
   return FALSE;
 #endif /* USE_NEW_IMPL_CL */
 }
@@ -413,11 +419,11 @@ void tiling_callback(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe
   return;
 }
 
-static inline __attribute__((always_inline)) void process_cpu(const dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_iop_t *piece,
+static inline __attribute__((always_inline)) int process_cpu(const dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_iop_t *piece,
                         const void *const ivoid,
                         void *const ovoid, const dt_iop_roi_t *const roi_in,
                         const dt_iop_roi_t *const roi_out,
-                        void (*denoiser)(const float *const inbuf, float *const outbuf,
+                        int (*denoiser)(const float *const inbuf, float *const outbuf,
                                          const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out,
                                          const dt_nlmeans_param_t *const params))
 {
@@ -449,10 +455,12 @@ static inline __attribute__((always_inline)) void process_cpu(const dt_dev_pixel
                                       .patch_radius = P,
                                       .search_radius = K,
                                       .decimate = decimate,
-                                      .norm = norm2 };
-  denoiser(ivoid,ovoid,roi_in,roi_out,&params);
+                                      .norm = norm2,
+                                      .pipe = pipe };
+  if(denoiser(ivoid,ovoid,roi_in,roi_out,&params)) return 1;
   if(pipe->mask_display & DT_DEV_PIXELPIPE_DISPLAY_MASK)
     dt_iop_alpha_copy(ivoid, ovoid, roi_out->width, roi_out->height);
+  return 0;
 }
 
 int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_iop_t *piece, const void *const ivoid,
@@ -460,8 +468,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
 {
   const dt_iop_roi_t *const roi_in = &piece->roi_in;
   const dt_iop_roi_t *const roi_out = &piece->roi_out;
-  process_cpu(pipe, piece, ivoid, ovoid, roi_in, roi_out, nlmeans_denoise);
-  return 0;
+  return process_cpu(pipe, piece, ivoid, ovoid, roi_in, roi_out, nlmeans_denoise);
 }
 
 void init_global(dt_iop_module_so_t *module)

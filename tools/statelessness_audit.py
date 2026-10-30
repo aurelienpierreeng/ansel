@@ -38,8 +38,16 @@ REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 # by letter therefore accuses every const table of pointers in the tree.
 #
 # .data.rel.ro* is read-only once the dynamic linker has finished, so it is not state.
-MUTABLE_SECTIONS = re.compile(r"^\.(data|bss|sdata|sbss|tdata|tbss)(\.|$)")
-READONLY_SECTIONS = re.compile(r"^\.(rodata|data\.rel\.ro)(\.|$)")
+#
+# COFF (Windows) names the same things differently: `.rdata` is read-only, `.tls` is
+# thread-local storage, and a grouped section takes a `$` suffix (`.bss$foo`) where ELF takes
+# a `.` one.
+MUTABLE_SECTIONS = re.compile(r"^\.(data|bss|sdata|sbss|tdata|tbss|tls)([.$]|$)")
+READONLY_SECTIONS = re.compile(r"^\.(rodata|rdata|data\.rel\.ro)([.$]|$)")
+
+# What a compiled object is called: CMake names it `<source>.obj` on Windows, `<source>.o`
+# elsewhere. Looking for the wrong one finds nothing -- which scan() refuses to call a pass.
+OBJ_SUFFIX = ".obj" if sys.platform in ("win32", "cygwin", "msys") else ".o"
 
 # Compiler-emitted symbols that are not program state.
 NOISE = re.compile(r"^(__func__|__PRETTY_FUNCTION__|CSWTCH|__gcov|__profc|__profd|__llvm|"
@@ -52,7 +60,7 @@ def objects(build_dir):
     out = []
     for dirpath, _, filenames in os.walk(build_dir):
         for fn in filenames:
-            if fn.endswith(".o"):
+            if fn.endswith(OBJ_SUFFIX):
                 out.append(os.path.join(dirpath, fn))
     return out
 
@@ -70,10 +78,10 @@ def source_of(obj, build_dir):
     `CMakeFiles/<target>.dir/` component wherever it sits, and what is left is the path
     relative to the project root.
     """
-    rel = os.path.relpath(obj, build_dir)
+    rel = os.path.relpath(obj, build_dir).replace("\\", "/")
     rel = re.sub(r"CMakeFiles/[^/]*\.dir/", "", rel)
-    if rel.endswith(".o"):
-        rel = rel[:-2]
+    if rel.endswith(OBJ_SUFFIX):
+        rel = rel[:-len(OBJ_SUFFIX)]
     if os.path.isfile(os.path.join(REPO, rel)):
         return rel
     # Generated sources (introspection_*.c) have no counterpart in the tree; ignore them.
@@ -87,15 +95,23 @@ def scan(build_dir):
 
     objs = objects(build_dir)
     if not objs:
-        sys.exit(f"error: no .o files under {build_dir}")
+        sys.exit(f"error: no {OBJ_SUFFIX} files under {build_dir}")
 
-    # objdump -t prints:  value flags section \t size name
+    # ELF: objdump -t prints  value flags section \t size name
     # flags contain spaces, so anchor on the tab that precedes the size.
     # objdump prints a visibility marker before the name for non-default visibility:
     #   ... .data.rel.local.DW.ref...  0000000000000008 .hidden DW.ref.__gxx_personality_v0
     # Capturing the first token there yields ".hidden" as the symbol name.
     row = re.compile(r"^[0-9a-fA-F]+\s+(?P<flags>.{7})\s+(?P<section>\S+)\t[0-9a-fA-F]+\s+"
                      r"(?:\.(?:hidden|protected|internal)\s+)?(?P<name>\S+)")
+    # COFF: objdump -t prints the section as a NUMBER, not a name:
+    #   [ 28](sec  3)(fl 0x00)(ty    0)(scl   3) (nx 0) 0x0000000000000000 _accels_global
+    # 0 is undefined, -1 absolute, -2 debug. The names come from the one symbol objdump emits
+    # per section (`[  4](sec  3)... (nx 1) 0x0... .bss'), which is listed before anything
+    # that lands in it. The ELF pattern above matches none of these lines: an object read
+    # with it alone yields no symbols at all, and a tree of them reads as entirely stateless.
+    coff_row = re.compile(r"^\[\s*\d+\]\(sec\s+(?P<sec>-?\d+)\)\(fl [^)]*\)\(ty\s+[0-9a-fA-F]+\)"
+                          r"\(scl\s+\d+\)\s+\(nx (?P<nx>\d+)\)\s+0x[0-9a-fA-F]+\s+(?P<name>\S+)")
 
     for obj in objs:
         src = source_of(obj, build_dir)
@@ -105,15 +121,37 @@ def scan(build_dir):
             out = subprocess.run(["objdump", "-t", obj], capture_output=True, text=True).stdout
         except FileNotFoundError:
             sys.exit("error: objdump not found")
+
+        # Both formats reduce to (name, section) with ELF's spellings for the two special
+        # sections, so the classification below is written once.
+        symbols = []
+        section_names = {}
         for line in out.splitlines():
             m = row.match(line)
+            if m:
+                if m.group("name") != m.group("section"):   # objdump's one symbol per section
+                    symbols.append((m.group("name"), m.group("section")))
+                continue
+            m = coff_row.match(line)
             if not m:
                 continue
-            name, section, flags = m.group("name"), m.group("section"), m.group("flags")
+            sec, name = int(m.group("sec")), m.group("name")
+            if sec > 0 and m.group("nx") == "1" and name.startswith("."):
+                section_names[sec] = name                    # the section's own symbol
+            elif sec == 0:
+                # A call into another DLL goes through its import thunk; the callee is the
+                # name behind the prefix.
+                symbols.append((name[len("__imp_"):] if name.startswith("__imp_") else name,
+                                "*UND*"))
+            elif sec > 0:
+                symbols.append((name, section_names.get(sec, "")))
+            # sec < 0: absolute (`@feat.00') or debug (`.file') -- neither is a symbol here
+
+        for name, section in symbols:
             if NOISE.match(name):
                 continue
-            if section == "*ABS*" or name == section:
-                continue          # the file symbol, and objdump's one symbol per section
+            if section == "*ABS*":
+                continue          # the file symbol
             if section == "*UND*":
                 calls[src].add(name)
             elif READONLY_SECTIONS.match(section):

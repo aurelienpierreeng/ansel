@@ -1,5 +1,27 @@
 include_directories(${CMAKE_CURRENT_BINARY_DIR}/..)
 
+if(USE_OPENCL)
+  # HAVE_OPENCL changes the LAYOUT of public structs -- it gates `process_cl` and its siblings
+  # in dt_iop_module_t -- so anything linking lib_ansel must see the same value as the library,
+  # or it reads the library's fields at its own offsets. The tests were compiling a 1088-byte
+  # dt_iop_module_t against the library's 1104, and a `module->dev` set by a test read back as
+  # NULL inside lib_ansel. Nothing warned; the tests simply exercised a different struct.
+  #
+  # add_definitions() is DIRECTORY-scoped and src/ sets it for itself, but the test tree is a
+  # SIBLING of src/, not a child, so it inherited nothing. Setting it here covers this directory
+  # and unittests/ below it.
+  #
+  # Do NOT express this as `target_compile_definitions(ansel_deps INTERFACE ...)' in src/: that
+  # reaches every consumer of ansel_deps, including targets with no OpenCL include path, and
+  # common/opencl.h includes <CL/cl.h> inside this very guard. src/widgets then failed to build
+  # on Windows and macOS while Linux happened to resolve the header anyway.
+  #
+  # The same goes for the bundled OpenCL headers src/ adds for itself: without them the tests
+  # only resolved <CL/cl.h> where the system ships one, which Windows does not.
+  add_definitions(-DHAVE_OPENCL=1)
+  include_directories(SYSTEM ${CMAKE_SOURCE_DIR}/src/external/OpenCL)
+endif(USE_OPENCL)
+
 add_executable(ansel-test-variables variables.c)
 target_link_libraries(ansel-test-variables lib_ansel)
 target_include_directories(ansel-test-variables PRIVATE
@@ -35,6 +57,10 @@ set_target_properties(ansel-test-masks-geometry PROPERTIES
   SKIP_BUILD_RPATH FALSE
   BUILD_WITH_INSTALL_RPATH FALSE
   BUILD_RPATH "$<TARGET_FILE_DIR:lib_ansel>")
+if(WIN32)
+  # Windows has no rpath: the DLL must sit beside the executable, as in tests/unittests.
+  _copy_required_library(ansel-test-masks-geometry lib_ansel)
+endif()
 target_compile_definitions(ansel-test-masks-geometry PRIVATE
   ANSEL_TEST_SOURCE_DIR="${CMAKE_SOURCE_DIR}"
   ANSEL_TEST_BINARY_DIR="${CMAKE_BINARY_DIR}")

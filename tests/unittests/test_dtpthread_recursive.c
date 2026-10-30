@@ -42,6 +42,10 @@
 #include <stdint.h>
 #include <cmocka.h>
 
+#ifdef _WIN32
+#include "win/main_wrapper.h"
+#endif
+
 /*
  * These four exercise re-entrant locking on purpose, which is exactly the pattern clang's
  * thread-safety analysis is built to reject: it models a lock as held or not held, so a
@@ -128,7 +132,7 @@ static void _an_rwlock_writer_may_re_enter(void **state) NO_THREAD_SAFETY_ANALYS
   assert_int_equal(dt_pthread_rwlock_destroy(&lock), 0);
 }
 
-int main(void)
+int main(int argc, char *argv[])
 {
   const struct CMUnitTest tests[] = {
     cmocka_unit_test(_a_null_attr_mutex_is_recursive),

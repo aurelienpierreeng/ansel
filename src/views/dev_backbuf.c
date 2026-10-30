@@ -55,10 +55,15 @@ void dt_dev_get_background_color(const dt_develop_t *dev, dt_aligned_pixel_t bg_
 
 void dt_dev_draw_iso12646_border(cairo_t *cr, double width, double height, int border)
 {
-  // draw the white frame around picture
+  /* the white frame around the picture: the ring only, the picture is painted over the middle
+   * anyway and the middle is most of the window */
+  cairo_save(cr);
   cairo_rectangle(cr, -border * .5f, -border * .5f, width + border, height + border);
+  cairo_rectangle(cr, 1.0, 1.0, width - 2.0, height - 2.0);
+  cairo_set_fill_rule(cr, CAIRO_FILL_RULE_EVEN_ODD);
   cairo_set_source_rgb(cr, 1., 1., 1.);
   cairo_fill(cr);
+  cairo_restore(cr);
 }
 
 void dt_dev_draw_profile_mode_label(cairo_t *cri, int height)
@@ -91,6 +96,33 @@ void dt_dev_draw_profile_mode_label(cairo_t *cri, int height)
   g_object_unref(layout);
 }
 
+/**
+ * @brief Point this surface at a cacheline, holding the GUI's own claim on it.
+ *
+ * A pixelpipe cache entry with refcount > 0 is never evicted, never has its vRAM flushed and
+ * never removed -- that one predicate is what the LRU, `dt_dev_pixelpipe_cache_flush_clmem()'
+ * and the removal path all share. A locked surface keeps a RAW POINTER into the entry's pixels
+ * for as long as it exists, which is exactly the thing that claim exists to protect, so the GUI
+ * takes it rather than borrowing the pipeline's.
+ *
+ * That is the difference from how this used to work. The surface relied on the single keepalive
+ * ref `pixelpipe_hb.c' swaps when it publishes a new backbuffer, so the cacheline under the
+ * displayed frame was protected only while the pipeline still called it the backbuffer -- the
+ * moment it published the next one, what the screen was showing belonged to nobody. Holding the
+ * claim here means the frame on screen survives the pipeline moving on, which is what lets that
+ * pipeline stop allocating a fresh buffer for every frame just to keep out of the GUI's way.
+ *
+ * Every bind goes through here, including the release (@p entry NULL), so the take and the drop
+ * cannot drift apart -- the shape of bug this file would otherwise grow one assignment at a time.
+ */
+static void _locked_bind_entry(dt_dev_locked_surface_t *locked, struct dt_pixel_cache_entry_t *entry)
+{
+  if(locked->entry == entry) return;
+  if(!IS_NULL_PTR(locked->entry)) dt_dev_pixelpipe_cache_ref_count_entry(FALSE, locked->entry);
+  locked->entry = entry;
+  if(!IS_NULL_PTR(entry)) dt_dev_pixelpipe_cache_ref_count_entry(TRUE, entry);
+}
+
 void dt_dev_release_locked_surface(dt_dev_locked_surface_t *locked)
 {
   if(IS_NULL_PTR(locked)) return;
@@ -101,10 +133,7 @@ void dt_dev_release_locked_surface(dt_dev_locked_surface_t *locked)
     locked->surface = NULL;
   }
 
-  /* These cairo views only mirror whatever cacheline the pipeline currently exposes as backbuffer.
-   * They never own the backbuffer keepalive ref themselves: `pixelpipe_hb.c` swaps that ownership
-   * when publishing a new backbuffer. Releasing the surface must therefore only drop the GUI view. */
-  locked->entry = NULL;
+  _locked_bind_entry(locked, NULL);
   locked->data = NULL;
   locked->hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
   locked->width = 0;
@@ -156,8 +185,8 @@ gboolean dt_dev_lock_pipe_surface(dt_develop_t *dev, dt_dev_pixelpipe_t *pipe, d
    * to the slow path does. */
 
   struct dt_pixel_cache_entry_t *entry = NULL;
-  /* GUI surfaces only borrow the currently published backbuffer. They rely on the backbuffer keepalive ref
-   * owned by `pixelpipe_hb.c`, so they must not take or drop their own cache refs here. */
+  /* The claim on whatever this resolves to is taken by _locked_bind_entry() below, once the
+   * entry is known to be usable -- never here, where the lookup may still be refused. */
   void *data = NULL;
   if(!dt_dev_pixelpipe_cache_peek_gui(pipe, NULL, &data, &entry, wait, _dev_backbuf_restart_cache_wait, dev))
     data = NULL;
@@ -192,8 +221,11 @@ gboolean dt_dev_lock_pipe_surface(dt_develop_t *dev, dt_dev_pixelpipe_t *pipe, d
 
   if(!IS_NULL_PTR(locked->surface) && locked->data == data && locked->width == width && locked->height == height)
   {
+    /* Same pixels, so the cairo surface stands -- but the ENTRY behind them may be a different
+     * one (this path compares the data pointer, the fast path above compares both), and the
+     * claim belongs to whichever entry actually owns the memory now. */
     locked->hash = hash;
-    locked->entry = entry;
+    _locked_bind_entry(locked, entry);
     locked->data = data;
     return TRUE;
   }
@@ -212,7 +244,7 @@ gboolean dt_dev_lock_pipe_surface(dt_develop_t *dev, dt_dev_pixelpipe_t *pipe, d
   locked->width = width;
   locked->height = height;
   locked->data = data;
-  locked->entry = entry;
+  _locked_bind_entry(locked, entry);
   locked->surface = surface;
   return TRUE;
 }
@@ -224,16 +256,29 @@ gboolean dt_dev_render_locked_surface(cairo_t *cr, const dt_develop_t *dev, dt_d
   if(IS_NULL_PTR(cr) || IS_NULL_PTR(dev) || IS_NULL_PTR(locked) || IS_NULL_PTR(locked->surface)) return FALSE;
   if(IS_NULL_PTR(locked->entry) || locked->hash == DT_PIXELPIPE_CACHE_HASH_INVALID) return FALSE;
 
-  cairo_set_source_rgb(cr, bg_color[0], bg_color[1], bg_color[2]);
-  cairo_paint(cr);
-
   int wd = locked->width;
   int ht = locked->height;
   if(wd <= 0 || ht <= 0) return FALSE;
 
   wd /= dt_gui_get_global()->ppd;
   ht /= dt_gui_get_global()->ppd;
-  cairo_translate(cr, .5f * (width - wd), .5f * (height - ht));
+  const double x0 = .5 * (width - wd);
+  const double y0 = .5 * (height - ht);
+
+  /* The background where the image will not cover: the four bands around it, as one even-odd
+   * fill. The hole is a pixel smaller than the image on every side so the blit overlaps it and
+   * no seam shows between the band and an antialiased image edge. A fill of the whole window
+   * under an image that covers most of it was a full pass for nothing: 5.9 ms of a frame at a
+   * 2560x1440 window on a 2x screen, against 1.3 ms for the bands. */
+  cairo_save(cr);
+  cairo_rectangle(cr, 0, 0, width, height);
+  cairo_rectangle(cr, x0 + 1.0, y0 + 1.0, wd - 2.0, ht - 2.0);
+  cairo_set_fill_rule(cr, CAIRO_FILL_RULE_EVEN_ODD);
+  cairo_set_source_rgb(cr, bg_color[0], bg_color[1], bg_color[2]);
+  cairo_fill(cr);
+  cairo_restore(cr);
+
+  cairo_translate(cr, x0, y0);
 
   if(dev->iso_12646.enabled) dt_dev_draw_iso12646_border(cr, wd, ht, border);
 
@@ -241,6 +286,9 @@ gboolean dt_dev_render_locked_surface(cairo_t *cr, const dt_develop_t *dev, dt_d
   cairo_surface_set_device_scale(locked->surface, dt_gui_get_global()->ppd, dt_gui_get_global()->ppd);
   cairo_rectangle(cr, 0, 0, wd, ht);
   cairo_set_source_surface(cr, locked->surface, 0, 0);
+  /* pixel for pixel on a matching target; say so, rather than leave the default filter to
+   * discover a mismatch the expensive way */
+  cairo_pattern_set_filter(cairo_get_source(cr), CAIRO_FILTER_NEAREST);
   cairo_fill(cr);
   dt_dev_pixelpipe_cache_rdlock_entry(FALSE, locked->entry);
 

@@ -1,6 +1,7 @@
 /*
     This file is part of Ansel.
     Copyright (C) 2026 Aurélien Pierre.
+    Copyright (C) 2026 Guillaume Stutin.
 
     Ansel is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -60,6 +61,42 @@ void dt_toast_log(const char *msg, ...) __attribute__((format(printf, 1, 2)));
 
 /** @brief Post a transient toast, interpreting Pango markup in @p msg. */
 void dt_toast_markup_log(const char *msg, ...) __attribute__((format(printf, 1, 2)));
+
+/** @brief Tell the user something that must not go unseen: what it says stays true after a toast
+ * would have faded -- a module failed, a file was not written, an export will not come.
+ *
+ * The GUI shows it in an alert window with one OK button (gui/alert.h): one window per @p title and
+ * @p message, which shows the message once and lists the items it was raised for under it, in a
+ * list that scrolls. A failure that repeats over a batch -- the thumbnails of a film roll, an
+ * export, sidecar files -- so stays one window that lists which items it hit, not only the last
+ * one. Without a GUI -- ansel-cli, or before dt_gui_gtk_init() -- it is printed on stderr: the title,
+ * the message, and the item on the line under them.
+ * Any thread.
+ *
+ * The message is the kind of failure: the same text at every call from one place, with no value
+ * in it, or every value would open a window of its own. What changes from one call to the next --
+ * the file, the module, the profile -- goes in @p item; an item of several values is built with
+ * g_strdup_printf() by the caller, and freed after this returns.
+ *
+ * @param title   already translated, one line; also what names the kind of failure
+ * @param message already translated; plain text, not markup; no value in it
+ * @param item    one line of the list under the message -- the full path of the image a module
+ *                failed on, prefixed with the module's name; plain text. NULL when there is
+ *                nothing to list. */
+void dt_control_alert(const char *title, const char *message, const char *item);
+
+/** @brief dt_control_alert() for a failure that repeats as long as its cause lasts -- memory
+ * running short, where every new request fails again. Its window lists every item while it is up,
+ * like any other; once closed, it does not open again this session for the same @p title and
+ * @p message. Without a GUI, printed on stderr each time, as dt_control_alert(). */
+void dt_control_alert_once(const char *title, const char *message, const char *item);
+
+/** @brief What dt_control_alert() and dt_control_alert_once() hand their finished text to, with
+ * @p once non-zero for the latter. Installed once by the GUI. */
+typedef void (*dt_control_alert_handler_t)(const char *title, const char *message, const char *item, int once);
+
+/** @brief Install the alert handler; NULL restores the fallback to dt_control_log(). */
+void dt_control_set_alert_handler(dt_control_alert_handler_t handler);
 
 /* Busy counters. Each enter must be matched by a leave: they are counters, not flags, so
  * nested work does not clear the indicator early. */

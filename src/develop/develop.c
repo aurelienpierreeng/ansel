@@ -76,9 +76,12 @@
 #include "caches/mipmap_cache.h"
 #include "metadata/tags.h"
 #include "common/conf.h"
+#include "common/image.h"
+#include "common/paths.h"   // DT_PATH_MAX
 #include "control/control.h"
 #include "control/signal.h"
 #include "control/jobs.h"
+#include "control/user_message.h"
 #include "develop/blend.h"
 #include "develop/develop.h"
 #include "develop/imageop.h"
@@ -554,7 +557,7 @@ gboolean _resync_pipe_with_history(dt_develop_t *dev, dt_dev_pixelpipe_t *pipe, 
 {
   // When in realtime mode, preview pipe gets paused at the benefit of main pipeline.
   // This is a transient state.
-  if(pipe->pause) return FALSE;
+  if(dt_atomic_get_int(&pipe->pause)) return FALSE;
 
   // We recompute if history hash changed or ROI has changed.
   // If we know history changed, ensure at least the last step is resynced.
@@ -708,6 +711,17 @@ void dt_dev_darkroom_pipeline(dt_develop_t *dev)
         continue;
       }
 
+      // Both pipes were resynced before the preview ran, so a history change committed while the
+      // preview was running (a module switched off mid-render, #1519) finds the main pipe planned
+      // from the old history: its killswitch is raised and its changed flag left set. The reset
+      // below would swallow that killswitch and render the stale history to completion, heavy
+      // modules included. The flag survives the skip, so the next iteration resyncs and runs the
+      // current state. Main pipe only: the preview runs first, right after the resync, and the
+      // configure-event ZOOMED flag landing inside that resync must not starve it (see above).
+      if(pipe == dev->pipe && dt_atomic_get_int(&pipe->shutdown)
+         && dt_dev_pixelpipe_get_changed(pipe) != DT_DEV_PIPE_UNCHANGED)
+        continue;
+
       dt_print(DT_DEBUG_PIPE | DT_DEBUG_DEV, "PIPE %s needs update\n", pipe->type == DT_DEV_PIXELPIPE_FULL ? "full" : "preview");
 
       dt_pthread_mutex_lock(&pipe->busy_mutex);
@@ -748,6 +762,19 @@ void dt_dev_darkroom_pipeline(dt_develop_t *dev)
           = pipe == dev->pipe
             && !IS_NULL_PTR(dev->gui_module)
             && dev->gui_module->request_mask_display != DT_DEV_PIXELPIPE_DISPLAY_NONE;
+
+      /**
+       * Same snapshot, for the overlays only the main pipe draws: the clipping and raw clipping
+       * indicators (iop/overexposed.c, iop/rawoverexposed.c disable themselves on any other pipe)
+       * and soft-proof or gamut check (iop/colorout.c applies the proofing mode to the FULL pipe
+       * only). The preview pipe never carries them.
+       */
+      dt_colorprofiles_settings_t profile_settings;
+      dt_colorprofiles_get_settings(&profile_settings);
+      const gboolean requested_overlay
+          = pipe == dev->pipe
+            && (dev->overexposed.enabled || dev->rawoverexposed.enabled
+                || profile_settings.mode != DT_PROFILE_NORMAL);
 
       // Connect GUI feedback for "pipe busy"
       dt_control_log_busy_enter();
@@ -866,24 +893,39 @@ void dt_dev_darkroom_pipeline(dt_develop_t *dev)
          * request snapshot and the runtime display mode because modules may
          * produce their mask through either mechanism.
          *
+         * Nor a main-pipe overlay: at zoom == fit the main pipe publishes the
+         * full frame too, and would overwrite the clean thumbnail the preview
+         * pipe has just written with clipping marks or a soft-proofed render.
+         * Skipped, the thumbnail keeps the preview pipe's.
+         *
          * This resamples non-linear uint8 at the end of the pipeline and is
          * therefore a low-quality resampling path.
          */
         if(!dt_dev_pixelpipe_get_realtime(pipe)
            && has_preview_size
            && !requested_mask_preview
+           && !requested_overlay
            && pipe->mask_display == DT_DEV_PIXELPIPE_DISPLAY_NONE)
           dt_dev_resync_mipmap_cache(dev, pipe, roi);
       }
 
-      // Allow some breathing room to the OS and GPU
-      dt_iop_nap(10000); // 10 ms
+      /* Breathing room for the OS and the GPU, sized against the work just done rather than
+       * fixed. A realtime stroke paces itself upstream -- the publisher only republishes once
+       * per measured pipe runtime -- so a constant here is not what stops this loop spinning;
+       * it is pure latency added to every frame. Two 10 ms naps were ~15% of a 130 ms frame
+       * when this was written and are 41% of a 29 ms one, which is how a constant ages when
+       * the thing it sits beside gets three times faster. */
+      if(!dt_dev_pixelpipe_get_realtime(pipe)) dt_iop_nap(10000);
     }
 
+    /* Nap only when this turn found nothing to do. Having serviced a pipe, go straight back and
+     * look again: the publish throttle decides how often there is new work, and sleeping past
+     * its next publish just moves the stroke further behind the pointer. */
+    const gboolean serviced = pipe_needs_update[0] || pipe_needs_update[1];
     if(dt_dev_pixelpipe_get_realtime(pipes[0]) || dt_dev_pixelpipe_get_realtime(pipes[1]))
-      dt_iop_nap(10000);
+      dt_iop_nap(serviced ? 500 : 10000);
     else
-      dt_iop_nap(50000);
+      dt_iop_nap(serviced ? 1000 : 50000);
   }
 
   for(size_t i = 0; i < G_N_ELEMENTS(pipes); i++)
@@ -937,6 +979,18 @@ static gboolean _dt_dev_mipmap_prefetch_full(dt_develop_t *dev, const int32_t im
   // 0x0 was a measured fact about the image, and dt_dev_geometry_refresh()'s own guard
   // (dt_dev_geometry_raw_inited) then let the size fold run on it.
   dt_dev_geometry_set_raw_size(dev, ok ? buf.width : 0, ok ? buf.height : 0, ok);
+
+  /* The entry could not be allocated just now. A decode that ran out of memory leaves an entry
+   * behind, and dt_imageio_open() says so itself, in the same window. */
+  if(IS_NULL_PTR(buf.cache_entry) && buf.status == DT_IMAGEIO_CACHE_FULL)
+  {
+    char path[DT_PATH_MAX] = { 0 };
+    dt_image_full_path(imgid, path, sizeof(path), NULL, __FUNCTION__);
+    dt_control_alert_once(_("Not enough memory"),
+                          _("Not enough memory to load the image at full size.\n"
+                            "Close other applications or add more RAM to your system."),
+                          path[0] ? path : NULL);
+  }
 
   dt_mipmap_cache_release(&buf);
 
@@ -1040,7 +1094,20 @@ void dt_dev_configure_real(dt_develop_t *dev, int wd, int ht)
   const dt_iop_roi_t gui_roi = { .x = 0, .y = 0, .width = wd, .height = ht, .scale = 1.0f };
   dt_iop_roi_t pipe_roi = { 0 };
   dt_dev_convert_roi(dev, &gui_roi, &pipe_roi, DT_DEV_ROI_GUI_LOGICAL, DT_DEV_ROI_PIPELINE);
-  dt_dev_viewport_set_box(dev, pipe_roi.width, pipe_roi.height);
+
+  /* A configure that changes nothing does nothing. GTK delivers a configure-event to the centre
+   * whenever its window is allocated again, and a layout pass runs whenever any widget's size
+   * request changes -- the theme gives every hovered tab and button a heavier font weight, so
+   * that is every hover. The box is what the pipes plan from; when it comes back the same as
+   * the one already published there is nothing to re-plan, no thumbnail size to recompute, and
+   * no reason to redraw the whole window (every panel, the navigation, the scopes). Only the
+   * first configure and a real size, border or zoom change get past this. */
+  if(!dt_dev_viewport_set_box(dev, pipe_roi.width, pipe_roi.height))
+  {
+    dt_print(DT_DEBUG_DEV, "[pixelpipe] Darkroom requested a %i×%i px widget -> %i×%i px raster preview, unchanged\n",
+             wd, ht, dt_dev_viewport_box_width(dev), dt_dev_viewport_box_height(dev));
+    return;
+  }
 
   dt_print(DT_DEBUG_DEV,
            "[pixelpipe] Darkroom requested a %i×%i px widget -> %i×%i px raster preview\n",
@@ -1642,20 +1709,6 @@ gchar *dt_dev_get_multi_name(const struct dt_iop_module_t *module)
   return label;
 }
 
-gchar *dt_dev_get_masks_group_name(const struct dt_iop_module_t *module)
-{
-  gchar *module_multi_name = dt_dev_get_multi_name(module);
-  gboolean has_multi_name = g_strcmp0(module_multi_name, "") != 0;
-  // fallback to module name if no multi name
-  gchar *module_label = has_multi_name ?  g_strdup(module_multi_name) : dt_history_item_get_name(module);
-  gchar *group_name = g_strdup_printf("Mask %s", module_label);
-  dt_free(module_label);
-  dt_free(module_multi_name);
-
-  return group_name;
-}
-
-
 gchar *dt_history_item_get_name(const struct dt_iop_module_t *module)
 {
   gchar *label;
@@ -2143,6 +2196,31 @@ void dt_dev_update_mouse_effect_radius(dt_develop_t *dev)
   dt_print(DT_DEBUG_MASKS,
            "[mouse] effect_radius=%0.3f effect_radius_clamped=%0.3f zoom_level=%0.4f ppd=%0.4f\n",
            radius, clamped, zoom_level, dt_screen_ppd());
+}
+
+void dt_dev_backbuf_take_keepalive(dt_backbuf_t *backbuf, struct dt_pixel_cache_entry_t *entry)
+{
+  if(IS_NULL_PTR(backbuf)) return;
+  /* Idempotent: a republication resolving to the same cacheline must not stack references, and
+   * must not drop the one it holds either -- which an unconditional release-then-take would do
+   * for a moment, long enough for the LRU to take the entry the screen is showing. */
+  if(backbuf->keepalive == entry) return;
+
+  dt_dev_backbuf_release_keepalive(backbuf);
+  if(!IS_NULL_PTR(entry))
+  {
+    dt_dev_pixelpipe_cache_ref_count_entry(TRUE, entry);
+    backbuf->keepalive = entry;
+  }
+}
+
+void dt_dev_backbuf_release_keepalive(dt_backbuf_t *backbuf)
+{
+  if(IS_NULL_PTR(backbuf) || IS_NULL_PTR(backbuf->keepalive)) return;
+  /* By POINTER. This reference was taken by pointer, and an entry's hash is not stable under
+   * rekey reuse -- see dt_dev_pixelpipe_cache_unref_entry() for what releasing by hash costs. */
+  dt_dev_pixelpipe_cache_unref_entry(backbuf->keepalive);
+  backbuf->keepalive = NULL;
 }
 
 void dt_dev_set_backbuf(dt_backbuf_t *backbuf, const int width, const int height, const size_t bpp, 

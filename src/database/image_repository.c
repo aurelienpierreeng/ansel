@@ -1,6 +1,7 @@
 /*
     This file is part of darktable,
-    Copyright (C) 2025 Aurélien PIERRE.
+    Copyright (C) 2025-2026 Aurélien PIERRE.
+    Copyright (C) 2026 Guillaume Stutin.
 
     darktable is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -16,6 +17,7 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
+#include <math.h>   // NAN, the "no colour matrix" sentinel restored below
 #include <string.h>
 
 #include "database/image_repository.h"
@@ -41,6 +43,7 @@ static sqlite3_stmt *_image_write_history_hash_stmt = NULL;
 static sqlite3_stmt *_image_write_timestamp_select_stmt = NULL;
 static sqlite3_stmt *_image_write_timestamp_update_stmt = NULL;
 static sqlite3_stmt *_image_set_flags_stmt = NULL;
+static sqlite3_stmt *_image_set_flags_masked_stmt = NULL;
 static dt_pthread_mutex_t _image_stmt_mutex;
 static gsize _image_stmt_mutex_inited = 0;
 
@@ -136,8 +139,24 @@ static void dt_image_from_stmt(dt_image_t *img, sqlite3_stmt *stmt)
     uint32_t tmp = sqlite3_column_int(stmt, 34);
     memcpy(&img->legacy_flip, &tmp, sizeof(dt_image_raw_parameters_t));
   }
+  /* Size the copy from the blob, not from the destination: the writer binds exactly
+   * sizeof(d65_color_matrix) (see dt_image_repository_store()), so anything shorter is a row this
+   * schema did not write so anything else is a row no writer of this schema produces and reading nine
+   * floats out of it is undefined. No null test: sqlite returns NULL only for a NULL or a zero-length
+   * value, so a size of exactly 36 already says the pointer is good. sqlite3_column_bytes() comes AFTER
+   * sqlite3_column_blob() on purpose -- that is the order sqlite3.h documents as safe, a size
+   * asked for first being allowed to describe a value the later call converts.
+   *
+   * The else branch is the one that runs in practice, on the NULL column of a row not yet stored.
+   * It matters because dt_image_cache_get_reload() reloads into an already populated struct
+   * WITHOUT going through dt_image_init(): the matrix from a previous load would otherwise
+   * survive a row that no longer carries one. NAN is the documented "no matrix" sentinel the
+   * readers test (imageio_profile.c, iop/colorin.c, pixel/illuminants.h). */
   const void *color_matrix = sqlite3_column_blob(stmt, 35);
-  if(color_matrix) memcpy(img->d65_color_matrix, color_matrix, sizeof(img->d65_color_matrix));
+  if(sqlite3_column_bytes(stmt, 35) == (int)sizeof(img->d65_color_matrix))
+    memcpy(img->d65_color_matrix, color_matrix, sizeof(img->d65_color_matrix));
+  else
+    img->d65_color_matrix[0] = NAN;
   if(sqlite3_column_type(stmt, 36) != SQLITE_NULL) img->colorspace = sqlite3_column_int(stmt, 36);
   if(sqlite3_column_type(stmt, 37) != SQLITE_NULL) img->raw_black_level = sqlite3_column_int(stmt, 37);
   if(sqlite3_column_type(stmt, 38) != SQLITE_NULL) img->raw_white_point = sqlite3_column_int(stmt, 38);
@@ -208,16 +227,25 @@ gboolean dt_image_repository_load(const int32_t imgid, dt_image_t *img)
   sqlite3_reset(stmt);
   sqlite3_clear_bindings(stmt);
   DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, imgid);
-  if(sqlite3_step(stmt) == SQLITE_ROW)
+  const int rc = sqlite3_step(stmt);
+  if(rc == SQLITE_ROW)
   {
     dt_image_from_stmt(img, stmt);
     found = TRUE;
   }
+  else if(rc == SQLITE_DONE)
+  {
+    // no such row: the image was removed, which is ordinary and not an error
+    img->id = UNKNOWN_IMAGE;
+  }
   else
   {
-    img->id = -1;
-    fprintf(stderr, "[image_repository_load] failed to open image %" PRId32 " from database: %s\n", imgid,
-            sqlite3_errmsg(dt_database_get_sqlite3_global()));
+    /* The read failed (SQLITE_BUSY while another program holds the library's lock, an I/O
+     * error), which says nothing about the image, so img is left as it was.
+     * dt_image_cache_get_reload() reloads a live entry in place: marking it invalid here would
+     * make dt_image_cache_get() answer NULL for that id for as long as the entry stays cached. */
+    fprintf(stderr, "[image_repository_load] could not read image %" PRId32 " from the database: %s\n",
+            imgid, sqlite3_errstr(rc));
   }
 
   dt_pthread_mutex_unlock(&_image_stmt_mutex);
@@ -735,6 +763,39 @@ gboolean dt_image_repository_set_flags(const int32_t imgid, const int flags)
   return ok;
 }
 
+gboolean dt_image_repository_set_flags_masked(const int32_t imgid, const int mask, const int value)
+{
+  if(imgid <= 0 || mask == 0) return FALSE;
+
+  _image_stmt_mutex_ensure();
+  dt_pthread_mutex_lock(&_image_stmt_mutex);
+  if(IS_NULL_PTR(_image_set_flags_masked_stmt))
+  {
+    // The row supplies the bits outside the mask, so nothing this caller read earlier can be
+    // written back over them. Same shape as dt_image_repository_set_flag_among()'s
+    // `flags|?1` and its clearing twin, with both halves in one statement.
+    DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
+                                "UPDATE main.images SET flags = (flags & ~?1) | (?2 & ?1)"
+                                " WHERE id = ?3",
+                                -1, &_image_set_flags_masked_stmt, NULL);
+  }
+  if(IS_NULL_PTR(_image_set_flags_masked_stmt))
+  {
+    dt_pthread_mutex_unlock(&_image_stmt_mutex);
+    return FALSE;
+  }
+
+  DT_DEBUG_SQLITE3_BIND_INT(_image_set_flags_masked_stmt, 1, mask);
+  DT_DEBUG_SQLITE3_BIND_INT(_image_set_flags_masked_stmt, 2, value);
+  DT_DEBUG_SQLITE3_BIND_INT(_image_set_flags_masked_stmt, 3, imgid);
+  const gboolean ok = (sqlite3_step(_image_set_flags_masked_stmt) == SQLITE_DONE);
+  sqlite3_reset(_image_set_flags_masked_stmt);
+  sqlite3_clear_bindings(_image_set_flags_masked_stmt);
+  dt_pthread_mutex_unlock(&_image_stmt_mutex);
+
+  return ok;
+}
+
 void dt_image_repository_foreach_with_path(dt_image_repository_path_row_cb cb, void *user_data)
 {
   if(IS_NULL_PTR(cb)) return;
@@ -754,12 +815,13 @@ void dt_image_repository_foreach_with_path(dt_image_repository_path_row_cb cb, v
   while(sqlite3_step(stmt) == SQLITE_ROW)
   {
     // No lock is held here on purpose: cb() writes back through this repository.
-    cb(sqlite3_column_int(stmt, 0),
-       sqlite3_column_int64(stmt, 1),
-       sqlite3_column_int(stmt, 2),
-       (const char *)sqlite3_column_text(stmt, 3),
-       sqlite3_column_int(stmt, 4),
-       user_data);
+    if(!cb(sqlite3_column_int(stmt, 0),
+           sqlite3_column_int64(stmt, 1),
+           sqlite3_column_int(stmt, 2),
+           (const char *)sqlite3_column_text(stmt, 3),
+           sqlite3_column_int(stmt, 4),
+           user_data))
+      break;
   }
   sqlite3_finalize(stmt);
 }
@@ -1617,6 +1679,11 @@ void dt_image_repository_cleanup(void)
   {
     sqlite3_finalize(_image_set_flags_stmt);
     _image_set_flags_stmt = NULL;
+  }
+  if(_image_set_flags_masked_stmt)
+  {
+    sqlite3_finalize(_image_set_flags_masked_stmt);
+    _image_set_flags_masked_stmt = NULL;
   }
 
   if(_image_stmt_mutex_inited)
