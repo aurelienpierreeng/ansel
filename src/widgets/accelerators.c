@@ -1374,8 +1374,11 @@ static void _make_column_clearable(GtkTreeViewColumn *col, GtkCellRenderer *rend
 {
   dt_shortcut_t *shortcut;
   gtk_tree_model_get(model, iter, COL_SHORTCUT, &shortcut, -1);
+  // "changes-prevent-symbolic" is Adwaita's padlock. A plain "lock" exists in neither Adwaita
+  // nor hicolor and renders as GTK's "image-missing" placeholder.
   g_object_set (renderer,
-                "icon-name", (!IS_NULL_PTR(shortcut) && !shortcut->locked) ? "edit-delete-symbolic" : "lock",
+                "icon-name", (!IS_NULL_PTR(shortcut) && !shortcut->locked) ? "edit-delete-symbolic"
+                                                                         : "changes-prevent-symbolic",
                 "visible",   (!IS_NULL_PTR(shortcut)),
                 "sensitive", (!IS_NULL_PTR(shortcut) && !shortcut->locked && shortcut->key),
                 NULL);
