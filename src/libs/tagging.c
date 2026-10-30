@@ -33,6 +33,7 @@
     Copyright (C) 2022 Martin Bařinka.
     Copyright (C) 2022 Nicolas Auffray.
     Copyright (C) 2026 Guillaume Stutin.
+    Copyright (C) 2026 BlueBlock.
     
     darktable is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -1134,7 +1135,9 @@ static void _pop_menu_attached_attach_to_all(GtkWidget *menuitem, dt_lib_module_
   if(tagid <= 0) return;
 
   // attach tag on images to act on
-  const gboolean res = dt_tag_attach(tagid, -1, TRUE, TRUE);
+  GList *imgs = dt_act_on_get_images();
+  const gboolean res = dt_tag_attach_images(tagid, imgs, TRUE);
+  g_list_free(imgs);
 
   /** record last tag used */
   _save_last_tag_used(dt_tag_get_name(tagid), d);
