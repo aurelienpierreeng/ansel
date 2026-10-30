@@ -1764,7 +1764,12 @@ static int32_t _image_import_internal(const int32_t film_id, const char *filenam
   }
 
   if(!dt_image_repository_insert_import(film_id, imgfname, flags, dt_datetime_now_to_gtimespan()))
+  {
+    dt_free(imgfname);
+    dt_free(ext);
+    dt_free(normalized_filename);
     return 0;
+  }
 
   id = dt_image_get_id(film_id, imgfname);
 
