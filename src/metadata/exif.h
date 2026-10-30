@@ -17,6 +17,7 @@
     Copyright (C) 2022 Martin Bařinka.
     Copyright (C) 2022 paolodepetrillo.
     Copyright (C) 2023, 2025 Aurélien PIERRE.
+    Copyright (C) 2026 Guillaume Stutin.
     
     darktable is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -120,7 +121,7 @@ void dt_exif_cleanup();
  *
  * Used by the XMP sidecar to serialise module parameter blobs, and by anything that has to
  * read one back; they are here rather than beside the sidecar because they are a codec, not
- * a document format -- `common/styles.c` and `common/presets.c` use them too. */
+ * a document format -- `develop/styles.c` and `common/presets.c` use them too. */
 char *dt_exif_xmp_encode(const unsigned char *input, const int len, int *output_len);
 char *dt_exif_xmp_encode_internal(const unsigned char *input, const int len, int *output_len, gboolean do_compress);
 unsigned char *dt_exif_xmp_decode(const char *input, const int len, int *output_len);

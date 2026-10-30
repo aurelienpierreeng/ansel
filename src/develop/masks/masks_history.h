@@ -18,7 +18,7 @@
 
 /** @file
  * Lifecycle and sharing of dt_masks_form_t objects between dev->forms and the
- * per-history-item / undo-redo snapshots (hist->forms).
+ * per-history-item / undo-redo snapshots (hist->forms), and the snapshot a style stores.
  *
  * Forms are refcounted instead of deep-copied: dt_masks_snapshot_current_forms()
  * and dt_masks_replace_current_forms() share pointers with dev->forms rather than
@@ -36,8 +36,10 @@
  * takes its arguments by POINTER, so tag declarations are sufficient. */
 
 #include <glib.h>
+#include <stdint.h>
 
 struct dt_develop_t;
+struct dt_dev_history_item_t;
 struct dt_masks_form_t;
 
 #ifdef __cplusplus
@@ -71,6 +73,32 @@ GList *dt_masks_snapshot_current_forms(struct dt_develop_t *dev, gboolean reset_
 
 /** Drop every reference a snapshot holds and set it to NULL. NULL-safe. */
 void dt_masks_forms_snapshot_release(GList **snapshot);
+
+/** The forms `history` holds at its item `item`: the snapshot of the last item up to and including
+ *  it that carries one, as dt_dev_pop_history_items_ext() would leave dev->forms there. NULL when
+ *  `item` is not in `history`. Borrowed: valid while the history lives. */
+GList *dt_masks_history_forms_at(GList *history, const struct dt_dev_history_item_t *item);
+
+/** TRUE when `forms` holds a form of id `formid`. */
+gboolean dt_masks_forms_hold(GList *forms, const int formid);
+
+/** Add to `*shapes` the group `mask_id` of `forms` and every form it holds, recursively, skipping
+ *  the ids `*shapes` already holds. `*shapes` holds references: release it with
+ *  dt_masks_forms_snapshot_release(). Implemented in masks.c. */
+void dt_masks_collect_shapes(GList **shapes, GList *forms, const int mask_id);
+
+/** Replace the shapes a style stores with `shapes`. Implemented in masks.c. */
+void dt_masks_write_style_shapes(const int32_t styleid, GList *shapes);
+
+/** The shapes a style stores, as references to release with dt_masks_forms_snapshot_release().
+ *  A shape that cannot be read is left out. Implemented in masks.c. */
+GList *dt_masks_read_style_shapes(const int32_t styleid);
+
+/** Add to every forms snapshot of `history` (a list of dt_dev_history_item_t) the forms that
+ *  dev->forms holds and `forms_before` does not, for when the items that brought them now sit
+ *  below snapshots taken before they existed. A snapshot that already holds a form with the
+ *  same id keeps its own. */
+void dt_masks_history_carry_new_forms(struct dt_develop_t *dev, GList *forms_before, GList *history);
 
 /** Release every reference this dev holds on any form, and empty both lists.
  *
