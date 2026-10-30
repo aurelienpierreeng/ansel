@@ -471,6 +471,12 @@ then
 		if [ "$INSTALL_PREFIX" = "$INSTALL_PREFIX_DEFAULT" ]; then
 			INSTALL_PREFIX="$DT_SRC_DIR/install"
 		fi
+		# cmake reads a relative path from the build directory, 3_make_hb_ansel_package.sh from its
+		# own and the other two steps from here, so they only agree on an absolute one.
+		case "$INSTALL_PREFIX" in
+			/*) ;;
+			*) INSTALL_PREFIX="$PWD/$INSTALL_PREFIX" ;;
+		esac
 		# What .ci/ci-script-mac.sh and 2_build_hb_ansel_custom.sh set beyond the defaults.
 		CMAKE_MORE_OPTIONS="${CMAKE_MORE_OPTIONS} -DRAWSPEED_ENABLE_LTO=ON -DBUILD_CMSTEST=OFF"
 	fi
