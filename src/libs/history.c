@@ -35,6 +35,7 @@
     Copyright (C) 2022 Miloš Komarčević.
     Copyright (C) 2022 Nicolas Auffray.
     Copyright (C) 2023 Alynx Zhou.
+    Copyright (C) 2026 Guillaume Stutin.
     
     darktable is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -206,8 +207,10 @@ static const char *_history_icon_name(const gboolean enabled, const gboolean def
 {
   if(always_on) return "emblem-readonly";
   if(deprecated) return "dialog-warning";
-  if(default_enabled) return enabled ? "emblem-ok" : "process-stop";
-  return enabled ? "emblem-ok" : "process-stop";
+  // "object-select-symbolic" is Adwaita's check mark. "emblem-ok" exists in no theme: GTK's
+  // "-symbolic" fallback turns it into "emblem-ok-symbolic", missing from the Adwaita bundled on Windows.
+  if(default_enabled) return enabled ? "object-select-symbolic" : "process-stop";
+  return enabled ? "object-select-symbolic" : "process-stop";
 }
 
 static gchar *_lib_history_change_text(dt_introspection_field_t *field, const char *d, gpointer params, gpointer oldpar)

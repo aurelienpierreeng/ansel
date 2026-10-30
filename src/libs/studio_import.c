@@ -124,7 +124,7 @@ static void _studio_import_update_state(dt_lib_studio_import_t *d)
   gtk_widget_show(d->status_icon);
   if(ready)
   {
-    dt_gui_set_symbolic_icon(d->status_icon, "emblem-ok-symbolic", GTK_ICON_SIZE_BUTTON, NULL);
+    dt_gui_set_symbolic_icon(d->status_icon, "object-select-symbolic", GTK_ICON_SIZE_BUTTON, NULL);
     gtk_label_set_text(GTK_LABEL(d->status), _("Ready to start the session."));
   }
   else
@@ -372,7 +372,8 @@ void gui_init(dt_lib_module_t *self)
   g_object_unref(status_layout);
   gtk_widget_set_size_request(d->status, -1, status_height);
 
-  d->status_icon = gtk_image_new_from_icon_name("emblem-ok-symbolic", GTK_ICON_SIZE_BUTTON);
+  // Adwaita's check mark: "emblem-ok-symbolic" is missing from the Adwaita bundled on Windows.
+  d->status_icon = gtk_image_new_from_icon_name("object-select-symbolic", GTK_ICON_SIZE_BUTTON);
   gtk_widget_set_valign(d->status_icon, GTK_ALIGN_CENTER);
   gtk_widget_set_no_show_all(d->status_icon, TRUE);
 
