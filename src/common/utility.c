@@ -648,6 +648,19 @@ double dt_util_gps_string_to_number(const gchar *input)
     return NAN;
   }
   trimmed[length - 1] = '\0';
+  g_strchomp(trimmed);
+  const size_t coordinate_length = strlen(trimmed);
+  if(coordinate_length > 0 && trimmed[coordinate_length - 1] == ',')
+  {
+    trimmed[coordinate_length - 1] = '\0';
+    g_strchomp(trimmed);
+  }
+  const size_t value_length = strlen(trimmed);
+  if(value_length == 0 || trimmed[value_length - 1] == ',')
+  {
+    dt_free(text);
+    return NAN;
+  }
   gchar **tokens = g_strsplit(trimmed, ",", 0);
   guint count = 0;
   while(tokens[count]) count++;
