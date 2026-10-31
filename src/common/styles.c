@@ -614,7 +614,7 @@ static int _styles_rebuild_history_from_items(dt_develop_t *dev_src, GList *appl
     if(IS_NULL_PTR(hist)) return 1;
 
     dev_src->history = g_list_append(dev_src->history, hist);
-    if(!dt_dev_history_item_update_from_params(dev_src, hist, module, module->enabled, NULL, 0, NULL, NULL))
+    if(!dt_dev_history_item_update_from_params(dev_src, hist, module, module->enabled, NULL, 0, NULL, NULL, FALSE))
     {
       dt_dev_history_free_history(dev_src);
       return 1;

@@ -99,6 +99,7 @@ void dt_control_init(dt_control_t *s)
   s->log_pos = s->log_ack = 0;
   s->log_busy = 0;
   s->log_message_timeout_id = 0;
+  for(int index = 0; index < DT_CTL_LOG_SIZE; index++) s->log_message[index] = NULL;
   dt_pthread_mutex_init(&(s->log_mutex), NULL);
 
   s->toast_pos = s->toast_ack = 0;
@@ -515,11 +516,23 @@ void dt_control_cleanup(dt_control_t *s)
   g_free(s->cursor.current_shape_str);
   dt_pthread_mutex_destroy(&s->queue_mutex);
   dt_pthread_mutex_destroy(&s->cond_mutex);
+  dt_control_log_cleanup(s);
   dt_pthread_mutex_destroy(&s->log_mutex);
   dt_pthread_mutex_destroy(&s->toast_mutex);
   dt_pthread_mutex_destroy(&s->res_mutex);
   dt_pthread_mutex_destroy(&s->run_mutex);
   dt_pthread_mutex_destroy(&s->progress_system.mutex);
+}
+
+void dt_control_log_cleanup(dt_control_t *s)
+{
+  dt_pthread_mutex_lock(&s->log_mutex);
+  for(int index = 0; index < DT_CTL_LOG_SIZE; index++)
+  {
+    dt_free(s->log_message[index]);
+    s->log_message[index] = NULL;
+  }
+  dt_pthread_mutex_unlock(&s->log_mutex);
 }
 
 
@@ -842,10 +855,10 @@ void dt_control_log(const char *msg, ...)
   va_list ap;
   va_start(ap, msg);
   char *escaped_msg = g_markup_vprintf_escaped(msg, ap);
-  const int msglen = strlen(escaped_msg);
-  g_strlcpy(darktable.control->log_message[darktable.control->log_pos], escaped_msg, DT_CTL_LOG_MSG_SIZE);
-  dt_free(escaped_msg);
   va_end(ap);
+  const int msglen = strlen(escaped_msg);
+  dt_free(darktable.control->log_message[darktable.control->log_pos]);
+  darktable.control->log_message[darktable.control->log_pos] = escaped_msg;
   if(darktable.control->log_message_timeout_id)
     g_source_remove(darktable.control->log_message_timeout_id);
   darktable.control->log_ack = darktable.control->log_pos;
@@ -862,22 +875,129 @@ void dt_control_log(const char *msg, ...)
 // Installed by dt_gui_gtk_init() before any worker runs, and never changed after: read without
 // a lock, like the other handlers the orchestrator installs.
 static dt_control_alert_handler_t _alert_handler = NULL;
+static GPrivate _alert_batch = G_PRIVATE_INIT(NULL);
+
+typedef struct dt_control_alert_batch_group_t
+{
+  char *title;
+  char *message;
+  int once;
+  gboolean has_itemless_alert;
+  GHashTable *item_set;
+  GPtrArray *items;
+} dt_control_alert_batch_group_t;
+
+typedef struct dt_control_alert_batch_t
+{
+  int depth;
+  GPtrArray *groups;
+} dt_control_alert_batch_t;
 
 void dt_control_set_alert_handler(dt_control_alert_handler_t handler)
 {
   _alert_handler = handler;
 }
 
+void dt_control_alert_batch_begin(void)
+{
+  dt_control_alert_batch_t *batch = g_private_get(&_alert_batch);
+  if(!IS_NULL_PTR(batch))
+  {
+    batch->depth++;
+    return;
+  }
+
+  batch = g_new0(dt_control_alert_batch_t, 1);
+  batch->depth = 1;
+  batch->groups = g_ptr_array_new();
+  g_private_set(&_alert_batch, batch);
+}
+
+void dt_control_alert_batch_end(void)
+{
+  dt_control_alert_batch_t *batch = g_private_get(&_alert_batch);
+  if(IS_NULL_PTR(batch)) return;
+
+  batch->depth--;
+  if(batch->depth > 0) return;
+
+  g_private_set(&_alert_batch, NULL);
+  for(guint group_index = 0; group_index < batch->groups->len; group_index++)
+  {
+    dt_control_alert_batch_group_t *group = g_ptr_array_index(batch->groups, group_index);
+    if(!IS_NULL_PTR(_alert_handler))
+    {
+      if(group->has_itemless_alert) _alert_handler(group->title, group->message, NULL, group->once);
+      for(guint item_index = 0; item_index < group->items->len; item_index++)
+        _alert_handler(group->title, group->message, g_ptr_array_index(group->items, item_index), group->once);
+    }
+    else
+    {
+      fprintf(stderr, "%s: %s\n", group->title, group->message);
+      for(guint item_index = 0; item_index < group->items->len; item_index++)
+        fprintf(stderr, "  %s\n", (const char *)g_ptr_array_index(group->items, item_index));
+    }
+
+    g_hash_table_destroy(group->item_set);
+    g_ptr_array_free(group->items, TRUE);
+    dt_free(group->message);
+    dt_free(group->title);
+    dt_free(group);
+  }
+  g_ptr_array_free(batch->groups, TRUE);
+  dt_free(batch);
+}
+
 // Without a GUI, stderr: a dt_control_log() there goes to a log no view ever draws.
 static void _alert(const char *title, const char *message, const char *item, const int once)
 {
   if(IS_NULL_PTR(message)) return;
-  if(!IS_NULL_PTR(_alert_handler))
-    _alert_handler(title, message, item, once);
-  else if(!IS_NULL_PTR(item))
-    fprintf(stderr, "%s: %s\n  %s\n", title, message, item);
-  else
-    fprintf(stderr, "%s: %s\n", title, message);
+
+  dt_control_alert_batch_t *batch = g_private_get(&_alert_batch);
+  if(IS_NULL_PTR(batch))
+  {
+    if(!IS_NULL_PTR(_alert_handler))
+      _alert_handler(title, message, item, once);
+    else if(!IS_NULL_PTR(item))
+      fprintf(stderr, "%s: %s\n  %s\n", title, message, item);
+    else
+      fprintf(stderr, "%s: %s\n", title, message);
+    return;
+  }
+
+  dt_control_alert_batch_group_t *group = NULL;
+  for(guint group_index = 0; group_index < batch->groups->len; group_index++)
+  {
+    dt_control_alert_batch_group_t *candidate = g_ptr_array_index(batch->groups, group_index);
+    if(g_strcmp0(candidate->title, title) == 0 && g_strcmp0(candidate->message, message) == 0
+       && candidate->once == once)
+    {
+      group = candidate;
+      break;
+    }
+  }
+
+  if(IS_NULL_PTR(group))
+  {
+    group = g_new0(dt_control_alert_batch_group_t, 1);
+    group->title = g_strdup(title);
+    group->message = g_strdup(message);
+    group->once = once;
+    group->item_set = g_hash_table_new(g_str_hash, g_str_equal);
+    group->items = g_ptr_array_new_with_free_func(dt_free_gpointer);
+    g_ptr_array_add(batch->groups, group);
+  }
+
+  if(IS_NULL_PTR(item))
+  {
+    group->has_itemless_alert = TRUE;
+    return;
+  }
+
+  if(g_hash_table_contains(group->item_set, item)) return;
+  char *item_copy = g_strdup(item);
+  g_hash_table_add(group->item_set, item_copy);
+  g_ptr_array_add(group->items, item_copy);
 }
 
 void dt_control_alert(const char *title, const char *message, const char *item)

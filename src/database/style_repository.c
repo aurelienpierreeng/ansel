@@ -26,7 +26,6 @@
 #include "database/style_repository.h"
 #include "database/database.h"
 #include "database/sql_debug.h"
-#include "system/dtpthread.h"
 #include "system/macros.h"
 #include "system/mem_alloc.h"
 
@@ -35,18 +34,6 @@
 // Everything else here runs at most once per user action and is prepared on the spot.
 static sqlite3_stmt *_styles_get_list_stmt = NULL;
 static sqlite3_stmt *_styles_apply_items_stmt = NULL;
-static dt_pthread_mutex_t _styles_stmt_mutex;
-static gsize _styles_stmt_mutex_inited = 0;
-
-static inline void _styles_stmt_mutex_ensure(void)
-{
-  if(g_once_init_enter(&_styles_stmt_mutex_inited))
-  {
-    dt_pthread_mutex_init(&_styles_stmt_mutex, NULL);
-    g_once_init_leave(&_styles_stmt_mutex_inited, 1);
-  }
-}
-
 /** "num IN (1,2,3)" / "num NOT IN (1,2,3)" for a GList of GINT_TO_POINTER nums.
  *
  *  The callers used to build this with g_strlcat into a 2048-byte buffer, which truncates in
@@ -226,8 +213,7 @@ void dt_style_repository_foreach_style(const char *filter, dt_style_repository_s
   char filterstring[512] = { 0 };
   snprintf(filterstring, sizeof(filterstring), "%%%s%%", filter);
 
-  _styles_stmt_mutex_ensure();
-  dt_pthread_mutex_lock(&_styles_stmt_mutex);
+  dt_database_lock();
   if(!_styles_get_list_stmt)
   {
     DT_DEBUG_SQLITE3_PREPARE_V2(
@@ -243,7 +229,7 @@ void dt_style_repository_foreach_style(const char *filter, dt_style_repository_s
   while(sqlite3_step(stmt) == SQLITE_ROW)
     cb(user_data, (const char *)sqlite3_column_text(stmt, 0), (const char *)sqlite3_column_text(stmt, 1));
 
-  dt_pthread_mutex_unlock(&_styles_stmt_mutex);
+  dt_database_unlock();
 }
 
 gboolean dt_style_repository_get_style(const char *name, dt_style_repository_style_cb cb,
@@ -274,8 +260,7 @@ void dt_style_repository_foreach_apply_item(const int32_t styleid,
 {
   if(IS_NULL_PTR(cb)) return;
 
-  _styles_stmt_mutex_ensure();
-  dt_pthread_mutex_lock(&_styles_stmt_mutex);
+  dt_database_lock();
   if(IS_NULL_PTR(_styles_apply_items_stmt))
   {
     // clang-format off
@@ -305,7 +290,7 @@ void dt_style_repository_foreach_apply_item(const int32_t styleid,
   }
 
   sqlite3_reset(stmt);
-  dt_pthread_mutex_unlock(&_styles_stmt_mutex);
+  dt_database_unlock();
 }
 
 void dt_style_repository_foreach_item_for_export(const int32_t styleid,
@@ -711,8 +696,7 @@ gboolean dt_style_repository_normalize_multi_priority(const int32_t styleid)
 
 void dt_style_repository_cleanup(void)
 {
-  _styles_stmt_mutex_ensure();
-  dt_pthread_mutex_lock(&_styles_stmt_mutex);
+  dt_database_lock();
   if(_styles_get_list_stmt)
   {
     sqlite3_finalize(_styles_get_list_stmt);
@@ -723,7 +707,7 @@ void dt_style_repository_cleanup(void)
     sqlite3_finalize(_styles_apply_items_stmt);
     _styles_apply_items_stmt = NULL;
   }
-  dt_pthread_mutex_unlock(&_styles_stmt_mutex);
+  dt_database_unlock();
 }
 
 // clang-format off

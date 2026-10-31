@@ -1608,105 +1608,134 @@ GList* dt_image_find_xmps(const char* filename)
 #endif
 }
 
-// Search for duplicate's sidecar files and import them if found and not in DB yet
-int dt_image_read_duplicates(const uint32_t id, const char *filename, const gboolean clear_selection)
+static int _image_read_duplicates(const uint32_t id, const char *filename, const gboolean clear_selection,
+                                  const gboolean read_primary, gboolean *tags_changed)
 {
+  if(tags_changed) *tags_changed = FALSE;
   int count_xmps_processed = 0;
-  gchar pattern[DT_PATH_MAX] = { 0 };
-
+  gchar primary_xmpfilename[DT_PATH_MAX] = { 0 };
   GList *files = dt_image_find_xmps(filename);
-
-  // we store the xmp filename without version part in pattern to speed up string comparison later
-  g_snprintf(pattern, sizeof(pattern), "%s.xmp", filename);
-
+  g_snprintf(primary_xmpfilename, sizeof(primary_xmpfilename), "%s.xmp", filename);
   for(GList *file_iter = files; file_iter; file_iter = g_list_next(file_iter))
   {
-    gchar *xmpfilename = file_iter->data;
-    int version = -1;
-
-    // we need to get the version number of the sidecar filename
-    if(!strncmp(xmpfilename, pattern, sizeof(pattern)))
+    const gchar *xmpfilename = file_iter->data;
+    const gboolean primary_sidecar = !strncmp(xmpfilename, primary_xmpfilename, DT_PATH_MAX);
+    const gboolean read_sidecar = read_primary || !primary_sidecar;
+    int version = 0;
+    if(!primary_sidecar)
     {
-      // this is an xmp file without version number which corresponds to version 0
-      version = 0;
+      const gchar *const sidecar_extension = strrchr(xmpfilename, '.');
+      const gchar *const image_extension = g_strrstr_len(xmpfilename, sidecar_extension - xmpfilename, ".");
+      const gchar *const version_start = g_strrstr_len(xmpfilename, image_extension - xmpfilename, "_") + 1;
+      version = atoi(version_start);
     }
-    else
+
+    if(!read_sidecar)
     {
-      // we need to derive the version number from the filename
-
-      gchar *c3 = xmpfilename + strlen(xmpfilename)
-        - 5; // skip over .xmp extension; position c3 at character before the '.'
-      while(*c3 != '.' && c3 > xmpfilename)
-        c3--; // skip over filename extension; position c3 is at character '.'
-      gchar *c4 = c3;
-      while(*c4 != '_' && c4 > xmpfilename) c4--; // move to beginning of version number
-      c4++;
-
-      gchar *idfield = g_strndup(c4, c3 - c4);
-
-      version = atoi(idfield);
-      dt_free(idfield);
+      dt_image_repository_set_version(id, version);
+      count_xmps_processed++;
+      continue;
     }
 
     int newid = id;
     int grpid = -1;
-
-    if(count_xmps_processed == 0)
+    if(count_xmps_processed > 0)
     {
-      // this is the first xmp processed, just update the passed-in id
-      dt_image_repository_set_version(id, version);
-    }
-    else
-    {
-      // create a new duplicate based on the passed-in id. Note that we do not call
-      // dt_image_duplicate_with_version() as this version also set the group which
-      // is using DT_IMAGE_CACHE_SAFE and so will write the .XMP. But we must avoid
-      // this has the xmp for the duplicate is read just below.
       newid = dt_image_repository_duplicate(id, version);
-      const dt_image_t *img = dt_image_cache_get(id, 'r');
-      if(!IS_NULL_PTR(img))
+      const dt_image_t *source = dt_image_cache_get(id, 'r');
+      if(!IS_NULL_PTR(source))
       {
-        grpid = img->group_id;
-        dt_image_cache_read_release(img);
+        grpid = source->group_id;
+        dt_image_cache_read_release(source);
       }
     }
-    // make sure newid is not selected
+    else
+      dt_image_repository_set_version(id, version);
     if(clear_selection) dt_selection_clear(dt_selection_get_global());
 
-    // dt_image_repository_duplicate() above returns -1 when it cannot create the duplicate,
-    // and dt_image_cache_get() returns NULL for an id it cannot load. Both were dereferenced
-    // unchecked, which is Sentry 140350855: SIGSEGV on `img->version = version` while
-    // importing a film roll whose sidecars name versions the duplicate could not be created
-    // for. Skipping this sidecar leaves the rest of the import to proceed.
     dt_image_t *img = (newid > 0) ? dt_image_cache_get(newid, 'w') : NULL;
     if(IS_NULL_PTR(img))
     {
-      fprintf(stderr, "[dt_image_read_duplicates] could not load image %i for sidecar '%s', skipping it\n",
-              newid, xmpfilename);
+      fprintf(stderr, "[dt_image_read_duplicates] could not load image %i for sidecar '%s', skipping it\n", newid,
+              xmpfilename);
       continue;
     }
-    (void)dt_exif_xmp_read(img, xmpfilename, 0);
+    gboolean sidecar_tags_changed = FALSE;
+    if(dt_exif_xmp_read_with_result(img, xmpfilename, 0, NULL, &sidecar_tags_changed, NULL)
+       >= DT_XMP_IMPORT_READ_ERROR)
+      dt_control_alert(_("Import problem"), _("Failed to read sidecar file"), xmpfilename);
     img->version = version;
     dt_image_cache_write_release(img, DT_IMAGE_CACHE_RELAXED);
+    if(tags_changed) *tags_changed |= sidecar_tags_changed;
 
     if(grpid != -1)
     {
-      // now it is safe to set the duplicate group-id
       dt_grouping_add_to_group(grpid, newid);
       dt_collection_update_query(dt_collection_get_global(), DT_COLLECTION_CHANGE_RELOAD, DT_COLLECTION_PROP_UNDEF, NULL);
     }
-
     count_xmps_processed++;
   }
-
   g_list_free_full(files, dt_free_gpointer);
-  files = NULL;
   return count_xmps_processed;
 }
 
-static int32_t _image_import_internal(const int32_t film_id, const char *filename,
-                                       gboolean lua_locking, gboolean raise_signals)
+int dt_image_read_duplicates_with_tags(const uint32_t id, const char *filename, const gboolean clear_selection,
+                                       gboolean *tags_changed)
 {
+  return _image_read_duplicates(id, filename, clear_selection, TRUE, tags_changed);
+}
+
+int dt_image_read_duplicates(const uint32_t id, const char *filename, const gboolean clear_selection)
+{
+  gboolean tags_changed = FALSE;
+  const int count = dt_image_read_duplicates_with_tags(id, filename, clear_selection, &tags_changed);
+  if(tags_changed) dt_metadata_tags_changed();
+  return count;
+}
+
+/** Resolve the capture group for a newly inserted image and update JPEG representatives. */
+static int32_t _image_import_resolve_group(const int32_t film_id, const int32_t id,
+                                           const char *extension, const char *sql_pattern)
+{
+  if(strcmp(extension, "jpg") != 0 && strcmp(extension, "jpeg") != 0)
+  {
+    const int32_t other_group = dt_image_repository_find_group_for_pattern(film_id, sql_pattern, TRUE, id);
+    dt_image_t *other_img = (other_group != -1) ? dt_image_cache_get(other_group, 'w') : NULL;
+    if(IS_NULL_PTR(other_img)) return id;
+
+    const char *other_extension = dt_util_path_get_extension(other_img->filename);
+    gchar *ext_lowercase = g_ascii_strdown(other_extension, -1);
+    if(strcmp(ext_lowercase, "jpg") != 0 && strcmp(ext_lowercase, "jpeg") != 0)
+    {
+      dt_image_cache_write_release(other_img, DT_IMAGE_CACHE_RELAXED);
+      dt_free(ext_lowercase);
+      return other_group;
+    }
+
+    other_img->group_id = id;
+    dt_image_cache_write_release(other_img, DT_IMAGE_CACHE_SAFE);
+    GList *members = dt_image_repository_get_group_members(other_group, other_group);
+    for(GList *member = members; member; member = g_list_next(member))
+    {
+      const int32_t member_id = GPOINTER_TO_INT(member->data);
+      dt_image_t *group_img = dt_image_cache_get(member_id, 'w');
+      if(IS_NULL_PTR(group_img)) continue;
+      group_img->group_id = id;
+      dt_image_cache_write_release(group_img, DT_IMAGE_CACHE_SAFE);
+    }
+    g_list_free(members);
+    dt_free(ext_lowercase);
+    return id;
+  }
+
+  const int32_t other_group = dt_image_repository_find_group_for_pattern(film_id, sql_pattern, FALSE, id);
+  return other_group != -1 ? other_group : id;
+}
+
+static int32_t _image_import_internal(const int32_t film_id, const char *filename, gboolean raise_signals,
+                                      gboolean *tags_changed)
+{
+  if(tags_changed) *tags_changed = FALSE;
   char *normalized_filename = dt_util_normalize_path(filename);
   if(!normalized_filename || !dt_util_test_image_file(normalized_filename))
   {
@@ -1771,52 +1800,7 @@ static int32_t _image_import_internal(const int32_t film_id, const char *filenam
   // Try to find out if this should be grouped already.
   gchar *basename = g_strndup(imgfname, image_extension - imgfname - 1);
   gchar *sql_pattern = g_strconcat(basename, ".%", NULL);
-  int group_id;
-  // in case we are not a jpg check if we need to change group representative
-  if(strcmp(ext, "jpg") != 0 && strcmp(ext, "jpeg") != 0)
-  {
-    const int32_t other_group = dt_image_repository_find_group_for_pattern(film_id, sql_pattern, TRUE, id);
-    // if we have a group already, and its representative can be read
-    dt_image_t *other_img = (other_group != -1) ? dt_image_cache_get(other_group, 'w') : NULL;
-    if(!IS_NULL_PTR(other_img))
-    {
-      int other_id = other_group;
-      const char *other_extension = dt_util_path_get_extension(other_img->filename);
-      gchar *ext_lowercase = g_ascii_strdown(other_extension, -1);
-      // if the group representative is a jpg, change group representative to this new imported image
-      if(!strcmp(ext_lowercase, "jpg") || !strcmp(ext_lowercase, "jpeg"))
-      {
-        other_img->group_id = id;
-        dt_image_cache_write_release(other_img, DT_IMAGE_CACHE_SAFE);
-        GList *members = dt_image_repository_get_group_members(other_id, other_id);
-        for(GList *l = members; l; l = g_list_next(l))
-        {
-          other_id = GPOINTER_TO_INT(l->data);
-          dt_image_t *group_img = dt_image_cache_get(other_id, 'w');
-          if(IS_NULL_PTR(group_img)) continue;
-          group_img->group_id = id;
-          dt_image_cache_write_release(group_img, DT_IMAGE_CACHE_SAFE);
-        }
-        g_list_free(members);
-        group_id = id;
-      }
-      else
-      {
-        dt_image_cache_write_release(other_img, DT_IMAGE_CACHE_RELAXED);
-        group_id = other_id;
-      }
-      dt_free(ext_lowercase);
-    }
-    else
-    {
-      group_id = id;
-    }
-  }
-  else
-  {
-    const int32_t other_group = dt_image_repository_find_group_for_pattern(film_id, sql_pattern, FALSE, id);
-    group_id = (other_group != -1) ? other_group : id;
-  }
+  const int32_t group_id = _image_import_resolve_group(film_id, id, ext, sql_pattern);
   dt_image_repository_set_group(id, group_id);
 
   // printf("[image_import] importing `%s' to img id %d\n", imgfname, id);
@@ -1837,22 +1821,25 @@ static int32_t _image_import_internal(const int32_t film_id, const char *filenam
   }
   img->group_id = group_id;
 
-  // read dttags and exif for database queries!
-  (void)dt_exif_read(img, normalized_filename);
+  gboolean imported_tags_changed = FALSE;
+  (void)dt_exif_read_persisted_with_tags(img, normalized_filename, &imported_tags_changed);
   char dtfilename[DT_PATH_MAX] = { 0 };
   g_strlcpy(dtfilename, normalized_filename, sizeof(dtfilename));
   // dt_image_path_append_version(id, dtfilename, sizeof(dtfilename));
   g_strlcat(dtfilename, ".xmp", sizeof(dtfilename));
 
-  const int res = dt_exif_xmp_read(img, dtfilename, 0);
+  gboolean sidecar_tags_changed = FALSE;
+  const dt_xmp_import_result_t res = dt_exif_xmp_read_with_result(img, dtfilename, 0, NULL,
+                                                                   &sidecar_tags_changed, NULL);
 
   // write through to db, but not to xmp.
   dt_image_cache_write_release(img, DT_IMAGE_CACHE_RELAXED);
 
-  // read all sidecar files
-  const int nb_xmp = dt_image_read_duplicates(id, normalized_filename, raise_signals);
+  gboolean duplicate_tags_changed = FALSE;
+  const int nb_xmp = _image_read_duplicates(id, normalized_filename, raise_signals, FALSE,
+                                            &duplicate_tags_changed);
 
-  if((res != 0) && (nb_xmp == 0))
+  if((res >= DT_XMP_IMPORT_READ_ERROR) && (nb_xmp == 0))
   {
     const gboolean lr_xmp = dt_lightroom_import(id, NULL, TRUE);
     if(lr_xmp) dt_control_save_xmp(id);
@@ -1864,7 +1851,8 @@ static int32_t _image_import_internal(const int32_t film_id, const char *filenam
   snprintf(tagname, sizeof(tagname), "darktable|format|%s", ext);
   dt_free(ext);
   dt_tag_new(tagname, &tagid);
-  dt_tag_attach(tagid, id, FALSE, FALSE);
+  const gboolean format_tag_changed = dt_tag_attach(tagid, id, FALSE, FALSE);
+  imported_tags_changed |= sidecar_tags_changed || duplicate_tags_changed || format_tag_changed;
 
   // make sure that there are no stale thumbnails left
   dt_mipmap_cache_remove(id, TRUE);
@@ -1876,6 +1864,9 @@ static int32_t _image_import_internal(const int32_t film_id, const char *filenam
   dt_free(basename);
   dt_free(sql_pattern);
   dt_free(normalized_filename);
+
+  if(tags_changed) *tags_changed = imported_tags_changed;
+  if(raise_signals && imported_tags_changed) dt_metadata_tags_changed();
 
   if(raise_signals)
   {
@@ -1928,12 +1919,18 @@ dt_image_flags_t dt_image_flags_from_extension(const char *extension)
 
 int32_t dt_image_import(const int32_t film_id, const char *filename, gboolean raise_signals)
 {
-  return _image_import_internal(film_id, filename, TRUE, raise_signals);
+  return _image_import_internal(film_id, filename, raise_signals, NULL);
+}
+
+int32_t dt_image_import_with_tags(const int32_t film_id, const char *filename, const gboolean raise_signals,
+                                  gboolean *tags_changed)
+{
+  return _image_import_internal(film_id, filename, raise_signals, tags_changed);
 }
 
 int32_t dt_image_import_lua(const int32_t film_id, const char *filename)
 {
-  return _image_import_internal(film_id, filename, FALSE, TRUE);
+  return _image_import_internal(film_id, filename, TRUE, NULL);
 }
 
 void dt_image_init(dt_image_t *img)

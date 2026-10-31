@@ -89,9 +89,27 @@ void dt_exif_set_exiv2_taglist();
 /** must not be freed */
 const GList* dt_exif_get_exiv2_taglist();
 
-/** read metadata from file with full path name, XMP data trumps IPTC data trumps EXIF data, store to image
- * struct. returns 0 on success. */
-int dt_exif_read(dt_image_t *img, const char *path);
+/** The outcome of an EXIF read. Partial means usable file metadata was decoded but one later source failed. */
+typedef enum dt_exif_read_result_t
+{
+  DT_EXIF_READ_OK = 0,
+  DT_EXIF_READ_PARTIAL,
+  DT_EXIF_READ_ERROR,
+  DT_EXIF_READ_PERSIST_ERROR
+} dt_exif_read_result_t;
+
+/** Read file metadata into @p img. A partial result retains all independently decoded fields. */
+dt_exif_read_result_t dt_exif_read(dt_image_t *img, const char *path);
+
+/** Read embedded metadata and persist its tags and descriptive metadata for an existing image.
+ * Owns a top-level transaction so failure cannot roll back a caller's work and notifications follow commit.
+ * A persistence error rolls back database mutations but retains independently decoded file fields.
+ */
+dt_exif_read_result_t dt_exif_read_persisted(dt_image_t *img, const char *path);
+
+/** Read and persist metadata, returning committed tag vocabulary or association changes in @p tags_changed. */
+dt_exif_read_result_t dt_exif_read_persisted_with_tags(dt_image_t *img, const char *filename,
+                                                        gboolean *tags_changed);
 
 /** read exif data to image struct from given data blob, wherever you got it from. */
 int dt_exif_read_from_blob(dt_image_t *img, uint8_t *blob, const int size);

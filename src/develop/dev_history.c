@@ -110,30 +110,15 @@ gboolean dt_dev_init_default_history(dt_develop_t *dev, const int32_t imgid, gbo
  * Converts DB row fields into a history item and appends it to dev->history.
  *
  * @param user_data Context pointer (dt_dev_history_db_ctx_t).
- * @param id Image id from DB row.
- * @param num History index.
- * @param modversion Module version stored in DB.
- * @param operation Operation name.
- * @param module_params Module params blob.
- * @param param_length Params blob length.
- * @param enabled Enabled flag from DB.
- * @param blendop_params Blend params blob.
- * @param bl_length Blend blob length.
- * @param blendop_version Blend params version.
- * @param multi_priority Instance priority.
- * @param multi_name Instance name.
- * @param preset_name Optional preset name (for auto presets).
+ * @param row Borrowed repository row.
  */
-static void _dev_history_db_row_cb(void *user_data, const int32_t id, const int num, const int modversion,
-                                   const char *operation, const void *module_params, const int param_length,
-                                   const gboolean enabled, const void *blendop_params, const int bl_length,
-                                   const int blendop_version, const int multi_priority, const char *multi_name,
-                                   const char *preset_name)
+static void _dev_history_db_row_cb(void *user_data, const dt_history_repository_row_t *row)
 {
   dt_dev_history_db_ctx_t *ctx = (dt_dev_history_db_ctx_t *)user_data;
-  _process_history_db_entry(ctx->dev, ctx->imgid, id, num, modversion, operation, module_params, param_length, enabled,
-                            blendop_params, bl_length, blendop_version, multi_priority, multi_name, preset_name,
-                            ctx->legacy_params, ctx->presets);
+  _process_history_db_entry(ctx->dev, ctx->imgid, row->imgid, row->num, row->module_version, row->operation,
+                            row->op_params, row->op_params_len, row->enabled, row->blendop_params,
+                            row->blendop_params_len, row->blendop_version, row->multi_priority, row->multi_name,
+                            row->preset_name, ctx->legacy_params, ctx->presets);
 }
 
 // returns the first history item with hist->module == module
@@ -170,8 +155,9 @@ dt_dev_history_item_t *dt_dev_history_get_last_item_by_module(GList *history_lis
 }
 
 gboolean dt_dev_history_item_update_from_params(dt_develop_t *dev, dt_dev_history_item_t *hist, dt_iop_module_t *module,
-                                               const gboolean enabled, const void *params, const int32_t params_size,
-                                               const dt_develop_blend_params_t *blend_params, GList *forms)
+                                                const gboolean enabled, const void *params, const int32_t params_size,
+                                                const dt_develop_blend_params_t *blend_params, GList *forms,
+                                                const gboolean forms_snapshot)
 {
   if(IS_NULL_PTR(hist) || IS_NULL_PTR(module)) return FALSE;
 
@@ -193,6 +179,8 @@ gboolean dt_dev_history_item_update_from_params(dt_develop_t *dev, dt_dev_histor
     hist->forms = NULL;
   }
   hist->forms = forms;
+  hist->forms_snapshot = forms_snapshot;
+  hist->mask_dependencies_invalid = FALSE;
 
   module->enabled = enabled;
   hist->enabled = enabled;
@@ -224,8 +212,12 @@ gboolean dt_dev_history_item_update_from_params(dt_develop_t *dev, dt_dev_histor
   // blend params link a mask group must never hash blind to that group's content (#1060).
   // History REPLAY must not use this helper's fallback: it hashes via _history_to_module()
   // against the snapshot accumulated at the item's position instead.
-  dt_iop_compute_module_hash(module, !IS_NULL_PTR(hist->forms) ? hist->forms : dev->forms);
+  const gboolean owns_hash_forms = IS_NULL_PTR(forms);
+  GList *hash_forms = owns_hash_forms ? dt_masks_snapshot_current_forms(dev, FALSE) : forms;
+  dt_iop_compute_module_hash(module, hash_forms);
+  if(owns_hash_forms) dt_masks_forms_snapshot_release(&hash_forms);
   hist->hash = module->hash;
+  hist->effective_hash = hist->hash;
 
   return TRUE;
 }
@@ -357,7 +349,8 @@ int dt_dev_history_item_from_source_history_item(dt_develop_t *dev_dest, dt_deve
   }
 
   if(!dt_dev_history_item_update_from_params(dev_dest, hist, mod_dest, hist_src->enabled, hist_src->params,
-                                             hist_src->module->params_size, hist_src->blend_params, forms_snapshot))
+                                              hist_src->module->params_size, hist_src->blend_params, forms_snapshot,
+                                              hist_src->forms_snapshot))
   {
     dt_print(DT_DEBUG_HISTORY | DT_DEBUG_VERBOSE,
              "[dt_dev_history_item_from_source_history_item] params update failed: src=%s multi='%s' "
@@ -534,16 +527,11 @@ GList *dt_history_duplicate(GList *hist)
     memcpy(new, old, sizeof(dt_dev_history_item_t));
     dt_atomic_set_int(&new->refcount, 1); // independent deep copy, not a shared reference
 
-    dt_iop_module_t *module = (old->module) ? old->module : dt_iop_get_module(old->op_name);
-
     if(old->params && old->params_size > 0)
     {
       new->params = malloc(old->params_size);
       memcpy(new->params, old->params, old->params_size);
     }
-
-    if(IS_NULL_PTR(module))
-      fprintf(stderr, "[_duplicate_history] can't find base module for %s\n", old->op_name);
 
     if(old->blend_params && old->blendop_params_size > 0)
     {
@@ -961,7 +949,7 @@ gboolean dt_dev_add_history_item_ext(dt_develop_t *dev, struct dt_iop_module_t *
 
   // Fill history item and recompute hash (also applies params/blend_params to module to keep hash consistent).
   dt_dev_history_item_update_from_params(dev, hist, module, module->enabled, module->params, module->params_size,
-                                         module->blend_params, forms_snapshot);
+                                          module->blend_params, forms_snapshot, include_masks);
 
   if(include_masks && hist->forms)
     dt_print(DT_DEBUG_HISTORY, "[dt_dev_add_history_item_ext] masks committed for module %s at history position %i\n", module->name(), hist->num);
@@ -1006,7 +994,8 @@ uint64_t dt_dev_history_compute_hash(dt_develop_t *dev) REQUIRES_SHARED(dev->his
       hist = g_list_previous(hist))
   {
     dt_dev_history_item_t *item = (dt_dev_history_item_t *)hist->data;
-    hash = dt_hash(hash, (const char *)&item->hash, sizeof(uint64_t));
+    const uint64_t effective_hash = item->effective_hash ? item->effective_hash : item->hash;
+    hash = dt_hash(hash, (const char *)&effective_hash, sizeof(effective_hash));
   }
   dt_print(DT_DEBUG_HISTORY, "[dt_dev_history_get_hash] history hash: %" PRIu64 ", history end: %i, items %i\n", hash, dt_dev_get_history_end_ext(dev), g_list_length(dev->history));
   return hash;
@@ -1360,10 +1349,10 @@ static inline void _dt_dev_modules_reload_defaults(dt_develop_t *dev)
  * @param hist History item.
  * @param module Module instance.
  */
-static inline void _history_to_module(const dt_dev_history_item_t *const hist, dt_iop_module_t *module,
-                                      GList *current_forms)
+static inline void _history_to_module(dt_dev_history_item_t *hist, dt_iop_module_t *module,
+                                       GList *current_forms)
 {
-  module->enabled = (hist->enabled != 0);
+  module->enabled = hist->enabled && !hist->mask_dependencies_invalid;
 
   // Update IOP order stuff, that applies to all modules regardless of their internals
   module->iop_order = hist->iop_order;
@@ -1382,6 +1371,46 @@ static inline void _history_to_module(const dt_dev_history_item_t *const hist, d
   // reads the live list, and during replay that list is only replaced with the target
   // snapshot after this loop, so the restored hash would be tied to the wrong mask content.
   dt_iop_compute_module_hash(module, !IS_NULL_PTR(hist->forms) ? hist->forms : current_forms);
+  hist->effective_hash = module->hash;
+}
+
+static void _disable_modules_with_unusable_masks(dt_develop_t *dev, GList *forms, GList *history,
+                                                 const int history_end)
+{
+  gboolean changed = FALSE;
+  do
+  {
+    changed = FALSE;
+    for(GList *node = dev->iop; !IS_NULL_PTR(node); node = g_list_next(node))
+    {
+      dt_iop_module_t *module = (dt_iop_module_t *)node->data;
+      if(!module->enabled || IS_NULL_PTR(module->blend_params)) continue;
+      const uint32_t mask_mode = module->blend_params->mask_mode;
+      const gboolean drawn_missing = (mask_mode & (DEVELOP_MASK_ENABLED | DEVELOP_MASK_SHAPE))
+          == (DEVELOP_MASK_ENABLED | DEVELOP_MASK_SHAPE)
+          && !dt_masks_form_is_usable_ext(forms, module->blend_params->mask_id);
+      const gboolean needs_raster = (mask_mode & (DEVELOP_MASK_ENABLED | DEVELOP_MASK_RASTER))
+          == (DEVELOP_MASK_ENABLED | DEVELOP_MASK_RASTER);
+      dt_iop_module_t *source = needs_raster
+          ? dt_iop_get_module_by_op_priority(dev->iop, module->blend_params->raster_mask_source,
+                                              module->blend_params->raster_mask_instance)
+          : NULL;
+      const gboolean raster_missing = needs_raster
+          && (IS_NULL_PTR(source) || source == module || source->iop_order >= module->iop_order
+              || !source->enabled);
+      if(!(drawn_missing || raster_missing)) continue;
+      module->enabled = FALSE;
+      dt_iop_compute_module_hash(module, forms);
+      dt_dev_history_item_t *active = dt_dev_history_get_last_item_by_module(history, module, history_end);
+      if(!IS_NULL_PTR(active))
+      {
+        active = dt_dev_history_cow_touch(dev, active);
+        active->mask_dependencies_invalid = TRUE;
+        active->effective_hash = module->hash;
+      }
+      changed = TRUE;
+    }
+  } while(changed);
 }
 
 
@@ -1406,13 +1435,14 @@ void dt_dev_pop_history_items_ext(dt_develop_t *dev) REQUIRES_SHARED(dev->histor
   GList *forms = NULL;
   for(int i = 0; i < history_end && history; i++)
   {
-    dt_dev_history_item_t *hist = (dt_dev_history_item_t *)(history->data);
+    dt_dev_history_item_t *hist = dt_dev_history_cow_touch(dev, (dt_dev_history_item_t *)(history->data));
+    hist->mask_dependencies_invalid = FALSE;
     dt_iop_module_t *module = hist->module;
 
     // Update the reference to the form snapshot that doesn't belong
     // conceptually to history items. Advance it before applying the item so the
     // item's hash is computed against the masks state at its own position.
-    if(hist->forms) forms = hist->forms;
+    if(hist->forms_snapshot) forms = hist->forms;
 
     if(module) _history_to_module(hist, module, forms);
 
@@ -1421,6 +1451,7 @@ void dt_dev_pop_history_items_ext(dt_develop_t *dev) REQUIRES_SHARED(dev->histor
 
   // Nuke dev->forms and replace it with the last hist->forms in history.
   dt_masks_replace_current_forms(dev, forms);
+  _disable_modules_with_unusable_masks(dev, forms, dev->history, history_end);
 
   // History (metadata + presets) is now fully applied to module params. Let modules publish any
   // dev->proxy state derived from their EFFECTIVE params (e.g. temperature's WB coeffs, consumed by
@@ -1573,6 +1604,9 @@ int dt_dev_write_history_item(const int32_t imgid, dt_dev_history_item_t *h, int
     if (form)
       dt_masks_write_masks_history_item(imgid, num, form);
   }
+
+  const gboolean empty_forms_snapshot = h->forms_snapshot && IS_NULL_PTR(h->forms);
+  if(empty_forms_snapshot && !dt_history_repository_write_mask_item(imgid, num, 0, 0, "", 0, NULL, 0, 0, NULL, 0)) return 1;
 
   return 0;
 }
@@ -2385,7 +2419,7 @@ gboolean dt_dev_read_history_ext(dt_develop_t *dev, const int32_t imgid) REQUIRE
 
     // Same accumulation rule as dt_dev_pop_history_items_ext(): an item without its own forms
     // snapshot is hashed against the last snapshot recorded at or before its position.
-    if(hist->forms) accumulated_forms = hist->forms;
+    if(hist->forms_snapshot) accumulated_forms = hist->forms;
 
     dt_iop_module_t *module = hist->module;
     _history_to_module(hist, module, accumulated_forms);
@@ -2400,6 +2434,21 @@ gboolean dt_dev_read_history_ext(dt_develop_t *dev, const int32_t imgid) REQUIRE
 
     dt_print(DT_DEBUG_HISTORY, "[history] successfully loaded module %s history (enabled: %i)\n", hist->module->op, hist->enabled);
   }
+
+  _dt_dev_modules_reload_defaults(dev);
+  accumulated_forms = NULL;
+  int history_index = 0;
+  const int active_history_end = dt_dev_get_history_end_ext(dev);
+  for(GList *history = g_list_first(dev->history); history && history_index < active_history_end;
+      history = g_list_next(history), history_index++)
+  {
+    dt_dev_history_item_t *hist = dt_dev_history_cow_touch(dev, (dt_dev_history_item_t *)history->data);
+    hist->mask_dependencies_invalid = FALSE;
+    if(hist->forms_snapshot) accumulated_forms = hist->forms;
+    if(hist->module) _history_to_module(hist, hist->module, accumulated_forms);
+  }
+  dt_masks_replace_current_forms(dev, accumulated_forms);
+  _disable_modules_with_unusable_masks(dev, accumulated_forms, dev->history, active_history_end);
 
   dt_dev_masks_list_change(dev);
   dt_dev_masks_update_hash(dev);
@@ -2560,6 +2609,15 @@ static void _dt_dev_history_compress_internal(dt_develop_t *dev, const gboolean 
   // This keeps history_mutex hold time short and avoids lock-order contention
   // with GUI/pipeline users touching masks/pixelpipe.
   dt_pthread_rwlock_wrlock(&dev->history_mutex);
+
+  const int history_end = dt_dev_get_history_end_ext(dev);
+  int history_index = 0;
+  for(GList *history = dev->history; history && history_index < history_end;
+      history = g_list_next(history), history_index++)
+  {
+    const dt_dev_history_item_t *hist = (const dt_dev_history_item_t *)history->data;
+    if(!IS_NULL_PTR(hist) && !IS_NULL_PTR(hist->module)) hist->module->enabled = hist->enabled;
+  }
 
   // Cleanup old history
   dt_dev_history_free_history(dev);

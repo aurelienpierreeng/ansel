@@ -237,7 +237,7 @@ static gboolean _resolve_from_history(dt_develop_t *dev, dt_iop_module_t *module
     const dt_dev_history_item_t *const hist = (const dt_dev_history_item_t *)item->data;
     if(IS_NULL_PTR(hist) || hist->module != module) continue;
     *params = hist->params;
-    enabled = hist->enabled;
+    enabled = hist->enabled && !hist->mask_dependencies_invalid;
     break;
   }
 

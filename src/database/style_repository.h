@@ -39,8 +39,9 @@ extern "C" {
  *  scalars and `common/styles.c` builds the structs, which is also where a module's localized
  *  name has to come from (`dt_iop_get_localized_name()`, same layer problem).
  *
- *  A row callback runs while this module holds its statement mutex, so a callback must not call
- *  back into this repository. In practice they only build a list.
+ *  Callbacks using cached statements receive borrowed SQLite row data while the connection is
+ *  locked. They must not re-enter database or transaction APIs before returning. In practice
+ *  callbacks only build a list.
  *
  *  The `iop_list` column crosses the same boundary: this module stores and returns it as the TEXT
  *  it is, and styles.c serialises it through `dt_ioppr_*`.

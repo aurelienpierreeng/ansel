@@ -2047,6 +2047,7 @@ void dt_cleanup()
   }
   else
   {
+    dt_control_log_cleanup(darktable.control);
     dt_pthread_mutex_destroy(&darktable.control->log_mutex);
     dt_pthread_mutex_destroy(&darktable.control->run_mutex);
   }
