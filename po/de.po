@@ -7,7 +7,7 @@ msgstr ""
 "Project-Id-Version: darktable\n"
 "Report-Msgid-Bugs-To: \n"
 "POT-Creation-Date: 2026-09-07 23:37+0200\n"
-"PO-Revision-Date: 2026-10-31 13:13+0100\n"
+"PO-Revision-Date: 2026-10-31 19:28+0100\n"
 "Last-Translator: Jobst Hoffmann <j.hoffmann@fh-aachen.de>\n"
 "Language-Team: German <>\n"
 "Language: de\n"
@@ -2465,7 +2465,6 @@ msgstr "Weichzeichnungsradius"
 
 #: ../build/src/iop/introspection_retouch.c:274
 #: ../build/src/iop/introspection_retouch.c:427
-#, fuzzy
 msgid "Fill mode"
 msgstr "Füllmodus"
 
@@ -2477,15 +2476,13 @@ msgstr "Helligkeit"
 # where does it occur?
 #: ../build/src/iop/introspection_retouch.c:298
 #: ../build/src/iop/introspection_retouch.c:443
-#, fuzzy
 msgid "Max_iter"
-msgstr "max_iter"
+msgstr "Max_iter"
 
 #: ../build/src/iop/introspection_retouch.c:304
 #: ../build/src/iop/introspection_retouch.c:447
-#, fuzzy
 msgid "Heal algorithm"
-msgstr "Algorithmen:"
+msgstr "Heil-Algorithmus"
 
 #: ../build/src/iop/introspection_retouch.c:461
 msgid "Unused"
@@ -2509,9 +2506,8 @@ msgid "Fill"
 msgstr "Füllen"
 
 #: ../build/src/iop/introspection_retouch.c:469
-#, fuzzy
 msgid "Gaussian"
-msgstr "Gauß"
+msgstr "Gaußsche"
 
 #: ../build/src/iop/introspection_retouch.c:470
 msgid "Bilateral"
@@ -2526,9 +2522,8 @@ msgid "Color"
 msgstr "Farbe"
 
 #: ../build/src/iop/introspection_retouch.c:491
-#, fuzzy
 msgid "Linear"
-msgstr "linear"
+msgstr "Linear"
 
 #: ../build/src/iop/introspection_retouch.c:492
 #, fuzzy
@@ -4177,9 +4172,9 @@ msgid "`%s` (module `%s`)"
 msgstr "‚%s‘ (Modul ‚%s‘)"
 
 #: ../src/caches/pixelpipe_cache.c:186
-#, fuzzy, c-format
+#, c-format
 msgid "module `%s`"
-msgstr "Modul"
+msgstr "Modul `%s`"
 
 #: ../src/caches/pixelpipe_cache.c:192
 msgid ""
@@ -4862,9 +4857,8 @@ msgid "Printing failed"
 msgstr "wärmender Filter"
 
 #: ../src/common/cups_print.c:588
-#, fuzzy
 msgid "error while printing"
-msgstr "Fehler beim Drucken von Bild ‚%s‘ auf ‚%s‘"
+msgstr "Fehler beim Drucken"
 
 #: ../src/common/cups_print.c:592
 #, c-format
@@ -5000,9 +4994,8 @@ msgstr ""
 #: ../src/common/image.c:2379 ../src/common/image.c:2397
 #: ../src/common/image.c:2445 ../src/control/jobs/control_jobs.c:191
 #: ../src/control/jobs/control_jobs.c:802
-#, fuzzy
 msgid "File operation failed"
-msgstr "Überblend Operation"
+msgstr "Die Dateioperation ist fehlgeschlagen"
 
 #: ../src/common/image.c:2142
 #, fuzzy
@@ -5020,24 +5013,20 @@ msgid "cannot write local copy"
 msgstr "kann keine lokale Kopie schreiben"
 
 #: ../src/common/image.c:2191
-#, fuzzy
 msgid "error moving local copy"
-msgstr "Fehler beim Verschieben lokaler Kopie ‚%s‘ auf ‚%s‘"
+msgstr "Fehler beim Verschieben der lokalen Kopie"
 
 #: ../src/common/image.c:2207
-#, fuzzy
 msgid "error moving file: file not found"
-msgstr "Fehler beim Verschieben ‚%s‘: Datei nicht gefunden"
+msgstr "Fehler beim Verschieben der Datei: Datei nicht gefunden"
 
 #: ../src/common/image.c:2218
-#, fuzzy
 msgid "error moving file: file exists"
-msgstr "Fehler beim Verschieben ‚%s‘ auf ‚%s‘: Datei existiert bereits"
+msgstr "Fehler beim Verschieben der Datei: Datei existiert bereits"
 
 #: ../src/common/image.c:2224
-#, fuzzy
 msgid "error moving file"
-msgstr "Fehler beim Laden von Datei ‚%s‘"
+msgstr "Fehler beim Verschieben  der Datei"
 
 #: ../src/common/image.c:2365
 msgid "cannot create local copy when the original file is not accessible."
@@ -5481,9 +5470,8 @@ msgstr "Begleitdatei wurde nicht geschrieben"
 #. a merge missing one of its exposures is not the merge that was asked for
 #: ../src/control/jobs/control_jobs.c:424 ../src/views/darkroom.c:1232
 #: ../src/views/darkroom.c:1235 ../src/views/darkroom.c:1239
-#, fuzzy
 msgid "Image could not be opened"
-msgstr "Eingabeprofil konnte nicht erzeugt werden!"
+msgstr "Das Bild konnte nicht geöffnet werden"
 
 #: ../src/control/jobs/control_jobs.c:460
 msgid "exposure bracketing only works on raw images."
@@ -5835,15 +5823,13 @@ msgstr "Exif-Daten aktualisieren"
 #: ../src/imageio/storage/disk.c:409 ../src/imageio/storage/disk.c:454
 #: ../src/imageio/storage/gallery.c:304 ../src/imageio/storage/gallery.c:389
 #: ../src/imageio/storage/gallery.c:429
-#, fuzzy
 msgid "Export failed"
-msgstr "Exportprofil"
+msgstr "Export fehlgeschlagen"
 
 #: ../src/control/jobs/control_jobs.c:1964
-#, fuzzy
 msgid "failed to get parameters from storage module, aborting export.."
 msgstr ""
-"Konnte keine Einstellungen vom Speicher-Modul bekommen, breche Export ab…"
+"Konnte keine Einstellungen vom Speicher-Modul bekommen, breche Export ab.."
 
 #: ../src/control/jobs/control_jobs.c:1977
 msgid "export images"
@@ -5928,14 +5914,12 @@ msgstr ""
 
 #: ../src/control/jobs/import_jobs.c:431 ../src/control/jobs/import_jobs.c:458
 #: ../src/control/jobs/import_jobs.c:463
-#, fuzzy
 msgid "Import problem"
-msgstr "Import-Ordner"
+msgstr "Import-Problem"
 
 #: ../src/control/jobs/import_jobs.c:431
-#, fuzzy
 msgid "Error importing file in collection"
-msgstr "Fehler beim Importieren der Datei in die Sammlung: %s"
+msgstr "Fehler beim Importieren der Datei in die Sammlung"
 
 #: ../src/control/jobs/import_jobs.c:458
 #, fuzzy
@@ -6182,9 +6166,8 @@ msgstr "`%s` auf %s"
 #: ../src/develop/pixelpipe_raster_masks.c:69
 #: ../src/develop/pixelpipe_raster_masks.c:88 ../src/develop/tiling.c:487
 #: ../src/develop/tiling.c:795 ../src/iop/colorreconstruction.c:624
-#, fuzzy
 msgid "Module failed"
-msgstr "Modul"
+msgstr "Modul fehlgeschlagen"
 
 #: ../src/develop/blend.c:464
 msgid "detail mask blending error"
@@ -6886,9 +6869,8 @@ msgid "%s edits the %s of the hovered shape"
 msgstr "%s bearbeitet das %s der Form, über die der Mauszeiger bewegt wird"
 
 #: ../src/develop/blend_gui.c:3946
-#, fuzzy
 msgid "Edit current module's group name"
-msgstr "Aktuellen Namen der Modulmaske bearbeiten"
+msgstr "Aktuellen Namen der Modulgruppe bearbeiten"
 
 #. buttons for mask polarity and edit mode
 #: ../src/develop/blend_gui.c:3955
@@ -7172,13 +7154,13 @@ msgid "disabled module `%s`: unexpected input buffer format"
 msgstr "Modul `%s` deaktiviert: unerwartetes Format des Eingabepuffers"
 
 #: ../src/develop/develop.c:990 ../src/imageio/imageio_core.c:1163
-#, fuzzy
 msgid ""
 "Not enough memory to load the image at full size.\n"
 "Close other applications or add more RAM to your system."
 msgstr ""
-"Auf Ihrem System geht der Arbeitsspeicher zur Neige. Schließen sie andere "
-"Anwendungen oder rüsten sie Ihr System mit mehr RAM auf."
+"Es ist nicht genügend Arbeitsspeicher vorhanden, um das Bild in voller Größe "
+"anzuzeigen.\n"
+"Schließen Sie andere Anwendungen oder rüsten Sie Ihr System mit mehr RAM auf."
 
 #: ../src/develop/history_merge.c:1729
 msgid ""
@@ -8376,9 +8358,8 @@ msgid "Could not save"
 msgstr "Konnte nicht speichern"
 
 #: ../src/gui/actions/file.c:293
-#, fuzzy
 msgid "could not save the image list"
-msgstr "Die Bilderliste konnte nicht unter ‚%s‘ gespeichert werden: %s"
+msgstr "konnte die Bilderliste nicht speichern"
 
 #: ../src/gui/actions/file.c:334
 msgid "Ansel - Export image list"
@@ -8859,9 +8840,8 @@ msgid "allocations outside the lines"
 msgstr "Zuweisungen außerhalb der Zeilen"
 
 #: ../src/gui/actions/supervisor_window.c:932
-#, fuzzy
 msgid "headroom for display and applications"
-msgstr "Speicherkapazität für Betriebssystem/Anwendung (MiB)"
+msgstr "für die Anzeige und die Anwendungen verfügbarer Speicherplatz (MiB)"
 
 #: ../src/gui/actions/supervisor_window.c:936
 #, c-format
@@ -8897,9 +8877,9 @@ msgid "mipmap cache"
 msgstr "Mipmap-Cache"
 
 #: ../src/gui/actions/supervisor_window.c:1036
-#, fuzzy
 msgid "headroom for OS and applications"
-msgstr "Speicherkapazität für Betriebssystem/Anwendung (MiB)"
+msgstr ""
+"Für das Betriebssystem und die Anwendungen verfügbarer Speicherplatz (MiB)"
 
 #. The caches it holds, under it; each device, with what it holds, after it.
 #: ../src/gui/actions/supervisor_window.c:1039
@@ -8912,7 +8892,6 @@ msgid "lines in RAM"
 msgstr "Zeilen im RAM"
 
 #: ../src/gui/actions/supervisor_window.c:1047
-#, fuzzy
 msgid "lines"
 msgstr "Linie"
 
@@ -8935,9 +8914,8 @@ msgid "Mipmap cache — %u items"
 msgstr "Mipmap Cache — %u Einträge"
 
 #: ../src/gui/actions/supervisor_window.c:1138
-#, fuzzy
 msgid "image cache"
-msgstr "vorheriges Bild"
+msgstr "Bilder Cache"
 
 #: ../src/gui/actions/supervisor_window.c:1140
 #, c-format
@@ -8982,12 +8960,10 @@ msgid "Search"
 msgstr "Suchen"
 
 #: ../src/gui/alert.c:378
-#, fuzzy
 msgid "copy to clipboard"
-msgstr "In die Zwischenablage kopieren"
+msgstr "in die Zwischenablage kopieren"
 
 #: ../src/gui/application.c:278 ../src/gui/closing.c:104
-#, fuzzy
 msgid "Closing Ansel..."
 msgstr "Ansel beenden..."
 
@@ -9034,7 +9010,6 @@ msgstr ""
 "ist."
 
 #: ../src/gui/closing.c:118
-#, fuzzy
 msgid "Details"
 msgstr "Details"
 
@@ -9044,26 +9019,23 @@ msgid "Type"
 msgstr "Typ"
 
 #: ../src/gui/closing.c:136
-#, fuzzy
 msgctxt "closing jobs"
 msgid "Description"
 msgstr "Beschreibung"
 
 #. Going back is the default, added first: Enter does not quit.
 #: ../src/gui/closing.c:167
-#, fuzzy
 msgid "Go back"
-msgstr "Zurück zum vorherigen Bild"
+msgstr "Zurück"
 
 #: ../src/gui/closing.c:168
 msgid "Quit anyway"
 msgstr "Trotzdem beenden"
 
 #: ../src/gui/closing.c:189
-#, fuzzy
 msgctxt "job type"
 msgid "Image operation"
-msgstr "Seitenausrichtung"
+msgstr "Bildbearbeitung"
 
 #: ../src/gui/closing.c:191
 #, fuzzy
@@ -9078,22 +9050,19 @@ msgstr "Hintergrundaufgabe"
 
 #. prints share this queue: their description says so
 #: ../src/gui/closing.c:195
-#, fuzzy
 msgctxt "job type"
 msgid "Export"
-msgstr "Exportieren:"
+msgstr "Export"
 
 #: ../src/gui/closing.c:197
-#, fuzzy
 msgctxt "job type"
 msgid "Maintenance"
-msgstr "Benutzeroberfläche"
+msgstr "Wartung"
 
 #: ../src/gui/closing.c:199
-#, fuzzy
 msgctxt "job type"
 msgid "Darkroom rendering"
-msgstr "Dunkelkammer Module"
+msgstr "Dunkelkammer Darstellung"
 
 #: ../src/gui/closing.c:261
 #, c-format
@@ -10767,9 +10736,8 @@ msgid "Preset not imported"
 msgstr "%u Tags importiert"
 
 #: ../src/gui/preferences.c:1224
-#, fuzzy
 msgid "failed to import preset"
-msgstr "Voreinstellung %s konnte nicht importiert werden"
+msgstr "der Import der Voreinstellungen ist fehlgeschlagen"
 
 #: ../src/gui/preferences.c:1235
 msgid "select preset(s) to import"
@@ -11427,9 +11395,8 @@ msgstr "ungültige Randgröße wurde durch 0 ersetzt"
 
 #: ../src/imageio/format/pdf.c:212 ../src/imageio/storage/disk.c:454
 #: ../src/imageio/storage/gallery.c:389 ../src/imageio/storage/gallery.c:429
-#, fuzzy
 msgid "could not export to file!"
-msgstr "Konnte nicht in Datei ‚%s‘ exportieren!"
+msgstr "konnte nicht in eine Datei exportieren!"
 
 #: ../src/imageio/format/pdf.c:370
 msgid "PDF"
@@ -11732,14 +11699,12 @@ msgid "skip"
 msgstr "überspringen"
 
 #: ../src/imageio/storage/disk.c:403 ../src/imageio/storage/gallery.c:304
-#, fuzzy
 msgid "could not create directory!"
-msgstr "Konnte Verzeichnis ‚%s‘ nicht erstellen!"
+msgstr "konnte Verzeichnis nicht erstellen!"
 
 #: ../src/imageio/storage/disk.c:409
-#, fuzzy
 msgid "could not write to directory!"
-msgstr "Konnte nicht in Verzeichnis ‚%s‘ schreiben!"
+msgstr "konnte nicht in das Verzeichnis schreiben!"
 
 #: ../src/imageio/storage/disk.c:440
 #, c-format
@@ -16561,9 +16526,8 @@ msgid "failed to start drawing worker"
 msgstr "Der Zeichen-Worker konnte nicht gestartet werden"
 
 #: ../src/iop/drawlayer/runtime.c:761 ../src/iop/drawlayer/worker.c:1677
-#, fuzzy
 msgid "Drawing not saved"
-msgstr "Zeichen-Begleitdatei gespeichert."
+msgstr "Zeichnung nicht gespeichert"
 
 #: ../src/iop/drawlayer/worker.c:1677
 msgid "drawing worker queue is full, stroke aborted"
@@ -19284,9 +19248,8 @@ msgstr "Heilen-Werkzeug aktivieren"
 
 #. overwrite tooltip ourself to handle shift+click
 #: ../src/iop/retouch.c:2358
-#, fuzzy
 msgid "Ctrl+click to change tool for current form"
-msgstr "Strg+Klick: für aktuelle Form verwenden"
+msgstr "Strg+Klick um zum Werkzeug für aktuelle Form zu wechseln"
 
 #: ../src/iop/retouch.c:2359
 #, fuzzy
@@ -19323,7 +19286,6 @@ msgstr ""
 "Retuschierte Skalen werden durch die untere Linie kenntlich gemacht"
 
 #: ../src/iop/retouch.c:2416
-#, fuzzy
 msgid "Display masks"
 msgstr "Masken anzeigen"
 
@@ -19333,17 +19295,14 @@ msgid "Temporarily switch off shapes"
 msgstr "Formen vorübergehend ausschalten"
 
 #: ../src/iop/retouch.c:2429
-#, fuzzy
 msgid "Paste cut shapes to current scale"
-msgstr "Zugeschnittene Formen des aktuellen Maßstab einfügen"
+msgstr "Ausgeschnittene Formen im aktuellen Maßstab einfügen"
 
 #: ../src/iop/retouch.c:2433
-#, fuzzy
 msgid "Cut shapes from current scale"
-msgstr "Zuschneiden der Formen vom aktuellen Maßstab"
+msgstr "Formen vom aktuellen Maßstab ausschneiden"
 
 #: ../src/iop/retouch.c:2440
-#, fuzzy
 msgid "Display wavelet scale"
 msgstr "Wavelet-Skala anzeigen"
 
@@ -19372,9 +19331,8 @@ msgstr ""
 "um die Auswahl aufzuheben, klicke auf eine leere Stelle"
 
 #: ../src/iop/retouch.c:2494
-#, fuzzy
 msgid "Erase the detail or fills with chosen color"
-msgstr "löscht das Detail oder füllt mit der gewählten Farbe"
+msgstr "Die Details oder Füllungen mit der ausgewählten Farbe löschen"
 
 #: ../src/iop/retouch.c:2501
 msgid "fill color: "
@@ -19849,9 +19807,8 @@ msgid "color matrix not found for image"
 msgstr "Farbmatrix für Bild nicht gefunden"
 
 #: ../src/iop/temperature.c:1208
-#, fuzzy
 msgid "failed to read camera white balance information!"
-msgstr "Konnte Weißabgleichsdaten der Kamera nicht aus ‚%s‘ lesen!"
+msgstr "Lesen der Weißabgleichsdaten der Kamera fehlgeschlagen!"
 
 #: ../src/iop/temperature.c:1511 ../src/iop/temperature.c:1529
 msgid "green channel coefficient"
@@ -22695,15 +22652,13 @@ msgid "Invert shape"
 msgstr "Form umkehren"
 
 #: ../src/libs/shape_manager.c:1870
-#, fuzzy
 msgid "New group from selection"
-msgstr "Graphen auf Auswahl beschränken"
+msgstr "Neue Gruppe aus der Auswahl"
 
 #. One entry, named for what the row holds -- the whole group when it is one.
 #: ../src/libs/shape_manager.c:1888
-#, fuzzy
 msgid "Delete group"
-msgstr "Knoten löschen"
+msgstr "Gruppe löschen"
 
 #: ../src/libs/shape_manager.c:1899
 msgid "Delete unused shapes"
@@ -23534,9 +23489,8 @@ msgid "Last modified: %s"
 msgstr "Zuletzt verändert: %s"
 
 #: ../src/libs/textnotes.c:1846
-#, fuzzy
 msgid "failed to save text notes"
-msgstr "Das Speichern der Textnotizen unter %s ist fehlgeschlagen: %s"
+msgstr "das Speichern der Textnotizen ist fehlgeschlagen"
 
 #: ../src/libs/textnotes.c:2063
 msgid "toggle Markdown preview"
@@ -24429,19 +24383,16 @@ msgid "No image to open in darkroom."
 msgstr "Kein Bild in der Dunkelkammer zu öffnen."
 
 #: ../src/views/view.c:1055
-#, fuzzy
 msgid "File not found"
-msgstr "Farbe nicht gefunden"
+msgstr "Die Datei wurde nicht gefunden"
 
 #: ../src/views/view.c:1056
-#, fuzzy
 msgid "Corrupted file"
-msgstr "Rotfilter"
+msgstr "Beschädigte Datei"
 
 #: ../src/views/view.c:1057
-#, fuzzy
 msgid "Out of RAM"
-msgstr "Änderungsverlauf"
+msgstr "Nicht genügend RAM"
 
 #: ../src/views/view.c:1058
 msgid "Unsupported format"
@@ -24456,18 +24407,16 @@ msgid "Unsupported camera"
 msgstr "Nicht unterstützte Kamera"
 
 #: ../src/views/view.c:1061
-#, fuzzy
 msgid "Loading error"
-msgstr "Fehler beim Verschieben in den Papierkorb"
+msgstr "Fehler beim Laden"
 
 #: ../src/views/view.c:1062
 msgid "I/O error"
 msgstr "I/O Fehler"
 
 #: ../src/views/view.c:1063
-#, fuzzy
 msgid "No embedded thumbnail"
-msgstr "Vorschaubilder vorab rendern"
+msgstr "Kein eingebettetes Vorschaubild"
 
 #: ../src/views/view.c:1064
 #, fuzzy
@@ -24479,13 +24428,13 @@ msgid "Aborted"
 msgstr "Abgebrochen"
 
 #: ../src/views/view.c:1132
-#, fuzzy
 msgid ""
 "Not enough memory to display the thumbnail.\n"
 "Close other applications or add more RAM to your system."
 msgstr ""
-"Auf Ihrem System geht der Arbeitsspeicher zur Neige. Schließen sie andere "
-"Anwendungen oder rüsten sie Ihr System mit mehr RAM auf."
+"Es ist nicht genügend Arbeitsspeicher vorhanden, um das Vorschaubild "
+"anzuzeigen.\n"
+"Schließen Sie andere Anwendungen oder rüsten Sie Ihr System mit mehr RAM auf."
 
 #: ../src/widgets/accelerators.c:216
 msgid "Shortcut"
