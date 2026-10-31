@@ -43,6 +43,13 @@ static void _preserves_cardinal_direction_signs(void **state G_GNUC_UNUSED)
   assert_double_equal(dt_util_gps_string_to_number("120,0,W"), -120.0, 0.0);
 }
 
+static void _accepts_direction_with_or_without_a_separator(void **state G_GNUC_UNUSED)
+{
+  assert_double_equal(dt_util_gps_string_to_number("45,30,N"), 45.5, 0.0);
+  assert_double_equal(dt_util_gps_string_to_number("45,30N"), 45.5, 0.0);
+  assert_double_equal(dt_util_gps_string_to_number("45,30, N"), 45.5, 0.0);
+}
+
 static void _parses_degrees_minutes_seconds(void **state G_GNUC_UNUSED)
 {
   assert_double_equal(dt_util_gps_string_to_number("179,59,59.5,W"), -179.9998611111111,
@@ -80,7 +87,7 @@ static void _rejects_minutes_or_seconds_of_sixty(void **state G_GNUC_UNUSED)
 
 static void _rejects_incomplete_and_extra_coordinate_tokens(void **state G_GNUC_UNUSED)
 {
-  const char *const input[] = { "x", "", "1,N", "1,2", "1,2,3,4,N" };
+  const char *const input[] = { "x", "", "1,N", "1,2", "1,2,,N", "1,2,3,4,N" };
 
   for(size_t index = 0; index < G_N_ELEMENTS(input); index++)
     assert_true(isnan(dt_util_gps_string_to_number(input[index])));
@@ -99,6 +106,7 @@ int main(int argc, char *argv[])
   const struct CMUnitTest tests[] = {
     cmocka_unit_test(_parses_degrees_minutes_with_ascii_fractional_decimals),
     cmocka_unit_test(_preserves_cardinal_direction_signs),
+    cmocka_unit_test(_accepts_direction_with_or_without_a_separator),
     cmocka_unit_test(_parses_degrees_minutes_seconds),
     cmocka_unit_test(_accepts_latitude_and_longitude_endpoints),
     cmocka_unit_test(_accepts_fractional_minutes_and_seconds_below_sixty),
