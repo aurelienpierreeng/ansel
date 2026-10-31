@@ -7,7 +7,7 @@ msgstr ""
 "Project-Id-Version: darktable\n"
 "Report-Msgid-Bugs-To: \n"
 "POT-Creation-Date: 2026-09-07 23:37+0200\n"
-"PO-Revision-Date: 2026-10-30 20:26+0100\n"
+"PO-Revision-Date: 2026-10-31 13:13+0100\n"
 "Last-Translator: Jobst Hoffmann <j.hoffmann@fh-aachen.de>\n"
 "Language-Team: German <>\n"
 "Language: de\n"
@@ -845,7 +845,7 @@ msgstr "Pixelgröße"
 #: ../build/src/iop/introspection_censorize.c:63
 #: ../build/src/iop/introspection_censorize.c:120
 msgid "output blur radius"
-msgstr "Output Weichzeichnungsradius"
+msgstr "Ausgabe des Radius des Weichzeichnens"
 
 #: ../build/src/iop/introspection_censorize.c:69
 #: ../build/src/iop/introspection_censorize.c:124
@@ -1099,7 +1099,7 @@ msgstr "Kontraststützpunkt"
 #: ../build/src/iop/introspection_colorbalance.c:132
 #: ../build/src/iop/introspection_colorbalance.c:215
 msgid "output saturation"
-msgstr "Output-Sättigung"
+msgstr "Ausgabe der Sättigung"
 
 #: ../build/src/iop/introspection_colorbalance.c:229
 msgid "lift, gamma, gain (ProPhoto RGB)"
@@ -2455,15 +2455,13 @@ msgstr "Belichtung"
 
 #: ../build/src/iop/introspection_retouch.c:262
 #: ../build/src/iop/introspection_retouch.c:419
-#, fuzzy
 msgid "Blur type"
-msgstr "Art der Unschärfe"
+msgstr "Unschärfeart"
 
 #: ../build/src/iop/introspection_retouch.c:268
 #: ../build/src/iop/introspection_retouch.c:423
-#, fuzzy
 msgid "Blur radius"
-msgstr "Radius"
+msgstr "Weichzeichnungsradius"
 
 #: ../build/src/iop/introspection_retouch.c:274
 #: ../build/src/iop/introspection_retouch.c:427
@@ -2473,7 +2471,6 @@ msgstr "Füllmodus"
 
 #: ../build/src/iop/introspection_retouch.c:292
 #: ../build/src/iop/introspection_retouch.c:439
-#, fuzzy
 msgid "Brightness"
 msgstr "Helligkeit"
 
@@ -2517,9 +2514,8 @@ msgid "Gaussian"
 msgstr "Gauß"
 
 #: ../build/src/iop/introspection_retouch.c:470
-#, fuzzy
 msgid "Bilateral"
-msgstr "bilateral"
+msgstr "Bilateral"
 
 #: ../build/src/iop/introspection_retouch.c:474
 msgid "Erase"
@@ -4210,7 +4206,6 @@ msgid "%.2f MiB for module `%s` on %s: only %.2f MiB available"
 msgstr "%.2f MiB für das Modul `%s` auf %s: nur %.2f MiB verfügbar"
 
 #: ../src/caches/pixelpipe_cache.c:1921
-#, fuzzy
 msgid ""
 "Your system is running out of memory:\n"
 "A module could not get the memory it needs, so it fails and the image is not "
@@ -4218,8 +4213,11 @@ msgid ""
 "\n"
 "Close other applications or add more RAM to your system."
 msgstr ""
-"Auf Ihrem System geht der Arbeitsspeicher zur Neige. Schließen sie andere "
-"Anwendungen oder rüsten sie Ihr System mit mehr RAM auf."
+"Auf Ihrem System geht der Arbeitsspeicher zur Neige:\n"
+"Ein Modul konnte nicht den benötigten Arbeitsspeicher erhalten, sodass es "
+"fehlschlägt und das Bild nicht aktualisiert wird.\n"
+"\n"
+"Schließen Sie andere Anwendungen oder rüsten Sie Ihr System mit mehr RAM auf."
 
 #: ../src/colorprofiles/colorspaces.c:1806
 msgid "(unknown name)"
@@ -4796,9 +4794,9 @@ msgid "unknown/invalid"
 msgstr "unbekannt/ungültig"
 
 #: ../src/metadata/colorlabels.c:265
-#, fuzzy, c-format
+#, c-format
 msgid "Color labels removed for %i image(s)"
-msgstr "Farbmarkierung auf %s bei %i Bild(ern) gesetzt"
+msgstr "Farbmarkierungen bei %i Bild(ern) entfernt"
 
 #: ../src/metadata/colorlabels.c:267
 #, c-format
@@ -4806,9 +4804,9 @@ msgid "Color label set to %s for %i image(s)"
 msgstr "Farbmarkierung auf %s bei %i Bild(ern) gesetzt"
 
 #: ../src/metadata/colorlabels.c:270
-#, fuzzy, c-format
+#, c-format
 msgid "Color label %s removed for %i image(s)"
-msgstr "Farbmarkierung auf %s bei %i Bild(ern) gesetzt"
+msgstr "Farbkennzeichnung %s für %i Bild(er) entfernt"
 
 #: ../src/common/colorchecker.h:845
 #, c-format
@@ -5014,14 +5012,12 @@ msgstr ""
 "gelöscht werden: %s"
 
 #: ../src/common/image.c:2176
-#, fuzzy
 msgid "cannot access local copy"
-msgstr "auf lokale Kopie ‚%s‘ kann nicht zugegriffen werden."
+msgstr "kann auf lokale Kopie nicht zugreifen"
 
 #: ../src/common/image.c:2183
-#, fuzzy
 msgid "cannot write local copy"
-msgstr "lokale Kopie ‚%s‘ kann nicht erzeugt werden."
+msgstr "kann keine lokale Kopie schreiben"
 
 #: ../src/common/image.c:2191
 #, fuzzy
@@ -5460,26 +5456,23 @@ msgstr ""
 "abgebrochen."
 
 #: ../src/control/jobs/control_jobs.c:312
-#, fuzzy
 msgid "cannot write XMP file: the image cache entry is busy, try again."
 msgstr ""
-"Die XMP-Datei für das Bild %i kann nicht geschrieben werden: Der Bild-Cache-"
-"Eintrag ist belegt. Bitte versuchen Sie es erneut."
+"kann die XMP-Datei nicht schreiben: Der Cache-Eintrag des Bildes ist belegt, "
+"versuchen Sie es noch einmal."
 
 #: ../src/control/jobs/control_jobs.c:315
-#, fuzzy
 msgid "cannot write XMP file: the original file could not be found."
 msgstr ""
-"Die XMP-Datei für das Bild %i kann nicht geschrieben werden: Die "
-"Originaldatei wurde nicht gefunden."
+"kann die XMP-Datei nicht schreiben: Die Originaldatei konnte nicht gefunden "
+"werden."
 
 #: ../src/control/jobs/control_jobs.c:318
-#, fuzzy
 msgid ""
 "cannot write XMP file: the target storage may be unavailable or read-only."
 msgstr ""
-"Die XMP-Datei für das Bild %i kann nicht geschrieben werden: Der "
-"Zielspeicher ist möglicherweise nicht verfügbar oder schreibgeschützt."
+"kann die XMP-Datei nicht schreiben: Der Zielspeicher ist möglicherweise "
+"nicht verfügbar oder schreibgeschützt."
 
 #: ../src/control/jobs/control_jobs.c:332
 msgid "Sidecar file not written"
@@ -6467,7 +6460,7 @@ msgstr "einschließend & invertiert"
 
 #: ../src/develop/blend.c:2379
 msgid "output before blur"
-msgstr "Output vor Weichzeichnen"
+msgstr "Ausgabe vor dem Weichzeichnen"
 
 #: ../src/develop/blend.c:2380
 msgid "input before blur"
@@ -6475,7 +6468,7 @@ msgstr "Eingabe vor Weichzeichnen"
 
 #: ../src/develop/blend.c:2381
 msgid "output after blur"
-msgstr "Output nach Weichzeichnen"
+msgstr "Ausgabe nach dem Weichzeichnen"
 
 #: ../src/develop/blend.c:2382
 msgid "input after blur"
@@ -6495,7 +6488,7 @@ msgstr "Eingabe"
 #: ../src/develop/blend_gui.c:710 ../src/develop/blend_gui.c:3588
 #: ../src/iop/drawlayer.c:2953
 msgid "output"
-msgstr "Output"
+msgstr "Ausgabe"
 
 #: ../src/develop/blend_gui.c:721
 msgid " (zoom)"
@@ -6754,7 +6747,7 @@ msgid ""
 "* range defined by lower markers: do not blend at all\n"
 "* range between adjacent upper/lower markers: blend gradually"
 msgstr ""
-"Anpassung basierend auf dem Input dieses Moduls:\n"
+"Anpassung basierend auf dem Eingabe dieses Moduls:\n"
 "• Bereich der oberen Marker: vollständig überblenden\n"
 "• Bereich der unteren Marker: gar nicht überblenden\n"
 "• Bereich zwischen zugehörigen oberen/unteren Markern: allmählich einblenden"
@@ -6766,7 +6759,7 @@ msgid ""
 "* range defined by lower markers: do not blend at all\n"
 "* range between adjacent upper/lower markers: blend gradually"
 msgstr ""
-"Anpassung basierend auf dem Output dieses Moduls ohne Überblendung:\n"
+"Anpassung basierend auf der Ausgabe dieses Moduls ohne Überblendung:\n"
 "• Bereich der oberen Marker: vollständig überblenden\n"
 "• Bereich der unteren Marker: gar nicht überblenden\n"
 "• Bereich zwischen zugehörigen oberen/unteren Markern: allmählich einblenden"
@@ -6820,7 +6813,7 @@ msgstr ""
 
 #: ../src/develop/blend_gui.c:3642
 msgid "display the current channel from the unblended module output"
-msgstr "display the current channel from the unblended module output"
+msgstr "Den aktuellen Kanal aus dem ungemischten Modulausgang anzeigen"
 
 #: ../src/develop/blend_gui.c:3643
 msgid "display the current channel from the module input"
@@ -7075,10 +7068,9 @@ msgid ""
 "choose to guide mask by input or output image and\n"
 "choose to apply feathering before or after mask blur"
 msgstr ""
-"wählen, ob die kantensensitive Maske anhand Input- oder Output-Bild geführt "
-"wird\n"
-"wählen, ob die Glättung vor oder nach der Maskierungsunschärfe angewendet "
-"wird"
+"wählen, ob die kantensensitive Maske anhand des Eingabe- oder Ausgabe-Bildes "
+"geführt wird\n"
+"wählen, ob die Glättung vor oder nach der Weichzeichnen-Maske angewendet wird"
 
 #: ../src/develop/blend_gui.c:5073 ../src/libs/history.c:482
 msgid "feathering radius"
@@ -8092,7 +8084,6 @@ msgstr "Mittlerer Bereich"
 #. it opens, which nothing above reaches. A window is named by its title, and named before
 #. use like the panels are.
 #: ../src/gui/actions/doc_screenshot.c:997
-#, fuzzy
 msgid "Windows"
 msgstr "Fenster"
 
@@ -9048,10 +9039,9 @@ msgid "Details"
 msgstr "Details"
 
 #: ../src/gui/closing.c:130
-#, fuzzy
 msgctxt "closing jobs"
 msgid "Type"
-msgstr "Objektiv:"
+msgstr "Typ"
 
 #: ../src/gui/closing.c:136
 #, fuzzy
@@ -9082,10 +9072,9 @@ msgid "Thumbnail"
 msgstr "_Vorschaubilder"
 
 #: ../src/gui/closing.c:193
-#, fuzzy
 msgctxt "job type"
 msgid "Background task"
-msgstr "Hintergrund"
+msgstr "Hintergrundaufgabe"
 
 #. prints share this queue: their description says so
 #: ../src/gui/closing.c:195
@@ -11689,9 +11678,8 @@ msgid "graphic"
 msgstr "Grafik"
 
 #: ../src/imageio/imageio_core.c:632
-#, fuzzy
 msgid "cannot find the style to apply during export."
-msgstr "Stil ‚%s‘ kann zum Exportieren nicht gefunden werden."
+msgstr "kann den Stil zum Exportieren nicht finden"
 
 #: ../src/imageio/imageio_core.c:1171
 #, c-format
@@ -13215,9 +13203,9 @@ msgid ""
 msgstr ""
 "\n"
 "<b>Profil Qualität : %s</b>\n"
-"Input ΔE : \tavg. %.2f ; \tmax. %.2f\n"
+"Einagbe ΔE : \tavg. %.2f ; \tmax. %.2f\n"
 "WB ΔE : \tavg. %.2f ; \tmax. %.2f\n"
-"Output ΔE : \tavg. %.2f ; \tmax. %.2f\n"
+"Ausgabe ΔE : \tavg. %.2f ; \tmax. %.2f\n"
 "\n"
 "<b>Profil Daten</b>\n"
 "Lichtquelle :  \t%.0f K \t%s \n"
@@ -14919,29 +14907,25 @@ msgstr "durch Profil vorgegeben"
 #: ../src/iop/colorin.c:579 ../src/iop/colorin.c:868 ../src/iop/colorin.c:889
 #: ../src/iop/colorin.c:979 ../src/iop/colorout.c:521 ../src/iop/colorout.c:555
 #: ../src/iop/colorout.c:580
-#, fuzzy
 msgid "Color profile replaced"
-msgstr "Arbeitsprofil"
+msgstr "Farbprofil ersetzt"
 
 #: ../src/iop/colorin.c:580
-#, fuzzy
 msgid ""
 "can't extract matrix from colorspace, it will be replaced by Rec2020 RGB!"
 msgstr ""
-"Kann Matrix nicht aus dem Farbraum ‚%s‘ extrahieren, wird durch Rec2020 RGB "
+"Kann Matrix nicht aus dem Farbraum extrahieren, wird durch Rec2020 RGB "
 "ersetzt!"
 
 #: ../src/iop/colorin.c:830 ../src/iop/demosaic.c:2299 ../src/iop/invert.c:118
 #: ../src/iop/invert.c:368 ../src/iop/temperature.c:1174
 #: ../src/iop/temperature.c:1208
-#, fuzzy
 msgid "Camera data missing"
-msgstr "Metadaten"
+msgstr "Kameradaten fehlen"
 
 #: ../src/iop/colorin.c:830
-#, fuzzy
 msgid "color matrix not found!"
-msgstr "‚%s‘ Farbmatrix nicht gefunden!"
+msgstr "Farbmatrix nicht gefunden!"
 
 #: ../src/iop/colorin.c:869
 msgid "unsupported input profile has been replaced by linear Rec709 RGB!"
@@ -15471,9 +15455,8 @@ msgid "[dual demosaic_cl] internal problem"
 msgstr "[dual demosaic_cl] internes Problem"
 
 #: ../src/iop/demosaic.c:2299
-#, fuzzy
 msgid "color matrix not found for 4bayer image!"
-msgstr "‚%s‘ Farbmatrix für 4-Bayer-Bild nicht gefunden!"
+msgstr "Farbmatrix für 4-Bayer-Bild nicht gefunden!"
 
 #: ../src/iop/demosaic.c:2435
 msgid ""
@@ -17830,9 +17813,8 @@ msgstr ""
 "processing-modules/finalscale/'>Mehr dazu...</a>"
 
 #: ../src/iop/invert.c:118 ../src/iop/invert.c:368
-#, fuzzy
 msgid "color matrix not found for 4bayer image"
-msgstr "‚%s‘ Farbmatrix für 4-Bayer-Bild nicht gefunden"
+msgstr "Farbmatrix für 4-Bayer-Bild nicht gefunden"
 
 #: ../src/iop/invert.c:135
 msgid "invert"
@@ -19382,13 +19364,12 @@ msgid "shape selected:"
 msgstr "Form ausgewählt:"
 
 #: ../src/iop/retouch.c:2487
-#, fuzzy
 msgid ""
 "Click on a shape to select it,\n"
 "to unselect click on an empty space"
 msgstr ""
-"klicke auf eine Form, um diese auszuwählen, \n"
-"um die Auswahl aufzuheben, klick auf eine leere Stelle"
+"Klicke auf eine Form, um diese auszuwählen, \n"
+"um die Auswahl aufzuheben, klicke auf eine leere Stelle"
 
 #: ../src/iop/retouch.c:2494
 #, fuzzy
@@ -19416,9 +19397,8 @@ msgstr ""
 "Löschen."
 
 #: ../src/iop/retouch.c:2526
-#, fuzzy
 msgid "Type for the blur algorithm"
-msgstr "Typ des Weichzeichnungsalgorithmus"
+msgstr "Typ des Weichzeichnen-Algorithmus"
 
 # Ugh ...
 #: ../src/iop/retouch.c:2530
@@ -19865,9 +19845,8 @@ msgid "camera reference"
 msgstr "Kamera-Referenzpunkt"
 
 #: ../src/iop/temperature.c:1174
-#, fuzzy
 msgid "color matrix not found for image"
-msgstr "‚%s‘ Farbmatrix für Bild nicht gefunden"
+msgstr "Farbmatrix für Bild nicht gefunden"
 
 #: ../src/iop/temperature.c:1208
 #, fuzzy
@@ -22424,9 +22403,8 @@ msgid "processing `%s' for `%s'"
 msgstr "Verarbeiten von ‚%s‘ für ‚%s‘"
 
 #: ../src/libs/print_settings.c:396
-#, fuzzy
 msgid "cannot open printer profile"
-msgstr "Konnte Druckerprofile ‚%s‘ nicht öffnen"
+msgstr "Kann das Druckerprofil nicht öffnen"
 
 #: ../src/libs/print_settings.c:404
 #, c-format
@@ -22434,9 +22412,8 @@ msgid "error getting output profile for image %d"
 msgstr "Fehler für das Ausgabeprofils des Bildes %d"
 
 #: ../src/libs/print_settings.c:413
-#, fuzzy
 msgid "cannot apply printer profile"
-msgstr "Konnte Druckerprofile ‚%s‘ nicht anwenden"
+msgstr "Kann das Druckerprofile nicht anwenden"
 
 #: ../src/libs/print_settings.c:564
 msgid "failed to create temporary pdf for printing"
@@ -23954,23 +23931,20 @@ msgid "Zoom out"
 msgstr "Herauszoomen"
 
 #: ../src/views/darkroom.c:1831
-#, fuzzy
 msgid "Zoom to fit"
-msgstr "Herauszoomen"
+msgstr "An Bildschirm anpassen"
 
 #: ../src/views/darkroom.c:1833
 msgid "Zooms the main image to fit the window"
 msgstr "Das Hauptbild wird so vergrößert, dass es in das Fenster passt"
 
 #: ../src/views/darkroom.c:1834
-#, fuzzy
 msgid "Zoom to 100%"
-msgstr "Herauszoomen"
+msgstr "Auf 100 % vergrößern"
 
 #: ../src/views/darkroom.c:1836
-#, fuzzy
 msgid "Zooms the main image to 100%"
-msgstr "Den Fokus auf das Hauptbild richten"
+msgstr "Vergrößert das Hauptbild auf 100 %"
 
 #: ../src/views/darkroom.c:1846 ../src/views/darkroom.c:1950
 #: ../src/views/darkroom.c:1972 ../src/views/darkroom.c:1976
@@ -24474,9 +24448,8 @@ msgid "Unsupported format"
 msgstr "Nicht unterstütztes Dateiformat"
 
 #: ../src/views/view.c:1059
-#, fuzzy
 msgid "Unsupported feature"
-msgstr "3D-LUT: Nicht unterstütztes Dateiformat"
+msgstr "Nicht unterstützte Funktion"
 
 #: ../src/views/view.c:1060
 msgid "Unsupported camera"
@@ -24694,11 +24667,11 @@ msgstr "$(FILE.FOLDER) – Verzeichnisstruktur des Eingabebildes"
 
 #: ../src/widgets/gtkentry.c:205
 msgid "$(FILE.NAME) - basename of the input image"
-msgstr "$(FILE.NAME) – Basisname des Input Bildes"
+msgstr "$(FILE.NAME) – Basisname des Eingabebildes"
 
 #: ../src/widgets/gtkentry.c:206
 msgid "$(FILE.EXTENSION) - extension of the input image"
-msgstr "$(FILE.EXTENSION) – Erweiterung des Input Bildes"
+msgstr "$(FILE.EXTENSION) – Erweiterung des Eingabebildes"
 
 #: ../src/widgets/gtkentry.c:207
 msgid "$(FILE.YEAR) - year of modification of the input image"
