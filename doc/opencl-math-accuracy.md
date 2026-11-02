@@ -143,26 +143,37 @@ error term of `csum_two_sum()` under each option set:
 | NVIDIA GTX 1060, proprietary driver (has fp64) † | not reported | **0** |
 | Mesa 25.2.8 rusticl, Radeon 780M radeonsi, LLVM 20 (no fp64) | exact | exact |
 | Mesa rusticl, llvmpipe † | not reported | exact |
-| Apple OpenCL, Apple Silicon | double-float intact ‡ | not measured |
+| Apple OpenCL, Apple M1, macOS 26.7.1 (no fp64) | exact; double-float intact ‡ | **0**, and the double-float collapses to fp32 |
 | Apple OpenCL, Intel Macs | not measured | not measured |
 
 "exact" means the probe read back the true rounding error (1 for `1e8 + 1`, 1e-8 for `3 + 1e-8`)
-from the device. † measured by a reviewer with their own probe, 2026-11; the other device row on
-2026-11-02 against `bca94b57fd`, clang 23 on 2026-10-28 against `8e628de1c2`.
+from the device. † measured by a reviewer with their own probe, 2026-11; the rusticl radeonsi row on
+2026-11-02 against `bca94b57fd`, the Apple M1 row on 2026-11-02 against `b2dfd3ce9b`, clang 23 on
+2026-10-28 against `8e628de1c2`.
 
-‡ Not probed directly: read from the sparse solver self-test (`HL_SPCL_TEST`, the GPU Cholesky
-in `hl_real_t` against its CPU `double` twin) of the community test campaign, 2026-09-30 to
+On the M1 the probe also ran the double-float of `hl_real.h`, the arithmetic of the sparse solvers
+on this fp64-less device, through `clBuildProgram()` with each option set and the kernel directory
+as `-I`. Under the current default `hl_add(1e8, 1)` reads `(1e8, 1)` and `hl_div(1, 3)` is off by
+8.9e-16; under the legacy default they read `(1e8, 0)` and 3.0e-08 — single precision. Two runs,
+same figures.
+
+‡ Beyond the M1, not probed directly: read from the sparse solver self-test (`HL_SPCL_TEST`, the
+GPU Cholesky in `hl_real_t` against its CPU `double` twin) of the community test campaign, 2026-09-30 to
 2026-10-20, builds of the branch from before the migration but each run on a fresh
 `--configdir`, hence under the current default. Eight runs, M2 Pro, M3 Pro, M4, M4 Pro, M4 Max
 and M5, all read 4.25e-10 maximum relative difference, two orders of magnitude below single
 precision's unit roundoff (6e-8), which a solve carried out in plain fp32 cannot reach. For
 comparison, the same test reads 3.1e-12 with native double (seven NVIDIA cards), 1.2e-14 on an
 RX 6600 under AMD's driver, and 3.0e-10 with the double-float on rusticl. None of the campaign's
-runs used the legacy options, so the legacy column stays unmeasured on Apple.
+runs used the legacy options: on those chips the legacy column is the M1's, assumed to hold for
+the same compiler, not measured.
 
-So on the one device measured to fold it, the NVIDIA card, what is lost is the compensation of
-the reductions; its solvers run in native double. A device without fp64 whose compiler folds the
-double-float down to plain fp32 has not been observed, but nothing in the language prevents one.
+So two compilers are measured to fold it, with different costs. On the NVIDIA card what is lost
+is the compensation of the reductions; its solvers run in native double. On Apple Silicon, which
+has no fp64, the double-float folds down to plain fp32 as well: the biharmonic systems, conditioned
+around 3e8, would then be solved in single precision. That is the case the migration exists for:
+until it, every Mac that had run a build older than `d90978a75c` carried the legacy key, OpenCL
+enabled or not, and would have built these kernels with it as soon as OpenCL came on by default.
 
 Why rusticl does not fold, read from Mesa's dumps (`CLC_DEBUG=dump_llvm,dump_spirv`,
 `AMD_DEBUG=cs,nir,asm`) and its source at `mesa-25.2.8`: clang emits `fadd fast`, but Mesa runs
