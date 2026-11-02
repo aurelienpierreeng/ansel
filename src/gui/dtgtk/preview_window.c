@@ -50,6 +50,7 @@ typedef struct dt_preview_window_t
   GdkMonitor *monitor;      // monitor the window sits on (compared by pointer, never dereferenced)
   GdkMonitor *previous_monitor; // the one before: the OS may have moved the window away before telling us
   gboolean evacuate;        // its monitor was unplugged: to be reset as a first preview
+  gboolean maximized;       // maximized when last shown, to restore it when the OS shows it again
 } dt_preview_window_t;
 
 /** Client size of a first preview. Wide enough for the title (image name and version). */
@@ -136,8 +137,22 @@ static gboolean _preview_configure_event(GtkWidget *window, GdkEventConfigure *e
 /** @brief Remember the maximized state and, on Windows, prevent the taskbar or Win+D from minimizing the preview. */
 static gboolean _preview_window_state_event(GtkWidget *window, GdkEventWindowState *event, gpointer user_data)
 {
-  if(!(event->new_window_state & (GDK_WINDOW_STATE_FULLSCREEN | GDK_WINDOW_STATE_WITHDRAWN | GDK_WINDOW_STATE_ICONIFIED)))
-    _last.maximized = (event->new_window_state & GDK_WINDOW_STATE_MAXIMIZED) != 0;
+  dt_preview_window_t *preview = (dt_preview_window_t *)user_data;
+
+  // Windows hides the previews with Ansel when it is minimized, and shows them again unmaximized, wherever
+  // they were. Maximize them again: GTK then picks the monitor they sit on.
+  if(event->changed_mask & GDK_WINDOW_STATE_WITHDRAWN)
+  {
+    if(!(event->new_window_state & GDK_WINDOW_STATE_WITHDRAWN) && preview->maximized)
+      gtk_window_maximize(GTK_WINDOW(window));
+    return FALSE;
+  }
+
+  if(!(event->new_window_state & (GDK_WINDOW_STATE_FULLSCREEN | GDK_WINDOW_STATE_ICONIFIED)))
+  {
+    preview->maximized = (event->new_window_state & GDK_WINDOW_STATE_MAXIMIZED) != 0;
+    _last.maximized = preview->maximized;
+  }
 
 #ifdef GDK_WINDOWING_WIN32
   if(event->new_window_state & GDK_WINDOW_STATE_ICONIFIED)
@@ -368,7 +383,7 @@ void dt_preview_window_spawn(const int32_t imgid)
   g_signal_connect(G_OBJECT(dialog), "delete-event", G_CALLBACK(_preview_close), NULL);
   g_signal_connect(G_OBJECT(dialog), "key-press-event", G_CALLBACK(_preview_close), NULL);
   g_signal_connect(G_OBJECT(dialog), "configure-event", G_CALLBACK(_preview_configure_event), preview);
-  g_signal_connect(G_OBJECT(dialog), "window-state-event", G_CALLBACK(_preview_window_state_event), NULL);
+  g_signal_connect(G_OBJECT(dialog), "window-state-event", G_CALLBACK(_preview_window_state_event), preview);
 
   preview->area = gtk_drawing_area_new();
   gtk_widget_set_hexpand(preview->area, TRUE);
