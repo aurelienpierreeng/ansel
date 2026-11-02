@@ -24,6 +24,7 @@
     Copyright (C) 2023 Luca Zulberti.
     Copyright (C) 2023 Ricky Moon.
     Copyright (C) 2025-2026 Guillaume Stutin.
+    Copyright (C) 2026 Sergio Schvezov.
     
     darktable is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -2192,6 +2193,39 @@ dt_thumbtable_t *dt_thumbtable_new(dt_thumbtable_mode_t mode)
     dt_accels_new_virtual_shortcut(dt_gui_get_accels(), accel_group,
                                    path, table->grid, GDK_KEY_Alt_L, 0);
     dt_free(path);
+  }
+
+  // The grid gives Shift and Ctrl a meaning on every move key (filemanager.c's
+  // _grid_on_keyboard_move()). Declaring them here is what lists them in the shortcuts dialog
+  // and locks them, so that no global shortcut can take them over (doc/thumbtable.md).
+  if(mode == DT_THUMBTABLE_MODE_FILEMANAGER)
+  {
+    const struct
+    {
+      guint key;
+      const char *extend;
+      const char *move_cursor;
+    } moves[] = {
+      { GDK_KEY_Up, N_("Expand the selection up"), N_("Move the cursor up") },
+      { GDK_KEY_Down, N_("Expand the selection down"), N_("Move the cursor down") },
+      { GDK_KEY_Left, N_("Expand the selection left"), N_("Move the cursor left") },
+      { GDK_KEY_Right, N_("Expand the selection right"), N_("Move the cursor right") },
+      { GDK_KEY_Page_Up, N_("Expand the selection to the previous page"), N_("Move the cursor to the previous page") },
+      { GDK_KEY_Page_Down, N_("Expand the selection to the next page"), N_("Move the cursor to the next page") },
+      { GDK_KEY_Home, N_("Expand the selection to the start"), N_("Move the cursor to the start") },
+      { GDK_KEY_End, N_("Expand the selection to the end"), N_("Move the cursor to the end") },
+    };
+    for(size_t i = 0; i < G_N_ELEMENTS(moves); i++)
+    {
+      path = dt_accels_build_path(path_bases[0], _(moves[i].extend));
+      dt_accels_new_virtual_shortcut(dt_gui_get_accels(), accel_groups[0],
+                                     path, table->grid, moves[i].key, GDK_SHIFT_MASK);
+      dt_free(path);
+      path = dt_accels_build_path(path_bases[0], _(moves[i].move_cursor));
+      dt_accels_new_virtual_shortcut(dt_gui_get_accels(), accel_groups[0],
+                                     path, table->grid, moves[i].key, DT_PRIMARY_MASK);
+      dt_free(path);
+    }
   }
 
   path = dt_accels_build_path(_("Global/Menu/File"), _("Remove image from library"));
