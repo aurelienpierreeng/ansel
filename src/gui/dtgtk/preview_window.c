@@ -139,22 +139,9 @@ static gboolean _preview_window_state_event(GtkWidget *window, GdkEventWindowSta
     gtk_window_deiconify(GTK_WINDOW(window));
     return TRUE;
   }
-  // GDK re-applies the native style on every maximize/restore, which brings the minimize box back.
-  if(event->changed_mask & (GDK_WINDOW_STATE_MAXIMIZED | GDK_WINDOW_STATE_FULLSCREEN))
-    gdk_window_set_functions(gtk_widget_get_window(window),
-                             GDK_FUNC_MOVE | GDK_FUNC_RESIZE | GDK_FUNC_MAXIMIZE | GDK_FUNC_CLOSE);
 #endif
   return FALSE;
 }
-
-#ifdef GDK_WINDOWING_WIN32
-/** @brief On Windows, drop the minimize button: GTK recomputes the native style when mapping, so it can only be removed afterwards. */
-static void _preview_map_event(GtkWidget *window, GdkEvent *event, gpointer user_data)
-{
-  gdk_window_set_functions(gtk_widget_get_window(window),
-                           GDK_FUNC_MOVE | GDK_FUNC_RESIZE | GDK_FUNC_MAXIMIZE | GDK_FUNC_CLOSE);
-}
-#endif
 
 /**
  * @brief Reopen the previews that sat on an unplugged monitor as first previews: default size, not maximized,
@@ -376,9 +363,6 @@ void dt_preview_window_spawn(const int32_t imgid)
   g_signal_connect(G_OBJECT(dialog), "key-press-event", G_CALLBACK(_preview_close), NULL);
   g_signal_connect(G_OBJECT(dialog), "configure-event", G_CALLBACK(_preview_configure_event), preview);
   g_signal_connect(G_OBJECT(dialog), "window-state-event", G_CALLBACK(_preview_window_state_event), NULL);
-#ifdef GDK_WINDOWING_WIN32
-  g_signal_connect(G_OBJECT(dialog), "map-event", G_CALLBACK(_preview_map_event), NULL);
-#endif
 
   preview->area = gtk_drawing_area_new();
   gtk_widget_set_hexpand(preview->area, TRUE);
@@ -390,5 +374,11 @@ void dt_preview_window_spawn(const int32_t imgid)
   DT_DEBUG_CONTROL_SIGNAL_CONNECT(dt_control_signal_get_global(), DT_SIGNAL_DARKROOM_UI_CHANGED, G_CALLBACK(_preview_redraw), preview);
 
   gtk_widget_set_visible(preview->area, TRUE);
+#ifdef GDK_WINDOWING_WIN32
+  // On Windows the minimize box follows the GDK decorations, not the window functions. With GDK_DECOR_ALL the
+  // listed decorations are the ones left out: everything but the minimize button, which would also minimize Ansel.
+  gtk_widget_realize(dialog);
+  gdk_window_set_decorations(gtk_widget_get_window(dialog), GDK_DECOR_ALL | GDK_DECOR_MINIMIZE);
+#endif
   gtk_widget_show_all(dialog);
 }
