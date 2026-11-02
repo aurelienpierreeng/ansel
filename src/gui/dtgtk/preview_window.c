@@ -50,6 +50,7 @@ typedef struct dt_preview_window_t
   GdkMonitor *monitor;      // monitor the window sits on (compared by pointer, never dereferenced)
   GdkMonitor *previous_monitor; // the one before: the OS may have moved the window away before telling us
   gboolean evacuate;        // its monitor was unplugged: to be reset as a first preview
+  GdkRectangle removed_geometry; // geometry of that monitor, to tell an unplug from a re-enumeration
 } dt_preview_window_t;
 
 /** Client size of a first preview. Wide enough for the title (image name and version). */
@@ -157,6 +158,28 @@ static gboolean _preview_window_state_event(GtkWidget *window, GdkEventWindowSta
 static gboolean _preview_evacuate(gpointer user_data)
 {
   _evacuate_source = 0;
+
+  // The OS may re-enumerate the monitors without any being unplugged (minimizing Ansel on Windows):
+  // a monitor of the same geometry still connected means this one was not unplugged.
+  GdkDisplay *display = gtk_widget_get_display(dt_gui_main_window());
+  const int n_monitors = gdk_display_get_n_monitors(display);
+  gboolean unplugged = FALSE;
+  for(GList *l = _previews; l; l = g_list_next(l))
+  {
+    dt_preview_window_t *preview = (dt_preview_window_t *)l->data;
+    if(!preview->evacuate) continue;
+
+    for(int i = 0; i < n_monitors && preview->evacuate; i++)
+    {
+      GdkRectangle geometry;
+      gdk_monitor_get_geometry(gdk_display_get_monitor(display, i), &geometry);
+      if(!memcmp(&geometry, &preview->removed_geometry, sizeof(GdkRectangle))) preview->evacuate = FALSE;
+    }
+    if(preview->evacuate) unplugged = TRUE;
+  }
+  if(!unplugged) return G_SOURCE_REMOVE;
+
+  memset(&_last, 0, sizeof(_last));
 #ifdef GDK_WINDOWING_WIN32
   // Windows minimizes Ansel on a monitor change, and hides the previews it owns with it.
   gtk_window_present(GTK_WINDOW(dt_gui_main_window()));
@@ -194,11 +217,11 @@ static void _preview_monitor_removed(GdkDisplay *display, GdkMonitor *monitor, g
     dt_preview_window_t *preview = (dt_preview_window_t *)l->data;
     if(monitor != preview->monitor && monitor != preview->previous_monitor) continue;
     preview->evacuate = TRUE;
+    gdk_monitor_get_geometry(monitor, &preview->removed_geometry);
     found = TRUE;
   }
   if(!found) return;
 
-  memset(&_last, 0, sizeof(_last));
   if(_evacuate_source == 0) _evacuate_source = g_idle_add(_preview_evacuate, NULL);
 }
 
