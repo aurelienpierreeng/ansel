@@ -26,13 +26,12 @@
 #include "common.h"
 #include "compensated.h"
 
-// Double precision: none in this file. The four stage-2 reduction finalizers below used to
-// accumulate their partials in double, compiled only where cl_khr_fp64 exists -- but every one
-// of them narrows its result to float on the way out, so the double only ever bought the
-// accuracy of the SUMMATION. They now sum in compensated single precision (compensated.h:
-// value + running error, a couple of ulp whatever the number of terms) and are unguarded:
-// available on every device, Apple's fp64-less OpenCL included. The host twins still sum in
-// double; the two agree to a float ulp, not bit for bit.
+// Double precision: none in this file. The four stage-2 reduction finalizers below narrow
+// their result to float, so what they need from more than float is only the accuracy of the
+// SUMMATION: they sum in compensated single precision (compensated.h: value + running error,
+// a couple of ulp whatever the number of terms) and are unguarded, available on every device,
+// Apple's fp64-less OpenCL included. The host twins sum in double; the two agree to a float
+// ulp, not bit for bit.
 //
 // Do not guard on cl_khr_fp64 again. Measured on Apple M1: that runtime DEFINES the macro
 // without advertising the extension, so a guarded block compiles and each kernel touching a

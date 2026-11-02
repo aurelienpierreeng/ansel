@@ -127,20 +127,55 @@ rm -rf ~/.cache/ansel/cached_kernels_for_*
 **The key is sticky, except for the legacy default.** A key that still reads exactly
 `-cl-fast-relaxed-math -cl-no-signed-zeros -cl-unsafe-math-optimizations` — the default before
 `d90978a75c` — is replaced by the current default at the next start (`dt_opencl_device_init()`);
-any other value, i.e. one a user wrote, is kept. Until that migration existed, every install
-older than 2026-08-18 kept the unsafe flags, OpenCL disabled or not, since the key is written
-before `opencl` is read. Testing any *future* default change still requires a fresh
-`--configdir` or a migration of the same kind.
+any other value, i.e. one a user wrote, is kept. The key is written before `opencl` is read, so
+an install that ran a build older than `d90978a75c` carries it whether OpenCL was enabled or
+not. Testing any *future* default change requires a fresh `--configdir` or a migration of the
+same kind.
 
-*Migration added 2026-10-28 against `8e628de1c2`.* It became necessary rather than nice: the
-compensated sums of `data/kernels/compensated.h` and the double-float of `hl_real.h` rely on the
-compiler not reassociating. Measured with clang 23 (`-cc1 -triple spir64-unknown-unknown -O2
--emit-llvm`), the error term of `csum_two_sum()` compiles to its 6 flops under
-`-cl-mad-enable -cl-no-signed-zeros`, and to `store float 0.0` under the legacy default or under
-`-cl-unsafe-math-optimizations` alone — the compensation, and on an fp64-less device the whole
-double-float, silently gone. (First measured by the PR #1541 reviewer with clang 18.) No `#error`
-tripwire on `__FAST_RELAXED_MATH__` guards those headers: a program that fails to build fails
-`dt_opencl_device_init()` as a whole, which would cost the user the GPU, not just this module.
+The migration matters because the compensated sums of `data/kernels/compensated.h` and the
+double-float of `hl_real.h` rely on the compiler not reassociating, and the legacy default
+licenses it. Whether a compiler actually uses the licence is a property of the compiler. The
+error term of `csum_two_sum()` under each option set:
+
+| where | `-cl-mad-enable -cl-no-signed-zeros` | legacy default |
+|---|---|---|
+| clang 18 and 23 offline, `-cc1 -triple spir64-unknown-unknown -O2 -emit-llvm` | 6 flops | `store float 0.0` (also under `-cl-unsafe-math-optimizations` or `-cl-fast-relaxed-math` alone) |
+| NVIDIA GTX 1060, proprietary driver (has fp64) † | not reported | **0** |
+| Mesa 25.2.8 rusticl, Radeon 780M radeonsi, LLVM 20 (no fp64) | exact | exact |
+| Mesa rusticl, llvmpipe † | not reported | exact |
+| Apple OpenCL, Apple Silicon | double-float intact ‡ | not measured |
+| Apple OpenCL, Intel Macs | not measured | not measured |
+
+"exact" means the probe read back the true rounding error (1 for `1e8 + 1`, 1e-8 for `3 + 1e-8`)
+from the device. † measured by a reviewer with their own probe, 2026-11; the other device row on
+2026-11-02 against `bca94b57fd`, clang 23 on 2026-10-28 against `8e628de1c2`.
+
+‡ Not probed directly: read from the sparse solver self-test (`HL_SPCL_TEST`, the GPU Cholesky
+in `hl_real_t` against its CPU `double` twin) of the community test campaign, 2026-09-30 to
+2026-10-20, builds of the branch from before the migration but each run on a fresh
+`--configdir`, hence under the current default. Eight runs, M2 Pro, M3 Pro, M4, M4 Pro, M4 Max
+and M5, all read 4.25e-10 maximum relative difference, two orders of magnitude below single
+precision's unit roundoff (6e-8), which a solve carried out in plain fp32 cannot reach. For
+comparison, the same test reads 3.1e-12 with native double (seven NVIDIA cards), 1.2e-14 on an
+RX 6600 under AMD's driver, and 3.0e-10 with the double-float on rusticl. None of the campaign's
+runs used the legacy options, so the legacy column stays unmeasured on Apple.
+
+So on the one device measured to fold it, the NVIDIA card, what is lost is the compensation of
+the reductions; its solvers run in native double. A device without fp64 whose compiler folds the
+double-float down to plain fp32 has not been observed, but nothing in the language prevents one.
+
+Why rusticl does not fold, read from Mesa's dumps (`CLC_DEBUG=dump_llvm,dump_spirv`,
+`AMD_DEBUG=cs,nir,asm`) and its source at `mesa-25.2.8`: clang emits `fadd fast`, but Mesa runs
+it at `-O0` (`src/compiler/clc/clc_helpers.cpp`), so no LLVM pass uses the flags; the SPIR-V
+carries them as the legacy `FPFastMathMode Fast` bit (0x10); and `spirv_to_nir`
+(`src/compiler/spirv/vtn_alu.c`, `handle_fp_fast_math()`) marks an operation `exact` unless it
+carries all four `SPV_KHR_float_controls2` bits (`AllowRecip`, `AllowContract`, `AllowReassoc`,
+`AllowTransform`), which `Fast` does not. The final RDNA3 code keeps all six additions. A Mesa
+whose translator emits the `float_controls2` bits would no longer be protected by this.
+
+No `#error` tripwire on `__FAST_RELAXED_MATH__` guards those headers: a program that fails to
+build fails `dt_opencl_device_init()` as a whole, which would cost the user the GPU, not just
+this module.
 
 ## If you are adding a kernel
 
