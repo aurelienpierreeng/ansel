@@ -189,8 +189,8 @@ preparation, white balance, harmonic, demosaic and colour profiles, `-cl-fast-re
 0.021 % of the pixels; its worst error, 6.4e-04, is on the pixel where forcing the error term to
 0 gives the same 6.4e-04. Of the five self-tests run with the error term forced to 0 (sparse,
 core, knee, cgrad, region), only the mean of the region test moves, from 7.46e-09 to 7.61e-09.
-Nor do the legacy options buy time there: the `hl_` kernels of that export take 4.59 s under the
-current default and 4.62 s under the legacy one (median of five runs).
+Nor do the legacy options buy time worth having there: the `hl_` kernels of that export take
+4.59 s under the legacy options and 4.62 s under the current default (median of five runs), 0.6 %.
 
 On llvmpipe, where the module itself runs on the CPU, the four self-tests read the same under the
 current default and `-cl-fast-relaxed-math`: sparse 3.37e-10, core 2.98e-07, aniso 3.58e-07, dome
