@@ -47,16 +47,30 @@ typedef struct dt_preview_window_t
   GtkWidget *window;
   int width;
   int height;
-  double aspect; // width / height of the displayed image, 0 until it is rendered
+  gboolean maximize_on_map; // the previous preview was maximized: done once mapped, so that the monitor is known
+  GdkMonitor *monitor;      // monitor the window sits on (compared by pointer, never dereferenced)
+  GdkMonitor *previous_monitor; // the one before: the OS may have moved the window away before telling us
+  gboolean evacuate;        // its monitor was unplugged: to be reset as a first preview
 } dt_preview_window_t;
 
-/** Client size and maximized state of the last preview that was moved or resized: the next ones open alike. */
-static int _last_width = 420;
-static int _last_height = 420;
-static gboolean _last_maximized = FALSE;
+/** Client size of a first preview. Wide enough for the title (image name and version). */
+#define DT_PREVIEW_DEFAULT_SIZE 420
+
+/**
+ * Geometry the user last gave to a preview, reused by the next ones until the user changes it.
+ * x, y are those of the outer frame (title bar included) in screen coordinates, so that they also say
+ * which monitor it was on. Not valid before the first preview and after its monitor is unplugged.
+ */
+static struct
+{
+  gboolean valid;
+  gboolean maximized;
+  int x, y, width, height;
+} _last = { 0 };
 
 /** Open previews, in opening order: closing one gives the focus back to the most recent of the others. */
 static GList *_previews = NULL;
+static guint _evacuate_source = 0;
 
 void _preview_redraw(gpointer instance, dt_preview_window_t *preview);
 
@@ -87,52 +101,128 @@ static gboolean _preview_close(GtkWidget *window, GdkEvent *event, gpointer user
   return TRUE;
 }
 
-/** Remember the size the user gave to the window, for the next previews. Maximized or fullscreen sizes are not. */
+/**
+ * @brief Remember the position and size the user gave to the window, for the next previews, and the monitor
+ * it sits on. Called on every configure event, a drag included: a few reads and stores, the last event of a
+ * drag is the final geometry. Maximized and fullscreen geometries are not the user's layout: skipped.
+ */
 static gboolean _preview_configure_event(GtkWidget *window, GdkEventConfigure *event, gpointer user_data)
 {
-  const GdkWindowState state = gdk_window_get_state(gtk_widget_get_window(window));
-  if(!(state & (GDK_WINDOW_STATE_MAXIMIZED | GDK_WINDOW_STATE_FULLSCREEN)))
-    gtk_window_get_size(GTK_WINDOW(window), &_last_width, &_last_height);
+  dt_preview_window_t *preview = (dt_preview_window_t *)user_data;
+  GdkWindow *gdk_window = gtk_widget_get_window(window);
+  GdkMonitor *monitor = gdk_display_get_monitor_at_window(gtk_widget_get_display(window), gdk_window);
+  if(monitor != preview->monitor)
+  {
+    preview->previous_monitor = preview->monitor;
+    preview->monitor = monitor;
+  }
+
+  if(gdk_window_get_state(gdk_window) & (GDK_WINDOW_STATE_MAXIMIZED | GDK_WINDOW_STATE_FULLSCREEN)) return FALSE;
+
+  GdkRectangle frame;
+  gdk_window_get_frame_extents(gdk_window, &frame);
+  _last.x = frame.x;
+  _last.y = frame.y;
+  gtk_window_get_size(GTK_WINDOW(window), &_last.width, &_last.height);
+  _last.valid = TRUE;
   return FALSE;
 }
 
-/**
- * @brief Remember the maximized state, and release the aspect ratio hint while maximized: the window manager
- * fills the screen whatever the image ratio, and the hint would fight it.
- */
+/** @brief Remember the maximized state and, on Windows, prevent the taskbar or Win+D from minimizing the preview. */
 static gboolean _preview_window_state_event(GtkWidget *window, GdkEventWindowState *event, gpointer user_data)
 {
-  const dt_preview_window_t *preview = (const dt_preview_window_t *)user_data;
-  if(!(event->changed_mask & GDK_WINDOW_STATE_MAXIMIZED)) return FALSE;
+  if(!(event->new_window_state & GDK_WINDOW_STATE_FULLSCREEN))
+    _last.maximized = (event->new_window_state & GDK_WINDOW_STATE_MAXIMIZED) != 0;
 
-  const gboolean maximized = (event->new_window_state & GDK_WINDOW_STATE_MAXIMIZED) != 0;
-  _last_maximized = maximized;
-  if(preview->aspect > 0.)
+#ifdef GDK_WINDOWING_WIN32
+  if(event->new_window_state & GDK_WINDOW_STATE_ICONIFIED)
   {
-    GdkGeometry hints = { .min_aspect = preview->aspect, .max_aspect = preview->aspect };
-    gtk_window_set_geometry_hints(GTK_WINDOW(window), NULL, &hints, maximized ? 0 : GDK_HINT_ASPECT);
+    gtk_window_deiconify(GTK_WINDOW(window));
+    return TRUE;
   }
+  // GDK re-applies the native style on every maximize/restore, which brings the minimize box back.
+  if(event->changed_mask & (GDK_WINDOW_STATE_MAXIMIZED | GDK_WINDOW_STATE_FULLSCREEN))
+    gdk_window_set_functions(gtk_widget_get_window(window),
+                             GDK_FUNC_MOVE | GDK_FUNC_RESIZE | GDK_FUNC_MAXIMIZE | GDK_FUNC_CLOSE);
+#endif
   return FALSE;
 }
 
 /**
- * @brief Give the window the aspect ratio of the rendered image (crop and orientation included), so that no grey
- * margin is left around it, and keep it while the user resizes. The width is kept and the height follows.
+ * @brief Once mapped: on Windows, drop the minimize button (GTK recomputes the native style when mapping, so
+ * it can only be removed afterwards), and maximize if the previous preview was. Maximizing is deferred to an
+ * idle callback: some window managers lose the title bar of a window maximized before their decoration is set.
  */
-static void _preview_fit_aspect(dt_preview_window_t *preview, const double aspect)
+static gboolean _preview_deferred_maximize(gpointer user_data)
 {
-  preview->aspect = aspect;
-  GtkWindow *window = GTK_WINDOW(preview->window);
-  if(gdk_window_get_state(gtk_widget_get_window(preview->window)) & GDK_WINDOW_STATE_MAXIMIZED) return;
+  GtkWidget *window = GTK_WIDGET(user_data);
+  if(gtk_widget_get_realized(window)) gtk_window_maximize(GTK_WINDOW(window));
+  g_object_unref(window);
+  return G_SOURCE_REMOVE;
+}
 
-  int width = 0, height = 0;
-  gtk_window_get_size(window, &width, &height);
-  // X11 window managers may satisfy a newly installed hint by shrinking the width to the current height:
-  // resize without the hint first, so that the width stays the reference for portrait images too.
-  gtk_window_set_geometry_hints(window, NULL, NULL, 0);
-  gtk_window_resize(window, width, (int)(width / aspect + 0.5));
-  GdkGeometry hints = { .min_aspect = aspect, .max_aspect = aspect };
-  gtk_window_set_geometry_hints(window, NULL, &hints, GDK_HINT_ASPECT);
+static void _preview_map_event(GtkWidget *window, GdkEvent *event, gpointer user_data)
+{
+  dt_preview_window_t *preview = (dt_preview_window_t *)user_data;
+#ifdef GDK_WINDOWING_WIN32
+  gdk_window_set_functions(gtk_widget_get_window(window),
+                           GDK_FUNC_MOVE | GDK_FUNC_RESIZE | GDK_FUNC_MAXIMIZE | GDK_FUNC_CLOSE);
+#endif
+  if(preview->maximize_on_map) g_idle_add(_preview_deferred_maximize, g_object_ref(window));
+  preview->maximize_on_map = FALSE;
+}
+
+/**
+ * @brief Reopen the previews that sat on an unplugged monitor as first previews: default size, not maximized,
+ * centered on Ansel's window. Done from an idle callback, not from the monitor signal, because the OS is
+ * rearranging windows at that point.
+ */
+static gboolean _preview_evacuate(gpointer user_data)
+{
+  _evacuate_source = 0;
+#ifdef GDK_WINDOWING_WIN32
+  // Windows minimizes Ansel on a monitor change, and hides the previews it owns with it.
+  gtk_window_present(GTK_WINDOW(dt_gui_main_window()));
+#endif
+
+  GdkRectangle main_frame;
+  gdk_window_get_frame_extents(gtk_widget_get_window(dt_gui_main_window()), &main_frame);
+
+  // Loop on the open previews, looking for those marked.
+  for(GList *l = _previews; l; l = g_list_next(l))
+  {
+    dt_preview_window_t *preview = (dt_preview_window_t *)l->data;
+    if(!preview->evacuate) continue;
+
+    preview->evacuate = FALSE;
+    gtk_window_unmaximize(GTK_WINDOW(preview->window));
+    gtk_window_resize(GTK_WINDOW(preview->window), DT_PREVIEW_DEFAULT_SIZE, DT_PREVIEW_DEFAULT_SIZE);
+    gtk_window_move(GTK_WINDOW(preview->window), main_frame.x + (main_frame.width - DT_PREVIEW_DEFAULT_SIZE) / 2,
+                    main_frame.y + (main_frame.height - DT_PREVIEW_DEFAULT_SIZE) / 2);
+    gtk_window_present(GTK_WINDOW(preview->window));
+  }
+  return G_SOURCE_REMOVE;
+}
+
+/**
+ * @brief Mark the previews that sat on the unplugged monitor, and forget the saved geometry, which belongs
+ * to it or may be maximized there. The OS may already have moved a window away before this signal, hence
+ * the previous monitor too. Monitors are compared by pointer: the OS also rearranges the others' geometry.
+ */
+static void _preview_monitor_removed(GdkDisplay *display, GdkMonitor *monitor, gpointer user_data)
+{
+  gboolean found = FALSE;
+  for(GList *l = _previews; l; l = g_list_next(l))
+  {
+    dt_preview_window_t *preview = (dt_preview_window_t *)l->data;
+    if(monitor != preview->monitor && monitor != preview->previous_monitor) continue;
+    preview->evacuate = TRUE;
+    found = TRUE;
+  }
+  if(!found) return;
+
+  memset(&_last, 0, sizeof(_last));
+  if(_evacuate_source == 0) _evacuate_source = g_idle_add(_preview_evacuate, NULL);
 }
 
 static void _preview_window_size_allocate(GtkWidget *widget, GtkAllocation *allocation, gpointer user_data)
@@ -198,12 +288,6 @@ _thumb_draw_image(GtkWidget *widget, cairo_t *cr, gpointer user_data)
     const double logical_width = width / sx;
     const double logical_height = height / sy;
 
-    // Ignore tiny surfaces and changes below the rounding noise, so that the ratio does not jitter.
-    const double aspect = logical_width / logical_height;
-    if(logical_width >= 50. && logical_height >= 50.
-       && (preview->aspect <= 0. || fabs(aspect / preview->aspect - 1.) > 0.01))
-      _preview_fit_aspect(preview, aspect);
-
     // we draw the image
     cairo_save(cr);
     double x_offset = (w - logical_width) / 2. + borders;
@@ -246,7 +330,7 @@ void dt_preview_window_spawn(const int32_t imgid)
     dt_control_log(_("No image to open !"));
     return;
   }
-  gchar *name = g_strdup_printf(_("Ansel - Preview : %s"), img->filename);
+  gchar *name = g_strdup_printf(_("Ansel - Preview: %s [%d]"), img->filename, img->version);
   dt_image_cache_read_release(img);
 
   dt_preview_window_t *preview = calloc(1, sizeof(dt_preview_window_t));
@@ -264,16 +348,50 @@ void dt_preview_window_spawn(const int32_t imgid)
   dt_osx_disallow_fullscreen(dialog);
 #endif
 
-  gtk_window_set_position(GTK_WINDOW(dialog), GTK_WIN_POS_CENTER_ON_PARENT);
   gtk_window_set_modal(GTK_WINDOW(dialog), FALSE);
   gtk_window_set_transient_for(GTK_WINDOW(dialog), GTK_WINDOW(dt_gui_main_window()));
-  gtk_window_set_default_size(GTK_WINDOW(dialog), _last_width, _last_height);
-  if(_last_maximized) gtk_window_maximize(GTK_WINDOW(dialog));
+  gtk_window_set_skip_taskbar_hint(GTK_WINDOW(dialog), TRUE);
+
+  // Reuse the geometry the user last gave to a preview, on whichever monitor it was, provided its center
+  // still lies on a connected monitor. Otherwise open as a first preview: default size, centered on Ansel.
+  GdkDisplay *display = gtk_widget_get_display(dialog);
+  gboolean placed = FALSE;
+  const int n_monitors = gdk_display_get_n_monitors(display);
+  // Loop on the connected monitors, looking for the one holding the center of the saved geometry.
+  for(int i = 0; _last.valid && !placed && i < n_monitors; i++)
+  {
+    GdkRectangle geometry;
+    gdk_monitor_get_geometry(gdk_display_get_monitor(display, i), &geometry);
+    const GdkPoint center = { _last.x + _last.width / 2, _last.y + _last.height / 2 };
+    placed = center.x >= geometry.x && center.x < geometry.x + geometry.width
+             && center.y >= geometry.y && center.y < geometry.y + geometry.height;
+  }
+
+  if(placed)
+  {
+    gtk_window_set_default_size(GTK_WINDOW(dialog), _last.width, _last.height);
+    gtk_window_move(GTK_WINDOW(dialog), _last.x, _last.y);
+    preview->maximize_on_map = _last.maximized;
+  }
+  else
+  {
+    gtk_window_set_default_size(GTK_WINDOW(dialog), DT_PREVIEW_DEFAULT_SIZE, DT_PREVIEW_DEFAULT_SIZE);
+    gtk_window_set_position(GTK_WINDOW(dialog), GTK_WIN_POS_CENTER_ON_PARENT);
+  }
+
+  static gboolean monitors_connected = FALSE;
+  if(!monitors_connected)
+  {
+    g_signal_connect(display, "monitor-removed", G_CALLBACK(_preview_monitor_removed), NULL);
+    monitors_connected = TRUE;
+  }
+
   g_signal_connect(G_OBJECT(dialog), "destroy", G_CALLBACK(_preview_window_destroy), preview);
   g_signal_connect(G_OBJECT(dialog), "delete-event", G_CALLBACK(_preview_close), NULL);
   g_signal_connect(G_OBJECT(dialog), "key-press-event", G_CALLBACK(_preview_close), NULL);
-  g_signal_connect(G_OBJECT(dialog), "configure-event", G_CALLBACK(_preview_configure_event), NULL);
-  g_signal_connect(G_OBJECT(dialog), "window-state-event", G_CALLBACK(_preview_window_state_event), preview);
+  g_signal_connect(G_OBJECT(dialog), "configure-event", G_CALLBACK(_preview_configure_event), preview);
+  g_signal_connect(G_OBJECT(dialog), "window-state-event", G_CALLBACK(_preview_window_state_event), NULL);
+  g_signal_connect(G_OBJECT(dialog), "map-event", G_CALLBACK(_preview_map_event), preview);
 
   preview->area = gtk_drawing_area_new();
   gtk_widget_set_hexpand(preview->area, TRUE);
