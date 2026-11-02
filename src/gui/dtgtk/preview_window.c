@@ -47,7 +47,6 @@ typedef struct dt_preview_window_t
   GtkWidget *window;
   int width;
   int height;
-  gboolean maximize_on_map; // the previous preview was maximized: done once mapped, so that the monitor is known
   GdkMonitor *monitor;      // monitor the window sits on (compared by pointer, never dereferenced)
   GdkMonitor *previous_monitor; // the one before: the OS may have moved the window away before telling us
   gboolean evacuate;        // its monitor was unplugged: to be reset as a first preview
@@ -148,29 +147,14 @@ static gboolean _preview_window_state_event(GtkWidget *window, GdkEventWindowSta
   return FALSE;
 }
 
-/**
- * @brief Once mapped: on Windows, drop the minimize button (GTK recomputes the native style when mapping, so
- * it can only be removed afterwards), and maximize if the previous preview was. Maximizing is deferred to an
- * idle callback: some window managers lose the title bar of a window maximized before their decoration is set.
- */
-static gboolean _preview_deferred_maximize(gpointer user_data)
-{
-  GtkWidget *window = GTK_WIDGET(user_data);
-  if(gtk_widget_get_realized(window)) gtk_window_maximize(GTK_WINDOW(window));
-  g_object_unref(window);
-  return G_SOURCE_REMOVE;
-}
-
+#ifdef GDK_WINDOWING_WIN32
+/** @brief On Windows, drop the minimize button: GTK recomputes the native style when mapping, so it can only be removed afterwards. */
 static void _preview_map_event(GtkWidget *window, GdkEvent *event, gpointer user_data)
 {
-  dt_preview_window_t *preview = (dt_preview_window_t *)user_data;
-#ifdef GDK_WINDOWING_WIN32
   gdk_window_set_functions(gtk_widget_get_window(window),
                            GDK_FUNC_MOVE | GDK_FUNC_RESIZE | GDK_FUNC_MAXIMIZE | GDK_FUNC_CLOSE);
-#endif
-  if(preview->maximize_on_map) g_idle_add(_preview_deferred_maximize, g_object_ref(window));
-  preview->maximize_on_map = FALSE;
 }
+#endif
 
 /**
  * @brief Reopen the previews that sat on an unplugged monitor as first previews: default size, not maximized,
@@ -371,7 +355,8 @@ void dt_preview_window_spawn(const int32_t imgid)
   {
     gtk_window_set_default_size(GTK_WINDOW(dialog), _last.width, _last.height);
     gtk_window_move(GTK_WINDOW(dialog), _last.x, _last.y);
-    preview->maximize_on_map = _last.maximized;
+    // Placed first, so that the window manager maximizes it on the monitor it was on.
+    if(_last.maximized) gtk_window_maximize(GTK_WINDOW(dialog));
   }
   else
   {
@@ -391,7 +376,9 @@ void dt_preview_window_spawn(const int32_t imgid)
   g_signal_connect(G_OBJECT(dialog), "key-press-event", G_CALLBACK(_preview_close), NULL);
   g_signal_connect(G_OBJECT(dialog), "configure-event", G_CALLBACK(_preview_configure_event), preview);
   g_signal_connect(G_OBJECT(dialog), "window-state-event", G_CALLBACK(_preview_window_state_event), NULL);
-  g_signal_connect(G_OBJECT(dialog), "map-event", G_CALLBACK(_preview_map_event), preview);
+#ifdef GDK_WINDOWING_WIN32
+  g_signal_connect(G_OBJECT(dialog), "map-event", G_CALLBACK(_preview_map_event), NULL);
+#endif
 
   preview->area = gtk_drawing_area_new();
   gtk_widget_set_hexpand(preview->area, TRUE);
