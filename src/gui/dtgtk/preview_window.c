@@ -44,15 +44,26 @@ typedef struct dt_preview_window_t
   cairo_surface_t *surface;
   dt_view_image_surface_fetcher_t fetcher;
   GtkWidget *area;
+  GtkWidget *window;
   int width;
   int height;
+  double aspect; // width / height of the displayed image, 0 until it is rendered
 } dt_preview_window_t;
+
+/** Client size and maximized state of the last preview that was moved or resized: the next ones open alike. */
+static int _last_width = 420;
+static int _last_height = 420;
+static gboolean _last_maximized = FALSE;
+
+/** Open previews, in opening order: closing one gives the focus back to the most recent of the others. */
+static GList *_previews = NULL;
 
 void _preview_redraw(gpointer instance, dt_preview_window_t *preview);
 
 static void _preview_window_destroy(GtkWidget *dialog, gpointer user_data)
 {
   dt_preview_window_t *preview = (dt_preview_window_t *)user_data;
+  _previews = g_list_remove(_previews, preview);
   // Disconnect from DARKROOM_UI_CHANGED before freeing: otherwise the handler keeps
   // firing with a dangling `preview` pointer and crashes on the next UI change
   // (e.g. moving the border-size slider).
@@ -61,9 +72,67 @@ static void _preview_window_destroy(GtkWidget *dialog, gpointer user_data)
   dt_free(preview);
 }
 
-static void _close_preview_popup(GtkWidget *dialog, gint response_id, gpointer data)
+/**
+ * @brief Close on Escape or on the close button, and focus the most recently opened preview still alive
+ * (the main window when none is left), so that repeated Escape peels them off one after the other.
+ */
+static gboolean _preview_close(GtkWidget *window, GdkEvent *event, gpointer user_data)
 {
-  gtk_widget_destroy(dialog);
+  if(event->type == GDK_KEY_PRESS && event->key.keyval != GDK_KEY_Escape) return FALSE;
+
+  gtk_widget_destroy(window);
+  GList *last = g_list_last(_previews);
+  GtkWidget *next = IS_NULL_PTR(last) ? dt_gui_main_window() : ((dt_preview_window_t *)last->data)->window;
+  gtk_window_present(GTK_WINDOW(next));
+  return TRUE;
+}
+
+/** Remember the size the user gave to the window, for the next previews. Maximized or fullscreen sizes are not. */
+static gboolean _preview_configure_event(GtkWidget *window, GdkEventConfigure *event, gpointer user_data)
+{
+  const GdkWindowState state = gdk_window_get_state(gtk_widget_get_window(window));
+  if(!(state & (GDK_WINDOW_STATE_MAXIMIZED | GDK_WINDOW_STATE_FULLSCREEN)))
+    gtk_window_get_size(GTK_WINDOW(window), &_last_width, &_last_height);
+  return FALSE;
+}
+
+/**
+ * @brief Remember the maximized state, and release the aspect ratio hint while maximized: the window manager
+ * fills the screen whatever the image ratio, and the hint would fight it.
+ */
+static gboolean _preview_window_state_event(GtkWidget *window, GdkEventWindowState *event, gpointer user_data)
+{
+  const dt_preview_window_t *preview = (const dt_preview_window_t *)user_data;
+  if(!(event->changed_mask & GDK_WINDOW_STATE_MAXIMIZED)) return FALSE;
+
+  const gboolean maximized = (event->new_window_state & GDK_WINDOW_STATE_MAXIMIZED) != 0;
+  _last_maximized = maximized;
+  if(preview->aspect > 0.)
+  {
+    GdkGeometry hints = { .min_aspect = preview->aspect, .max_aspect = preview->aspect };
+    gtk_window_set_geometry_hints(GTK_WINDOW(window), NULL, &hints, maximized ? 0 : GDK_HINT_ASPECT);
+  }
+  return FALSE;
+}
+
+/**
+ * @brief Give the window the aspect ratio of the rendered image (crop and orientation included), so that no grey
+ * margin is left around it, and keep it while the user resizes. The width is kept and the height follows.
+ */
+static void _preview_fit_aspect(dt_preview_window_t *preview, const double aspect)
+{
+  preview->aspect = aspect;
+  GtkWindow *window = GTK_WINDOW(preview->window);
+  if(gdk_window_get_state(gtk_widget_get_window(preview->window)) & GDK_WINDOW_STATE_MAXIMIZED) return;
+
+  int width = 0, height = 0;
+  gtk_window_get_size(window, &width, &height);
+  // X11 window managers may satisfy a newly installed hint by shrinking the width to the current height:
+  // resize without the hint first, so that the width stays the reference for portrait images too.
+  gtk_window_set_geometry_hints(window, NULL, NULL, 0);
+  gtk_window_resize(window, width, (int)(width / aspect + 0.5));
+  GdkGeometry hints = { .min_aspect = aspect, .max_aspect = aspect };
+  gtk_window_set_geometry_hints(window, NULL, &hints, GDK_HINT_ASPECT);
 }
 
 static void _preview_window_size_allocate(GtkWidget *widget, GtkAllocation *allocation, gpointer user_data)
@@ -129,6 +198,12 @@ _thumb_draw_image(GtkWidget *widget, cairo_t *cr, gpointer user_data)
     const double logical_width = width / sx;
     const double logical_height = height / sy;
 
+    // Ignore tiny surfaces and changes below the rounding noise, so that the ratio does not jitter.
+    const double aspect = logical_width / logical_height;
+    if(logical_width >= 50. && logical_height >= 50.
+       && (preview->aspect <= 0. || fabs(aspect / preview->aspect - 1.) > 0.01))
+      _preview_fit_aspect(preview, aspect);
+
     // we draw the image
     cairo_save(cr);
     double x_offset = (w - logical_width) / 2. + borders;
@@ -178,29 +253,33 @@ void dt_preview_window_spawn(const int32_t imgid)
   preview->imgid = imgid;
   dt_view_image_surface_fetcher_init(&preview->fetcher);
 
-  GtkWidget *dialog = gtk_dialog_new();
+  // A plain top-level window rather than a GtkDialog, to get the maximize button.
+  GtkWidget *dialog = gtk_window_new(GTK_WINDOW_TOPLEVEL);
+  preview->window = dialog;
+  _previews = g_list_append(_previews, preview);
   gtk_window_set_title(GTK_WINDOW(dialog), name);
   dt_free(name);
 
 #ifdef GDK_WINDOWING_QUARTZ
   dt_osx_disallow_fullscreen(dialog);
-  gtk_window_set_position(GTK_WINDOW(dialog), GTK_WIN_POS_CENTER_ON_PARENT);
 #endif
 
-  gtk_dialog_set_default_response(GTK_DIALOG(dialog), GTK_RESPONSE_CANCEL);
+  gtk_window_set_position(GTK_WINDOW(dialog), GTK_WIN_POS_CENTER_ON_PARENT);
   gtk_window_set_modal(GTK_WINDOW(dialog), FALSE);
   gtk_window_set_transient_for(GTK_WINDOW(dialog), GTK_WINDOW(dt_gui_main_window()));
-  gtk_window_set_default_size(GTK_WINDOW(dialog), 350, 350);
-  g_signal_connect(G_OBJECT(dialog), "response", G_CALLBACK(_close_preview_popup), NULL);
+  gtk_window_set_default_size(GTK_WINDOW(dialog), _last_width, _last_height);
+  if(_last_maximized) gtk_window_maximize(GTK_WINDOW(dialog));
   g_signal_connect(G_OBJECT(dialog), "destroy", G_CALLBACK(_preview_window_destroy), preview);
+  g_signal_connect(G_OBJECT(dialog), "delete-event", G_CALLBACK(_preview_close), NULL);
+  g_signal_connect(G_OBJECT(dialog), "key-press-event", G_CALLBACK(_preview_close), NULL);
+  g_signal_connect(G_OBJECT(dialog), "configure-event", G_CALLBACK(_preview_configure_event), NULL);
+  g_signal_connect(G_OBJECT(dialog), "window-state-event", G_CALLBACK(_preview_window_state_event), preview);
 
   preview->area = gtk_drawing_area_new();
   gtk_widget_set_hexpand(preview->area, TRUE);
   gtk_widget_set_vexpand(preview->area, TRUE);
-  gtk_widget_set_halign(preview->area, GTK_ALIGN_FILL);
-  gtk_widget_set_valign(preview->area, GTK_ALIGN_FILL);
-  gtk_widget_set_size_request(preview->area, 350, 350);
-  gtk_box_pack_start(GTK_BOX(gtk_dialog_get_content_area(GTK_DIALOG(dialog))), preview->area, TRUE, TRUE, 0);
+  gtk_widget_set_size_request(preview->area, 120, 120);
+  gtk_container_add(GTK_CONTAINER(dialog), preview->area);
   g_signal_connect(G_OBJECT(preview->area), "draw", G_CALLBACK(_thumb_draw_image), preview);
   g_signal_connect(G_OBJECT(preview->area), "size-allocate", G_CALLBACK(_preview_window_size_allocate), preview);
   DT_DEBUG_CONTROL_SIGNAL_CONNECT(dt_control_signal_get_global(), DT_SIGNAL_DARKROOM_UI_CHANGED, G_CALLBACK(_preview_redraw), preview);
