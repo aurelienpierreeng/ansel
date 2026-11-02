@@ -109,6 +109,12 @@ static gboolean _preview_configure_event(GtkWidget *window, GdkEventConfigure *e
 {
   dt_preview_window_t *preview = (dt_preview_window_t *)user_data;
   GdkWindow *gdk_window = gtk_widget_get_window(window);
+
+  // Minimizing Ansel hides its previews and the OS parks them at a fake position (-32000 on Windows):
+  // that is not a layout, nor a monitor change.
+  if(!gdk_window_is_visible(gdk_window) || (gdk_window_get_state(gdk_window) & GDK_WINDOW_STATE_ICONIFIED))
+    return FALSE;
+
   GdkMonitor *monitor = gdk_display_get_monitor_at_window(gtk_widget_get_display(window), gdk_window);
   if(monitor != preview->monitor)
   {
@@ -130,7 +136,7 @@ static gboolean _preview_configure_event(GtkWidget *window, GdkEventConfigure *e
 /** @brief Remember the maximized state and, on Windows, prevent the taskbar or Win+D from minimizing the preview. */
 static gboolean _preview_window_state_event(GtkWidget *window, GdkEventWindowState *event, gpointer user_data)
 {
-  if(!(event->new_window_state & GDK_WINDOW_STATE_FULLSCREEN))
+  if(!(event->new_window_state & (GDK_WINDOW_STATE_FULLSCREEN | GDK_WINDOW_STATE_WITHDRAWN | GDK_WINDOW_STATE_ICONIFIED)))
     _last.maximized = (event->new_window_state & GDK_WINDOW_STATE_MAXIMIZED) != 0;
 
 #ifdef GDK_WINDOWING_WIN32
