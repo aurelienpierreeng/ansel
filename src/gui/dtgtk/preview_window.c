@@ -38,6 +38,15 @@
 #include "osx/osx.h"
 #endif
 
+/** Layout of a preview on one monitor. The monitor is identified by name: a replugged one is a new GdkMonitor. */
+typedef struct dt_preview_layout_t
+{
+  gboolean valid;
+  gboolean maximized;
+  int x, y, width, height;
+  char monitor[128];
+} dt_preview_layout_t;
+
 typedef struct dt_preview_window_t
 {
   int32_t imgid;
@@ -51,7 +60,20 @@ typedef struct dt_preview_window_t
   GdkMonitor *previous_monitor; // the one before: the OS may have moved the window away before telling us
   gboolean evacuate;        // its monitor was unplugged: to be reset as a first preview
   gboolean maximized;       // maximized when last shown, to restore it when the OS shows it again
+  dt_preview_layout_t layout;          // on `monitor`
+  dt_preview_layout_t previous_layout; // on `previous_monitor`
+  dt_preview_layout_t home;            // of an evacuated preview, restored if that monitor comes back
 } dt_preview_window_t;
+
+/**
+ * The behaviours below guarded by this macro were written and tested on Linux window managers (X11, Wayland)
+ * only: they fix what those do differently from Windows, where the plain code was tested and works. Windows and
+ * macOS keep that plain code. If a future OS or window manager version handles these cases like Linux's
+ * did, the guards can be dropped; if Linux's catches up with Windows', so can the extra code.
+ */
+#if defined(GDK_WINDOWING_X11) || defined(GDK_WINDOWING_WAYLAND)
+#define DT_PREVIEW_LINUX_WM
+#endif
 
 /** Client size of a first preview. Wide enough for the title (image name and version). */
 #define DT_PREVIEW_DEFAULT_SIZE 420
@@ -74,6 +96,13 @@ static guint _evacuate_source = 0;
 
 void _preview_redraw(gpointer instance, dt_preview_window_t *preview);
 
+#ifdef DT_PREVIEW_LINUX_WM
+static void _preview_monitor_name(GdkMonitor *monitor, char *name, const size_t size)
+{
+  g_snprintf(name, size, "%s/%s", gdk_monitor_get_manufacturer(monitor), gdk_monitor_get_model(monitor));
+}
+#endif
+
 static void _preview_window_destroy(GtkWidget *dialog, gpointer user_data)
 {
   dt_preview_window_t *preview = (dt_preview_window_t *)user_data;
@@ -94,10 +123,20 @@ static gboolean _preview_close(GtkWidget *window, GdkEvent *event, gpointer user
 {
   if(event->type == GDK_KEY_PRESS && event->key.keyval != GDK_KEY_Escape) return FALSE;
 
+#ifdef DT_PREVIEW_LINUX_WM
+  // Hand the focus over before destroying: a focused window that disappears lets the window manager pick
+  // the new focus itself (the main window, as the parent), and the next Escape would not reach a preview.
+  GList *last = g_list_last(_previews);
+  if(((dt_preview_window_t *)last->data)->window == window) last = g_list_previous(last);
+  GtkWidget *next = IS_NULL_PTR(last) ? dt_gui_main_window() : ((dt_preview_window_t *)last->data)->window;
+  gtk_window_present_with_time(GTK_WINDOW(next), gdk_event_get_time(event));
+  gtk_widget_destroy(window);
+#else
   gtk_widget_destroy(window);
   GList *last = g_list_last(_previews);
   GtkWidget *next = IS_NULL_PTR(last) ? dt_gui_main_window() : ((dt_preview_window_t *)last->data)->window;
   gtk_window_present(GTK_WINDOW(next));
+#endif
   return TRUE;
 }
 
@@ -121,6 +160,10 @@ static gboolean _preview_configure_event(GtkWidget *window, GdkEventConfigure *e
   {
     preview->previous_monitor = preview->monitor;
     preview->monitor = monitor;
+    preview->previous_layout = preview->layout;
+#ifdef DT_PREVIEW_LINUX_WM
+    _preview_monitor_name(monitor, preview->layout.monitor, sizeof(preview->layout.monitor));
+#endif
   }
 
   if(gdk_window_get_state(gdk_window) & (GDK_WINDOW_STATE_MAXIMIZED | GDK_WINDOW_STATE_FULLSCREEN)) return FALSE;
@@ -131,6 +174,12 @@ static gboolean _preview_configure_event(GtkWidget *window, GdkEventConfigure *e
   _last.y = frame.y;
   gtk_window_get_size(GTK_WINDOW(window), &_last.width, &_last.height);
   _last.valid = TRUE;
+
+  preview->layout.x = _last.x;
+  preview->layout.y = _last.y;
+  preview->layout.width = _last.width;
+  preview->layout.height = _last.height;
+  preview->layout.valid = TRUE;
   return FALSE;
 }
 
@@ -152,6 +201,7 @@ static gboolean _preview_window_state_event(GtkWidget *window, GdkEventWindowSta
   {
     preview->maximized = (event->new_window_state & GDK_WINDOW_STATE_MAXIMIZED) != 0;
     _last.maximized = preview->maximized;
+    preview->layout.maximized = preview->maximized;
   }
 
 #ifdef GDK_WINDOWING_WIN32
@@ -177,8 +227,10 @@ static gboolean _preview_evacuate(gpointer user_data)
   gtk_window_present(GTK_WINDOW(dt_gui_main_window()));
 #endif
 
+#ifndef DT_PREVIEW_LINUX_WM
   GdkRectangle main_frame;
   gdk_window_get_frame_extents(gtk_widget_get_window(dt_gui_main_window()), &main_frame);
+#endif
 
   // Loop on the open previews, looking for those marked.
   for(GList *l = _previews; l; l = g_list_next(l))
@@ -189,9 +241,18 @@ static gboolean _preview_evacuate(gpointer user_data)
     preview->evacuate = FALSE;
     gtk_window_unmaximize(GTK_WINDOW(preview->window));
     gtk_window_resize(GTK_WINDOW(preview->window), DT_PREVIEW_DEFAULT_SIZE, DT_PREVIEW_DEFAULT_SIZE);
+#ifdef DT_PREVIEW_LINUX_WM
+    // Remap with the centering hint, exactly as a first preview is placed: moving the window by hand
+    // would have to guess the decorations, which Linux window managers do not report the way Windows does.
+    gtk_widget_hide(preview->window);
+    gtk_window_set_position(GTK_WINDOW(preview->window), GTK_WIN_POS_CENTER_ON_PARENT);
+    gtk_window_present(GTK_WINDOW(preview->window));
+    gtk_window_set_position(GTK_WINDOW(preview->window), GTK_WIN_POS_NONE);
+#else
     gtk_window_move(GTK_WINDOW(preview->window), main_frame.x + (main_frame.width - DT_PREVIEW_DEFAULT_SIZE) / 2,
                     main_frame.y + (main_frame.height - DT_PREVIEW_DEFAULT_SIZE) / 2);
     gtk_window_present(GTK_WINDOW(preview->window));
+#endif
   }
   return G_SOURCE_REMOVE;
 }
@@ -209,6 +270,7 @@ static void _preview_monitor_removed(GdkDisplay *display, GdkMonitor *monitor, g
     dt_preview_window_t *preview = (dt_preview_window_t *)l->data;
     if(monitor != preview->monitor && monitor != preview->previous_monitor) continue;
     preview->evacuate = TRUE;
+    preview->home = (monitor == preview->monitor) ? preview->layout : preview->previous_layout;
     found = TRUE;
   }
   if(!found) return;
@@ -216,6 +278,29 @@ static void _preview_monitor_removed(GdkDisplay *display, GdkMonitor *monitor, g
   memset(&_last, 0, sizeof(_last));
   if(_evacuate_source == 0) _evacuate_source = g_idle_add(_preview_evacuate, NULL);
 }
+
+#ifdef DT_PREVIEW_LINUX_WM
+/** @brief A monitor was plugged: put back the evacuated previews that lived on one of that name, as they were. */
+static void _preview_monitor_added(GdkDisplay *display, GdkMonitor *monitor, gpointer user_data)
+{
+  char name[128];
+  _preview_monitor_name(monitor, name, sizeof(name));
+
+  // Loop on the open previews, looking for those evacuated from a monitor of that name.
+  for(GList *l = _previews; l; l = g_list_next(l))
+  {
+    dt_preview_window_t *preview = (dt_preview_window_t *)l->data;
+    if(!preview->home.valid || strcmp(preview->home.monitor, name)) continue;
+
+    gtk_window_resize(GTK_WINDOW(preview->window), preview->home.width, preview->home.height);
+    gtk_window_move(GTK_WINDOW(preview->window), preview->home.x, preview->home.y);
+    // Placed first, so that the window manager maximizes it on that monitor.
+    if(preview->home.maximized) gtk_window_maximize(GTK_WINDOW(preview->window));
+    preview->home.valid = FALSE;
+  }
+}
+
+#endif
 
 static void _preview_window_size_allocate(GtkWidget *widget, GtkAllocation *allocation, gpointer user_data)
 {
@@ -376,6 +461,9 @@ void dt_preview_window_spawn(const int32_t imgid)
   if(!monitors_connected)
   {
     g_signal_connect(display, "monitor-removed", G_CALLBACK(_preview_monitor_removed), NULL);
+#ifdef DT_PREVIEW_LINUX_WM
+    g_signal_connect(display, "monitor-added", G_CALLBACK(_preview_monitor_added), NULL);
+#endif
     monitors_connected = TRUE;
   }
 
