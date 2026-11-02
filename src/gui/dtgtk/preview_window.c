@@ -387,4 +387,7 @@ void dt_preview_window_spawn(const int32_t imgid)
   gdk_window_set_decorations(gtk_widget_get_window(dialog), GDK_DECOR_ALL | GDK_DECOR_MINIMIZE);
 #endif
   gtk_widget_show_all(dialog);
+  // The centering hint is for the first mapping only: GTK applies it again whenever the window is shown after
+  // being hidden, as Windows does with the previews when Ansel is minimized and restored.
+  gtk_window_set_position(GTK_WINDOW(dialog), GTK_WIN_POS_NONE);
 }
