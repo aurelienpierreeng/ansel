@@ -1386,16 +1386,20 @@ static void _disable_modules_with_unusable_masks(dt_develop_t *dev, GList *forms
       dt_iop_module_t *module = (dt_iop_module_t *)node->data;
       if(!module->enabled || IS_NULL_PTR(module->blend_params)) continue;
       const uint32_t mask_mode = module->blend_params->mask_mode;
-      const gboolean drawn_missing = (mask_mode & (DEVELOP_MASK_ENABLED | DEVELOP_MASK_SHAPE))
+      const gboolean has_drawn_reference = (mask_mode & (DEVELOP_MASK_ENABLED | DEVELOP_MASK_SHAPE))
           == (DEVELOP_MASK_ENABLED | DEVELOP_MASK_SHAPE)
+          && module->blend_params->mask_id > 0;
+      const gboolean drawn_missing = has_drawn_reference
           && !dt_masks_form_is_usable_ext(forms, module->blend_params->mask_id);
-      const gboolean needs_raster = (mask_mode & (DEVELOP_MASK_ENABLED | DEVELOP_MASK_RASTER))
-          == (DEVELOP_MASK_ENABLED | DEVELOP_MASK_RASTER);
-      dt_iop_module_t *source = needs_raster
+      const gboolean has_raster_reference = (mask_mode & (DEVELOP_MASK_ENABLED | DEVELOP_MASK_RASTER))
+          == (DEVELOP_MASK_ENABLED | DEVELOP_MASK_RASTER)
+          && (module->blend_params->raster_mask_id > 0
+              || module->blend_params->raster_mask_source[0] != '\0');
+      dt_iop_module_t *source = has_raster_reference
           ? dt_iop_get_module_by_op_priority(dev->iop, module->blend_params->raster_mask_source,
                                               module->blend_params->raster_mask_instance)
           : NULL;
-      const gboolean raster_missing = needs_raster
+      const gboolean raster_missing = has_raster_reference
           && (IS_NULL_PTR(source) || source == module || source->iop_order >= module->iop_order
               || !source->enabled);
       if(!(drawn_missing || raster_missing)) continue;
