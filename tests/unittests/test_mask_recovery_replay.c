@@ -96,15 +96,20 @@ static dt_dev_history_item_t *history_for(dt_develop_t *dev, const char *operati
 }
 
 static void write_history(const int32_t imgid, const int first_num, const dt_iop_module_t *exposure,
-                           const dt_iop_module_t *consumer, const dt_iop_module_t *boundary)
+                           const dt_iop_module_t *consumer, const dt_iop_module_t *neutral)
 {
   assert_true(dt_history_repository_delete_dev_history(imgid));
   dt_develop_blend_params_t exposure_blend = *exposure->default_blendop_params;
   dt_develop_blend_params_t consumer_blend = *consumer->default_blendop_params;
+  dt_develop_blend_params_t neutral_blend = *neutral->default_blendop_params;
   exposure_blend.mask_mode = DEVELOP_MASK_ENABLED | DEVELOP_MASK_SHAPE;
   exposure_blend.mask_id = 42;
   consumer_blend.mask_mode = DEVELOP_MASK_ENABLED | DEVELOP_MASK_RASTER;
   g_strlcpy(consumer_blend.raster_mask_source, exposure->op, sizeof(consumer_blend.raster_mask_source));
+  neutral_blend.mask_mode = DEVELOP_MASK_ENABLED | DEVELOP_MASK_SHAPE | DEVELOP_MASK_RASTER;
+  neutral_blend.mask_id = 0;
+  neutral_blend.raster_mask_id = 0;
+  neutral_blend.raster_mask_source[0] = '\0';
   assert_true(dt_history_repository_write_item(imgid, first_num, exposure->op, exposure->params, exposure->params_size,
                                                  exposure->version(), TRUE, &exposure_blend, sizeof(exposure_blend),
                                                  dt_develop_blend_version(), 0, ""));
@@ -112,9 +117,9 @@ static void write_history(const int32_t imgid, const int first_num, const dt_iop
                                                  consumer->version(), TRUE, &consumer_blend, sizeof(consumer_blend),
                                                  dt_develop_blend_version(),
                                                  0, ""));
-  assert_true(dt_history_repository_write_item(imgid, first_num + 2, boundary->op, boundary->params, boundary->params_size,
-                                                 boundary->version(), TRUE, boundary->default_blendop_params,
-                                                 sizeof(*boundary->default_blendop_params), dt_develop_blend_version(), 0, ""));
+  assert_true(dt_history_repository_write_item(imgid, first_num + 2, neutral->op, neutral->params, neutral->params_size,
+                                                 neutral->version(), TRUE, &neutral_blend, sizeof(neutral_blend),
+                                                 dt_develop_blend_version(), 0, ""));
 
   const dt_masks_node_circle_t circle = { .center = { 0.5f, 0.5f }, .radius = 0.2f, .border = 0.0f };
   const dt_masks_form_group_t group = { .formid = 41, .parentid = 42, .opacity = 1.0f };
@@ -156,11 +161,11 @@ static void should_recover_masked_module_when_replaying_an_empty_snapshot(void *
   assert_int_equal(dt_dev_load_image(&dev, imgid), 0);
   dt_iop_module_t *exposure = module_for(&dev, "exposure");
   dt_iop_module_t *consumer = module_for(&dev, "colorbalancergb");
-  dt_iop_module_t *boundary = module_for(&dev, "dither");
+  dt_iop_module_t *neutral = module_for(&dev, "filmicrgb");
   assert_non_null(exposure);
   assert_non_null(consumer);
-  assert_non_null(boundary);
-  write_history(imgid, g_list_length(dev.history), exposure, consumer, boundary);
+  assert_non_null(neutral);
+  write_history(imgid, g_list_length(dev.history), exposure, consumer, neutral);
 
   dt_pthread_rwlock_wrlock(&dev.history_mutex);
   dt_dev_read_history_ext(&dev, imgid);
@@ -180,12 +185,17 @@ static void should_recover_masked_module_when_replaying_an_empty_snapshot(void *
 
   pop_history(&dev, empty_snapshot_history_end);
   exposure_history = history_for(&dev, "exposure");
+  dt_dev_history_item_t *neutral_history = history_for(&dev, "filmicrgb");
+  assert_non_null(neutral_history);
   assert_false(exposure->enabled);
   assert_true(exposure_history->enabled);
   assert_true(exposure_history->mask_dependencies_invalid);
   assert_true(exposure_history->effective_hash != valid_hash);
+  assert_true(neutral->enabled);
+  assert_false(neutral_history->mask_dependencies_invalid);
   assert_null(dt_dev_pixelpipe_get_module_piece(dev.pipe, exposure));
   assert_null(dt_dev_pixelpipe_get_module_piece(dev.pipe, consumer));
+  assert_non_null(dt_dev_pixelpipe_get_module_piece(dev.pipe, neutral));
 
   pop_history(&dev, valid_history_end);
   exposure_history = history_for(&dev, "exposure");
