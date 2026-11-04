@@ -44,7 +44,10 @@ typedef struct dt_preview_layout_t
 {
   gboolean valid;
   gboolean maximized;
-  int x, y, width, height;
+  int x;
+  int y;
+  int width;
+  int height;
 } dt_preview_layout_t;
 
 typedef struct dt_preview_window_t
@@ -85,7 +88,10 @@ typedef struct dt_preview_window_t
 static struct
 {
   gboolean valid;
-  int x, y, width, height;
+  int x;
+  int y;
+  int width;
+  int height;
 } _last = { 0 };
 
 /** Open previews, in opening order: closing one gives the focus back to the most recent of the others. */
@@ -293,7 +299,8 @@ _thumb_draw_image(GtkWidget *widget, cairo_t *cr, gpointer user_data)
     // The image is immediately available
     int width = cairo_image_surface_get_width(preview->surface);
     int height = cairo_image_surface_get_height(preview->surface);
-    double sx = 1.0, sy = 1.0;
+    double sx = 1.0;
+    double sy = 1.0;
     cairo_surface_get_device_scale(preview->surface, &sx, &sy);
     const double logical_width = width / sx;
     const double logical_height = height / sy;
