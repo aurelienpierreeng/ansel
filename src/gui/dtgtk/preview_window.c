@@ -72,6 +72,9 @@ typedef struct dt_preview_window_t
  * had restored to a normal size, and keep it so, whereas Linux window managers keep its normal state. On
  * Windows only, maximize changes arriving right after a display change are therefore not recorded as the
  * user's, and previews that the user did not maximize are unmaximized to their recorded size afterwards.
+ * Trade-off, accepted knowingly: this is a time heuristic, since the OS's maximize and the user's look the same
+ * in the event stream. A maximize the user clicks within DT_PREVIEW_DISPLAY_CHANGE_WINDOW of a display change is
+ * ignored and undone as well.
  */
 #if defined(GDK_WINDOWING_X11) || defined(GDK_WINDOWING_WAYLAND)
 #define DT_PREVIEW_LINUX_WM
@@ -261,6 +264,7 @@ static gboolean _preview_undo_os_maximize(gpointer user_data)
     if(preview->layout.maximized || !preview->layout.valid) continue;
     if(!(gdk_window_get_state(gdk_window) & GDK_WINDOW_STATE_MAXIMIZED)) continue;
     gtk_window_unmaximize(GTK_WINDOW(preview->window));
+    // Size only: the position is left to Windows, which picks the monitor, as the display layout changed.
     gtk_window_resize(GTK_WINDOW(preview->window), preview->layout.width, preview->layout.height);
   }
   return G_SOURCE_REMOVE;
