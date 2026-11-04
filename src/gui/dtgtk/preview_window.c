@@ -61,8 +61,14 @@ typedef struct dt_preview_window_t
 
 /**
  * The focus handoff guarded by this macro is needed on Linux window managers (X11, Wayland), which otherwise
- * choose a different focus after a preview is destroyed. Window placement and monitor changes are left to
- * every platform's native window manager.
+ * choose a different focus after a preview is destroyed. Preview placement and monitor changes are left to
+ * every platform's native window manager; the deliberate Windows exceptions are keeping Ansel visible across
+ * a display change and preventing a preview from minimizing.
+ *
+ * Known platform divergence, accepted on purpose: when the monitor holding a preview is unplugged, Windows may
+ * bring the preview back maximized on the remaining monitor, even if the user had restored it to a normal size,
+ * whereas Linux window managers keep its normal state. We do not detect or undo this: the user restores the
+ * window again if wanted.
  */
 #if defined(GDK_WINDOWING_X11) || defined(GDK_WINDOWING_WAYLAND)
 #define DT_PREVIEW_LINUX_WM
@@ -206,21 +212,10 @@ static gboolean _preview_window_state_event(GtkWidget *window, GdkEventWindowSta
 {
   dt_preview_window_t *preview = (dt_preview_window_t *)user_data;
 
-#ifdef GDK_WINDOWING_WIN32
-  // Windows hides the previews with Ansel when it is minimized, and shows them again unmaximized, wherever
-  // they were. Maximize them again: GTK then picks the monitor they sit on.
-  if(event->changed_mask & GDK_WINDOW_STATE_WITHDRAWN)
-  {
-    if(!(event->new_window_state & GDK_WINDOW_STATE_WITHDRAWN) && preview->layout.maximized)
-      gtk_window_maximize(GTK_WINDOW(window));
-    return FALSE;
-  }
-#endif
-
-  if(!(event->new_window_state & (GDK_WINDOW_STATE_FULLSCREEN | GDK_WINDOW_STATE_ICONIFIED)))
-  {
+  // Follow every change of the maximized bit, whatever else the same event carries (a transient ICONIFIED
+  // during a restore must not leave a stale TRUE behind). Placement is never ours to override.
+  if(event->changed_mask & GDK_WINDOW_STATE_MAXIMIZED)
     preview->layout.maximized = (event->new_window_state & GDK_WINDOW_STATE_MAXIMIZED) != 0;
-  }
 
 #ifdef GDK_WINDOWING_WIN32
   if(event->new_window_state & GDK_WINDOW_STATE_ICONIFIED)
