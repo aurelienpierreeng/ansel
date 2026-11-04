@@ -140,7 +140,7 @@ static gboolean _preview_window_clear_position(gpointer user_data)
 }
 
 /** @brief Keep the initial position hint until the window manager has placed the mapped window. */
-static gboolean _preview_window_map(GtkWidget *window, GdkEvent *event, gpointer user_data)
+static gboolean _preview_window_map(GtkWidget *window, GdkEvent *, gpointer user_data)
 {
   g_idle_add(_preview_window_clear_position, g_object_ref(window));
   return FALSE;
@@ -170,12 +170,12 @@ static gboolean _preview_close_and_refocus(GtkWidget *window, const guint32 time
   return TRUE;
 }
 
-static gboolean _preview_delete_event(GtkWidget *window, GdkEvent *event, gpointer user_data)
+static gboolean _preview_delete_event(GtkWidget *window, const GdkEvent *event, gpointer user_data)
 {
   return _preview_close_and_refocus(window, gdk_event_get_time(event));
 }
 
-static gboolean _preview_key_press_event(GtkWidget *window, GdkEventKey *event, gpointer user_data)
+static gboolean _preview_key_press_event(GtkWidget *window, const GdkEventKey *event, gpointer user_data)
 {
   if(event->keyval != GDK_KEY_Escape) return FALSE;
   return _preview_close_and_refocus(window, event->time);
@@ -214,7 +214,7 @@ static gboolean _preview_configure_event(GtkWidget *window, GdkEventConfigure *e
 }
 
 /** @brief Remember the maximized state and, on Windows, prevent the taskbar or Win+D from minimizing the preview. */
-static gboolean _preview_window_state_event(GtkWidget *window, GdkEventWindowState *event, gpointer user_data)
+static gboolean _preview_window_state_event(GtkWidget *window, const GdkEventWindowState *event, gpointer user_data)
 {
   dt_preview_window_t *preview = (dt_preview_window_t *)user_data;
 
