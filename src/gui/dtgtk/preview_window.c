@@ -140,7 +140,8 @@ static gboolean _preview_window_clear_position(gpointer user_data)
 }
 
 /** @brief Keep the initial position hint until the window manager has placed the mapped window. */
-static gboolean _preview_window_map(GtkWidget *window, GdkEvent *, gpointer user_data)
+static gboolean _preview_window_map(GtkWidget *window, GdkEvent *event __attribute__((unused)),
+                                      gpointer user_data)
 {
   g_idle_add(_preview_window_clear_position, g_object_ref(window));
   return FALSE;
