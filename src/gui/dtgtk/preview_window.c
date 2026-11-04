@@ -68,10 +68,10 @@ typedef struct dt_preview_window_t
  * every platform's native window manager; the deliberate Windows exceptions are keeping Ansel visible across
  * a display change and preventing a preview from minimizing.
  *
- * Known platform divergence, accepted on purpose: when the monitor holding a preview is unplugged, Windows may
- * bring the preview back maximized on the remaining monitor, even if the user had restored it to a normal size,
- * whereas Linux window managers keep its normal state. We do not detect or undo this: the user restores the
- * window again if wanted.
+ * Known platform divergence: when a monitor is unplugged or plugged, Windows may maximize a preview the user
+ * had restored to a normal size, and keep it so, whereas Linux window managers keep its normal state. On
+ * Windows only, maximize changes arriving right after a display change are therefore not recorded as the
+ * user's, and previews that the user did not maximize are unmaximized to their recorded size afterwards.
  */
 #if defined(GDK_WINDOWING_X11) || defined(GDK_WINDOWING_WAYLAND)
 #define DT_PREVIEW_LINUX_WM
@@ -98,6 +98,12 @@ static struct
 static GList *_previews = NULL;
 #ifdef GDK_WINDOWING_WIN32
 static gboolean _preview_monitor_handler_connected = FALSE;
+/** Time of the last display change (monotonic, microseconds). */
+static gint64 _display_change_time = 0;
+/** Maximize changes that come this soon after a display change (microseconds) are Windows', not the user's. */
+#define DT_PREVIEW_DISPLAY_CHANGE_WINDOW (2 * G_USEC_PER_SEC)
+/** Delay (milliseconds) before undoing what Windows did to the previews after a display change. */
+#define DT_PREVIEW_DISPLAY_CHANGE_SETTLE_MS 500
 #endif
 
 void _preview_redraw(gpointer instance, dt_preview_window_t *preview);
@@ -221,7 +227,13 @@ static gboolean _preview_window_state_event(GtkWidget *window, const GdkEventWin
 
   // Follow every change of the maximized bit, whatever else the same event carries (a transient ICONIFIED
   // during a restore must not leave a stale TRUE behind). Placement is never ours to override.
-  if(event->changed_mask & GDK_WINDOW_STATE_MAXIMIZED)
+  // On Windows, a maximize that follows a display change was done by the OS, not asked for by the user:
+  // it must not overwrite what the user chose, which is what gets restored afterwards.
+  gboolean os_initiated = FALSE;
+#ifdef GDK_WINDOWING_WIN32
+  os_initiated = g_get_monotonic_time() - _display_change_time < DT_PREVIEW_DISPLAY_CHANGE_WINDOW;
+#endif
+  if((event->changed_mask & GDK_WINDOW_STATE_MAXIMIZED) && !os_initiated)
     preview->layout.maximized = (event->new_window_state & GDK_WINDOW_STATE_MAXIMIZED) != 0;
 
 #ifdef GDK_WINDOWING_WIN32
@@ -235,10 +247,35 @@ static gboolean _preview_window_state_event(GtkWidget *window, const GdkEventWin
 }
 
 #ifdef GDK_WINDOWING_WIN32
-/** @brief Windows can minimize Ansel during a display change; restore the application without moving previews. */
+/**
+ * @brief Give back to the previews the normal size the user had set, if Windows maximized them on a display
+ * change. Maximized by the user, they stay maximized.
+ */
+static gboolean _preview_undo_os_maximize(gpointer user_data)
+{
+  // Loop on the open previews, looking for those the user left in a normal state but that are maximized now.
+  for(GList *l = _previews; l; l = g_list_next(l))
+  {
+    const dt_preview_window_t *preview = (dt_preview_window_t *)l->data;
+    GdkWindow *gdk_window = gtk_widget_get_window(preview->window);
+    if(preview->layout.maximized || !preview->layout.valid) continue;
+    if(!(gdk_window_get_state(gdk_window) & GDK_WINDOW_STATE_MAXIMIZED)) continue;
+    gtk_window_unmaximize(GTK_WINDOW(preview->window));
+    gtk_window_resize(GTK_WINDOW(preview->window), preview->layout.width, preview->layout.height);
+  }
+  return G_SOURCE_REMOVE;
+}
+
+/**
+ * @brief Windows can minimize Ansel during a display change; restore the application, and undo the maximize
+ * that Windows may apply to previews. The previews are not moved: Windows picks the monitor.
+ */
 static void _preview_recover_after_display_change(GdkDisplay *display, GdkMonitor *monitor, gpointer user_data)
 {
+  _display_change_time = g_get_monotonic_time();
   gtk_window_present(GTK_WINDOW(dt_gui_main_window()));
+  // Windows applies its changes to the windows after the signal: look again once they are done.
+  g_timeout_add(DT_PREVIEW_DISPLAY_CHANGE_SETTLE_MS, _preview_undo_os_maximize, NULL);
 }
 #endif
 
@@ -400,6 +437,7 @@ void dt_preview_window_spawn(const int32_t imgid)
   if(!_preview_monitor_handler_connected)
   {
     g_signal_connect(display, "monitor-removed", G_CALLBACK(_preview_recover_after_display_change), NULL);
+    g_signal_connect(display, "monitor-added", G_CALLBACK(_preview_recover_after_display_change), NULL);
     _preview_monitor_handler_connected = TRUE;
   }
 #endif
