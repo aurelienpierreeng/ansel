@@ -1,4 +1,12 @@
-How to make disk image with ansel application bundle from source (using Homebrew):
+How to build ansel from source on macOS (using Homebrew):
+
+Install Homebrew and the packages (steps 0 and 1 below), then use build.sh from the root of the sources, as on any other platform:
+     $ ./build.sh --install --sudo
+installs to /opt/ansel and links ansel and ansel-cli in /usr/local/bin, while
+     $ ./build.sh --build-package --install
+goes through steps 3 and 4 as well and leaves install/package/Ansel.app and install/Ansel-<version>-{arm64|i386}.dmg. No sudo there: the install tree defaults to install/ in the sources, and --prefix must be a directory you own.
+
+How to make disk image with ansel application bundle from source, step by step (using Homebrew):
 
 0). Install Homebrew (instructions and prerequisites can be found on official website https://brew.sh/), ideally use default installation path (/opt/homebrew for arm64, /usr/local for i386).
 

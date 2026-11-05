@@ -483,10 +483,20 @@ jobs:
         run: |
           "${SRC_DIR}/packaging/install-deps-macos.sh"
       - name: Build and Install
+        if: ${{ matrix.btype != 'Release' }}
         run: |
           cmake -E make_directory "${BUILD_DIR}";
           cmake -E make_directory "${INSTALL_PREFIX}";
           ./src/.ci/ci-script.sh;
+      # build.sh is what someone on a Mac types, and nothing else here would run it there: this
+      # cell gives it the job, with the same prefix, so "Check if it runs" reads its install.
+      # --sudo is for /usr/local/bin. doc/ci.md says what this covers.
+      - name: Build and Install through build.sh
+        if: ${{ matrix.btype == 'Release' }}
+        run: |
+          "${SRC_DIR}/build.sh" --build-dir "${BUILD_DIR}" --prefix "${INSTALL_PREFIX}" \
+            --build-type "${CMAKE_BUILD_TYPE}" --build-generator "${GENERATOR}" \
+            --install --sudo --skip-lensfun
       - name: Check if it runs
         run: |
           ${INSTALL_PREFIX}/bin/ansel --version || true

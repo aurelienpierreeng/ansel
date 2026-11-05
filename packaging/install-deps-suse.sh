@@ -112,7 +112,7 @@ function tumbleweed_function
 	sqlite3-devel
 	squashfs
 	update-desktop-files )
-    "${SUDO[@]}" zypper --non-interactive install --no-recommends "${ZYPPER_PACKAGES[@]}"
+    "${SUDO[@]}" zypper --non-interactive install --no-recommends --auto-agree-with-licenses "${ZYPPER_PACKAGES[@]}"
 	return 0
 }
 
@@ -207,7 +207,7 @@ function leap_function
 	update-desktop-files
 	libx265-215
     )
-    "${SUDO[@]}" zypper --non-interactive install --no-recommends "${ZYPPER_PACKAGES[@]}"
+    "${SUDO[@]}" zypper --non-interactive install --no-recommends --auto-agree-with-licenses "${ZYPPER_PACKAGES[@]}"
 	return 0
 }
 
