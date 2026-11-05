@@ -44,26 +44,140 @@ typedef struct dt_preview_window_t
   cairo_surface_t *surface;
   dt_view_image_surface_fetcher_t fetcher;
   GtkWidget *area;
+  GtkWidget *dialog;
+  struct dt_preview_window_t *prev_preview;
+  gboolean close_prepared;
+  gboolean maximized;
+  gboolean fullscreen;
   int width;
   int height;
 } dt_preview_window_t;
 
+typedef struct dt_preview_window_geometry_t
+{
+  int x;
+  int y;
+  int width;
+  int height;
+  gboolean valid;
+} dt_preview_window_geometry_t;
+
+static dt_preview_window_geometry_t _preview_geometry = { 0 };
+static dt_preview_window_t *_last_opened_preview = NULL;
+static int _preview_count = 0;
+static gboolean _previews_fullscreen = FALSE;
+static gboolean _previews_maximized = FALSE;
+
 void _preview_redraw(gpointer instance, dt_preview_window_t *preview);
+static void _preview_window_store_geometry(GtkWidget *dialog);
+
+static void _preview_window_prepare_close(GtkWidget *dialog, dt_preview_window_t *preview)
+{
+  if(preview->close_prepared) return;
+
+  if(preview == _last_opened_preview)
+  {
+    _preview_window_store_geometry(dialog);
+    _last_opened_preview = preview->prev_preview;
+    if(_last_opened_preview && _last_opened_preview->dialog)
+      gtk_window_present_with_time(GTK_WINDOW(_last_opened_preview->dialog), gtk_get_current_event_time());
+  }
+  else
+  {
+    dt_preview_window_t *current = _last_opened_preview;
+    while(current && current->prev_preview != preview)
+      current = current->prev_preview;
+    if(current)
+      current->prev_preview = preview->prev_preview;
+    if(_last_opened_preview && _last_opened_preview->dialog)
+      gtk_window_present_with_time(GTK_WINDOW(_last_opened_preview->dialog), gtk_get_current_event_time());
+  }
+
+  if(_preview_count == 1)
+  {
+    GtkWidget *main_window = dt_gui_main_window();
+    if(main_window)
+      gtk_window_present_with_time(GTK_WINDOW(main_window), gtk_get_current_event_time());
+  }
+
+  preview->close_prepared = TRUE;
+}
+
+static void _preview_window_store_geometry(GtkWidget *dialog)
+{
+  gtk_window_get_position(GTK_WINDOW(dialog), &_preview_geometry.x, &_preview_geometry.y);
+  gtk_window_get_size(GTK_WINDOW(dialog), &_preview_geometry.width, &_preview_geometry.height);
+  _preview_geometry.valid = TRUE;
+}
+
+static gboolean _preview_window_state_changed(GtkWidget *dialog, GdkEventWindowState *event, gpointer user_data)
+{
+  dt_preview_window_t *preview = (dt_preview_window_t *)user_data;
+  preview->maximized = (event->new_window_state & GDK_WINDOW_STATE_MAXIMIZED) != 0;
+  preview->fullscreen = (event->new_window_state & GDK_WINDOW_STATE_FULLSCREEN) != 0;
+  if(preview->fullscreen)
+    _previews_fullscreen = TRUE;
+  if(preview->maximized)
+    _previews_maximized = TRUE;
+  return FALSE;
+}
+
+static void _preview_window_monitor_changed(GdkDisplay *, GdkMonitor *, gpointer user_data)
+{
+  dt_preview_window_t *preview = (dt_preview_window_t *)user_data;
+  if(_previews_fullscreen || preview->fullscreen)
+    gtk_window_fullscreen(GTK_WINDOW(preview->dialog));
+  else if(_previews_maximized || preview->maximized)
+    gtk_window_maximize(GTK_WINDOW(preview->dialog));
+}
+
+static gboolean _preview_window_configure(GtkWidget *dialog, GdkEventConfigure *event, gpointer user_data)
+{
+  dt_preview_window_t *preview = (dt_preview_window_t *)user_data;
+  if(preview != _last_opened_preview) return FALSE;
+
+  gtk_window_get_position(GTK_WINDOW(dialog), &_preview_geometry.x, &_preview_geometry.y);
+  _preview_geometry.width = event->width;
+  _preview_geometry.height = event->height;
+  _preview_geometry.valid = TRUE;
+  return FALSE;
+}
 
 static void _preview_window_destroy(GtkWidget *dialog, gpointer user_data)
 {
   dt_preview_window_t *preview = (dt_preview_window_t *)user_data;
+  _preview_window_prepare_close(dialog, preview);
+
   // Disconnect from DARKROOM_UI_CHANGED before freeing: otherwise the handler keeps
   // firing with a dangling `preview` pointer and crashes on the next UI change
   // (e.g. moving the border-size slider).
   DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(dt_control_signal_get_global(), G_CALLBACK(_preview_redraw), preview);
+  GdkDisplay *display = gtk_widget_get_display(dialog);
+  g_signal_handlers_disconnect_by_func(display, G_CALLBACK(_preview_window_monitor_changed), preview);
   dt_view_image_surface_fetcher_cleanup(&preview->fetcher);
   dt_free(preview);
+
+  _preview_count--;
+  if(_preview_count == 0)
+  {
+    _preview_geometry.valid = FALSE;
+    _last_opened_preview = NULL;
+    _previews_fullscreen = FALSE;
+    _previews_maximized = FALSE;
+  }
 }
 
 static void _close_preview_popup(GtkWidget *dialog, gint response_id, gpointer data)
 {
+  dt_preview_window_t *preview = (dt_preview_window_t *)data;
+  _preview_window_prepare_close(dialog, preview);
   gtk_widget_destroy(dialog);
+}
+
+static gboolean _preview_window_delete(GtkWidget *dialog, GdkEvent *event, gpointer user_data)
+{
+  _close_preview_popup(dialog, 0, user_data);
+  return TRUE;
 }
 
 static void _preview_window_size_allocate(GtkWidget *widget, GtkAllocation *allocation, gpointer user_data)
@@ -171,14 +285,18 @@ void dt_preview_window_spawn(const int32_t imgid)
     dt_control_log(_("No image to open !"));
     return;
   }
-  gchar *name = g_strdup_printf(_("Ansel - Preview : %s"), img->filename);
+  gchar *name = g_strdup_printf(_("Ansel - Preview : %s [%d]"), img->filename, img->version);
   dt_image_cache_read_release(img);
 
   dt_preview_window_t *preview = calloc(1, sizeof(dt_preview_window_t));
   preview->imgid = imgid;
+  preview->prev_preview = _last_opened_preview;
   dt_view_image_surface_fetcher_init(&preview->fetcher);
+  _preview_count++;
+  _last_opened_preview = preview;
 
   GtkWidget *dialog = gtk_dialog_new();
+  preview->dialog = dialog;
   gtk_window_set_title(GTK_WINDOW(dialog), name);
   dt_free(name);
 
@@ -187,19 +305,41 @@ void dt_preview_window_spawn(const int32_t imgid)
   gtk_window_set_position(GTK_WINDOW(dialog), GTK_WIN_POS_CENTER_ON_PARENT);
 #endif
 
-  gtk_dialog_set_default_response(GTK_DIALOG(dialog), GTK_RESPONSE_CANCEL);
   gtk_window_set_modal(GTK_WINDOW(dialog), FALSE);
   gtk_window_set_transient_for(GTK_WINDOW(dialog), GTK_WINDOW(dt_gui_main_window()));
-  gtk_window_set_default_size(GTK_WINDOW(dialog), 350, 350);
-  g_signal_connect(G_OBJECT(dialog), "response", G_CALLBACK(_close_preview_popup), NULL);
+  gtk_dialog_set_default_response(GTK_DIALOG(dialog), GTK_RESPONSE_CANCEL);
+  if(_preview_geometry.valid)
+  {
+    gtk_window_set_default_size(GTK_WINDOW(dialog), _preview_geometry.width, _preview_geometry.height);
+  }
+  else
+  {
+    gtk_window_set_position(GTK_WINDOW(dialog), GTK_WIN_POS_CENTER_ON_PARENT);
+    gtk_window_set_default_size(GTK_WINDOW(dialog), 420, 420);
+  }
+  gtk_window_set_type_hint(GTK_WINDOW(dialog), GDK_WINDOW_TYPE_HINT_NORMAL);
+  gtk_window_set_decorated(GTK_WINDOW(dialog), TRUE);
+  gtk_widget_realize(dialog);
+#ifdef _WIN32
+  gdk_window_set_functions(gtk_widget_get_window(dialog), GDK_FUNC_ALL & ~GDK_FUNC_MINIMIZE);
+#endif
+  if(_preview_geometry.valid)
+    gtk_window_move(GTK_WINDOW(dialog), _preview_geometry.x, _preview_geometry.y);
+  g_signal_connect(G_OBJECT(dialog), "response", G_CALLBACK(_close_preview_popup), preview);
+  g_signal_connect(G_OBJECT(dialog), "delete-event", G_CALLBACK(_preview_window_delete), preview);
   g_signal_connect(G_OBJECT(dialog), "destroy", G_CALLBACK(_preview_window_destroy), preview);
+  g_signal_connect(G_OBJECT(dialog), "window-state-event", G_CALLBACK(_preview_window_state_changed), preview);
+  g_signal_connect(G_OBJECT(dialog), "configure-event", G_CALLBACK(_preview_window_configure), preview);
+  GdkDisplay *display = gtk_widget_get_display(dialog);
+  g_signal_connect(display, "monitor-added", G_CALLBACK(_preview_window_monitor_changed), preview);
+  g_signal_connect(display, "monitor-removed", G_CALLBACK(_preview_window_monitor_changed), preview);
 
   preview->area = gtk_drawing_area_new();
   gtk_widget_set_hexpand(preview->area, TRUE);
   gtk_widget_set_vexpand(preview->area, TRUE);
   gtk_widget_set_halign(preview->area, GTK_ALIGN_FILL);
   gtk_widget_set_valign(preview->area, GTK_ALIGN_FILL);
-  gtk_widget_set_size_request(preview->area, 350, 350);
+  gtk_widget_set_size_request(preview->area, 420, 420);
   gtk_box_pack_start(GTK_BOX(gtk_dialog_get_content_area(GTK_DIALOG(dialog))), preview->area, TRUE, TRUE, 0);
   g_signal_connect(G_OBJECT(preview->area), "draw", G_CALLBACK(_thumb_draw_image), preview);
   g_signal_connect(G_OBJECT(preview->area), "size-allocate", G_CALLBACK(_preview_window_size_allocate), preview);
@@ -207,4 +347,5 @@ void dt_preview_window_spawn(const int32_t imgid)
 
   gtk_widget_set_visible(preview->area, TRUE);
   gtk_widget_show_all(dialog);
+  gtk_window_present(GTK_WINDOW(dialog));
 }
