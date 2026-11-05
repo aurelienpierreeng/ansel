@@ -41,6 +41,7 @@
 #include "develop/masks/masks_touched.h"
 #include "develop/masks_group.h"
 #include "develop/develop.h"       // dt_develop_t, for the write-API fixture
+#include "develop/pixelpipe_hb.h"
 
 #include <stdarg.h>
 #include <stddef.h>
@@ -308,6 +309,68 @@ static void _copy_members_refuses_anything_that_is_not_a_group(void **state)
   g_list_free(shape.points);
 }
 
+static void _serialized_group_members_copy_child_ids_by_value(void **state)
+{
+  (void)state;
+  const dt_masks_form_group_t rows[2] = {
+    { .formid = 11, .parentid = 7, .state = DT_MASKS_STATE_USE, .opacity = 0.5f },
+    { .formid = 22, .parentid = 7, .state = DT_MASKS_STATE_USE, .opacity = 1.0f },
+  };
+  uint8_t serialized[sizeof(rows) + 1] = { 0 };
+  for(size_t index = 0; index < G_N_ELEMENTS(rows); index++)
+    memcpy(serialized + 1 + index * sizeof(dt_masks_form_group_t)
+               + offsetof(dt_masks_form_group_t, formid),
+           &rows[index].formid, sizeof(rows[index].formid));
+  int *child_ids = NULL;
+
+  assert_true(dt_masks_group_deserialize_child_ids(serialized + 1, sizeof(rows), G_N_ELEMENTS(rows), &child_ids));
+  assert_int_equal(child_ids[0], 11);
+  assert_int_equal(child_ids[1], 22);
+  dt_free_align(child_ids);
+
+  child_ids = (int *)(intptr_t)-1;
+  assert_false(dt_masks_group_deserialize_child_ids(serialized + 1, sizeof(rows) - 1, G_N_ELEMENTS(rows), &child_ids));
+  assert_null(child_ids);
+  assert_false(dt_masks_group_deserialize_child_ids(serialized + 1, -1, G_N_ELEMENTS(rows), &child_ids));
+  assert_null(child_ids);
+  assert_false(dt_masks_group_deserialize_child_ids(serialized + 1, sizeof(rows), -1, &child_ids));
+  assert_null(child_ids);
+  assert_false(dt_masks_group_deserialize_child_ids(NULL, sizeof(rows), G_N_ELEMENTS(rows), &child_ids));
+  assert_null(child_ids);
+  assert_false(dt_masks_group_deserialize_child_ids(serialized + 1, sizeof(rows), G_N_ELEMENTS(rows), NULL));
+  assert_true(dt_masks_group_deserialize_child_ids(NULL, 0, 0, &child_ids));
+  assert_null(child_ids);
+}
+
+static void _serialized_group_members_read_formid_at_its_declared_offset(void **state)
+{
+  (void)state;
+  gchar *unit_tests_directory = g_path_get_dirname(__FILE__);
+  gchar *tests_directory = g_path_get_dirname(unit_tests_directory);
+  gchar *source_directory = g_path_get_dirname(tests_directory);
+  gchar *masks_source_path
+      = g_build_filename(source_directory, "src", "develop", "masks", "masks.c", NULL);
+  gchar *masks_source = NULL;
+  gsize masks_source_size = 0;
+
+  assert_true(g_file_get_contents(masks_source_path, &masks_source, &masks_source_size, NULL));
+  const gchar *deserialize = g_strstr_len(masks_source, masks_source_size,
+                                          "gboolean dt_masks_group_deserialize_child_ids");
+  assert_non_null(deserialize);
+  const gchar *copy = g_strstr_len(deserialize, masks_source + masks_source_size - deserialize,
+                                   "memcpy(&ids[index]");
+  assert_non_null(copy);
+  const gchar *copy_end = g_strstr_len(copy, masks_source + masks_source_size - copy, ";\n");
+  assert_non_null(copy_end);
+  assert_non_null(g_strstr_len(copy, copy_end - copy, "offsetof(dt_masks_form_group_t, formid)"));
+
+  g_free(masks_source);
+  g_free(masks_source_path);
+  g_free(source_directory);
+  g_free(tests_directory);
+  g_free(unit_tests_directory);
+}
+
 static void _type_tokens_are_the_persisted_conf_key_spellings(void **state)
 {
   (void)state;
@@ -572,6 +635,217 @@ static void _find_holder_names_the_group_that_references_a_shape(void **state)
   _write_fixture_cleanup(&f);
 }
 
+typedef struct
+{
+  dt_develop_t dev;
+  dt_iop_module_t module;
+  dt_dev_pixelpipe_t pipe;
+  dt_masks_form_t group;
+  dt_masks_form_t left;
+  dt_masks_form_t right;
+  dt_masks_node_circle_t left_node;
+  dt_masks_node_circle_t right_node;
+  dt_masks_form_group_t rows[3];
+} _group_render_fixture_t;
+
+static void _group_render_fixture_init(_group_render_fixture_t *f)
+{
+  memset(f, 0, sizeof(*f));
+  f->module.dev = &f->dev;
+  f->pipe.iwidth = 32;
+  f->pipe.iheight = 32;
+  f->pipe.mask_rasterization_step = 1;
+
+  f->left_node = (dt_masks_node_circle_t){ .center = { 0.28f, 0.50f }, .radius = 0.20f, .border = 0.05f };
+  f->right_node = (dt_masks_node_circle_t){ .center = { 0.72f, 0.50f }, .radius = 0.20f, .border = 0.05f };
+  f->left = (dt_masks_form_t){ .type = DT_MASKS_CIRCLE, .functions = &dt_masks_functions_circle, .formid = 10 };
+  f->right = (dt_masks_form_t){ .type = DT_MASKS_CIRCLE, .functions = &dt_masks_functions_circle, .formid = 20 };
+  f->left.points = g_list_append(NULL, &f->left_node);
+  f->right.points = g_list_append(NULL, &f->right_node);
+  f->group = (dt_masks_form_t){ .type = DT_MASKS_GROUP, .functions = &dt_masks_functions_group, .formid = 30 };
+  f->pipe.forms = g_list_append(f->pipe.forms, &f->left);
+  f->pipe.forms = g_list_append(f->pipe.forms, &f->right);
+  f->pipe.forms = g_list_append(f->pipe.forms, &f->group);
+}
+
+static void _group_render_fixture_cleanup(_group_render_fixture_t *f)
+{
+  g_list_free(f->group.points);
+  g_list_free(f->left.points);
+  g_list_free(f->right.points);
+  g_list_free(f->pipe.forms);
+}
+
+static void _missing_group_member_is_skipped_without_becoming_an_empty_mask(void **state)
+{
+  (void)state;
+  _group_render_fixture_t f;
+  _group_render_fixture_init(&f);
+  const dt_iop_roi_t roi = { .x = 0, .y = 0, .width = 32, .height = 32, .scale = 1.0f };
+  float left[32 * 32] = { 0.0f };
+  float right[32 * 32] = { 0.0f };
+  float actual[32 * 32] = { 0.0f };
+  float rendered[32 * 32] = { 0.0f };
+  dt_iop_roi_t touched;
+
+  assert_int_equal(dt_masks_get_mask_roi(&f.module, &f.pipe, NULL, &f.left, &roi, left, NULL),
+                   DT_MASKS_RASTER_OK);
+  assert_int_equal(dt_masks_get_mask_roi(&f.module, &f.pipe, NULL, &f.right, &roi, right, NULL),
+                   DT_MASKS_RASTER_OK);
+
+  f.rows[0] = (dt_masks_form_group_t){ .formid = 10, .parentid = 30, .state = DT_MASKS_STATE_USE, .opacity = 1.0f };
+  f.rows[1] = (dt_masks_form_group_t){ .formid = 404, .parentid = 30,
+                                       .state = DT_MASKS_STATE_USE | DT_MASKS_STATE_INTERSECTION, .opacity = 0.37f };
+  f.rows[2] = (dt_masks_form_group_t){ .formid = 20, .parentid = 30, .opacity = 0.60f };
+  for(int index = 0; index < 3; index++) f.group.points = g_list_append(f.group.points, &f.rows[index]);
+
+  const int operations[] = { DT_MASKS_STATE_UNION, DT_MASKS_STATE_INTERSECTION,
+                             DT_MASKS_STATE_DIFFERENCE, DT_MASKS_STATE_EXCLUSION,
+                             DT_MASKS_STATE_UNION | DT_MASKS_STATE_INVERSE };
+  for(size_t operation_index = 0; operation_index < G_N_ELEMENTS(operations); operation_index++)
+  {
+    f.rows[2].state = DT_MASKS_STATE_USE | operations[operation_index];
+    memset(actual, 0, sizeof(actual));
+    memset(rendered, 0, sizeof(rendered));
+    assert_int_equal(dt_masks_get_mask_roi(&f.module, &f.pipe, NULL, &f.group, &roi, actual, &touched),
+                     DT_MASKS_RASTER_OK);
+    assert_int_equal(dt_masks_group_render_roi(&f.module, &f.pipe, NULL, &f.group, &roi, rendered),
+                     DT_MASKS_RASTER_OK);
+
+    for(size_t pixel = 0; pixel < G_N_ELEMENTS(actual); pixel++)
+    {
+      const float mask = 0.60f * ((operations[operation_index] & DT_MASKS_STATE_INVERSE)
+                                       ? 1.0f - right[pixel]
+                                       : right[pixel]);
+      float expected = 0.0f;
+      if(operations[operation_index] & DT_MASKS_STATE_UNION)
+        expected = fmaxf(left[pixel], mask);
+      else if(operations[operation_index] & DT_MASKS_STATE_INTERSECTION)
+        expected = fminf(left[pixel], mask);
+      else if(operations[operation_index] & DT_MASKS_STATE_DIFFERENCE)
+        expected = left[pixel] * (1.0f - mask);
+      else
+        expected = (left[pixel] > 0.0f && mask > 0.0f)
+                     ? fmaxf((1.0f - left[pixel]) * mask, left[pixel] * (1.0f - mask))
+                     : fmaxf(left[pixel], mask);
+      assert_float_equal(actual[pixel], expected, 1e-5f);
+      assert_float_equal(rendered[pixel], expected, 1e-5f);
+    }
+  }
+
+  dt_masks_form_t empty = { .type = DT_MASKS_CIRCLE, .functions = &dt_masks_functions_circle, .formid = 404 };
+  float empty_member[32 * 32] = { 0.0f };
+  gboolean differs_from_empty_member = FALSE;
+  f.rows[2].state = DT_MASKS_STATE_USE | DT_MASKS_STATE_UNION;
+  memset(actual, 0, sizeof(actual));
+  assert_int_equal(dt_masks_get_mask_roi(&f.module, &f.pipe, NULL, &f.group, &roi, actual, NULL),
+                   DT_MASKS_RASTER_OK);
+  f.pipe.forms = g_list_append(f.pipe.forms, &empty);
+  assert_int_equal(dt_masks_get_mask_roi(&f.module, &f.pipe, NULL, &f.group, &roi, empty_member, NULL),
+                   DT_MASKS_RASTER_OK);
+  for(size_t pixel = 0; pixel < G_N_ELEMENTS(actual); pixel++)
+  {
+    const float expected_missing = fmaxf(left[pixel], 0.60f * right[pixel]);
+    assert_float_equal(actual[pixel], expected_missing, 1e-5f);
+    assert_float_equal(empty_member[pixel], 0.60f * right[pixel], 1e-5f);
+    differs_from_empty_member |= actual[pixel] > empty_member[pixel] + 1e-5f;
+  }
+  assert_true(differs_from_empty_member);
+
+  dt_masks_member_t members[3];
+  assert_int_equal(dt_masks_group_copy_members(&f.group, members, G_N_ELEMENTS(members)), 3);
+  assert_int_equal(members[1].index, 1);
+  assert_int_equal(members[1].formid, 404);
+  assert_int_equal((int)members[1].state, DT_MASKS_STATE_USE | DT_MASKS_STATE_INTERSECTION);
+  assert_true(members[1].opacity == 0.37f);
+
+  _group_render_fixture_cleanup(&f);
+}
+
+static void _missing_first_member_keeps_the_following_member_at_its_persisted_position(void **state)
+{
+  (void)state;
+  _group_render_fixture_t f;
+  _group_render_fixture_init(&f);
+  const dt_iop_roi_t roi = { .x = 0, .y = 0, .width = 32, .height = 32, .scale = 1.0f };
+  float actual[32 * 32] = { 0.0f };
+
+  f.rows[0] = (dt_masks_form_group_t){ .formid = 404, .parentid = 30,
+                                       .state = DT_MASKS_STATE_USE | DT_MASKS_STATE_UNION, .opacity = 1.0f };
+  f.rows[1] = (dt_masks_form_group_t){ .formid = 20, .parentid = 30,
+                                       .state = DT_MASKS_STATE_USE | DT_MASKS_STATE_DIFFERENCE | DT_MASKS_STATE_INVERSE,
+                                       .opacity = 1.0f };
+  f.group.points = g_list_append(f.group.points, &f.rows[0]);
+  f.group.points = g_list_append(f.group.points, &f.rows[1]);
+
+  assert_int_equal(dt_masks_group_render_roi(&f.module, &f.pipe, NULL, &f.group, &roi, actual),
+                   DT_MASKS_RASTER_OK);
+  for(size_t pixel = 0; pixel < G_N_ELEMENTS(actual); pixel++) assert_float_equal(actual[pixel], 0.0f, 1e-6f);
+
+  _group_render_fixture_cleanup(&f);
+}
+
+static void _a_group_with_only_missing_members_renders_zero_coverage(void **state)
+{
+  (void)state;
+  _group_render_fixture_t f;
+  _group_render_fixture_init(&f);
+  const dt_iop_roi_t roi = { .x = 0, .y = 0, .width = 32, .height = 32, .scale = 1.0f };
+  float actual[32 * 32] = { 1.0f };
+  dt_iop_roi_t touched;
+
+  f.rows[0] = (dt_masks_form_group_t){ .formid = 404, .parentid = 30, .state = DT_MASKS_STATE_USE, .opacity = 1.0f };
+  f.rows[1] = (dt_masks_form_group_t){ .formid = 405, .parentid = 30,
+                                       .state = DT_MASKS_STATE_USE | DT_MASKS_STATE_UNION, .opacity = 1.0f };
+  f.group.points = g_list_append(f.group.points, &f.rows[0]);
+  f.group.points = g_list_append(f.group.points, &f.rows[1]);
+
+  assert_int_equal(dt_masks_get_mask_roi(&f.module, &f.pipe, NULL, &f.group, &roi, actual, &touched),
+                   DT_MASKS_RASTER_OK);
+  assert_true(dt_masks_touched_is_empty(&touched));
+  for(size_t pixel = 0; pixel < G_N_ELEMENTS(actual); pixel++) assert_float_equal(actual[pixel], 0.0f, 1e-6f);
+
+  _group_render_fixture_cleanup(&f);
+}
+
+static void _repeated_valid_group_members_apply_each_persisted_operation(void **state)
+{
+  (void)state;
+  _group_render_fixture_t f;
+  _group_render_fixture_init(&f);
+  const dt_iop_roi_t roi = { .x = 0, .y = 0, .width = 32, .height = 32, .scale = 1.0f };
+  float left[32 * 32] = { 0.0f };
+  float actual[32 * 32] = { 0.0f };
+
+  assert_int_equal(dt_masks_get_mask_roi(&f.module, &f.pipe, NULL, &f.left, &roi, left, NULL),
+                   DT_MASKS_RASTER_OK);
+  f.rows[0] = (dt_masks_form_group_t){ .formid = 10, .parentid = 30, .state = DT_MASKS_STATE_USE, .opacity = 1.0f };
+  f.rows[1] = (dt_masks_form_group_t){ .formid = 10, .parentid = 30,
+                                       .state = DT_MASKS_STATE_USE | DT_MASKS_STATE_DIFFERENCE, .opacity = 1.0f };
+  f.group.points = g_list_append(f.group.points, &f.rows[0]);
+  f.group.points = g_list_append(f.group.points, &f.rows[1]);
+
+  assert_int_equal(dt_masks_group_render_roi(&f.module, &f.pipe, NULL, &f.group, &roi, actual),
+                   DT_MASKS_RASTER_OK);
+  for(size_t pixel = 0; pixel < G_N_ELEMENTS(actual); pixel++)
+    assert_float_equal(actual[pixel], left[pixel] * (1.0f - left[pixel]), 1e-5f);
+
+  _group_render_fixture_cleanup(&f);
+}
+
+static int _raster_cache_setup(void **state)
+{
+  (void)state;
+  return dt_dev_pixelpipe_cache_init((size_t)64 * 1024 * 1024, FALSE, FALSE) ? 0 : -1;
+}
+
+static int _raster_cache_teardown(void **state)
+{
+  (void)state;
+  dt_dev_pixelpipe_cache_cleanup();
+  return 0;
+}
+
 int main(int argc, char *argv[])
 {
   const struct CMUnitTest tests[] = {
@@ -584,6 +858,8 @@ int main(int argc, char *argv[])
     cmocka_unit_test(_form_info_leaves_out_untouched_on_failure),
     cmocka_unit_test(_copy_members_preserves_order_and_reports_the_total),
     cmocka_unit_test(_copy_members_refuses_anything_that_is_not_a_group),
+    cmocka_unit_test(_serialized_group_members_copy_child_ids_by_value),
+    cmocka_unit_test(_serialized_group_members_read_formid_at_its_declared_offset),
     cmocka_unit_test(_type_tokens_are_the_persisted_conf_key_spellings),
     cmocka_unit_test(_set_operation_replaces_the_combine_op),
     cmocka_unit_test(_setting_the_state_it_already_has_is_unchanged),
@@ -594,9 +870,13 @@ int main(int argc, char *argv[])
     cmocka_unit_test(_set_opacity_refuses_a_nan_rather_than_clamping_it),
     cmocka_unit_test(_a_shared_group_is_cloned_before_its_opacity_changes),
     cmocka_unit_test(_find_holder_names_the_group_that_references_a_shape),
+    cmocka_unit_test(_missing_group_member_is_skipped_without_becoming_an_empty_mask),
+    cmocka_unit_test(_missing_first_member_keeps_the_following_member_at_its_persisted_position),
+    cmocka_unit_test(_a_group_with_only_missing_members_renders_zero_coverage),
+    cmocka_unit_test(_repeated_valid_group_members_apply_each_persisted_operation),
   };
 
-  return cmocka_run_group_tests(tests, NULL, NULL);
+  return cmocka_run_group_tests(tests, _raster_cache_setup, _raster_cache_teardown);
 }
 
 // clang-format off

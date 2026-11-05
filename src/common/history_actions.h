@@ -24,6 +24,7 @@
 
 #include "develop/history_merge.h"
 #include "history/history.h"   // dt_history_copy_item_t, for the clipboard accessor below
+#include "common/xmp_sidecar.h"
 
 /** copy history from imgid and pasts on selected images, merge or overwrite... */
 gboolean dt_history_copy(int32_t imgid);
@@ -50,9 +51,10 @@ gboolean dt_history_delete_on_list(const GList *list, gboolean undo);
 /** load a dt file and applies to selected images */
 int dt_history_load_and_apply_on_list(gchar *filename, const GList *list);
 
-/** load a dt file and applies to specified image */
+/** Load a dt file, apply it to an image, and optionally update its write timestamp atomically. */
 int dt_history_load_and_apply(const int32_t imgid, gchar *filename, int history_only);
-int dt_history_load_and_apply_on_image(int32_t imgid, gchar *filename, int history_only);
+dt_xmp_import_result_t dt_history_load_and_apply_on_image(int32_t imgid, gchar *filename, int history_only,
+                                                           const int64_t *write_timestamp);
 
 /**
  * @brief The history clipboard: what "copy history" put there, for "paste" to read.

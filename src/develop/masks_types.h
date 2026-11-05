@@ -159,10 +159,8 @@ typedef enum dt_masks_result_t
  *
  * @details The caller gets a copy, never a pointer into the group's own list. That is deliberate
  * twice over: the entry it would otherwise point at belongs to a refcounted, copy-on-write object
- * that the next dt_masks_cow_touch() replaces wholesale, and dt_masks_form_group_t itself can
- * never be made opaque -- common/xmp_sidecar.cc casts an XMP blob straight to an array of them and
- * validates the length against sizeof, so its size and field order ARE the on-disk format in every
- * user's sidecars. A value type is what lets everyone else stop depending on that layout.
+ * that the next dt_masks_cow_touch() replaces wholesale. A value type is what lets callers stop
+ * depending on the group's internal membership-row layout.
  *
  * `index` is the position in the group's list, and position is meaning: it is the compositing
  * order, the GTK row identity, and the index into iop/retouch.c's rt_forms[] and iop/spots.c's

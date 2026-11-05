@@ -54,6 +54,7 @@ typedef struct _fixture_t
 {
   dt_develop_t dev;
   dt_dev_pixelpipe_t pipe;
+  dt_iop_module_t module;
 } _fixture_t;
 
 static int _setup(void **state)
@@ -64,6 +65,8 @@ static int _setup(void **state)
   dt_pthread_mutex_init(&f->dev.transient_params_mutex, NULL);
   f->dev.pipe = &f->pipe;
   f->dev.preview_pipe = NULL;
+  f->module.dev = &f->dev;
+  f->module.enabled = TRUE;
   *state = f;
   return 0;
 }
@@ -261,6 +264,23 @@ static void _cow_touch_ignores_a_marker_naming_a_different_item(void **state)
   dt_dev_history_snapshot_release(&snap);
 }
 
+static void _history_copy_preserves_an_explicit_empty_forms_snapshot(void **state)
+{
+  _fixture_t *f = *state;
+  dt_dev_history_item_t *original = _append(&f->dev, 0x1);
+  original->module = &f->module;
+  original->enabled = f->module.enabled;
+  original->forms_snapshot = TRUE;
+
+  GList *copy = dt_history_duplicate(f->dev.history);
+
+  dt_dev_history_item_t *duplicated = g_list_nth_data(copy, 0);
+  assert_non_null(duplicated);
+  assert_true(duplicated->forms_snapshot);
+  assert_null(duplicated->forms);
+  g_list_free_full(copy, dt_dev_free_history_item);
+}
+
 /**
  * @brief A transient publication must be distinguishable from the one before it.
  *
@@ -326,6 +346,7 @@ int main(int argc, char *argv[])
     cmocka_unit_test_setup_teardown(_cow_touch_clones_an_item_a_snapshot_is_holding, _setup, _teardown),
     cmocka_unit_test_setup_teardown(_cow_touch_repoints_the_pipe_marker_and_balances_every_reference, _setup, _teardown),
     cmocka_unit_test_setup_teardown(_cow_touch_ignores_a_marker_naming_a_different_item, _setup, _teardown),
+    cmocka_unit_test_setup_teardown(_history_copy_preserves_an_explicit_empty_forms_snapshot, _setup, _teardown),
     cmocka_unit_test_setup_teardown(_transient_params_serial_advances_with_every_publication, _setup, _teardown),
   };
 

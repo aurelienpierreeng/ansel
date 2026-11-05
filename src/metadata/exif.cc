@@ -90,11 +90,13 @@
 #include <time.h>
 #include <zlib.h>
 
+#include <array>
 #include <cmath>
 #include <cstdlib>
 #include <cstring>
 #include <iostream>
 #include <string>
+#include <utility>
 
 #include <exiv2/exiv2.hpp>
 
@@ -107,15 +109,17 @@
 #include "common/logging.h"
 #include "common/utility.h"
 #include "database/tag_repository.h"
+#include "database/image_repository.h"
+#include "database/database.h"
 #include "math/math.h"
 #include "metadata/colorlabels.h"
 #include "metadata/metadata.h"
+#include "metadata/ratings.h"
 #include "metadata/notify.h"
 #include "metadata/tags.h"
 #include "system/macros.h"
 #include "system/mem_alloc.h"
 
-using namespace std;
 
 #if EXIV2_TEST_VERSION(0,28,0)
 #define AnyError Error
@@ -365,11 +369,78 @@ const GList* dt_exif_get_exiv2_taglist()
   return exiv2_taglist;
 }
 
-static void _exif_import_tags(dt_image_t *img, Exiv2::XmpData::iterator &pos);
+static gboolean _exif_import_tags(const dt_image_t *img, const Exiv2::XmpData::iterator &pos,
+                                   bool *tags_changed);
+
+static bool _exif_xmp_to_string(const Exiv2::XmpData::iterator &pos, const int index, std::string *value)
+{
+  try
+  {
+    *value = pos->toString(index);
+    return true;
+  }
+  catch(const Exiv2::AnyError &)
+  {
+    return false;
+  }
+}
+
+static bool _exif_xmp_to_long(const Exiv2::XmpData::iterator &pos, const int index, long *value)
+{
+  try
+  {
+    *value = pos->toLong(index);
+    return pos->value().ok();
+  }
+  catch(const Exiv2::AnyError &)
+  {
+    return false;
+  }
+}
+
+static bool _exif_iptc_to_printed(const Exiv2::IptcData::const_iterator &pos, std::string *value)
+{
+  try
+  {
+    *value = pos->print();
+    return true;
+  }
+  catch(const Exiv2::AnyError &)
+  {
+    return false;
+  }
+}
+
+static bool _exif_to_printed(const Exiv2::ExifData::const_iterator &pos, const Exiv2::ExifData &exifData,
+                             std::string *value)
+{
+  try
+  {
+    *value = pos->print(&exifData);
+    return true;
+  }
+  catch(const Exiv2::AnyError &)
+  {
+    return false;
+  }
+}
+
+static bool _exif_to_long(const Exiv2::ExifData::const_iterator &pos, long *value)
+{
+  try
+  {
+    *value = pos->toLong();
+    return pos->value().ok();
+  }
+  catch(const Exiv2::AnyError &)
+  {
+    return false;
+  }
+}
 
 // inspired by ufraw_exiv2.cc:
 
-static void dt_strlcpy_to_utf8(char *dest, size_t dest_max, Exiv2::ExifData::const_iterator &pos,
+static void dt_strlcpy_to_utf8(char *dest, size_t dest_max, const Exiv2::ExifData::const_iterator &pos,
                                Exiv2::ExifData &exifData)
 {
   std::string str = pos->print(&exifData);
@@ -406,7 +477,7 @@ void dt_remove_exif_keys(Exiv2::ExifData &exif, const char *keys[], unsigned int
   }
 }
 
-static bool dt_exif_read_xmp_tag(Exiv2::XmpData &xmpData, Exiv2::XmpData::iterator *pos, string key)
+static bool dt_exif_read_xmp_tag(Exiv2::XmpData &xmpData, Exiv2::XmpData::iterator *pos, std::string key)
 {
   try
   {
@@ -421,164 +492,270 @@ static bool dt_exif_read_xmp_tag(Exiv2::XmpData &xmpData, Exiv2::XmpData::iterat
 }
 #define FIND_XMP_TAG(key) dt_exif_read_xmp_tag(xmpData, &pos, key)
 
+static bool _exif_decode_xmp_scratch(dt_image_t *img, Exiv2::XmpData &xmpData, const bool clear_labels,
+                                     bool *partial);
+
+/** Reject ratings outside the range accepted by the image model. */
+/** Import the preferred XMP keyword collection and report whether tags changed. */
+static bool _exif_import_xmp_keywords(const dt_image_t *img, Exiv2::XmpData &xmpData,
+                                       const bool replace_existing, GList *imgs, bool *tags_changed,
+                                       bool *partial)
+{
+  auto pos = xmpData.findKey(Exiv2::XmpKey("Xmp.lr.hierarchicalSubject"));
+  if(pos == xmpData.end()) pos = xmpData.findKey(Exiv2::XmpKey("Xmp.dc.subject"));
+  if(pos == xmpData.end()) return true;
+  for(int i = 0; i < pos->count(); i++)
+  {
+    std::string value;
+    if(!_exif_xmp_to_string(pos, i, &value))
+    {
+      *partial = true;
+      return true;
+    }
+  }
+  if(replace_existing)
+  {
+    GList *attached = nullptr;
+    const bool had_tags = dt_tag_get_attached(img->id, &attached, TRUE) > 0;
+    dt_tag_free_result(&attached);
+    if(!dt_tag_set_tags(nullptr, imgs, TRUE, TRUE, FALSE)) return false;
+    *tags_changed = had_tags;
+  }
+  if(!_exif_import_tags(img, pos, tags_changed)) return false;
+  return true;
+}
+
+/** Import configured metadata fields while preserving the legacy language-prefix handling. */
+static bool _exif_import_xmp_metadata(const dt_image_t *img, Exiv2::XmpData &xmpData,
+                                      const bool replace_existing, const GList *imgs, bool *partial)
+{
+  Exiv2::XmpData::iterator pos;
+  for(unsigned int i = 0; i < DT_METADATA_NUMBER; i++)
+  {
+    if(!FIND_XMP_TAG(dt_metadata_get_key(i))) continue;
+    std::string value;
+    if(!_exif_xmp_to_string(pos, 0, &value))
+    {
+      *partial = true;
+      return true;
+    }
+  }
+  if(replace_existing && !dt_metadata_clear(imgs, FALSE)) return false;
+
+  for(unsigned int i = 0; i < DT_METADATA_NUMBER; i++)
+  {
+    const gchar *key = dt_metadata_get_key(i);
+    if(!FIND_XMP_TAG(key)) continue;
+    char *value = strdup(pos->toString().c_str());
+    char *allocation = value;
+    while(!strncmp(value, "lang=", 5) || !strncmp(value, "charset=", 8))
+    {
+      value += strcspn(value, " ");
+      value += strspn(value, " ");
+    }
+    const gboolean metadata_set = dt_metadata_set_import(img->id, key, value);
+    dt_free(allocation);
+    if(!metadata_set) return false;
+  }
+  return true;
+}
 
 // FIXME: according to http://www.exiv2.org/doc/classExiv2_1_1Metadatum.html#63c2b87249ba96679c29e01218169124
 // there is no need to pass xmpData
 // version = -1 -> version ignored
-bool dt_exif_decode_xmp_data(dt_image_t *img, Exiv2::XmpData &xmpData, int version,
-                                  bool exif_read)
+bool dt_exif_apply_xmp_persistence(dt_image_t *img, Exiv2::XmpData &xmpData, const int version,
+                                    const bool replace_existing, bool *tags_changed, bool *partial)
 {
-  // as this can be called several times during the image lifetime, clean up first
-  GList *imgs = NULL;
-  imgs = g_list_prepend(imgs, GINT_TO_POINTER(img->id));
+  *tags_changed = false;
+  GList imgs = { GINT_TO_POINTER(img->id), nullptr, nullptr };
   try
   {
-    Exiv2::XmpData::iterator pos;
+    if(!_exif_import_xmp_keywords(img, xmpData, replace_existing, &imgs, tags_changed, partial)) return false;
 
     // older darktable version did not write this data correctly:
     // the reasoning behind strdup'ing all the strings before passing it to sqlite3 is, that
     // they are somehow corrupt after the call to sqlite3_prepare_v2() -- don't ask me
     // why for they don't get passed to that function.
+    bool metadata_imported = true;
     if(version == -1 || version > 0)
-    {
-      if(!exif_read) dt_metadata_clear(imgs, FALSE);
-      for(unsigned int i = 0; i < DT_METADATA_NUMBER; i++)
-      {
-        const gchar *key = dt_metadata_get_key(i);
-        if(FIND_XMP_TAG(key))
-        {
-          char *value = strdup(pos->toString().c_str());
-          char *adr = value;
-          // skip any lang="" or charset=xxx
-          while(!strncmp(value, "lang=", 5) || !strncmp(value, "charset=", 8))
-          {
-            while(*value != ' ' && *value) value++;
-            while(*value == ' ') value++;
-          }
-          dt_metadata_set_import(img->id, key, value);
-          dt_free(adr);
-        }
-      }
-    }
+      metadata_imported = _exif_import_xmp_metadata(img, xmpData, replace_existing, &imgs, partial);
+    if(!metadata_imported) return false;
 
-    if(FIND_XMP_TAG("Xmp.xmp.Rating"))
-    {
-      const int stars = pos->toLong();
-      dt_image_set_xmp_rating(img, stars);
-    }
-    else
-      dt_image_set_xmp_rating(img, -2);
-
-    if(!exif_read) dt_colorlabels_remove_labels(img->id);
-    if(FIND_XMP_TAG("Xmp.xmp.Label"))
-    {
-      std::string label = pos->toString();
-      if(label == "Red") // Is it really called like that in XMP files?
-        dt_colorlabels_set_label(img->id, 0);
-      else if(label == "Yellow") // Is it really called like that in XMP files?
-        dt_colorlabels_set_label(img->id, 1);
-      else if(label == "Green")
-        dt_colorlabels_set_label(img->id, 2);
-      else if(label == "Blue") // Is it really called like that in XMP files?
-        dt_colorlabels_set_label(img->id, 3);
-      else if(label == "Purple") // Is it really called like that in XMP files?
-        dt_colorlabels_set_label(img->id, 4);
-    }
-    // if Xmp.xmp.Label not managed from an external app use dt colors
-    else if(FIND_XMP_TAG("Xmp.darktable.colorlabels"))
-    {
-      // color labels
-      const int cnt = pos->count();
-      for(int i = 0; i < cnt; i++)
-      {
-        dt_colorlabels_set_label(img->id, pos->toLong(i));
-      }
-    }
-
-    if((dt_image_get_xmp_mode()) ||
-       dt_conf_get_bool("ui_last/import_last_tags_imported"))
-    {
-      GList *tags = NULL;
-      // preserve dt tags which are not saved in xmp file
-      if(!exif_read) dt_tag_set_tags(tags, imgs, TRUE, TRUE, FALSE);
-      if(FIND_XMP_TAG("Xmp.lr.hierarchicalSubject"))
-        _exif_import_tags(img, pos);
-      else if(FIND_XMP_TAG("Xmp.dc.subject"))
-        _exif_import_tags(img, pos);
-    }
-
-    /* read gps location */
-    if(FIND_XMP_TAG("Xmp.exif.GPSLatitude"))
-    {
-      img->geoloc.latitude = dt_util_gps_string_to_number(pos->toString().c_str());
-    }
-
-    if(FIND_XMP_TAG("Xmp.exif.GPSLongitude"))
-    {
-      img->geoloc.longitude = dt_util_gps_string_to_number(pos->toString().c_str());
-    }
-
-    if(FIND_XMP_TAG("Xmp.exif.GPSAltitude"))
-    {
-      Exiv2::XmpData::const_iterator ref = xmpData.findKey(Exiv2::XmpKey("Xmp.exif.GPSAltitudeRef"));
-      if(ref != xmpData.end() && ref->size())
-      {
-        std::string sign_str = ref->toString();
-        const char *sign = sign_str.c_str();
-        double elevation = 0.0;
-        if(dt_util_gps_elevation_to_number(pos->toRational(0).first, pos->toRational(0).second, sign[0], &elevation))
-          img->geoloc.elevation = elevation;
-      }
-    }
-
-    /* read lens type from Xmp.exifEX.LensModel */
-    if(FIND_XMP_TAG("Xmp.exifEX.LensModel"))
-    {
-      // lens model
-      char *lens = strdup(pos->toString().c_str());
-      char *adr =  lens;
-      if(strncmp(lens, "lang=", 5) == 0)
-      {
-        lens = strchr(lens, ' ');
-        if(!IS_NULL_PTR(lens)) lens++;
-      }
-      // no need to do any Unicode<->locale conversion, the field is specified as ASCII
-      g_strlcpy(img->exif_lens, lens, sizeof(img->exif_lens));
-      dt_free(adr);
-    }
-
-    /* read timestamp from Xmp.exif.DateTimeOriginal */
-    if(FIND_XMP_TAG("Xmp.exif.DateTimeOriginal")
-       || FIND_XMP_TAG("Xmp.photoshop.DateCreated"))
-    {
-      char *datetime = strdup(pos->toString().c_str());
-      if(datetime[0] != '\0') dt_datetime_exif_to_img(img, datetime);
-      dt_free(datetime);
-    }
-
-    if(imgs)
-    {
-      g_list_free(imgs);
-      imgs = NULL;
-    }
-    imgs = NULL;
-    return true;
+    return _exif_decode_xmp_scratch(img, xmpData, replace_existing, partial);
   }
-  catch(const std::exception &e)
+  catch(const std::exception &) // NOSONAR
   {
-    if(imgs)
-    {
-      g_list_free(imgs);
-      imgs = NULL;
-    }
-    imgs = NULL;
-    std::string s(e.what());
-    std::cerr << "[exiv2 dt_exif_decode_xmp_data] " << img->filename << ": " << s << std::endl;
     return false;
   }
 }
 
-static bool dt_exif_read_iptc_tag(Exiv2::IptcData &iptcData, Exiv2::IptcData::const_iterator *pos, string key)
+bool dt_exif_decode_xmp_data(dt_image_t *img, Exiv2::XmpData &xmpData, const int version,
+                              const bool exif_read)
+{
+  bool tags_changed = false;
+  bool partial = false;
+  return dt_exif_apply_xmp_persistence(img, xmpData, version, !exif_read, &tags_changed, &partial);
+}
+
+/** Decode XMP geographic coordinates using the altitude reference's sign. */
+static void _exif_decode_xmp_location(dt_image_t *img, Exiv2::XmpData &xmpData, bool *partial)
+{
+  Exiv2::XmpData::iterator pos;
+  if(FIND_XMP_TAG("Xmp.exif.GPSLatitude"))
+  {
+    try
+    {
+      const double latitude = dt_util_gps_string_to_number(pos->toString().c_str());
+      if(std::isfinite(latitude))
+        img->geoloc.latitude = latitude;
+      else
+        *partial = true;
+    }
+    catch(const Exiv2::AnyError &)
+    {
+      *partial = true;
+    }
+  }
+  if(FIND_XMP_TAG("Xmp.exif.GPSLongitude"))
+  {
+    try
+    {
+      const double longitude = dt_util_gps_string_to_number(pos->toString().c_str());
+      if(std::isfinite(longitude))
+        img->geoloc.longitude = longitude;
+      else
+        *partial = true;
+    }
+    catch(const Exiv2::AnyError &)
+    {
+      *partial = true;
+    }
+  }
+  const Exiv2::XmpData::const_iterator ref = xmpData.findKey(Exiv2::XmpKey("Xmp.exif.GPSAltitudeRef"));
+  if(FIND_XMP_TAG("Xmp.exif.GPSAltitude") && ref != xmpData.end() && ref->size())
+  {
+    try
+    {
+      double elevation = 0.0;
+      const std::string sign = ref->toString();
+      if(!sign.empty() && dt_util_gps_elevation_to_number(pos->toRational(0).first,
+                                                           pos->toRational(0).second, sign[0], &elevation)
+         && std::isfinite(elevation))
+        img->geoloc.elevation = elevation;
+      else
+        *partial = true;
+    }
+    catch(const Exiv2::AnyError &)
+    {
+      *partial = true;
+    }
+  }
+}
+
+static void _exif_decode_xmp_color_labels(dt_image_t *img, Exiv2::XmpData &xmpData,
+                                          const bool clear_labels, bool *partial)
+{
+  Exiv2::XmpData::iterator pos;
+  if(const bool has_xmp_label = FIND_XMP_TAG("Xmp.xmp.Label"); has_xmp_label)
+  {
+    std::string label;
+    if(!_exif_xmp_to_string(pos, 0, &label))
+    {
+      *partial = true;
+      return;
+    }
+
+    int color = -1;
+    static const std::array<std::pair<const char *, int>, 5> colors = {
+      { { "Red", DT_COLORLABELS_RED }, { "Yellow", DT_COLORLABELS_YELLOW },
+        { "Green", DT_COLORLABELS_GREEN }, { "Blue", DT_COLORLABELS_BLUE },
+        { "Purple", DT_COLORLABELS_PURPLE } }
+    };
+    for(const auto &[name, value] : colors)
+    {
+      if(label == name)
+      {
+        color = value;
+        break;
+      }
+    }
+    if(color < 0)
+      *partial = true;
+    else if(clear_labels)
+      img->color_labels = 1 << color;
+    else
+      img->color_labels |= 1 << color;
+    return;
+  }
+  if(FIND_XMP_TAG("Xmp.darktable.colorlabels"))
+  {
+    const int count = pos->count();
+    int labels = 0;
+    bool invalid = false;
+    for(int i = 0; i < count; i++)
+    {
+      long color = 0;
+      if(!_exif_xmp_to_long(pos, i, &color) || color < 0 || color >= DT_COLORLABELS_LAST)
+        invalid = true;
+      else
+        labels |= 1 << color;
+    }
+    if(invalid)
+      *partial = true;
+    else if(clear_labels)
+      img->color_labels = labels;
+    else
+      img->color_labels |= labels;
+    return;
+  }
+  if(clear_labels) img->color_labels = 0;
+}
+
+static bool _exif_decode_xmp_scratch(dt_image_t *img, Exiv2::XmpData &xmpData, const bool clear_labels,
+                                     bool *partial)
+{
+  Exiv2::XmpData::iterator pos;
+  if(FIND_XMP_TAG("Xmp.xmp.Rating"))
+  {
+    long rating = 0;
+    if(!_exif_xmp_to_long(pos, 0, &rating) || rating < -1 || rating > 5)
+      *partial = true;
+    else
+      dt_image_set_xmp_rating(img, rating);
+  }
+  else
+    dt_image_set_xmp_rating(img, -2);
+
+  _exif_decode_xmp_color_labels(img, xmpData, clear_labels, partial);
+
+  _exif_decode_xmp_location(img, xmpData, partial);
+  if(FIND_XMP_TAG("Xmp.exifEX.LensModel"))
+  {
+    std::string value;
+    if(!_exif_xmp_to_string(pos, 0, &value))
+      *partial = true;
+    else
+    {
+      const char *lens = value.c_str();
+      if(const char *separator = g_str_has_prefix(lens, "lang=") ? strchr(lens, ' ') : nullptr;
+         !IS_NULL_PTR(separator))
+        lens = separator + 1;
+      g_strlcpy(img->exif_lens, lens, sizeof(img->exif_lens));
+    }
+  }
+  if(FIND_XMP_TAG("Xmp.exif.DateTimeOriginal") || FIND_XMP_TAG("Xmp.photoshop.DateCreated"))
+  {
+    std::string timestamp;
+    if(!_exif_xmp_to_string(pos, 0, &timestamp) || timestamp.size() < 19)
+      *partial = true;
+    else
+      dt_datetime_exif_to_img(img, timestamp.c_str());
+  }
+  return true;
+}
+
+static bool dt_exif_read_iptc_tag(Exiv2::IptcData &iptcData, Exiv2::IptcData::const_iterator *pos,
+                                  const std::string &key)
 {
   try
   {
@@ -593,77 +770,90 @@ static bool dt_exif_read_iptc_tag(Exiv2::IptcData &iptcData, Exiv2::IptcData::co
 }
 #define FIND_IPTC_TAG(key) dt_exif_read_iptc_tag(iptcData, &pos, key)
 
+static bool _exif_decode_iptc_datetime(dt_image_t *img, Exiv2::IptcData &iptcData, bool *partial)
+{
+  try
+  {
+    Exiv2::IptcData::const_iterator pos;
+    if(!FIND_IPTC_TAG("Iptc.Application2.DateCreated")) return true;
+    std::string datetime = pos->toString() + "T";
+    if(FIND_IPTC_TAG("Iptc.Application2.TimeCreated"))
+      datetime += pos->toString();
+    else
+      datetime += "00:00:00";
+    dt_datetime_exif_to_img(img, datetime.c_str());
+    return true;
+  }
+  catch(const std::exception &) // NOSONAR
+  {
+    *partial = true;
+    return true;
+  }
+}
 
 // FIXME: according to http://www.exiv2.org/doc/classExiv2_1_1Metadatum.html#63c2b87249ba96679c29e01218169124
 // there is no need to pass iptcData
-static bool _exif_decode_iptc_data(dt_image_t *img, Exiv2::IptcData &iptcData)
+static bool _exif_decode_iptc_data(dt_image_t *img, Exiv2::IptcData &iptcData, bool *tags_changed,
+                                   bool *partial)
 {
+  *tags_changed = false;
   try
   {
     Exiv2::IptcData::const_iterator pos;
     iptcData.sortByKey(); // this helps to quickly find all Iptc.Application2.Keywords
 
-    if((pos = iptcData.findKey(Exiv2::IptcKey("Iptc.Application2.Keywords"))) != iptcData.end())
+    pos = iptcData.findKey(Exiv2::IptcKey("Iptc.Application2.Keywords"));
+    while(pos != iptcData.end())
     {
-      while(pos != iptcData.end())
+      std::string key = pos->key();
+      if(g_strcmp0(key.c_str(), "Iptc.Application2.Keywords")) break;
+      std::string str;
+      if(!_exif_iptc_to_printed(pos, &str))
       {
-        std::string key = pos->key();
-        if(g_strcmp0(key.c_str(), "Iptc.Application2.Keywords")) break;
-        std::string str = pos->print();
-        char *tag = dt_util_foo_to_utf8(str.c_str());
-        guint tagid = 0;
-        dt_tag_new(tag, &tagid);
-        dt_tag_attach(tagid, img->id, FALSE, FALSE);
-        dt_free(tag);
+        *partial = true;
         ++pos;
+        continue;
       }
-      dt_metadata_tags_changed();
+      char *tag = dt_util_foo_to_utf8(str.c_str());
+      guint tagid = 0;
+      const gboolean tag_existed = dt_tag_exists(tag, &tagid);
+      const gboolean tag_created = dt_tag_new(tag, &tagid);
+      const gboolean tag_was_attached = tag_created && dt_tag_repository_is_attached(tagid, img->id);
+      const gboolean tag_attached = tag_was_attached || (tag_created && dt_tag_attach(tagid, img->id, FALSE, FALSE));
+      dt_free(tag);
+      if(!tag_attached) return false;
+      *tags_changed = *tags_changed || !tag_existed || !tag_was_attached;
+      ++pos;
     }
     if(FIND_IPTC_TAG("Iptc.Application2.Caption"))
     {
-      std::string str = pos->print(/*&iptcData*/);
-      dt_metadata_set_import(img->id, "Xmp.dc.description", str.c_str());
+      std::string value;
+      if(!_exif_iptc_to_printed(pos, &value))
+      {
+        *partial = true;
+      }
+      else if(!dt_metadata_set_import(img->id, "Xmp.dc.description", value.c_str())) return false;
     }
     if(FIND_IPTC_TAG("Iptc.Application2.Copyright"))
     {
-      std::string str = pos->print(/*&iptcData*/);
-      dt_metadata_set_import(img->id, "Xmp.dc.rights", str.c_str());
-    }
-    if(FIND_IPTC_TAG("Iptc.Application2.Byline"))
-    {
-      std::string str = pos->print(/*&iptcData*/);
-      dt_metadata_set_import(img->id, "Xmp.dc.creator", str.c_str());
-    }
-    else if(FIND_IPTC_TAG("Iptc.Application2.Writer"))
-    {
-      std::string str = pos->print(/*&iptcData*/);
-      dt_metadata_set_import(img->id, "Xmp.dc.creator", str.c_str());
-    }
-    else if(FIND_IPTC_TAG("Iptc.Application2.Contact"))
-    {
-      std::string str = pos->print(/*&iptcData*/);
-      dt_metadata_set_import(img->id, "Xmp.dc.creator", str.c_str());
-    }
-    if(FIND_IPTC_TAG("Iptc.Application2.DateCreated"))
-    {
-      // exiv2 already converts IPTC date and time into ISO 8601 format
-      GString *datetime = g_string_new(pos->toString().c_str());
-
-      datetime = g_string_append(datetime, "T");
-      if(FIND_IPTC_TAG("Iptc.Application2.TimeCreated"))
+      std::string value;
+      if(!_exif_iptc_to_printed(pos, &value))
       {
-        gchar *time = g_strdup(pos->toString().c_str());
-        datetime = g_string_append(datetime, time);
-        dt_free(time);
+        *partial = true;
       }
-      else
-        datetime = g_string_append(datetime, "00:00:00");
-
-      if(datetime->str[0] != '\0') dt_datetime_exif_to_img(img, datetime->str);
-      g_string_free(datetime, TRUE);
+      else if(!dt_metadata_set_import(img->id, "Xmp.dc.rights", value.c_str())) return false;
     }
-
-    return true;
+    if(FIND_IPTC_TAG("Iptc.Application2.Byline") || FIND_IPTC_TAG("Iptc.Application2.Writer")
+       || FIND_IPTC_TAG("Iptc.Application2.Contact"))
+    {
+      std::string value;
+      if(!_exif_iptc_to_printed(pos, &value))
+      {
+        *partial = true;
+      }
+      else if(!dt_metadata_set_import(img->id, "Xmp.dc.creator", value.c_str())) return false;
+    }
+    return _exif_decode_iptc_datetime(img, iptcData, partial);
   }
   catch(const std::exception &e)
   {
@@ -674,7 +864,7 @@ static bool _exif_decode_iptc_data(dt_image_t *img, Exiv2::IptcData &iptcData)
 }
 
 bool dt_exif_read_exif_tag(Exiv2::ExifData &exifData,
-                                Exiv2::ExifData::const_iterator *pos, string key)
+                                Exiv2::ExifData::const_iterator *pos, std::string key)
 {
   try
   {
@@ -813,7 +1003,11 @@ static gboolean _check_dng_opcodes(Exiv2::ExifData &exifData, dt_image_t *img)
   {
     g_autofree uint8_t *data = (uint8_t *)g_malloc(pos->size()); // NOSONAR
     pos->copy(data, Exiv2::invalidByteOrder);
-    dt_dng_opcode_process_opcode_list_2(data, pos->size(), img);
+    dt_image_t decoded;
+    dt_image_init(&decoded);
+    dt_dng_opcode_process_opcode_list_2(data, pos->size(), &decoded);
+    g_list_free_full(img->dng_gain_maps, dt_free_gpointer);
+    img->dng_gain_maps = decoded.dng_gain_maps;
     has_opcodes = TRUE;
   }
   else
@@ -1045,7 +1239,7 @@ void dt_exif_read_usercrop(dt_image_t *img, const char *filename)
     if(exifData.empty()) return;
     _check_usercrop(exifData, img);
   }
-  catch(const std::exception &e)
+  catch(const std::exception &e) // NOSONAR
   {
     std::string s(e.what());
     std::cerr << "[exiv2 dt_exif_read_usercrop] " << filename << ": " << s << std::endl;
@@ -1074,7 +1268,7 @@ void dt_exif_img_check_additional_tags(dt_image_t *img, const char *filename)
     }
     return;
   }
-  catch(const std::exception &e)
+  catch(const std::exception &e) // NOSONAR
   {
     std::string s(e.what());
     std::cerr << "[exiv2 reading DefaultUserCrop] " << filename << ": " << s << std::endl;
@@ -1082,25 +1276,32 @@ void dt_exif_img_check_additional_tags(dt_image_t *img, const char *filename)
   }
 }
 
-static void _find_datetime_taken(Exiv2::ExifData &exifData,
+static bool _find_datetime_taken(Exiv2::ExifData &exifData,
                                  Exiv2::ExifData::const_iterator pos,
                                  char *exif_datetime_taken)
 {
-  if((FIND_EXIF_TAG("Exif.Image.DateTimeOriginal") || FIND_EXIF_TAG("Exif.Photo.DateTimeOriginal"))
-     && pos->size() == DT_DATETIME_EXIF_LENGTH)
+  try
   {
-    dt_strlcpy_to_utf8(exif_datetime_taken, DT_DATETIME_EXIF_LENGTH, pos, exifData);
-    if(FIND_EXIF_TAG("Exif.Photo.SubSecTimeOriginal")
-       && pos->size() > 1)
+    if((FIND_EXIF_TAG("Exif.Image.DateTimeOriginal") || FIND_EXIF_TAG("Exif.Photo.DateTimeOriginal"))
+       && pos->size() == DT_DATETIME_EXIF_LENGTH)
     {
-      char msec[4];
-      dt_strlcpy_to_utf8(msec, sizeof(msec), pos, exifData);
-      dt_datetime_add_subsec_to_exif(exif_datetime_taken, DT_DATETIME_LENGTH, msec);
+      dt_strlcpy_to_utf8(exif_datetime_taken, DT_DATETIME_EXIF_LENGTH, pos, exifData);
+      if(FIND_EXIF_TAG("Exif.Photo.SubSecTimeOriginal")
+         && pos->size() > 1)
+      {
+        char msec[4];
+        dt_strlcpy_to_utf8(msec, sizeof(msec), pos, exifData);
+        dt_datetime_add_subsec_to_exif(exif_datetime_taken, DT_DATETIME_LENGTH, msec);
+      }
     }
+    else
+      *exif_datetime_taken = '\0';
+    return true;
   }
-  else
+  catch(const Exiv2::AnyError &)
   {
     *exif_datetime_taken = '\0';
+    return false;
   }
 }
 
@@ -1119,12 +1320,8 @@ static void _find_exif_maker(Exiv2::ExifData &exifData,
     dt_strlcpy_to_utf8(maker, m_size, pos, exifData);
     }
 
-  for(char *c = maker + m_size - 1; c > maker; c--)
-      if(*c != ' ' && *c != '\0')
-      {
-        *(c + 1) = '\0';
-        break;
-      }
+  size_t length = strnlen(maker, m_size);
+  while(length > 0 && maker[length - 1] == ' ') maker[--length] = '\0';
 }
 
 static void _find_exif_model(Exiv2::ExifData &exifData,
@@ -1141,763 +1338,819 @@ static void _find_exif_model(Exiv2::ExifData &exifData,
     dt_strlcpy_to_utf8(model, m_size, pos, exifData);
     }
 
-  for(char *c = model + m_size - 1; c > model; c--)
-      if(*c != ' ' && *c != '\0')
-      {
-        *(c + 1) = '\0';
-        break;
-      }
+  size_t length = strnlen(model, m_size);
+  while(length > 0 && model[length - 1] == ' ') model[--length] = '\0';
 }
 
-static bool _exif_decode_exif_data(dt_image_t *img, Exiv2::ExifData &exifData)
+static bool _exif_apply_exif_metadata(const dt_image_t *img, Exiv2::ExifData &exifData, bool *partial)
+{
+  Exiv2::ExifData::const_iterator pos;
+  if(FIND_EXIF_TAG("Exif.Image.Artist") || FIND_EXIF_TAG("Exif.Canon.OwnerName"))
+  {
+    std::string value;
+    if(!_exif_to_printed(pos, exifData, &value))
+      *partial = true;
+    else if(!dt_metadata_set_import(img->id, "Xmp.dc.creator", value.c_str())) return false;
+  }
+  if(FIND_EXIF_TAG("Exif.Photo.UserComment"))
+  {
+    try
+    {
+      const Exiv2::CommentValue value(pos->print(&exifData));
+      if(value.comment() != "binary comment"
+         && !dt_metadata_set_import(img->id, "Xmp.dc.description", value.comment().c_str()))
+        return false;
+    }
+    catch(const Exiv2::AnyError &)
+    {
+      *partial = true;
+    }
+  }
+  else if(FIND_EXIF_TAG("Exif.Image.ImageDescription"))
+  {
+    std::string value;
+    if(!_exif_to_printed(pos, exifData, &value))
+      *partial = true;
+    else if(!dt_metadata_set_import(img->id, "Xmp.dc.description", value.c_str())) return false;
+  }
+  if(FIND_EXIF_TAG("Exif.Image.Copyright"))
+  {
+    std::string value;
+    if(!_exif_to_printed(pos, exifData, &value))
+      *partial = true;
+    else if(!dt_metadata_set_import(img->id, "Xmp.dc.rights", value.c_str())) return false;
+  }
+  return true;
+}
+
+/** Decode exposure fields, preserving the camera-specific ISO fallbacks. */
+static void _exif_decode_exposure(dt_image_t *img, Exiv2::ExifData &exifData)
+{
+  Exiv2::ExifData::const_iterator pos;
+
+  /* Read shutter time */
+  if((pos = Exiv2::exposureTime(exifData)) != exifData.end() && pos->size())
+  {
+    img->exif_exposure = pos->toFloat();
+  }
+  else if(FIND_EXIF_TAG("Exif.Photo.ShutterSpeedValue") || FIND_EXIF_TAG("Exif.Image.ShutterSpeedValue"))
+  {
+    // uf_strlcpy_to_utf8(uf->conf->shutterText, max_name, pos, exifData);
+    img->exif_exposure = exp2f(-1.0f * pos->toFloat()); // convert from APEX value
+  }
+
+  // Read exposure bias
+  if(FIND_EXIF_TAG("Exif.Photo.ExposureBiasValue") || FIND_EXIF_TAG("Exif.Image.ExposureBiasValue"))
+  {
+    img->exif_exposure_bias = pos->toFloat();
+  }
+
+  /* Read aperture */
+  if((pos = Exiv2::fNumber(exifData)) != exifData.end() && pos->size())
+  {
+    img->exif_aperture = pos->toFloat();
+  }
+  else if(FIND_EXIF_TAG("Exif.Photo.ApertureValue") || FIND_EXIF_TAG("Exif.Image.ApertureValue"))
+  {
+    img->exif_aperture = exp2f(pos->toFloat() / 2.0f); // convert from APEX value
+  }
+
+  /* Read ISO speed - Nikon happens to return a pair for Lo and Hi modes */
+  if((pos = Exiv2::isoSpeed(exifData)) != exifData.end() && pos->size())
+  {
+    // if standard exif iso tag, use the old way of interpreting the return value to be more regression-save
+    if(strcmp(pos->key().c_str(), "Exif.Photo.ISOSpeedRatings") == 0)
+    {
+      int isofield = pos->count() > 1 ? 1 : 0;
+      img->exif_iso = pos->toFloat(isofield);
+    }
+    else
+    {
+      std::string str = pos->print();
+      img->exif_iso = (float)std::atof(str.c_str());
+    }
+  }
+  // some newer cameras support iso settings that exceed the 16 bit of exif's ISOSpeedRatings
+  if(img->exif_iso == 65535 || img->exif_iso == 0)
+  {
+    if(FIND_EXIF_TAG("Exif.PentaxDng.ISO") || FIND_EXIF_TAG("Exif.Pentax.ISO"))
+    {
+      std::string str = pos->print();
+      img->exif_iso = (float)std::atof(str.c_str());
+    }
+    else if((!g_strcmp0(img->exif_maker, "SONY") || !g_strcmp0(img->exif_maker, "Canon"))
+            && FIND_EXIF_TAG("Exif.Photo.RecommendedExposureIndex"))
+    {
+      img->exif_iso = pos->toFloat();
+    }
+  }
+}
+
+/** Decode focal length before deriving the crop factor. */
+static void _exif_decode_focal_length(dt_image_t *img, Exiv2::ExifData &exifData)
+{
+  Exiv2::ExifData::const_iterator pos;
+  if((pos = Exiv2::focalLength(exifData)) != exifData.end() && pos->size())
+  {
+    // This works around a bug in exiv2 the developers refuse to fix
+    // For details see http://dev.exiv2.org/issues/1083
+    if(pos->key() == "Exif.Canon.FocalLength" && pos->count() == 4)
+      img->exif_focal_length = pos->toFloat(1);
+    else
+      img->exif_focal_length = pos->toFloat();
+  }
+
+  // Read focal length in 35mm if available and try to calculate crop factor.
+  if(FIND_EXIF_TAG("Exif.Photo.FocalLengthIn35mmFilm"))
+  {
+    const float focal_length_35mm = pos->toFloat();
+    if(focal_length_35mm > 0.0f && img->exif_focal_length > 0.0f)
+      img->exif_crop = focal_length_35mm / img->exif_focal_length;
+    else
+      img->exif_crop = 0.0f;
+  }
+}
+
+/** Derive the crop factor from sensor dimensions only when equivalent focal length is unavailable. */
+static void _exif_decode_sensor_crop(dt_image_t *img, Exiv2::ExifData &exifData)
+{
+  Exiv2::ExifData::const_iterator pos;
+  if(img->exif_crop != 0.0f || !FIND_EXIF_TAG("Exif.Photo.FocalPlaneXResolution")) return;
+  float x_resolution = pos->toFloat();
+  float y_resolution = 0.0f;
+  if(FIND_EXIF_TAG("Exif.Photo.FocalPlaneYResolution")) y_resolution = pos->toFloat();
+  guint res_unit = 1;
+  if(FIND_EXIF_TAG("Exif.Photo.FocalPlaneResolutionUnit")) res_unit = pos->toLong();
+  if(res_unit == 2) // inch
+  {
+    x_resolution /= 25.4f;
+    y_resolution /= 25.4f;
+  }
+  else if(res_unit == 3) // centimeter
+  {
+    x_resolution /= 10.0f;
+    y_resolution /= 10.0f;
+  }
+  guint image_width = 0;
+  guint image_height = 0;
+  // We are entering the zoo of image dimensions metadata.
+  // Let's first try the Exif way of telling dimensions.
+  // For Canon and Sigma cameras, these are the valid raw image
+  // dimensions matching the the resolution tags.
+  // For Fujifilm cameras, this will get the pixel dimensions
+  // of the preview, not the sensor, because that's what the data
+  // in the resolution tags on most Fujifilm cameras seems to be
+  // calculated for.
+  if(FIND_EXIF_TAG("Exif.Photo.PixelXDimension")) image_width = pos->toLong();
+  if(FIND_EXIF_TAG("Exif.Photo.PixelYDimension")) image_height = pos->toLong();
+  // Then try the Adobe DNG way of telling dimensions.
+  // Exif.Image.ImageWidth/Length tags are also present in DNG files,
+  // but may contain the pixel dimensions of the preview image, which in
+  // this case will cause the diagonal calculation to be incorrect.
+  if(image_width == 0 && FIND_EXIF_TAG("Exif.SubImage1.NewSubfileType") && pos->toLong() == 0)
+  {
+    if(FIND_EXIF_TAG("Exif.SubImage1.ImageWidth")) image_width = pos->toLong();
+    if(FIND_EXIF_TAG("Exif.SubImage1.ImageLength")) image_height = pos->toLong();
+  }
+  // The following tags in certain formats may contain pixel dimensions of
+  // the preview instead of the full image, while resolution is calculated
+  // relative to the full image dimensions. So we check them last.
+  if(image_width == 0)
+  {
+    if(FIND_EXIF_TAG("Exif.Image.ImageWidth")) image_width = pos->toLong();
+    if(FIND_EXIF_TAG("Exif.Image.ImageLength")) image_height = pos->toLong();
+  }
+
+  const float x_size_mm = (float)image_width / x_resolution;
+  const float y_size_mm = (float)image_height / y_resolution;
+  if(image_width && image_height) // We've got the data and can calculate the crop factor
+  {
+    const float sensor_diagonal = dt_fast_hypotf(x_size_mm, y_size_mm);
+    const float fullframe_diagonal = dt_fast_hypotf(36.0f, 24.0f);
+    img->exif_crop = fullframe_diagonal / sensor_diagonal;
+  }
+  else
+    img->exif_crop = 0.0f; // Will be shown as "no data" in the image information module
+}
+
+/** Decode Nikon focus distances, including the second Z-mount distance field on older Exiv2. */
+static bool _exif_decode_nikon_focus_distance(dt_image_t *img, Exiv2::ExifData &exifData)
+{
+  if(Exiv2::ExifData::const_iterator pos;
+     Exiv2::testVersion(0, 27, 4) && FIND_EXIF_TAG("Exif.NikonLd4.LensID") && pos->toLong() != 0)
+  {
+    // Z lens, need to specifically look for the second instance of Exif.NikonLd4.FocusDistance
+    // unless using Exiv2 0.28.x and later (also expanded to 2 bytes of precision since 0.28.1).
+#if EXIV2_TEST_VERSION(0, 28, 0)
+    if(FIND_EXIF_TAG("Exif.NikonLd4.FocusDistance2"))
+    {
+      float value = pos->toFloat();
+      if(Exiv2::testVersion(0, 28, 1)) value /= 256.0f;
+#else
+    pos = exifData.end();
+    for(auto it = exifData.begin(); it != exifData.end(); it++)
+    {
+      if(it->key() == "Exif.NikonLd4.FocusDistance") pos = it;
+    }
+    if(pos != exifData.end() && pos->size())
+    {
+      float value = pos->toFloat();
+#endif
+      img->exif_focus_distance = 0.01f * pow(10.0f, value / 40.0f);
+    }
+  }
+  else if(FIND_EXIF_TAG("Exif.NikonLd2.FocusDistance") || FIND_EXIF_TAG("Exif.NikonLd3.FocusDistance")
+          || (Exiv2::testVersion(0, 27, 4) && FIND_EXIF_TAG("Exif.NikonLd4.FocusDistance")))
+  {
+    float value = pos->toFloat();
+    img->exif_focus_distance = 0.01f * pow(10.0f, value / 40.0f);
+  }
+  else
+    return false;
+  return true;
+}
+
+/** Decode non-Nikon focus distances in meters before trying standard EXIF. */
+static void _exif_decode_focus_distance(dt_image_t *img, Exiv2::ExifData &exifData)
+{
+  if(_exif_decode_nikon_focus_distance(img, exifData)) return;
+  Exiv2::ExifData::const_iterator pos;
+  if(FIND_EXIF_TAG("Exif.OlympusFi.FocusDistance"))
+  {
+    /* the distance is stored as a rational (fraction). according to
+     * http://www.dpreview.com/forums/thread/1173960?page=4
+     * some Olympus cameras have a wrong denominator of 10 in there while the nominator is always in mm.
+     * thus we ignore the denominator
+     * and divide with 1000.
+     * "I've checked a number of E-1 and E-300 images, and I agree that the FocusDistance looks like it is
+     * in mm for the E-1. However,
+     * it looks more like cm for the E-300.
+     * For both cameras, this value is stored as a rational. With the E-1, the denominator is always 1,
+     * while for the E-300 it is 10.
+     * Therefore, it looks like the numerator in both cases is in mm (which makes a bit of sense, in an odd
+     * sort of way). So I think
+     * what I will do in ExifTool is to take the numerator and divide by 1000 to display the focus distance
+     * in meters."
+     *   -- Boardhead, dpreview forums in 2005
+     */
+    int nominator = pos->toRational(0).first;
+    img->exif_focus_distance = fmax(0.0, (0.001 * nominator));
+  }
+  else if(FIND_EXIF_TAG("Exif.CanonFi.FocusDistanceUpper"))
+  {
+    const float FocusDistanceUpper = pos->toFloat();
+    if(FocusDistanceUpper <= 0.0f || (int)FocusDistanceUpper >= 0xffff)
+    {
+      img->exif_focus_distance = 0.0f;
+      return;
+    }
+    img->exif_focus_distance = FocusDistanceUpper / 100.0;
+    if(FIND_EXIF_TAG("Exif.CanonFi.FocusDistanceLower"))
+    {
+      const float FocusDistanceLower = pos->toFloat();
+      if(FocusDistanceLower > 0.0f && (int)FocusDistanceLower < 0xffff)
+      {
+        img->exif_focus_distance += FocusDistanceLower / 100.0;
+        img->exif_focus_distance /= 2.0;
+      }
+    }
+  }
+  else if(FIND_EXIF_TAG("Exif.CanonSi.SubjectDistance"))
+  {
+    img->exif_focus_distance = pos->toFloat() / 100.0;
+  }
+  else if((pos = Exiv2::subjectDistance(exifData)) != exifData.end() && pos->size())
+  {
+    img->exif_focus_distance = pos->toFloat();
+  }
+  else if(Exiv2::testVersion(0, 27, 2) && FIND_EXIF_TAG("Exif.Sony2Fp.FocusPosition2"))
+  {
+    const float focus_position = pos->toFloat();
+
+    if(focus_position && FIND_EXIF_TAG("Exif.Photo.FocalLengthIn35mmFilm"))
+    {
+      const float focal_length_35mm = pos->toFloat();
+
+      /* http://u88.n24.queensu.ca/exiftool/forum/index.php/topic,3688.msg29653.html#msg29653 */
+      img->exif_focus_distance = (pow(2, focus_position / 16 - 5) + 1) * focal_length_35mm / 1000;
+    }
+  }
+}
+
+/** Decode orientation and geolocation without persisting metadata. */
+static void _exif_decode_location(dt_image_t *img, Exiv2::ExifData &exifData)
+{
+  Exiv2::ExifData::const_iterator pos;
+  if(FIND_EXIF_TAG("Exif.Image.Orientation"))
+  {
+    img->orientation = dt_image_orientation_to_flip_bits(pos->toLong());
+  }
+  else if(FIND_EXIF_TAG("Exif.PanasonicRaw.Orientation"))
+  {
+    img->orientation = dt_image_orientation_to_flip_bits(pos->toLong());
+  }
+  /* for e.g. Sinar backs the raw orientation is in a different subdirectory */
+  if(FIND_EXIF_TAG("Exif.Thumbnail.PhotometricInterpretation") && (32803 == pos->toLong())
+     && FIND_EXIF_TAG("Exif.Thumbnail.Orientation"))
+  {
+    img->orientation = dt_image_orientation_to_flip_bits(pos->toLong());
+  }
+
+  /* read gps location */
+  if(FIND_EXIF_TAG("Exif.GPSInfo.GPSLatitude"))
+  {
+    Exiv2::ExifData::const_iterator ref = exifData.findKey(Exiv2::ExifKey("Exif.GPSInfo.GPSLatitudeRef"));
+    if(ref != exifData.end() && ref->size() && pos->count() == 3)
+    {
+      std::string sign_str = ref->toString();
+      const char *sign = sign_str.c_str();
+      double latitude = 0.0;
+      if(dt_util_gps_rationale_to_number(pos->toRational(0).first, pos->toRational(0).second,
+                                         pos->toRational(1).first, pos->toRational(1).second,
+                                         pos->toRational(2).first, pos->toRational(2).second, sign[0], &latitude))
+        img->geoloc.latitude = latitude;
+    }
+  }
+
+  if(FIND_EXIF_TAG("Exif.GPSInfo.GPSLongitude"))
+  {
+    Exiv2::ExifData::const_iterator ref = exifData.findKey(Exiv2::ExifKey("Exif.GPSInfo.GPSLongitudeRef"));
+    if(ref != exifData.end() && ref->size() && pos->count() == 3)
+    {
+      std::string sign_str = ref->toString();
+      const char *sign = sign_str.c_str();
+      double longitude = 0.0;
+      if(dt_util_gps_rationale_to_number(pos->toRational(0).first, pos->toRational(0).second,
+                                         pos->toRational(1).first, pos->toRational(1).second,
+                                         pos->toRational(2).first, pos->toRational(2).second, sign[0], &longitude))
+        img->geoloc.longitude = longitude;
+    }
+  }
+
+  if(FIND_EXIF_TAG("Exif.GPSInfo.GPSAltitude"))
+  {
+    Exiv2::ExifData::const_iterator ref = exifData.findKey(Exiv2::ExifKey("Exif.GPSInfo.GPSAltitudeRef"));
+    if(ref != exifData.end() && ref->size())
+    {
+      std::string sign_str = ref->toString();
+      const char *sign = sign_str.c_str();
+      double elevation = 0.0;
+      if(dt_util_gps_elevation_to_number(pos->toRational(0).first, pos->toRational(0).second, sign[0], &elevation))
+        img->geoloc.elevation = elevation;
+    }
+  }
+}
+
+/** Decode the lens name with the vendor-specific precedence used by existing libraries. */
+static void _exif_decode_lens_name(dt_image_t *img, Exiv2::ExifData &exifData)
+{
+  Exiv2::ExifData::const_iterator pos;
+  if((FIND_EXIF_TAG("Exif.CanonCs.LensType") && pos->toLong() != 61182 // prefer the other tag for RF lenses
+      && pos->toLong() != 0 && pos->toLong() != 65535)
+     || FIND_EXIF_TAG("Exif.Canon.LensModel"))
+  {
+    dt_strlcpy_to_utf8(img->exif_lens, sizeof(img->exif_lens), pos, exifData);
+  }
+  else if(FIND_EXIF_TAG("Exif.PentaxDng.LensType"))
+  {
+    dt_strlcpy_to_utf8(img->exif_lens, sizeof(img->exif_lens), pos, exifData);
+  }
+  else if(FIND_EXIF_TAG("Exif.Panasonic.LensType"))
+  {
+    dt_strlcpy_to_utf8(img->exif_lens, sizeof(img->exif_lens), pos, exifData);
+  }
+  else if(FIND_EXIF_TAG("Exif.OlympusEq.LensType"))
+  {
+    /* For every Olympus camera Exif.OlympusEq.LensType is present. */
+    dt_strlcpy_to_utf8(img->exif_lens, sizeof(img->exif_lens), pos, exifData);
+
+    /* We have to check if Exif.OlympusEq.LensType has been translated by
+     * exiv2. If it hasn't, fall back to Exif.OlympusEq.LensModel. */
+    std::string lens(img->exif_lens);
+    if(std::string::npos == lens.find_first_not_of(" 1234567890"))
+    {
+      /* Exif.OlympusEq.LensType contains only digits and spaces.
+       * This means that exiv2 couldn't convert it to human readable
+       * form. */
+      if(FIND_EXIF_TAG("Exif.OlympusEq.LensModel"))
+      {
+        dt_strlcpy_to_utf8(img->exif_lens, sizeof(img->exif_lens), pos, exifData);
+      }
+      /* Just in case Exif.OlympusEq.LensModel hasn't been found */
+      else if(FIND_EXIF_TAG("Exif.Photo.LensModel"))
+      {
+        dt_strlcpy_to_utf8(img->exif_lens, sizeof(img->exif_lens), pos, exifData);
+      }
+      fprintf(stderr, "[exif] Warning: lens \"%s\" unknown as \"%s\"\n", img->exif_lens, lens.c_str());
+    }
+  }
+  else if(Exiv2::testVersion(0, 27, 4) && FIND_EXIF_TAG("Exif.NikonLd4.LensID") && pos->toLong() == 0)
+  {
+    /* Z body w/ FTZ adapter or recent F body (e.g. D780, D6) detected.
+     * Prioritize the legacy ID lookup instead of Exif.Photo.LensModel included
+     * in the default Exiv2::lensName() search below. */
+    if(FIND_EXIF_TAG("Exif.NikonLd4.LensIDNumber"))
+      dt_strlcpy_to_utf8(img->exif_lens, sizeof(img->exif_lens), pos, exifData);
+  }
+  else if((pos = Exiv2::lensName(exifData)) != exifData.end() && pos->size())
+  {
+    dt_strlcpy_to_utf8(img->exif_lens, sizeof(img->exif_lens), pos, exifData);
+  }
+}
+
+/** Normalize display names without changing the vendor lookup precedence. */
+static void _exif_normalize_lens_name(dt_image_t *img, Exiv2::ExifData &exifData)
+{
+  Exiv2::ExifData::const_iterator pos;
+  /* Use pretty name for Canon RF & RF-S lenses (as exiftool/exiv2/lensfun) */
+  if(g_str_has_prefix(img->exif_lens, "RF"))
+  {
+    char *pretty;
+    if(img->exif_lens[2] == '-')
+      pretty = g_strconcat("Canon RF-S ", &img->exif_lens[4], (char *)NULL);
+    else
+      pretty = g_strconcat("Canon RF ", &img->exif_lens[2], (char *)NULL);
+    g_strlcpy(img->exif_lens, pretty, sizeof(img->exif_lens));
+    dt_free(pretty);
+  }
+
+  /* Capitalize Nikon Z-mount lenses properly for UI presentation */
+  if(const gboolean nikkor = g_str_has_prefix(img->exif_lens, "NIKKOR"),
+                    tamron = g_str_has_prefix(img->exif_lens, "TAMRON");
+     nikkor || tamron)
+  {
+    for(size_t i = 1; i <= 5; ++i) img->exif_lens[i] = g_ascii_tolower(img->exif_lens[i]);
+  }
+
+  // finally the lens has only numbers and parentheses, let's try to use
+  // Exif.Photo.LensModel if defined.
+
+  std::string lens(img->exif_lens);
+  if(std::string::npos == lens.find_first_not_of(" (1234567890)") && FIND_EXIF_TAG("Exif.Photo.LensModel"))
+  {
+    dt_strlcpy_to_utf8(img->exif_lens, sizeof(img->exif_lens), pos, exifData);
+  }
+}
+
+/** Select the calibration closest to D65, retaining the legacy unknown-illuminant fallback. */
+static int _exif_select_illuminant(const dt_dng_illuminant_t illu[3], const float colmatrix[3][12], int *sel_temp)
+{
+  int selected = -1;
+  *sel_temp = 0;
+  const int d65_temperature = _illu_to_temp(DT_LS_D65);
+  int minimum_delta = d65_temperature;
+  for(int i = 0; i < 3; i++)
+  {
+    const int temperature = _illu_to_temp(illu[i]);
+    const int delta = abs(temperature - d65_temperature);
+    if(temperature > *sel_temp && delta <= minimum_delta)
+    {
+      selected = i;
+      *sel_temp = temperature;
+      minimum_delta = delta;
+    }
+  }
+  if(selected != -1) return selected;
+  for(int i = 0; i < 3; i++)
+  {
+    if(illu[i] == DT_LS_Unknown && !isnan(colmatrix[i][0]))
+    {
+      *sel_temp = d65_temperature;
+      return i;
+    }
+  }
+  return -1;
+}
+
+/** Decode DNG color calibration without changing its illuminant-selection policy. */
+static void _exif_decode_color_matrix(dt_image_t *img, Exiv2::ExifData &exifData)
+{
+  Exiv2::ExifData::const_iterator pos;
+  {
+    float colmatrix[3][12];
+    colmatrix[0][0] = colmatrix[1][0] = colmatrix[2][0] = NAN;
+    dt_dng_illuminant_t illu[3] = { DT_LS_Unknown, DT_LS_Unknown, DT_LS_Unknown };
+    img->d65_color_matrix[0] = NAN; // make sure for later testing
+
+    // fallback later via `find_temperature_from_raw_coeffs` if there is no valid illuminant
+
+    // The correction matrices are taken from
+    // http://www.brucelindbloom.com - chromatic Adaption.
+    // using Bradford method: found Illuminant -> D65
+    const float correctmat[13][9] = {
+      { 0.9555766, -0.0230393, 0.0631636, -0.0282895, 1.0099416, 0.0210077, 0.0122982, -0.0204830,
+        1.3299098 }, // D50
+      { 0.9726856, -0.0135482, 0.0361731, -0.0167463, 1.0049102, 0.0120598, 0.0070026, -0.0116372,
+        1.1869548 }, // D55
+      { 1.0206905, 0.0091588, -0.0228796, 0.0115005, 0.9984917, -0.0076762, -0.0043619, 0.0072053,
+        0.8853432 }, // D75
+      { 0.8446965, -0.1179225, 0.3948108, -0.1366303, 1.1041226, 0.1291718, 0.0798489, -0.1348999,
+        3.1924009 }, // Standard light A
+      { 0.9415037, -0.0321240, 0.0584672, -0.0428238, 1.0250998, 0.0203309, 0.0101511, -0.0161170,
+        1.2847354 }, // Standard light B
+      { 0.9904476, -0.0071683, -0.0116156, -0.0123712, 1.0155950, -0.0029282, -0.0035635, 0.0067697,
+        0.9181569 }, //  Standard light C
+      { 0.9212269, -0.0449128, 0.1211620, -0.0553723, 1.0277243, 0.0403563, 0.0235086, -0.0391019,
+        1.6390644 }, // Fluorescent (F2)
+      // The following are calculated using the same Bradford method,
+      // with xy coord from DNG SDK as reference -> XYZ -> D65
+      { 0.8663030, -0.0913083, 0.2771784, -0.1090504, 1.0746895, 0.0913841, 0.0550856, -0.0924636,
+        2.5119387 }, // ISO Studio Tungsten (3200K first converted to xy as DNG SDK does)
+      { 1.0096114, 0.0061501, 0.0068113, 0.0102539, 0.9888663, 0.0015575, 0.0023119, -0.0044823,
+        1.0525915 }, // DaylightFluorescent (F1)
+      { 0.9554129, -0.0231280, 0.0637169, -0.0283629, 1.0099053, 0.0211824, 0.0124188, -0.0206922,
+        1.3330592 }, // DayWhiteFluorescent (F8)
+      { 0.9147843, -0.0492842, 0.1202810, -0.0622085, 1.034984, 0.0404480, 0.0228014, -0.0375807,
+        1.6259804 }, // CoolWhiteFluorescent (F9)
+      { 0.8805388, -0.0774890, 0.2293784, -0.0932136, 1.0589267, 0.0757827, 0.0453660, -0.0760107,
+        2.2417979 }, // WhiteFluorescent (F3)
+      { 0.8488316, -0.1107439, 0.3471428, -0.1310107, 1.0986874, 0.1141548, 0.0694025, -0.1167541,
+        2.9109462 } // WarmWhiteFluorescent (F4)
+    };
+
+    Exiv2::ExifData::const_iterator cm1_pos = exifData.findKey(Exiv2::ExifKey("Exif.Image.ColorMatrix1"));
+    if((cm1_pos != exifData.end()) && (cm1_pos->count() == 9))
+    {
+      for(int i = 0; i < 9; i++) colmatrix[0][i] = cm1_pos->toFloat(i);
+
+      if(FIND_EXIF_TAG("Exif.Image.CalibrationIlluminant1")) illu[0] = (dt_dng_illuminant_t)pos->toLong();
+    }
+
+    Exiv2::ExifData::const_iterator cm2_pos = exifData.findKey(Exiv2::ExifKey("Exif.Image.ColorMatrix2"));
+    if((cm2_pos != exifData.end()) && (cm2_pos->count() == 9))
+    {
+      for(int i = 0; i < 9; i++) colmatrix[1][i] = cm2_pos->toFloat(i);
+
+      if(FIND_EXIF_TAG("Exif.Image.CalibrationIlluminant2")) illu[1] = (dt_dng_illuminant_t)pos->toLong();
+    }
+
+    // So far the Exif.Image.CalibrationIlluminant3 tag and friends have not been implemented and there are no
+    // images to test
+#if EXIV2_TEST_VERSION(0, 27, 4)
+    Exiv2::ExifData::const_iterator cm3_pos = exifData.findKey(Exiv2::ExifKey("Exif.Image.ColorMatrix3"));
+    if((cm3_pos != exifData.end()) && (cm3_pos->count() == 9))
+    {
+      for(int i = 0; i < 9; i++) colmatrix[2][i] = cm3_pos->toFloat(i);
+
+      if(FIND_EXIF_TAG("Exif.Image.CalibrationIlluminant3")) illu[2] = (dt_dng_illuminant_t)pos->toLong();
+    }
+#endif
+
+    int sel_temp = 0;
+    const int sel_illu = _exif_select_illuminant(illu, colmatrix, &sel_temp);
+
+    if((sel_illu > -1) && (dt_get_debug_flags() & DT_DEBUG_IMAGEIO))
+    {
+      std::cerr << "[exif] `" << img->filename << "` dng illuminant " << illu[sel_illu]
+                << " (" << sel_temp << "K) selected from ";
+      for(int i = 0; i < 3; i++)
+        std::cerr << " -- [" << i + 1 << "] " << illu[i] << " (" << _illu_to_temp(illu[i]) << "K)";
+      std::cerr << std::endl;
+    }
+
+    // Take the found CalibrationIlluminant / ColorMatrix pair.
+    // D65: just copy. Otherwise multiply by the specific correction matrix.
+    if(sel_illu > -1)
+    {
+      // If no supported Illuminant is found/assumed it's better NOT to use any matrix.
+      // The colorin module will write an error message and use a fallback matrix
+      // instead of showing wrong colors.
+      switch(illu[sel_illu])
+      {
+        case DT_LS_D50:
+          mat3mul(img->d65_color_matrix, correctmat[0], colmatrix[sel_illu]);
+          break;
+        case DT_LS_D55:
+        case DT_LS_Daylight:
+        case DT_LS_FineWeather:
+        case DT_LS_Flash:
+          mat3mul(img->d65_color_matrix, correctmat[1], colmatrix[sel_illu]);
+          break;
+        case DT_LS_D75:
+        case DT_LS_Shade:
+          mat3mul(img->d65_color_matrix, correctmat[2], colmatrix[sel_illu]);
+          break;
+        case DT_LS_Tungsten:
+        case DT_LS_StandardLightA:
+          mat3mul(img->d65_color_matrix, correctmat[3], colmatrix[sel_illu]);
+          break;
+        case DT_LS_StandardLightB:
+          mat3mul(img->d65_color_matrix, correctmat[4], colmatrix[sel_illu]);
+          break;
+        case DT_LS_StandardLightC:
+          mat3mul(img->d65_color_matrix, correctmat[5], colmatrix[sel_illu]);
+          break;
+        case DT_LS_Fluorescent:
+          mat3mul(img->d65_color_matrix, correctmat[6], colmatrix[sel_illu]);
+          break;
+        case DT_LS_ISOStudioTungsten:
+          mat3mul(img->d65_color_matrix, correctmat[7], colmatrix[sel_illu]);
+          break;
+        case DT_LS_DaylightFluorescent:
+          mat3mul(img->d65_color_matrix, correctmat[8], colmatrix[sel_illu]);
+          break;
+        case DT_LS_DayWhiteFluorescent:
+          mat3mul(img->d65_color_matrix, correctmat[9], colmatrix[sel_illu]);
+          break;
+        case DT_LS_CoolWhiteFluorescent:
+          mat3mul(img->d65_color_matrix, correctmat[10], colmatrix[sel_illu]);
+          break;
+        case DT_LS_WhiteFluorescent:
+          mat3mul(img->d65_color_matrix, correctmat[11], colmatrix[sel_illu]);
+          break;
+        case DT_LS_WarmWhiteFluorescent:
+          mat3mul(img->d65_color_matrix, correctmat[12], colmatrix[sel_illu]);
+          break;
+        case DT_LS_D65:
+        case DT_LS_CloudyWeather:
+        case DT_LS_Unknown: // exceptional fallback to keep dt < 3.8 behaviour
+          for(int i = 0; i < 9; i++) img->d65_color_matrix[i] = colmatrix[sel_illu][i];
+          break;
+
+        default:
+          fprintf(stderr, "[exif] did not find a proper dng correction matrix for illuminant %i\n", illu[sel_illu]);
+          break;
+      }
+    }
+  }
+}
+
+/** Decode DNG sample classification independently of display colorspace metadata. */
+static void _exif_decode_dng_classification(dt_image_t *img, Exiv2::ExifData &exifData)
+{
+  Exiv2::ExifData::const_iterator pos;
+  if(FIND_EXIF_TAG("Exif.Image.DNGVersion"))
+  {
+    int format = 1;
+    int bps = 0;
+    int spp = 0;
+    int phi = 0;
+
+    if(FIND_EXIF_TAG("Exif.SubImage1.SampleFormat"))
+      format = pos->toLong();
+    else if(FIND_EXIF_TAG("Exif.Image.SampleFormat"))
+      format = pos->toLong();
+
+    if(FIND_EXIF_TAG("Exif.SubImage1.BitsPerSample"))
+      bps = pos->toLong();
+    else if(FIND_EXIF_TAG("Exif.Image.BitsPerSample"))
+      bps = pos->toLong();
+
+    if(FIND_EXIF_TAG("Exif.SubImage1.SamplesPerPixel"))
+      spp = pos->toLong();
+    else if(FIND_EXIF_TAG("Exif.Image.SamplesPerPixel"))
+      spp = pos->toLong();
+
+    if(FIND_EXIF_TAG("Exif.SubImage1.PhotometricInterpretation"))
+      phi = pos->toLong();
+    else if(FIND_EXIF_TAG("Exif.Image.PhotometricInterpretation"))
+      phi = pos->toLong();
+
+    if((format == 3) && (bps >= 16) && ((phi == 32803) || (phi == 34892))) img->flags |= DT_IMAGE_HDR;
+
+    if((spp == 1) && (phi == 34892)) img->flags |= DT_IMAGE_MONOCHROME;
+  }
+}
+
+/** Decode display colorspace only for non-raw images. */
+static void _exif_decode_colorspace(dt_image_t *img, Exiv2::ExifData &exifData)
+{
+  Exiv2::ExifData::const_iterator pos;
+  // some files have the display colorspace explicitly set. try to read that. The Exif.Photo.ColorSpace
+  // tag only exists in display-referred integer images, so gate on "not raw and not HDR-float"
+  // rather than on DT_IMAGE_LDR: at this point the dynamic range of an ambiguous container (TIFF,
+  // AVIF, HEIF) is not yet known (the extension can't tell, the buffer is not decoded), so the LDR
+  // flag may legitimately be unset here even for an integer image.
+  // tag absent -> leave colorspace as none
+  // 0x01   -> sRGB
+  // 0x02   -> AdobeRGB
+  // 0xffff -> Uncalibrated
+  //          + Exif.Iop.InteroperabilityIndex of 'R03' -> AdobeRGB
+  //          + Exif.Iop.InteroperabilityIndex of 'R98' -> sRGB
+  if(!dt_image_is_raw(img) && FIND_EXIF_TAG("Exif.Photo.ColorSpace"))
+  {
+    int colorspace = pos->toLong();
+    if(colorspace == 0x01)
+      img->colorspace = DT_IMAGE_COLORSPACE_SRGB;
+    else if(colorspace == 0x02)
+      img->colorspace = DT_IMAGE_COLORSPACE_ADOBE_RGB;
+    else if(colorspace == 0xffff)
+    {
+      if(FIND_EXIF_TAG("Exif.Iop.InteroperabilityIndex"))
+      {
+        std::string interop_index = pos->toString();
+        if(interop_index == "R03")
+          img->colorspace = DT_IMAGE_COLORSPACE_ADOBE_RGB;
+        else if(interop_index == "R98")
+          img->colorspace = DT_IMAGE_COLORSPACE_SRGB;
+      }
+    }
+  }
+}
+
+/** Override ambiguous Sony lens names after the generic EXIF readers. */
+static void _exif_decode_sony_lens_name(dt_image_t *img, Exiv2::ExifData &exifData)
+{
+  // Improve lens detection for Sony SAL lenses.
+  Exiv2::ExifData::const_iterator pos;
+  const bool sony_lens_found = FIND_EXIF_TAG("Exif.Sony2.LensID");
+  const long sony_lens_id = sony_lens_found ? pos->toLong() : 65535;
+  const std::string sony_lens_name = sony_lens_found ? pos->print() : std::string();
+  bool sony_lens_name_unambiguous = true;
+  for(const char character : sony_lens_name)
+  {
+    if(character != '|') continue;
+    sony_lens_name_unambiguous = false;
+    break;
+  }
+  if(const bool sony_lens_id_supported = sony_lens_id != 65535;
+     sony_lens_found && sony_lens_id_supported && sony_lens_name_unambiguous)
+  {
+    dt_strlcpy_to_utf8(img->exif_lens, sizeof(img->exif_lens), pos, exifData);
+  }
+  // Workaround for an issue on newer Sony NEX cams.
+  // The default EXIF field is not used by Sony to store lens data
+  // http://dev.exiv2.org/issues/883
+  // http://darktable.org/redmine/issues/8813
+  // FIXME: This is still a workaround
+  else if((!strncmp(img->exif_model, "NEX", 3)) || (!strncmp(img->exif_model, "ILCE", 4)))
+  {
+    snprintf(img->exif_lens, sizeof(img->exif_lens), "(unknown)");
+    if(FIND_EXIF_TAG("Exif.Photo.LensModel"))
+    {
+      std::string str = pos->print(&exifData);
+      snprintf(img->exif_lens, sizeof(img->exif_lens), "%s", str.c_str());
+    }
+  };
+}
+
+static bool _exif_decode_exif_data(dt_image_t *img, Exiv2::ExifData &exifData, const bool persist_tags,
+                                   bool *partial)
 {
   try
   {
-    /* List of tag names taken from exiv2's printSummary() in actions.cpp */
     Exiv2::ExifData::const_iterator pos;
-
     _find_exif_maker(exifData, pos, img->exif_maker, sizeof(img->exif_maker));
     _find_exif_model(exifData, pos, img->exif_model, sizeof(img->exif_model));
-
-    // Make sure we copy the exif make and model to the correct place if needed
     dt_image_refresh_makermodel(img);
-
-    /* Read shutter time */
-    if((pos = Exiv2::exposureTime(exifData)) != exifData.end() && pos->size())
+    _exif_decode_exposure(img, exifData);
+    _exif_decode_focal_length(img, exifData);
+    _exif_decode_sensor_crop(img, exifData);
+    const bool usercrop_valid = _check_usercrop(exifData, img);
+    switch(img->usercrop_status)
     {
-      img->exif_exposure = pos->toFloat();
+      case DT_IMAGE_USERCROP_MALFORMED:
+      case DT_IMAGE_USERCROP_CONFLICT:
+        *partial = true;
+        break;
+      default:
+        break;
     }
-    else if(FIND_EXIF_TAG("Exif.Photo.ShutterSpeedValue") || FIND_EXIF_TAG("Exif.Image.ShutterSpeedValue"))
-    {
-      // uf_strlcpy_to_utf8(uf->conf->shutterText, max_name, pos, exifData);
-      img->exif_exposure = exp2f(-1.0f * pos->toFloat());  // convert from APEX value
-    }
-
-    // Read exposure bias
-    if(FIND_EXIF_TAG("Exif.Photo.ExposureBiasValue") || FIND_EXIF_TAG("Exif.Image.ExposureBiasValue"))
-    {
-      img->exif_exposure_bias = pos->toFloat();
-    }
-
-    /* Read aperture */
-    if((pos = Exiv2::fNumber(exifData)) != exifData.end() && pos->size())
-    {
-      img->exif_aperture = pos->toFloat();
-    }
-    else if(FIND_EXIF_TAG("Exif.Photo.ApertureValue") || FIND_EXIF_TAG("Exif.Image.ApertureValue"))
-    {
-      img->exif_aperture = exp2f(pos->toFloat() / 2.0f);  // convert from APEX value
-    }
-
-    /* Read ISO speed - Nikon happens to return a pair for Lo and Hi modes */
-    if((pos = Exiv2::isoSpeed(exifData)) != exifData.end() && pos->size())
-    {
-      // if standard exif iso tag, use the old way of interpreting the return value to be more regression-save
-      if(strcmp(pos->key().c_str(), "Exif.Photo.ISOSpeedRatings") == 0)
-      {
-        int isofield = pos->count() > 1 ? 1 : 0;
-        img->exif_iso = pos->toFloat(isofield);
-      }
-      else
-      {
-        std::string str = pos->print();
-        img->exif_iso = (float)std::atof(str.c_str());
-      }
-    }
-    // some newer cameras support iso settings that exceed the 16 bit of exif's ISOSpeedRatings
-    if(img->exif_iso == 65535 || img->exif_iso == 0)
-    {
-      if(FIND_EXIF_TAG("Exif.PentaxDng.ISO") || FIND_EXIF_TAG("Exif.Pentax.ISO"))
-      {
-        std::string str = pos->print();
-        img->exif_iso = (float)std::atof(str.c_str());
-      }
-      else if((!g_strcmp0(img->exif_maker, "SONY") || !g_strcmp0(img->exif_maker, "Canon"))
-        && FIND_EXIF_TAG("Exif.Photo.RecommendedExposureIndex"))
-      {
-        img->exif_iso = pos->toFloat();
-      }
-    }
-
-    /* Read focal length  */
-    if((pos = Exiv2::focalLength(exifData)) != exifData.end() && pos->size())
-    {
-      // This works around a bug in exiv2 the developers refuse to fix
-      // For details see http://dev.exiv2.org/issues/1083
-      if (pos->key() == "Exif.Canon.FocalLength" && pos->count() == 4)
-        img->exif_focal_length = pos->toFloat(1);
-      else
-        img->exif_focal_length = pos->toFloat();
-    }
-
-    // Read focal length in 35mm if available and try to calculate crop factor.
-    if(FIND_EXIF_TAG("Exif.Photo.FocalLengthIn35mmFilm"))
-    {
-      const float focal_length_35mm = pos->toFloat();
-      if(focal_length_35mm > 0.0f && img->exif_focal_length > 0.0f)
-        img->exif_crop = focal_length_35mm / img->exif_focal_length;
-      else
-        img->exif_crop = 0.0f;
-    }
-
-    // If the tag for the equivalent focal length is missing or contains zero,
-    // let's try to get the crop factor by calculating the diagonal of the sensor:
-    if(img->exif_crop == 0.0f && FIND_EXIF_TAG("Exif.Photo.FocalPlaneXResolution"))
-    {
-      float x_resolution = pos->toFloat();
-      float y_resolution = 0.0f;
-      if(FIND_EXIF_TAG("Exif.Photo.FocalPlaneYResolution"))
-        y_resolution = pos->toFloat();
-      guint res_unit = 1;
-      if(FIND_EXIF_TAG("Exif.Photo.FocalPlaneResolutionUnit"))
-        res_unit = pos->toLong();
-      if(res_unit == 2) // inch
-      {
-        x_resolution /= 25.4f;
-        y_resolution /= 25.4f;
-      }
-      else
-      if(res_unit == 3) // centimeter
-      {
-        x_resolution /= 10.0f;
-        y_resolution /= 10.0f;
-      }
-      guint image_width = 0;
-      guint image_height = 0;
-      // We are entering the zoo of image dimensions metadata.
-      // Let's first try the Exif way of telling dimensions.
-      // For Canon and Sigma cameras, these are the valid raw image
-      // dimensions matching the the resolution tags.
-      // For Fujifilm cameras, this will get the pixel dimensions
-      // of the preview, not the sensor, because that's what the data
-      // in the resolution tags on most Fujifilm cameras seems to be
-      // calculated for.
-      if(FIND_EXIF_TAG("Exif.Photo.PixelXDimension"))
-        image_width = pos->toLong();
-      if(FIND_EXIF_TAG("Exif.Photo.PixelYDimension"))
-        image_height = pos->toLong();
-      // Then try the Adobe DNG way of telling dimensions.
-      // Exif.Image.ImageWidth/Length tags are also present in DNG files,
-      // but may contain the pixel dimensions of the preview image, which in
-      // this case will cause the diagonal calculation to be incorrect.
-      if(image_width == 0 && FIND_EXIF_TAG("Exif.SubImage1.NewSubfileType"))
-      {
-        if(pos->toLong() == 0)  // Primary image
-        {
-          if(FIND_EXIF_TAG("Exif.SubImage1.ImageWidth"))
-            image_width = pos->toLong();
-          if(FIND_EXIF_TAG("Exif.SubImage1.ImageLength"))
-            image_height = pos->toLong();
-        }
-      }
-      // The following tags in certain formats may contain pixel dimensions of
-      // the preview instead of the full image, while resolution is calculated
-      // relative to the full image dimensions. So we check them last.
-      if(image_width == 0)
-      {
-        if(FIND_EXIF_TAG("Exif.Image.ImageWidth"))
-          image_width = pos->toLong();
-        if(FIND_EXIF_TAG("Exif.Image.ImageLength"))
-          image_height = pos->toLong();
-      }
-
-      const float x_size_mm = (float)image_width / x_resolution;
-      const float y_size_mm = (float)image_height / y_resolution;
-      if(image_width && image_height) // We've got the data and can calculate the crop factor
-      {
-        const float sensor_diagonal = dt_fast_hypotf(x_size_mm, y_size_mm);
-        const float fullframe_diagonal = dt_fast_hypotf(36.0f, 24.0f);
-        img->exif_crop = fullframe_diagonal / sensor_diagonal;
-      }
-      else
-        img->exif_crop = 0.0f; // Will be shown as "no data" in the image information module
-    }
-
-    if(_check_usercrop(exifData, img))
+    if(usercrop_valid && persist_tags)
     {
       img->flags |= DT_IMAGE_HAS_ADDITIONAL_DNG_TAGS;
-        guint tagid = 0;
-        char tagname[64];
-        snprintf(tagname, sizeof(tagname), "darktable|mode|exif-crop");
-        dt_tag_new(tagname, &tagid);
-        dt_tag_attach(tagid, img->id, FALSE, FALSE);
+      guint tagid = 0;
+      if(!dt_tag_new("darktable|mode|exif-crop", &tagid)) return false;
+      if(!dt_is_tag_attached(tagid, img->id) && !dt_tag_attach(tagid, img->id, FALSE, FALSE)) return false;
     }
-
-    if(_check_dng_opcodes(exifData, img))
-    {
-      img->flags |= DT_IMAGE_HAS_ADDITIONAL_DNG_TAGS;
-    }
-
+    if(_check_dng_opcodes(exifData, img)) img->flags |= DT_IMAGE_HAS_ADDITIONAL_DNG_TAGS;
     _check_lens_correction_data(exifData, img);
-
-    /*
-     * Get the focus distance in meters.
-     */
-    if(Exiv2::testVersion(0, 27, 4) && FIND_EXIF_TAG("Exif.NikonLd4.LensID") && pos->toLong() != 0)
-    {
-      // Z lens, need to specifically look for the second instance of Exif.NikonLd4.FocusDistance
-      // unless using Exiv2 0.28.x and later (also expanded to 2 bytes of precision since 0.28.1).
-#if EXIV2_TEST_VERSION(0, 28, 0)
-      if(FIND_EXIF_TAG("Exif.NikonLd4.FocusDistance2"))
-      {
-        float value = pos->toFloat();
-        if(Exiv2::testVersion(0, 28, 1)) value /= 256.0f;
-#else
-      pos = exifData.end();
-      for(auto it = exifData.begin(); it != exifData.end(); it++)
-      {
-        if(it->key() == "Exif.NikonLd4.FocusDistance") pos = it;
-      }
-      if(pos != exifData.end() && pos->size())
-    {
-      float value = pos->toFloat();
-#endif
-        img->exif_focus_distance = 0.01f * pow(10.0f, value / 40.0f);
-    }
-    }
-    else if(FIND_EXIF_TAG("Exif.NikonLd2.FocusDistance") || FIND_EXIF_TAG("Exif.NikonLd3.FocusDistance")
-            || (Exiv2::testVersion(0, 27, 4) && FIND_EXIF_TAG("Exif.NikonLd4.FocusDistance")))
-    {
-      float value = pos->toFloat();
-      img->exif_focus_distance = 0.01f * pow(10.0f, value / 40.0f);
-    }
-    else if(FIND_EXIF_TAG("Exif.OlympusFi.FocusDistance"))
-    {
-      /* the distance is stored as a rational (fraction). according to
-       * http://www.dpreview.com/forums/thread/1173960?page=4
-       * some Olympus cameras have a wrong denominator of 10 in there while the nominator is always in mm.
-       * thus we ignore the denominator
-       * and divide with 1000.
-       * "I've checked a number of E-1 and E-300 images, and I agree that the FocusDistance looks like it is
-       * in mm for the E-1. However,
-       * it looks more like cm for the E-300.
-       * For both cameras, this value is stored as a rational. With the E-1, the denominator is always 1,
-       * while for the E-300 it is 10.
-       * Therefore, it looks like the numerator in both cases is in mm (which makes a bit of sense, in an odd
-       * sort of way). So I think
-       * what I will do in ExifTool is to take the numerator and divide by 1000 to display the focus distance
-       * in meters."
-       *   -- Boardhead, dpreview forums in 2005
-       */
-      int nominator = pos->toRational(0).first;
-      img->exif_focus_distance = fmax(0.0, (0.001 * nominator));
-    }
-    else if(FIND_EXIF_TAG("Exif.CanonFi.FocusDistanceUpper"))
-    {
-      const float FocusDistanceUpper = pos->toFloat();
-      if(FocusDistanceUpper <= 0.0f || (int)FocusDistanceUpper >= 0xffff)
-      {
-        img->exif_focus_distance = 0.0f;
-      }
-      else
-      {
-        img->exif_focus_distance = FocusDistanceUpper / 100.0;
-        if(FIND_EXIF_TAG("Exif.CanonFi.FocusDistanceLower"))
-        {
-          const float FocusDistanceLower = pos->toFloat();
-          if(FocusDistanceLower > 0.0f && (int)FocusDistanceLower < 0xffff)
-          {
-            img->exif_focus_distance += FocusDistanceLower / 100.0;
-            img->exif_focus_distance /= 2.0;
-          }
-        }
-      }
-    }
-    else if(FIND_EXIF_TAG("Exif.CanonSi.SubjectDistance"))
-    {
-      img->exif_focus_distance = pos->toFloat() / 100.0;
-    }
-    else if((pos = Exiv2::subjectDistance(exifData)) != exifData.end() && pos->size())
-    {
-      img->exif_focus_distance = pos->toFloat();
-    }
-    else if(Exiv2::testVersion(0,27,2) && FIND_EXIF_TAG("Exif.Sony2Fp.FocusPosition2"))
-    {
-      const float focus_position = pos->toFloat();
-
-      if (focus_position && FIND_EXIF_TAG("Exif.Photo.FocalLengthIn35mmFilm")) {
-        const float focal_length_35mm = pos->toFloat();
-
-        /* http://u88.n24.queensu.ca/exiftool/forum/index.php/topic,3688.msg29653.html#msg29653 */
-        img->exif_focus_distance = (pow(2, focus_position / 16 - 5) + 1) * focal_length_35mm / 1000;
-      }
-    }
-
-    /*
-     * Read image orientation
-     */
-    if(FIND_EXIF_TAG("Exif.Image.Orientation"))
-    {
-      img->orientation = dt_image_orientation_to_flip_bits(pos->toLong());
-    }
-    else if(FIND_EXIF_TAG("Exif.PanasonicRaw.Orientation"))
-    {
-      img->orientation = dt_image_orientation_to_flip_bits(pos->toLong());
-    }
-    /* for e.g. Sinar backs the raw orientation is in a different subdirectory */
-    if(FIND_EXIF_TAG("Exif.Thumbnail.PhotometricInterpretation") && (32803 == pos->toLong())
-       && FIND_EXIF_TAG("Exif.Thumbnail.Orientation"))
-    {
-      img->orientation = dt_image_orientation_to_flip_bits(pos->toLong());
-    }
-
-    /* read gps location */
-    if(FIND_EXIF_TAG("Exif.GPSInfo.GPSLatitude"))
-    {
-      Exiv2::ExifData::const_iterator ref = exifData.findKey(Exiv2::ExifKey("Exif.GPSInfo.GPSLatitudeRef"));
-      if(ref != exifData.end() && ref->size() && pos->count() == 3)
-      {
-        std::string sign_str = ref->toString();
-        const char *sign = sign_str.c_str();
-        double latitude = 0.0;
-        if(dt_util_gps_rationale_to_number(pos->toRational(0).first, pos->toRational(0).second,
-                                           pos->toRational(1).first, pos->toRational(1).second,
-                                           pos->toRational(2).first, pos->toRational(2).second, sign[0], &latitude))
-          img->geoloc.latitude = latitude;
-      }
-    }
-
-    if(FIND_EXIF_TAG("Exif.GPSInfo.GPSLongitude"))
-    {
-      Exiv2::ExifData::const_iterator ref = exifData.findKey(Exiv2::ExifKey("Exif.GPSInfo.GPSLongitudeRef"));
-      if(ref != exifData.end() && ref->size() && pos->count() == 3)
-      {
-        std::string sign_str = ref->toString();
-        const char *sign = sign_str.c_str();
-        double longitude = 0.0;
-        if(dt_util_gps_rationale_to_number(pos->toRational(0).first, pos->toRational(0).second,
-                                           pos->toRational(1).first, pos->toRational(1).second,
-                                           pos->toRational(2).first, pos->toRational(2).second, sign[0], &longitude))
-          img->geoloc.longitude = longitude;
-      }
-    }
-
-    if(FIND_EXIF_TAG("Exif.GPSInfo.GPSAltitude"))
-    {
-      Exiv2::ExifData::const_iterator ref = exifData.findKey(Exiv2::ExifKey("Exif.GPSInfo.GPSAltitudeRef"));
-      if(ref != exifData.end() && ref->size())
-      {
-        std::string sign_str = ref->toString();
-        const char *sign = sign_str.c_str();
-        double elevation = 0.0;
-        if(dt_util_gps_elevation_to_number(pos->toRational(0).first, pos->toRational(0).second, sign[0], &elevation))
-          img->geoloc.elevation = elevation;
-      }
-    }
-
-    /* Read lens name */
-    if((FIND_EXIF_TAG("Exif.CanonCs.LensType")
-        && pos->toLong() != 61182   // prefer the other tag for RF lenses
-        && pos->toLong() != 0
-        && pos->toLong() != 65535)
-       || FIND_EXIF_TAG("Exif.Canon.LensModel"))
-    {
-      dt_strlcpy_to_utf8(img->exif_lens, sizeof(img->exif_lens), pos, exifData);
-    }
-    else if(FIND_EXIF_TAG("Exif.PentaxDng.LensType"))
-    {
-      dt_strlcpy_to_utf8(img->exif_lens, sizeof(img->exif_lens), pos, exifData);
-    }
-    else if(FIND_EXIF_TAG("Exif.Panasonic.LensType"))
-    {
-      dt_strlcpy_to_utf8(img->exif_lens, sizeof(img->exif_lens), pos, exifData);
-    }
-    else if(FIND_EXIF_TAG("Exif.OlympusEq.LensType"))
-    {
-      /* For every Olympus camera Exif.OlympusEq.LensType is present. */
-      dt_strlcpy_to_utf8(img->exif_lens, sizeof(img->exif_lens), pos, exifData);
-
-      /* We have to check if Exif.OlympusEq.LensType has been translated by
-       * exiv2. If it hasn't, fall back to Exif.OlympusEq.LensModel. */
-      std::string lens(img->exif_lens);
-      if(std::string::npos == lens.find_first_not_of(" 1234567890"))
-      {
-        /* Exif.OlympusEq.LensType contains only digits and spaces.
-         * This means that exiv2 couldn't convert it to human readable
-         * form. */
-        if(FIND_EXIF_TAG("Exif.OlympusEq.LensModel"))
-        {
-          dt_strlcpy_to_utf8(img->exif_lens, sizeof(img->exif_lens), pos, exifData);
-        }
-        /* Just in case Exif.OlympusEq.LensModel hasn't been found */
-        else if(FIND_EXIF_TAG("Exif.Photo.LensModel"))
-        {
-          dt_strlcpy_to_utf8(img->exif_lens, sizeof(img->exif_lens), pos, exifData);
-        }
-        fprintf(stderr, "[exif] Warning: lens \"%s\" unknown as \"%s\"\n", img->exif_lens, lens.c_str());
-      }
-    }
-    else if(Exiv2::testVersion(0,27,4) && FIND_EXIF_TAG("Exif.NikonLd4.LensID") && pos->toLong() == 0)
-    {
-      /* Z body w/ FTZ adapter or recent F body (e.g. D780, D6) detected.
-       * Prioritize the legacy ID lookup instead of Exif.Photo.LensModel included
-       * in the default Exiv2::lensName() search below. */
-      if(FIND_EXIF_TAG("Exif.NikonLd4.LensIDNumber"))
-        dt_strlcpy_to_utf8(img->exif_lens, sizeof(img->exif_lens), pos, exifData);
-    }
-    else if((pos = Exiv2::lensName(exifData)) != exifData.end() && pos->size())
-    {
-      dt_strlcpy_to_utf8(img->exif_lens, sizeof(img->exif_lens), pos, exifData);
-    }
-
-    /* Use pretty name for Canon RF & RF-S lenses (as exiftool/exiv2/lensfun) */
-    if(g_str_has_prefix(img->exif_lens, "RF"))
-    {
-      char *pretty;
-      if(img->exif_lens[2] == '-')
-        pretty = g_strconcat("Canon RF-S ", &img->exif_lens[4], (char *)NULL);
-      else
-        pretty = g_strconcat("Canon RF ", &img->exif_lens[2], (char *)NULL);
-      g_strlcpy(img->exif_lens, pretty, sizeof(img->exif_lens));
-      dt_free(pretty);
-    }
-
-    /* Capitalize Nikon Z-mount lenses properly for UI presentation */
-    if(g_str_has_prefix(img->exif_lens, "NIKKOR") || g_str_has_prefix(img->exif_lens, "TAMRON"))
-    {
-      for(size_t i = 1; i <= 5; ++i)
-        img->exif_lens[i] = g_ascii_tolower(img->exif_lens[i]);
-    }
-
-    // finally the lens has only numbers and parentheses, let's try to use
-    // Exif.Photo.LensModel if defined.
-
-    std::string lens(img->exif_lens);
-    if(std::string::npos == lens.find_first_not_of(" (1234567890)")
-       && FIND_EXIF_TAG("Exif.Photo.LensModel"))
-    {
-      dt_strlcpy_to_utf8(img->exif_lens, sizeof(img->exif_lens), pos, exifData);
-    }
-
-#if 0
-    /* Read flash mode */
-    if ( (pos=exifData.findKey(Exiv2::ExifKey("Exif.Photo.Flash")))
-         != exifData.end() && pos->size())
-    {
-      uf_strlcpy_to_utf8(uf->conf->flashText, max_name, pos, exifData);
-    }
-    /* Read White Balance Setting */
-    if ( (pos=exifData.findKey(Exiv2::ExifKey("Exif.Photo.WhiteBalance")))
-         != exifData.end() && pos->size())
-    {
-      uf_strlcpy_to_utf8(uf->conf->whiteBalanceText, max_name, pos, exifData);
-    }
-#endif
-
-    char datetime[DT_DATETIME_LENGTH];
-    _find_datetime_taken(exifData, pos, datetime);
-    if(datetime[0] != '\0') dt_datetime_exif_to_img(img, datetime);
-
-    if(FIND_EXIF_TAG("Exif.Image.Artist"))
-    {
-      std::string str = pos->print(&exifData);
-      dt_metadata_set_import(img->id, "Xmp.dc.creator", str.c_str());
-    }
-    else if(FIND_EXIF_TAG("Exif.Canon.OwnerName"))
-    {
-      std::string str = pos->print(&exifData);
-      dt_metadata_set_import(img->id, "Xmp.dc.creator", str.c_str());
-    }
-
-    // FIXME: Should the UserComment go into the description? Or do we need an extra field for this?
-    if(FIND_EXIF_TAG("Exif.Photo.UserComment"))
-    {
-      std::string str = pos->print(&exifData);
-      Exiv2::CommentValue value(str);
-      std::string str2 = value.comment();
-      if(str2 != "binary comment")
-        dt_metadata_set_import(img->id, "Xmp.dc.description", str2.c_str());
-    }
-    else if(FIND_EXIF_TAG("Exif.Image.ImageDescription"))
-    {
-      std::string str = pos->print(&exifData);
-      dt_metadata_set_import(img->id, "Xmp.dc.description", str.c_str());
-    }
-
-    if(FIND_EXIF_TAG("Exif.Image.Copyright"))
-    {
-      std::string str = pos->print(&exifData);
-      dt_metadata_set_import(img->id, "Xmp.dc.rights", str.c_str());
-    }
-
+    _exif_decode_focus_distance(img, exifData);
+    _exif_decode_location(img, exifData);
+    _exif_decode_lens_name(img, exifData);
+    _exif_normalize_lens_name(img, exifData);
+    if(std::array<char, DT_DATETIME_LENGTH> datetime = {};
+       !_find_datetime_taken(exifData, pos, datetime.data()))
+      *partial = true;
+    else if(datetime[0] != '\0')
+      dt_datetime_exif_to_img(img, datetime.data());
+    if(persist_tags && !_exif_apply_exif_metadata(img, exifData, partial)) return false;
     if(FIND_EXIF_TAG("Exif.Image.Rating"))
     {
-      const int stars = pos->toLong();
-      dt_image_set_xmp_rating(img, stars);
+      long rating = 0;
+      if(!_exif_to_long(pos, &rating) || rating < -1 || rating > 5)
+        *partial = true;
+      else
+        dt_image_set_xmp_rating(img, rating);
     }
     else if(FIND_EXIF_TAG("Exif.Image.RatingPercent"))
     {
-      const int stars = pos->toLong() * 5. / 100;
-      dt_image_set_xmp_rating(img, stars);
+      long rating = 0;
+      if(!_exif_to_long(pos, &rating) || rating < 0 || rating > 100)
+        *partial = true;
+      else
+        dt_image_set_xmp_rating(img, rating * 5. / 100);
     }
     else
       dt_image_set_xmp_rating(img, -2);
-
-    // read embedded color matrix as used in DNGs
-    {
-      float colmatrix[3][12];
-      colmatrix[0][0] = colmatrix[1][0] = colmatrix[2][0] = NAN;
-      dt_dng_illuminant_t illu[3] = { DT_LS_Unknown, DT_LS_Unknown, DT_LS_Unknown };
-      img->d65_color_matrix[0] = NAN; // make sure for later testing
-
-      // fallback later via `find_temperature_from_raw_coeffs` if there is no valid illuminant
-
-      // The correction matrices are taken from
-      // http://www.brucelindbloom.com - chromatic Adaption.
-      // using Bradford method: found Illuminant -> D65
-      const float correctmat[13][9] = {
-        { 0.9555766, -0.0230393, 0.0631636, -0.0282895, 1.0099416, 0.0210077, 0.0122982, -0.0204830,
-          1.3299098 }, // D50
-        { 0.9726856, -0.0135482, 0.0361731, -0.0167463, 1.0049102, 0.0120598, 0.0070026, -0.0116372,
-          1.1869548 }, // D55
-        { 1.0206905, 0.0091588, -0.0228796, 0.0115005, 0.9984917, -0.0076762, -0.0043619, 0.0072053,
-          0.8853432 }, // D75
-        { 0.8446965, -0.1179225, 0.3948108, -0.1366303, 1.1041226, 0.1291718, 0.0798489, -0.1348999,
-          3.1924009 }, // Standard light A
-        { 0.9415037, -0.0321240, 0.0584672, -0.0428238, 1.0250998, 0.0203309, 0.0101511, -0.0161170,
-          1.2847354 }, // Standard light B
-        { 0.9904476, -0.0071683, -0.0116156, -0.0123712, 1.0155950, -0.0029282, -0.0035635, 0.0067697,
-          0.9181569 }, //  Standard light C
-        { 0.9212269, -0.0449128, 0.1211620, -0.0553723, 1.0277243, 0.0403563, 0.0235086, -0.0391019,
-          1.6390644 }, // Fluorescent (F2)
-        // The following are calculated using the same Bradford method,
-        // with xy coord from DNG SDK as reference -> XYZ -> D65
-        { 0.8663030, -0.0913083, 0.2771784, -0.1090504, 1.0746895, 0.0913841, 0.0550856, -0.0924636,
-          2.5119387 }, // ISO Studio Tungsten (3200K first converted to xy as DNG SDK does)
-        { 1.0096114, 0.0061501, 0.0068113, 0.0102539, 0.9888663, 0.0015575, 0.0023119, -0.0044823,
-          1.0525915 }, // DaylightFluorescent (F1)
-        { 0.9554129, -0.0231280, 0.0637169, -0.0283629, 1.0099053, 0.0211824, 0.0124188, -0.0206922,
-          1.3330592 }, // DayWhiteFluorescent (F8)
-        { 0.9147843, -0.0492842, 0.1202810, -0.0622085, 1.034984, 0.0404480, 0.0228014, -0.0375807,
-          1.6259804 }, // CoolWhiteFluorescent (F9)
-        { 0.8805388, -0.0774890, 0.2293784, -0.0932136, 1.0589267, 0.0757827, 0.0453660, -0.0760107,
-          2.2417979 }, // WhiteFluorescent (F3)
-        { 0.8488316, -0.1107439, 0.3471428, -0.1310107, 1.0986874, 0.1141548, 0.0694025, -0.1167541,
-          2.9109462 }  // WarmWhiteFluorescent (F4)
-      };
-
-      Exiv2::ExifData::const_iterator cm1_pos = exifData.findKey(Exiv2::ExifKey("Exif.Image.ColorMatrix1"));
-      if((cm1_pos != exifData.end()) && (cm1_pos->count() == 9))
-      {
-        for(int i = 0; i < 9; i++) colmatrix[0][i] = cm1_pos->toFloat(i);
-
-        if(FIND_EXIF_TAG("Exif.Image.CalibrationIlluminant1")) illu[0] = (dt_dng_illuminant_t) pos->toLong();
-      }
-
-      Exiv2::ExifData::const_iterator cm2_pos = exifData.findKey(Exiv2::ExifKey("Exif.Image.ColorMatrix2"));
-      if((cm2_pos != exifData.end()) && (cm2_pos->count() == 9))
-      {
-        for(int i = 0; i < 9; i++) colmatrix[1][i] = cm2_pos->toFloat(i);
-
-        if(FIND_EXIF_TAG("Exif.Image.CalibrationIlluminant2")) illu[1] = (dt_dng_illuminant_t) pos->toLong();
-      }
-
-      // So far the Exif.Image.CalibrationIlluminant3 tag and friends have not been implemented and there are no images to test
-#if EXIV2_TEST_VERSION(0,27,4)
-      Exiv2::ExifData::const_iterator cm3_pos = exifData.findKey(Exiv2::ExifKey("Exif.Image.ColorMatrix3"));
-      if((cm3_pos != exifData.end()) && (cm3_pos->count() == 9))
-      {
-        for(int i = 0; i < 9; i++) colmatrix[2][i] = cm3_pos->toFloat(i);
-
-        if(FIND_EXIF_TAG("Exif.Image.CalibrationIlluminant3")) illu[2] = (dt_dng_illuminant_t) pos->toLong();
-      }
-#endif
-
-      int sel_illu = -1;
-      int sel_temp = 0;
-      const int D65temp = _illu_to_temp(DT_LS_D65);
-      int delta_min = D65temp;
-      // Which illuminant will be used for the color matrix?
-      // We first try to find D65 or take the next higher
-      for(int i = 0; i < 3; ++i)
-      {
-        int temp_cur = _illu_to_temp(illu[i]);
-        int delta_cur = abs(temp_cur - D65temp);
-        if((temp_cur > sel_temp) && (delta_cur <= delta_min))
-        {
-          sel_illu = i;
-          sel_temp = temp_cur;
-          delta_min = delta_cur;
-        }
-      }
-      // If there is none defined we'll use the first valid color matrix
-      // without correction, i.e. assume D65 (keep dt < 3.8 behaviour)
-      // TODO: "Other" illuminant is currently unsupported
-      if(sel_illu == -1)
-        for(int i = 0; i < 3; ++i)
-        {
-          if((illu[i] == DT_LS_Unknown) && !isnan(colmatrix[i][0]))
-          {
-            sel_illu = i;
-            sel_temp = D65temp;
-            break;
-          }
-        }
-
-      if((sel_illu > -1) && (dt_get_debug_flags() & DT_DEBUG_IMAGEIO))
-      {
-        fprintf(stderr, "[exif] `%s` dng illuminant %i (%iK) selected from ", img->filename, illu[sel_illu], sel_temp);
-        for(int i = 0; i < 3; i++)
-          fprintf(stderr," -- [%i] %i (%iK)", i + 1, illu[i], _illu_to_temp(illu[i]));
-        fprintf(stderr, "\n");
-      }
-
-      // Take the found CalibrationIlluminant / ColorMatrix pair.
-      // D65: just copy. Otherwise multiply by the specific correction matrix.
-      if(sel_illu > -1)
-      {
-       // If no supported Illuminant is found/assumed it's better NOT to use any matrix.
-       // The colorin module will write an error message and use a fallback matrix
-       // instead of showing wrong colors.
-        switch(illu[sel_illu])
-        {
-          case DT_LS_D50:
-            mat3mul(img->d65_color_matrix, correctmat[0], colmatrix[sel_illu]);
-            break;
-          case DT_LS_D55:
-          case DT_LS_Daylight:
-          case DT_LS_FineWeather:
-          case DT_LS_Flash:
-            mat3mul(img->d65_color_matrix, correctmat[1], colmatrix[sel_illu]);
-            break;
-          case DT_LS_D75:
-          case DT_LS_Shade:
-            mat3mul(img->d65_color_matrix, correctmat[2], colmatrix[sel_illu]);
-            break;
-          case DT_LS_Tungsten:
-          case DT_LS_StandardLightA:
-            mat3mul(img->d65_color_matrix, correctmat[3], colmatrix[sel_illu]);
-            break;
-          case DT_LS_StandardLightB:
-            mat3mul(img->d65_color_matrix, correctmat[4], colmatrix[sel_illu]);
-            break;
-          case DT_LS_StandardLightC:
-            mat3mul(img->d65_color_matrix, correctmat[5], colmatrix[sel_illu]);
-            break;
-          case DT_LS_Fluorescent:
-            mat3mul(img->d65_color_matrix, correctmat[6], colmatrix[sel_illu]);
-            break;
-          case DT_LS_ISOStudioTungsten:
-            mat3mul(img->d65_color_matrix, correctmat[7], colmatrix[sel_illu]);
-            break;
-          case DT_LS_DaylightFluorescent:
-            mat3mul(img->d65_color_matrix, correctmat[8], colmatrix[sel_illu]);
-            break;
-          case DT_LS_DayWhiteFluorescent:
-            mat3mul(img->d65_color_matrix, correctmat[9], colmatrix[sel_illu]);
-            break;
-          case DT_LS_CoolWhiteFluorescent:
-            mat3mul(img->d65_color_matrix, correctmat[10], colmatrix[sel_illu]);
-            break;
-          case DT_LS_WhiteFluorescent:
-            mat3mul(img->d65_color_matrix, correctmat[11], colmatrix[sel_illu]);
-            break;
-          case DT_LS_WarmWhiteFluorescent:
-            mat3mul(img->d65_color_matrix, correctmat[12], colmatrix[sel_illu]);
-            break;
-          case DT_LS_D65:
-          case DT_LS_CloudyWeather:
-          case DT_LS_Unknown: // exceptional fallback to keep dt < 3.8 behaviour
-            for(int i = 0; i < 9; i++) img->d65_color_matrix[i] = colmatrix[sel_illu][i];
-            break;
-
-          default:
-            fprintf(stderr,"[exif] did not find a proper dng correction matrix for illuminant %i\n", illu[sel_illu]);
-            break;
-        }
-      }
-    }
-
-    // Finding out about DNG hdr and monochrome images can be done here while reading exif data.
-    if(FIND_EXIF_TAG("Exif.Image.DNGVersion"))
-    {
-      int format = 1;
-      int bps = 0;
-      int spp = 0;
-      int phi = 0;
-
-      if(FIND_EXIF_TAG("Exif.SubImage1.SampleFormat"))
-        format = pos->toLong();
-      else if(FIND_EXIF_TAG("Exif.Image.SampleFormat"))
-        format = pos->toLong();
-
-      if(FIND_EXIF_TAG("Exif.SubImage1.BitsPerSample"))
-        bps = pos->toLong();
-      else if(FIND_EXIF_TAG("Exif.Image.BitsPerSample"))
-        bps = pos->toLong();
-
-      if(FIND_EXIF_TAG("Exif.SubImage1.SamplesPerPixel"))
-        spp = pos->toLong();
-      else if(FIND_EXIF_TAG("Exif.Image.SamplesPerPixel"))
-        spp = pos->toLong();
-
-      if(FIND_EXIF_TAG("Exif.SubImage1.PhotometricInterpretation"))
-        phi = pos->toLong();
-      else if(FIND_EXIF_TAG("Exif.Image.PhotometricInterpretation"))
-        phi = pos->toLong();
-
-      if((format == 3) && (bps >= 16) && ((phi == 32803) || (phi == 34892))) 
-        img->flags |= DT_IMAGE_HDR;
-
-      if((spp == 1) && (phi == 34892)) 
-        img->flags |= DT_IMAGE_MONOCHROME;
-    }
-    
-    // some files have the display colorspace explicitly set. try to read that. The Exif.Photo.ColorSpace
-    // tag only exists in display-referred integer images, so gate on "not raw and not HDR-float"
-    // rather than on DT_IMAGE_LDR: at this point the dynamic range of an ambiguous container (TIFF,
-    // AVIF, HEIF) is not yet known (the extension can't tell, the buffer is not decoded), so the LDR
-    // flag may legitimately be unset here even for an integer image.
-    // tag absent -> leave colorspace as none
-    // 0x01   -> sRGB
-    // 0x02   -> AdobeRGB
-    // 0xffff -> Uncalibrated
-    //          + Exif.Iop.InteroperabilityIndex of 'R03' -> AdobeRGB
-    //          + Exif.Iop.InteroperabilityIndex of 'R98' -> sRGB
-    if(!dt_image_is_raw(img) && FIND_EXIF_TAG("Exif.Photo.ColorSpace"))
-    {
-      int colorspace = pos->toLong();
-      if(colorspace == 0x01)
-        img->colorspace = DT_IMAGE_COLORSPACE_SRGB;
-      else if(colorspace == 0x02)
-        img->colorspace = DT_IMAGE_COLORSPACE_ADOBE_RGB;
-      else if(colorspace == 0xffff)
-      {
-        if(FIND_EXIF_TAG("Exif.Iop.InteroperabilityIndex"))
-        {
-          std::string interop_index = pos->toString();
-          if(interop_index == "R03")
-            img->colorspace = DT_IMAGE_COLORSPACE_ADOBE_RGB;
-          else if(interop_index == "R98")
-            img->colorspace = DT_IMAGE_COLORSPACE_SRGB;
-        }
-      }
-    }
-
-    // Improve lens detection for Sony SAL lenses.
-    if(FIND_EXIF_TAG("Exif.Sony2.LensID") && pos->toLong() != 65535 && pos->print().find('|') == std::string::npos)
-    {
-      dt_strlcpy_to_utf8(img->exif_lens, sizeof(img->exif_lens), pos, exifData);
-    }
-    // Workaround for an issue on newer Sony NEX cams.
-    // The default EXIF field is not used by Sony to store lens data
-    // http://dev.exiv2.org/issues/883
-    // http://darktable.org/redmine/issues/8813
-    // FIXME: This is still a workaround
-    else if((!strncmp(img->exif_model, "NEX", 3)) || (!strncmp(img->exif_model, "ILCE", 4)))
-    {
-      snprintf(img->exif_lens, sizeof(img->exif_lens), "(unknown)");
-      if(FIND_EXIF_TAG("Exif.Photo.LensModel"))
-      {
-        std::string str = pos->print(&exifData);
-        snprintf(img->exif_lens, sizeof(img->exif_lens), "%s", str.c_str());
-      }
-    };
-
+    _exif_decode_color_matrix(img, exifData);
+    _exif_decode_dng_classification(img, exifData);
+    _exif_decode_colorspace(img, exifData);
+    _exif_decode_sony_lens_name(img, exifData);
     img->exif_inited = TRUE;
     return true;
   }
-  catch(const std::exception &e)
+  catch(const std::exception &e) // NOSONAR
   {
     std::string s(e.what());
     std::cerr << "[exiv2 _exif_decode_exif_data] " << img->filename << ": " << s << std::endl;
@@ -1912,7 +2165,8 @@ int dt_exif_read_from_blob(dt_image_t *img, uint8_t *blob, const int size)
   {
     Exiv2::ExifData exifData;
     Exiv2::ExifParser::decode(exifData, blob, size);
-    bool res = _exif_decode_exif_data(img, exifData);
+    bool partial = false;
+    bool res = _exif_decode_exif_data(img, exifData, true, &partial);
     return res ? 0 : 1;
   }
   catch(const std::exception &e)
@@ -1980,7 +2234,7 @@ int dt_exif_get_thumbnail(const char *path, uint8_t **buffer, size_t *size, char
 
     return 0;
   }
-  catch(const std::exception &e)
+  catch(const std::exception &e) // NOSONAR
   {
     std::string s(e.what());
     std::cerr << "[exiv2 dt_exif_get_thumbnail] " << path << ": " << s << std::endl;
@@ -1991,67 +2245,182 @@ int dt_exif_get_thumbnail(const char *path, uint8_t **buffer, size_t *size, char
 /** read the metadata of an image.
  * XMP data trumps IPTC data trumps EXIF data
  */
-int dt_exif_read(dt_image_t *img, const char *path)
+static void _exif_seed_fallbacks(dt_image_t *img, const char *path)
 {
-  // Seed the provisional image-type flag (LDR / HDR / RAW, from the file extension) before we probe
-  // dt_image_is_ldr() / dt_image_is_hdr() while decoding the EXIF below. This function can run on a
-  // freshly dt_image_init()'d object (import preview, path-pattern expansion) long before the buffer
-  // is decoded and dt_image_buffer_resolve_flags() sets the authoritative datatype-derived flags.
-  // Only seed when nothing is classified yet, so a DB-loaded / already-resolved image is untouched.
-  if(!(img->flags & (DT_IMAGE_LDR | DT_IMAGE_HDR | DT_IMAGE_RAW | DT_IMAGE_S_RAW)))
-  {
-    const char *ext = g_strrstr(path, ".");
-    if(ext) img->flags |= dt_image_flags_from_extension(ext + 1);
-  }
+  if(const char *ext = g_strrstr(path, ".");
+     !(img->flags & (DT_IMAGE_LDR | DT_IMAGE_HDR | DT_IMAGE_RAW | DT_IMAGE_S_RAW)) && !IS_NULL_PTR(ext))
+    img->flags |= dt_image_flags_from_extension(ext + 1);
 
-  // at least set datetime taken to something useful in case there is no exif data in this file (pfm, png,
-  // ...)
   struct stat statbuf;
+  if(!stat(path, &statbuf)) dt_datetime_unix_to_img(img, &statbuf.st_mtime);
+}
 
-  if(!stat(path, &statbuf))
-  {
-    dt_datetime_unix_to_img(img, &statbuf.st_mtime);
-  }
+dt_exif_read_result_t dt_exif_read(dt_image_t *img, const char *path)
+{
+  _exif_seed_fallbacks(img, path);
+  gboolean success = TRUE;
+  bool partial = false;
 
   try
   {
     std::unique_ptr<Exiv2::Image> image(Exiv2::ImageFactory::open(WIDEN(path)));
-    if(!image.get()) return 1;
+    if(!image.get())
+    {
+      return DT_EXIF_READ_ERROR;
+    }
     image->readMetadata();
-    bool res = true;
 
-    // EXIF metadata
     Exiv2::ExifData &exifData = image->exifData();
     if(!exifData.empty())
     {
-      res = _exif_decode_exif_data(img, exifData);
+      success = _exif_decode_exif_data(img, exifData, false, &partial);
     }
     else
       img->exif_inited = 1;
 
-    // IPTC metadata.
     Exiv2::IptcData &iptcData = image->iptcData();
-    if(!iptcData.empty()) res = _exif_decode_iptc_data(img, iptcData) && res;
+    if(success && !iptcData.empty()) success = _exif_decode_iptc_datetime(img, iptcData, &partial);
 
-    // XMP metadata
     Exiv2::XmpData &xmpData = image->xmpData();
-    if(!xmpData.empty())
-      res = dt_exif_decode_xmp_data(img, xmpData, -1, true) && res;
+    if(success && !xmpData.empty()) success = _exif_decode_xmp_scratch(img, xmpData, false, &partial);
 
-    // Initialize size - don't wait for full raw to be loaded to get this
-    // information. If use_embedded_thumbnail is set, it will take a
-    // change in development history to have this information
-    img->height = image->pixelHeight();
-    img->width = image->pixelWidth();
+    if(success)
+    {
+      img->height = image->pixelHeight();
+      img->width = image->pixelWidth();
+    }
+  }
+  catch(const std::exception &e) // NOSONAR
+  {
+    std::string s(e.what());
+    std::cerr << "[exiv2 dt_exif_read] " << path << ": " << s << std::endl;
+    success = FALSE;
+  }
 
-    return res ? 0 : 1;
+  if(!success || partial) return DT_EXIF_READ_PARTIAL;
+  return DT_EXIF_READ_OK;
+}
+
+/** Decode file-backed image fields before opening the metadata transaction. */
+static bool _exif_stage_persisted_image(dt_image_t *img, Exiv2::Image &image, gboolean *usercrop_tag,
+                                        bool *partial)
+{
+  if(Exiv2::ExifData &exifData = image.exifData(); exifData.empty())
+    img->exif_inited = 1;
+  else
+  {
+    if(!_exif_decode_exif_data(img, exifData, false, partial)) return false;
+    *usercrop_tag = img->usercrop_status == DT_IMAGE_USERCROP_VALID;
+  }
+  img->height = image.pixelHeight();
+  img->width = image.pixelWidth();
+  return true;
+}
+
+/** Persist staged EXIF, IPTC, and XMP metadata inside the caller-owned transaction. */
+static bool _exif_persist_staged_metadata(dt_image_t *img, Exiv2::Image &image,
+                                           const gboolean usercrop_tag, gboolean *tags_changed,
+                                           bool *partial)
+{
+  Exiv2::ExifData &exifData = image.exifData();
+  Exiv2::IptcData &iptcData = image.iptcData();
+  Exiv2::XmpData &xmpData = image.xmpData();
+  if(usercrop_tag)
+  {
+    guint tagid = 0;
+    if(!dt_tag_new("darktable|mode|exif-crop", &tagid)) return false;
+    if(!dt_is_tag_attached(tagid, img->id))
+    {
+      if(!dt_tag_attach(tagid, img->id, FALSE, FALSE)) return false;
+      *tags_changed = TRUE;
+    }
+  }
+  if(!_exif_apply_exif_metadata(img, exifData, partial)) return false;
+  if(!iptcData.empty())
+  {
+    bool iptc_metadata_changed = false;
+    if(!_exif_decode_iptc_data(img, iptcData, &iptc_metadata_changed, partial)) return false;
+    *tags_changed = *tags_changed || iptc_metadata_changed;
+  }
+  if(!xmpData.empty())
+  {
+    bool xmp_tags_changed = false;
+    if(!dt_exif_apply_xmp_persistence(img, xmpData, -1, false, &xmp_tags_changed, partial)) return false;
+    *tags_changed = *tags_changed || xmp_tags_changed;
+  }
+  return true;
+}
+
+dt_exif_read_result_t dt_exif_read_persisted_with_tags(dt_image_t *img, const char *path,
+                                                        gboolean *tags_changed)
+{
+  if(tags_changed) *tags_changed = FALSE;
+  if(dt_database_transaction_is_owned_by_current_thread()) return DT_EXIF_READ_PERSIST_ERROR;
+  if(img->id <= UNKNOWN_IMAGE) return DT_EXIF_READ_PERSIST_ERROR;
+  dt_image_t persisted_image;
+  dt_image_init(&persisted_image);
+  if(!dt_image_repository_load(img->id, &persisted_image)) return DT_EXIF_READ_PERSIST_ERROR;
+  const uint32_t rating_flags = persisted_image.flags & (DT_VIEW_RATINGS_MASK | DT_IMAGE_REJECTED);
+  _exif_seed_fallbacks(img, path);
+  gboolean transaction_started = FALSE;
+  gboolean committed_tags_changed = FALSE;
+  gboolean usercrop_tag = FALSE;
+  gboolean success = TRUE;
+  bool partial = false;
+  gboolean persistence_started = FALSE;
+  gboolean image_staged = FALSE;
+  dt_image_t staged_image;
+
+  try
+  {
+    std::unique_ptr<Exiv2::Image> image(Exiv2::ImageFactory::open(WIDEN(path)));
+    success = !IS_NULL_PTR(image.get());
+    if(!success) goto cleanup;
+    image->readMetadata();
+    success = _exif_stage_persisted_image(img, *image, &usercrop_tag, &partial);
+    if(!success) goto cleanup;
+    staged_image = *img;
+    staged_image.dng_gain_maps = nullptr;
+    image_staged = TRUE;
+
+    persistence_started = TRUE;
+    transaction_started = dt_database_start_transaction();
+    success = transaction_started;
+    if(!success) goto cleanup;
+    success = _exif_persist_staged_metadata(img, *image, usercrop_tag, &committed_tags_changed, &partial);
+    if(!success) goto cleanup;
+    success = dt_database_release_transaction();
+    if(success) transaction_started = FALSE;
   }
   catch(const std::exception &e)
   {
     std::string s(e.what());
-    std::cerr << "[exiv2 dt_exif_read] " << path << ": " << s << std::endl;
-    return 1;
+    std::cerr << "[exiv2 dt_exif_read_persisted] " << path << ": " << s << std::endl;
+    success = FALSE;
   }
+
+cleanup:
+  if(!success)
+  {
+    if(transaction_started && dt_database_transaction_is_owned_by_current_thread())
+      dt_database_rollback_transaction();
+    if(image_staged && persistence_started)
+    {
+      GList *gain_maps = img->dng_gain_maps;
+      *img = staged_image;
+      img->dng_gain_maps = gain_maps;
+    }
+    img->flags = (img->flags & ~(DT_VIEW_RATINGS_MASK | DT_IMAGE_REJECTED)) | rating_flags;
+    return persistence_started ? DT_EXIF_READ_PERSIST_ERROR : DT_EXIF_READ_ERROR;
+  }
+
+  if(tags_changed) *tags_changed = committed_tags_changed;
+  return partial ? DT_EXIF_READ_PARTIAL : DT_EXIF_READ_OK;
+}
+
+dt_exif_read_result_t dt_exif_read_persisted(dt_image_t *img, const char *path)
+{
+  return dt_exif_read_persisted_with_tags(img, path, nullptr);
 }
 
 int dt_exif_write_blob(uint8_t *blob, uint32_t size, const char *path, const int compressed)
@@ -2103,7 +2472,7 @@ int dt_exif_write_blob(uint8_t *blob, uint32_t size, const char *path, const int
     imgExifData.sortByTag();
     image->writeMetadata();
   }
-  catch(const std::exception &e)
+  catch(const std::exception &e) // NOSONAR
   {
     std::string s(e.what());
     std::cerr << "[exiv2 dt_exif_write_blob] " << path << ": " << s << std::endl;
@@ -2207,17 +2576,22 @@ char *dt_exif_xmp_encode_internal(const unsigned char *input, const int len, int
 unsigned char *dt_exif_xmp_decode(const char *input, const int len, int *output_len)
 {
   unsigned char *output = NULL;
+  const size_t max_output_size = 64 * 1024 * 1024;
+
+  if(IS_NULL_PTR(input) || len < 0) return NULL;
 
   // check if data is in compressed format
-  if(!strncmp(input, "gz", 2))
+  if(len >= 4 && !strncmp(input, "gz", 2))
   {
     // we have compressed data in base64 representation with leading "gz"
 
     // get stored compression factor so we know the needed buffer size for uncompress
-    const float factor = 10 * (input[2] - '0') + (input[3] - '0');
+    if(!g_ascii_isdigit(input[2]) || !g_ascii_isdigit(input[3])) return NULL;
+    const size_t factor = 10 * (input[2] - '0') + (input[3] - '0');
+    if((size_t)(len - 4) > max_output_size) return NULL;
 
     // get a rw copy of input buffer omitting leading "gz" and compression factor
-    unsigned char *buffer = (unsigned char *)strdup(input + 4);
+    unsigned char *buffer = (unsigned char *)g_strndup(input + 4, len - 4);
     if(IS_NULL_PTR(buffer)) return NULL;
 
     // decode from base64 to compressed binary
@@ -2225,8 +2599,16 @@ unsigned char *dt_exif_xmp_decode(const char *input, const int len, int *output_
     g_base64_decode_inplace((char *)buffer, &compressed_size);
 
     // do the actual uncompress step
+    if(compressed_size == 0 || compressed_size > max_output_size) {
+      dt_free(buffer);
+      return NULL;
+    }
+
     int result = Z_BUF_ERROR;
-    uLongf bufLen = factor * compressed_size;
+    const size_t estimated_size = factor > max_output_size / compressed_size
+                                    ? max_output_size
+                                    : factor * compressed_size;
+    size_t bufLen = MIN(max_output_size, MAX(compressed_size, estimated_size));
     uLongf destLen;
 
     // we know the actual compression factor but if that fails we re-try with
@@ -2238,13 +2620,18 @@ unsigned char *dt_exif_xmp_decode(const char *input, const int len, int *output_
         dt_free(output);
       }
       output = (unsigned char *)malloc(bufLen);
-      if(IS_NULL_PTR(output)) break;
+      if(IS_NULL_PTR(output))
+      {
+        dt_free(buffer);
+        return nullptr;
+      }
 
       destLen = bufLen;
 
       result = uncompress(output, &destLen, buffer, compressed_size);
 
-      bufLen *= 2;
+      if(bufLen == max_output_size) break;
+      bufLen = MIN(max_output_size, bufLen * 2);
 
     } while(result == Z_BUF_ERROR);
 
@@ -2260,7 +2647,7 @@ unsigned char *dt_exif_xmp_decode(const char *input, const int len, int *output_
       return NULL;
     }
 
-    if(output_len) *output_len = destLen;
+    if(output_len) *output_len = (int)destLen;
   }
   else
   {
@@ -2272,9 +2659,12 @@ unsigned char *dt_exif_xmp_decode(const char *input, const int len, int *output_
 #define TO_BINARY(a) (a > 57 ? a - 97 + 10 : a - 48)
 
     // make sure that we don't find any unexpected characters indicating corrupted data
-    if(strspn(input, "0123456789abcdef") != strlen(input)) return NULL;
+    if(len % 2) return NULL;
+    if((size_t)len / 2 > max_output_size) return NULL;
+    for(int i = 0; i < len; i++)
+      if(!g_ascii_isxdigit(input[i]) || g_ascii_isupper(input[i])) return NULL;
 
-    output = (unsigned char *)malloc(len / 2);
+    output = (unsigned char *)malloc(MAX(len / 2, 1));
     if(IS_NULL_PTR(output)) return NULL;
 
     if(output_len) *output_len = len / 2;
@@ -2291,40 +2681,39 @@ unsigned char *dt_exif_xmp_decode(const char *input, const int len, int *output_
   return output;
 }
 
-static void _exif_import_tags(dt_image_t *img, Exiv2::XmpData::iterator &pos)
+static gboolean _exif_import_tags(const dt_image_t *img, const Exiv2::XmpData::iterator &pos,
+                                  bool *tags_changed)
 {
-  // tags in array
   const int cnt = pos->count();
 
   for(int i = 0; i < cnt; i++)
   {
-    char tagbuf[1024];
-    std::string pos_str = pos->toString(i);
-    g_strlcpy(tagbuf, pos_str.c_str(), sizeof(tagbuf));
-    int tagid = -1;
-    char *tag = tagbuf;
-    while(tag)
+    std::string pos_str;
+    if(!_exif_xmp_to_string(pos, i, &pos_str))
+      continue;
+    char *next_tag = pos_str.data();
+    while(!IS_NULL_PTR(next_tag))
     {
-      char *next_tag = strstr(tag, ",");
+      char *tag = next_tag;
+      next_tag = strstr(tag, ",");
       if(next_tag) *(next_tag++) = 0;
-      // check if tag is available, get its id:
-      for(int k = 0; k < 2; k++)
+      g_strstrip(tag);
+      if(*tag == '\0') continue;
+      guint tagid = dt_tag_repository_find_by_name(tag);
+      if(tagid == 0)
       {
-        const guint found = dt_tag_repository_find_by_name(tag);
-        if(found > 0) tagid = (int)found;
-
-        if(tagid > 0) break;
-
         fprintf(stderr, "[xmp_import] creating tag: %s\n", tag);
-        // create this tag (increment id, leave icon empty), retry.
-        dt_tag_repository_insert(tag);
+        tagid = dt_tag_repository_insert(tag);
+        *tags_changed = *tags_changed || tagid != 0;
       }
-      // associate image and tag.
-      dt_tag_repository_attach(tagid, img->id);
-
-      tag = next_tag;
+      if(tagid == 0) return FALSE;
+      const gboolean attached = dt_tag_repository_is_attached(tagid, img->id);
+      if(!attached && !dt_tag_repository_attach(tagid, img->id))
+        return FALSE;
+      *tags_changed = *tags_changed || !attached;
     }
   }
+  return TRUE;
 }
 
 dt_colorspaces_color_profile_type_t dt_exif_get_color_space(const uint8_t *data, size_t size)
@@ -2364,7 +2753,7 @@ dt_colorspaces_color_profile_type_t dt_exif_get_color_space(const uint8_t *data,
 
     return DT_COLORSPACE_DISPLAY; // nothing embedded
   }
-  catch(const std::exception &e)
+  catch(const std::exception &e) // NOSONAR
   {
     std::string s(e.what());
     std::cerr << "[exiv2 dt_exif_get_color_space] " << s << std::endl;
@@ -2383,7 +2772,7 @@ void dt_exif_get_datetime_taken(const uint8_t *data, size_t size, char *datetime
 
     _find_datetime_taken(exifData, pos, datetime_taken);
   }
-  catch(const std::exception &e)
+  catch(const std::exception &e) // NOSONAR
   {
     std::string s(e.what());
     std::cerr << "[exiv2 dt_exif_get_datetime_taken] " << s << std::endl;
@@ -2424,7 +2813,7 @@ void dt_exif_init()
   {
     Exiv2::XmpProperties::propertyList("lr");
   }
-  catch(const std::exception &e)
+  catch(const std::exception &) // NOSONAR
   {
     // if lightroom is not known register it
     Exiv2::XmpProperties::registerNs("http://ns.adobe.com/lightroom/1.0/", "lr");
@@ -2433,7 +2822,7 @@ void dt_exif_init()
   {
     Exiv2::XmpProperties::propertyList("exifEX");
   }
-  catch(const std::exception &e)
+  catch(const std::exception &) // NOSONAR
   {
     // if exifEX is not known register it
     Exiv2::XmpProperties::registerNs("http://cipa.jp/exif/1.0/", "exifEX");

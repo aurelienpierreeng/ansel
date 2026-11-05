@@ -35,6 +35,28 @@ initialiser exists — glibc hides `PTHREAD_RECURSIVE_MUTEX_INITIALIZER_NP` behi
 environment. Both are static so they are valid from program start; that property is worth
 more than recursion here.
 
+### SQLite connection and repository statement caches
+
+`dt_database_start_transaction()` acquires the database rwlock, then the global SQLite
+connection mutex, and retains both until its outermost release or rollback. Cached statements
+in `history_repository.c`, `image_repository.c`, and `style_repository.c` use
+`dt_database_lock()` before preparing, binding, stepping, resetting, finalizing, or invoking
+a row callback. They no longer take repository-local statement mutexes, so an ordinary
+repository call and a transaction use the same connection-first order.
+
+The SQLite connection mutex is recursive, but callbacks stepped from cached repository
+statements receive borrowed SQLite row data that remains valid only until the callback returns.
+Those callbacks must not re-enter database or transaction APIs while that data is live: a nested
+query can reset, step, or finalize the statement from which the callback borrowed it. The image
+repository's explicitly uncached collection and path walks instead release their connection gate
+before callbacks to permit their documented write-back reentry. Repository code does not acquire
+an image-cache lock; callers must not hold one across a database callback.
+
+Nested database transactions create SQLite savepoints. Releasing a nested transaction releases
+its savepoint; rolling it back rolls back and releases only that savepoint. A transaction batch
+nested in an existing transaction creates its own savepoint as well. This keeps a failed nested
+operation from rolling back writes that belong to its caller.
+
 ## Where per-image serialization actually lives
 
 **The image cache entry lock.** `dt_image_cache_get(imgid, 'w')` guards *this image's

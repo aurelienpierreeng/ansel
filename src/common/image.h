@@ -598,6 +598,13 @@ int32_t dt_image_get_id(int32_t film_id, const gchar *filename);
 dt_image_flags_t dt_image_flags_from_extension(const char *extension);
 
 int32_t dt_image_import(int32_t film_id, const char *filename, gboolean raise_signals);
+/** Import an image and report whether the completed import committed tag attachments.
+ *
+ * @p tags_changed is optional. When @p raise_signals is TRUE, this function emits one tag-change
+ * notification after all image-cache locks and metadata transactions have been released.
+ */
+int32_t dt_image_import_with_tags(int32_t film_id, const char *filename, gboolean raise_signals,
+                                  gboolean *tags_changed);
 /** imports a new image from raw/etc file and adds it to the data base and image cache. Use from lua thread.*/
 int32_t dt_image_import_lua(int32_t film_id, const char *filename);
 /** removes the given image from the database. */
@@ -802,6 +809,13 @@ char *dt_image_camera_missing_sample_message(const struct dt_image_t *img, gbool
 void dt_image_check_camera_missing_sample(const struct dt_image_t *img);
 /** get dirname from imgid */
 void dt_get_dirname_from_imgid(gchar *dir, const int32_t imgid);
+/** Import sidecars for the primary image and its versions without sending notifications.
+ *
+ * @p tags_changed is optional and reports only successfully committed tag changes. The caller owns
+ * the resulting notification so a batch can emit one after importing every image.
+ */
+int dt_image_read_duplicates_with_tags(uint32_t id, const char *filename, gboolean clear_selection,
+                                       gboolean *tags_changed);
 // Search for duplicate's sidecar files and import them if found and not in DB yet
 int dt_image_read_duplicates(const uint32_t id, const char *filename, const gboolean clear_selection);
 
