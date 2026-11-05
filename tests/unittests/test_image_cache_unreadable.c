@@ -49,11 +49,28 @@ static gchar *_rcfile = NULL;
  * its own and no other connection can lock it; and one successful read holds a read
  * transaction that the lock cannot pass, so each test needs a connection that has read
  * nothing yet. */
-static int _setup(void **state __attribute__((unused)))
+static int _setup(void **state)
 {
   _dir = g_dir_make_tmp("ansel_test_image_cache_unreadable_XXXXXX", NULL);
   if(IS_NULL_PTR(_dir)) return -1;
   _library = g_build_filename(_dir, "library.db", NULL);
+
+  testdb_paths_t *paths = g_new0(testdb_paths_t, 1);
+  paths->configdir = g_dir_make_tmp("ansel-test-config-XXXXXX", NULL);
+  paths->cachedir = g_dir_make_tmp("ansel-test-cache-XXXXXX", NULL);
+  if(IS_NULL_PTR(paths->configdir) || IS_NULL_PTR(paths->cachedir))
+  {
+    if(!IS_NULL_PTR(paths->configdir)) g_rmdir(paths->configdir);
+    if(!IS_NULL_PTR(paths->cachedir)) g_rmdir(paths->cachedir);
+    g_free(paths->configdir);
+    g_free(paths->cachedir);
+    g_free(paths);
+    return -1;
+  }
+  dt_loc_init_user_config_dir(paths->configdir);
+  dt_loc_init_user_cache_dir(paths->cachedir);
+  *state = paths;
+
   const dt_database_params_t params = { .alternative = _library,
                                         .library = NULL,
                                         .load_data = FALSE,
