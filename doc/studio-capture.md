@@ -340,7 +340,7 @@ whatever darkroom had last sampled, since automatic re-sampling requires
 `.picker` to be non-`NULL`.
 
 Applying a style (`libs/studio_style.c`) writes straight to the DB through a
-throwaway `dt_develop_t` (`common/styles.c`), so it never touches `d->dev`'s
+throwaway `dt_develop_t` (`develop/styles.c`), so it never touches `d->dev`'s
 in-memory history or pipeline. `_studio_history_changed_callback` — the
 `DT_SIGNAL_DEVELOP_HISTORY_CHANGE` handler raised right after — reloads
 `d->dev`'s history from DB and rebuilds its pipeline (`dt_dev_reload_history_items`

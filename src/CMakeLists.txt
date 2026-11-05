@@ -156,7 +156,7 @@ FILE(GLOB SOURCE_FILES
   "pixel/nlmeans_core.c"
   "common/pdf.c"
   "history/presets.c"
-  "common/styles.c"
+  "develop/styles.c"
   "common/selection.c"
   "gui/privacy_consent.c"
   "common/sentry.c"

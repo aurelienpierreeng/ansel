@@ -242,6 +242,35 @@ via `dt_masks_group_add_form`, so it was an orphan on top of being uncommitted).
 fixed; audit any *new* handler in `libs/shape_manager.c` / `blend_gui.c` that mutates forms without a
 trailing commit before trusting its undo/redo behavior.
 
+## Items merged below a history carry their forms into every snapshot above them
+
+*Found `5632537f6e`, 2026-10-21; measured with styles on `6898be8fb6`, 2026-10-21.*
+
+Since `dev->forms` is rebuilt from the last snapshot (above), a form is part of the edit only if
+the topmost snapshot holds it. A paste or a style in *prepend* mode (`DT_HISTORY_MERGE_PREPEND`,
+`develop/history_merge.c`) puts its items below the destination's: their own snapshots hold the
+pasted forms, but the destination's snapshots above them were taken before those forms existed.
+`dt_history_merge()` therefore snapshots the destination's forms before anything is copied --
+before the topological solve, which copies the contents of the instances it creates -- and
+`dt_masks_history_carry_new_forms()` adds every form gained since to each destination snapshot
+that lacks its id. A snapshot that already holds the id keeps its own version: in prepend the
+destination wins conflicts. Append needs nothing, the pasted items go on top.
+
+Measured headless through `dt_history_copy_and_paste_on_image()` on two Sony ARW files, pasting a
+retouch with 45 shapes (46 forms with its group) onto an image whose own retouch is a second
+instance: before, 46 forms after the paste and the pasted group unresolved -- the pasted item's
+snapshot held 92 forms, the destination's two above it 46; after, 92 forms and both groups resolved,
+45/45 members each, read back from the database. A destination with no snapshot of its own never
+loses anything, since the pasted items' snapshot is then the topmost: a blank image keeps its shapes
+in every mode, with or without the carry.
+
+A style goes through the same merge, so it lost its shapes the same way. Measured the same way with
+a style taken from the source image (46 stored shapes) and applied by `dt_styles_apply_to_image_merge()`
+onto the same destination: in prepend, 46 forms and the style's group unresolved before, 92 forms
+and both groups resolved after; append brings 92 forms either way. The carry costs rows, since each
+destination snapshot above now holds the merged forms too: the prepended image writes 276 rows to
+`main.masks_history` where the appended one writes 184.
+
 ## Same-thread rwlock reentrancy
 
 *Found `137fed9830`, 2026-07-10.*
@@ -269,6 +298,107 @@ image's history + masks_history every time). Known, not yet fixed — see
 `doc/masks_history_dedup.md` for the full design (developed on a dedicated branch, merged only
 when Ansel 1.0 is prepared, per explicit instruction not to migrate any user's live DB
 prematurely).
+
+## A style stores the shapes its items use
+
+*Found `74f2f56c5e`, 2026-10-21; which shapes come is chosen in the edit dialog since `9fbc8744c0`, 2026-10-21.*
+
+A style is a copy taken now and pasted later, so it carries what a paste carries: the shapes its
+items' masks are drawn with. `data.style_shapes` (data schema 10) holds them, one row per form in
+the layout of `main.masks_history`, keyed by the style alone: a style has one flat set of shapes,
+as `dev->forms` is one flat list.
+
+**Which.** Every shape its items' masks use: a drawn mask's as well as those of a module that
+draws its own (`IOP_FLAGS_INTERNAL_MASKS`: retouch, spots). Nothing is chosen when the style is
+created or edited: it stores them all, and which of them applying it brings is set apart, below.
+
+**From where.** An item taken from an image takes its group as the image's history holds it *at
+that item* (`dt_masks_history_forms_at()`, the accumulation rule of
+`dt_dev_pop_history_items_ext()`), not at `history_end`: the dialog lists the redo tail too, and an
+item above `history_end` can name a group the forms at `history_end` lack. Two items naming one form
+keep the later item's state. An item an edit keeps keeps the shapes the style had; an item whose
+blend params predate the current blend version has none, since no style stored shapes then.
+
+**Applying.** `_styles_prepare_source_dev()` puts the shapes in the source dev's forms, and
+`_styles_rebuild_history_from_items()` gives each item whose blend params name a group a snapshot
+of them. Without that snapshot `dt_dev_pop_history_items_ext()` empties `dev->forms` (it keeps the
+last snapshot, and there is none), and the merge then finds nothing to copy. From there merge and
+replace carry them exactly as they carry a paste's: in prepend, a module the destination already
+has keeps its own mask, and the shapes of one it lacks reach the destination's snapshots above it
+(see above). At export, `dt_styles_apply_style_items()` merges one
+module at a time from a dev that holds only the shapes, because
+`dt_history_merge_module_into_history()` copies forms from a dev and from nothing else.
+
+**Which come.** Each module instance of the style whose drawn mask has stored shapes chooses
+whether applying the style brings them: `data.style_items.apply_shapes` (data 10, `1` by default).
+The choice is the instance's (operation and `multi_name`): `dt_style_repository_set_apply_shapes()`
+sets it on all its items at once, and one item of it set off decides for all of them, so an item an
+edit adds to an unchecked instance from an image comes without its shapes too.
+
+The edit dialog sets it, in a *shapes* column. A row has a box when its item has shapes where the
+row takes it from: the style's stored shapes for an item kept from the style
+(`dt_styles_get_items_with_shapes()`), the image's history for an item updated or added from the
+selected image (`dt_styles_get_image_items_with_shapes()`). The list has one row per history item
+while the choice is the instance's, so every row of an instance follows its box. A box starts where
+the style has it (`dt_styles_get_shapes_modules()`), checked for an instance the style lacks, and
+saving writes the choice of each instance with a box on an included row
+(`dt_styles_set_shapes_modules()`), after the edit or the duplicate. A module that draws its own
+shapes never has a box: its shapes always come. The create dialog has no column, so a new style
+brings every shape.
+
+A copy of the style keeps the choice, and a `.dtstyle` carries it as `<apply_shapes>0</apply_shapes>`
+inside a `<plugin>`, written only when off, so a file whose boxes are all checked is what an older
+build writes; older parsers ignore an element they do not know inside `<plugin>`. Every application
+follows it, the styles module, the Styles menu, a style at import, the studio pool and export alike,
+because `_styles_applied_shapes()` reads it where they all meet: `_styles_prepare_source_dev()` and
+`dt_styles_apply_style_items()`.
+
+A drawn mask that comes without its shapes arrives with its blend params unchanged, so it names a
+group the image lacks: `_develop_blend_init_drawn_mask()` fills a drawn mask whose group is missing
+(1, or 0 when the mask is inverted), and the module applies as if it had no drawn mask until shapes
+are drawn on the image. The merge reports the missing group on stderr, as it does any form it
+cannot find.
+
+That export path applies a style's items **newest first**: `dt_styles_get_item_list()` reads them
+`ORDER BY num DESC`, prepends each and reverses the list, which leaves them descending. Of several
+items of one module, the oldest is therefore merged last and wins, its params and its mask alike.
+Measured on a style holding three exposure items: the export dev's exposure params differ from the
+source's final ones, with or without shapes, and match them once the list is applied oldest first.
+
+**The file.** A `.dtstyle` carries them as `<shapes><shape formid type name version points_count
+points source/></shapes>` after `<style>`, every value an attribute. Older parsers, darktable's and
+Ansel's, match `name`, `description` and `iop_list` by element name wherever the element sits, so a
+`<name>` inside a shape would rename the style in an older build; an attribute is ignored. Points
+and source are encoded as the XMP blobs are.
+
+**Reading one back.** A row is checked when it is read, not when it is imported:
+`_masks_form_from_row()` refuses a row whose type has no shape functions, whose source is shorter
+than two floats, or, at the current mask version, whose points blob is shorter than its point
+count needs. A row of an older mask version is read at its stored point size, the rest zeroed:
+the conversions v3→v4, v4→v5 and v5→v6 fill fields appended to the ellipse and gradient points, so
+those rows are legitimately shorter. A style's shape of another mask version is refused rather than
+converted, since v1→v2 and v2→v3 need the image's geometry.
+
+Measured with a scratch program on an image with 45 retouch shapes and a drawn mask added on
+exposure: the style stores 48 shapes, and 46 without the exposure items (the retouch group and its
+45 members). Of the style's three exposure items, the one naming the stored group is the only row
+with a box, and so is its image row; no other module has one. Checked, append and replace onto a
+fresh image bring the retouch group with its 45 members resolved and exposure's mask; prepend keeps
+the destination's exposure. Unchecked, all three and the export path bring the retouch group and 46
+forms, and exposure arrives in drawn mode with `mask_id` 434343 and no such group. A duplicate keeps
+the box unchecked, a `.dtstyle` saved, deleted and imported back keeps it and its 48 shapes, and a
+style whose boxes are all checked writes no `apply_shapes`. With one of exposure's three items set
+back to on in the database, as an edit adding an item to an unchecked instance leaves it, the box
+still reads unchecked and the four paths still bring 46 forms. The item left on is the only one
+naming a held group, so a choice read item by item shows the box checked and brings exposure's
+shapes in append and replace, as measured on a build that read it so. A duplicate and an edit keep
+48, and an edit adding exposure from the image to the 46-shape style gives 48, listed checked.
+Creating a style whose items use shapes takes 7.2 to 12.3 ms, for loading the image's history once.
+Opening the edit dialog reads the style's side in 0.5 ms and the image's in 2.5 ms, for loading its
+history. The data 9 to 10 step, replayed on a copy of a real data library of 33 styles and 223 items, leaves
+every item at `apply_shapes` 1, and the build opens it at 10.
+
+Presets still carry no shapes.
 
 ---
 
