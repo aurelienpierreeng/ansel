@@ -1391,6 +1391,8 @@ void dt_dev_pop_history_items_ext(dt_develop_t *dev) REQUIRES_SHARED(dev->histor
 
   // Ensure `dev->image_storage` is up-to-date before modules reload their defaults.
   // This avoids using incomplete RAW metadata (WB coeffs, matrices) on newly-inited images.
+  // Its result is not needed: only a successful read sets image_storage.id, so a failed one leaves a
+  // whole copy of this same image, merely not refreshed.
   dt_dev_ensure_image_storage(dev, dev->image_storage.id);
 
   // Reset every module to its default params first; the history overlay below then overwrites the
@@ -1923,7 +1925,8 @@ int dt_dev_replace_history_on_image(dt_develop_t *dev_src, const int32_t dest_im
 {
   if(dest_imgid <= 0) return 1;
 
-  dt_dev_ensure_image_storage(dev_src, dest_imgid);
+  // the history is written for dev_src->image_storage.id, which would still name the image read before
+  if(dt_dev_ensure_image_storage(dev_src, dest_imgid)) return 1;
 
   // Same shape as dt_dev_reload_history_items(): the whole rebuild runs under the write lock,
   // released before dt_dev_write_history(), which takes the read lock itself.
