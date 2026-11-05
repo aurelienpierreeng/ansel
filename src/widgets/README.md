@@ -91,6 +91,7 @@ application as-is, unlike the rest.
 | `accelerators.{c,h}` | the whole keyboard-shortcut system (3224 lines) |
 | `bauhaus.{c,h}` | the slider/combobox toolkit (3982 lines) |
 | `resize_handle.{c,h}` | the drag grip that resizes a panel, the scope, the filmstrip |
+| `scroll_latch.{c,h}` | keeps the mouse wheel on a scrolled window once it has started scrolling |
 | `gtkentry.c` | `GtkEntry` completion helper |
 | `gdkkeys.h` | keysym mapping (numpad/main-pad equivalence) |
 | `widget_settings.{c,h}` | toolkit state: scroll, DPI/em metrics, freeze depth, palette |
