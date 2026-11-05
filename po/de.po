@@ -7,7 +7,7 @@ msgstr ""
 "Project-Id-Version: darktable\n"
 "Report-Msgid-Bugs-To: \n"
 "POT-Creation-Date: 2026-09-07 23:37+0200\n"
-"PO-Revision-Date: 2026-11-05 16:34+0100\n"
+"PO-Revision-Date: 2026-11-05 21:16+0100\n"
 "Last-Translator: Jobst Hoffmann <j.hoffmann@fh-aachen.de>\n"
 "Language-Team: German <>\n"
 "Language: de\n"
@@ -658,7 +658,7 @@ msgstr "Art der Unschärfe"
 #: ../build/src/iop/introspection_blurs.c:89
 #: ../build/src/iop/introspection_blurs.c:178
 msgid "blur radius"
-msgstr "Radius"
+msgstr "Unschärferadius"
 
 #: ../build/src/iop/introspection_blurs.c:95
 #: ../build/src/iop/introspection_blurs.c:182
@@ -834,7 +834,7 @@ msgstr "nur Aufhellen"
 #: ../build/src/iop/introspection_censorize.c:51
 #: ../build/src/iop/introspection_censorize.c:112
 msgid "input blur radius"
-msgstr "Eingabe Weichzeichnungsradius"
+msgstr "Eingabe Unschärferadius"
 
 #: ../build/src/iop/introspection_censorize.c:57
 #: ../build/src/iop/introspection_censorize.c:116
@@ -844,7 +844,7 @@ msgstr "Pixelgröße"
 #: ../build/src/iop/introspection_censorize.c:63
 #: ../build/src/iop/introspection_censorize.c:120
 msgid "output blur radius"
-msgstr "Ausgabe des Radius des Weichzeichnens"
+msgstr "Ausgabe des Unschärferadius"
 
 #: ../build/src/iop/introspection_censorize.c:69
 #: ../build/src/iop/introspection_censorize.c:124
@@ -2453,12 +2453,12 @@ msgstr "Belichtung"
 #: ../build/src/iop/introspection_retouch.c:262
 #: ../build/src/iop/introspection_retouch.c:419
 msgid "Blur type"
-msgstr "Unschärfeart"
+msgstr "Art der Unschärfe"
 
 #: ../build/src/iop/introspection_retouch.c:268
 #: ../build/src/iop/introspection_retouch.c:423
 msgid "Blur radius"
-msgstr "Weichzeichnungsradius"
+msgstr "Unschärferadius"
 
 #: ../build/src/iop/introspection_retouch.c:274
 #: ../build/src/iop/introspection_retouch.c:427
@@ -6432,7 +6432,7 @@ msgstr "Ausgabe vor dem Weichzeichnen"
 
 #: ../src/develop/blend.c:2380
 msgid "input before blur"
-msgstr "Eingabe vor Weichzeichnen"
+msgstr "Eingabe vor Verwischen"
 
 #: ../src/develop/blend.c:2381
 msgid "output after blur"
@@ -6440,7 +6440,7 @@ msgstr "Ausgabe nach dem Weichzeichnen"
 
 #: ../src/develop/blend.c:2382
 msgid "input after blur"
-msgstr "Eingabe nach Weichzeichnen"
+msgstr "Eingabe nach Verwischen"
 
 #: ../src/develop/blend.c:2387 ../src/imageio/format/avif.c:780
 #: ../src/libs/history.c:427 ../src/libs/history.c:428
@@ -7020,11 +7020,11 @@ msgstr ""
 
 #: ../src/develop/blend_gui.c:5057
 msgid "blurring radius"
-msgstr "Weichzeichnungsradius"
+msgstr "Unschärferadius"
 
 #: ../src/develop/blend_gui.c:5059
 msgid "radius for gaussian blur of blend mask"
-msgstr "Radius des Gaußschen Weichzeichners der Maske"
+msgstr "Radius für die Gaußsche Unschärfe der Überblendungsmaske"
 
 #: ../src/develop/blend_gui.c:5062 ../src/libs/history.c:483
 msgid "feathering guide"
@@ -7035,9 +7035,10 @@ msgid ""
 "choose to guide mask by input or output image and\n"
 "choose to apply feathering before or after mask blur"
 msgstr ""
-"wählen, ob die kantensensitive Maske anhand des Eingabe- oder Ausgabe-Bildes "
-"geführt wird\n"
-"wählen, ob die Glättung vor oder nach der Weichzeichnen-Maske angewendet wird"
+"Wählen Sie aus, ob die Maske anhand des Eingabe- oder des Ausgabebildes "
+"ausgerichtet werden soll, und\n"
+"legen Sie fest, ob die Weichzeichnung vor oder nach dem Weichzeichnen der "
+"Maske angewendet werden soll."
 
 #: ../src/develop/blend_gui.c:5073 ../src/libs/history.c:482
 msgid "feathering radius"
@@ -10655,7 +10656,7 @@ msgstr "Einstellungen wurden nicht gespeichert"
 msgid "the settings file could not be written in this folder"
 msgstr ""
 "Die Datei mit den Einstellungen konnte nicht in diesem Ordner gespeichert "
-"werden."
+"werden"
 
 #. Adding the outer container
 #: ../src/gui/preferences.c:1020
@@ -11613,7 +11614,7 @@ msgstr "Grafik"
 
 #: ../src/imageio/imageio_core.c:632
 msgid "cannot find the style to apply during export."
-msgstr "kann den Stil zum Exportieren nicht finden"
+msgstr "kann den Stil zum Exportieren nicht finden."
 
 #: ../src/imageio/imageio_core.c:1171
 #, c-format
@@ -12510,7 +12511,7 @@ msgstr ""
 
 #: ../src/iop/bilateral.cc:108 ../src/iop/diffuse.c:416
 msgid "surface blur"
-msgstr "Flächenweichzeichner"
+msgstr "Flächenunschärfe"
 
 #: ../src/iop/bilateral.cc:113
 msgid "denoise (bilateral filter)"
@@ -12519,8 +12520,8 @@ msgstr "Entrauschen (bilateraler Filter)"
 #: ../src/iop/bilateral.cc:133
 msgid "apply edge-aware surface blur to denoise or smoothen textures"
 msgstr ""
-"Rauschreduktion oder Glätten von Texturen durch kantenerhaltenden "
-"Flächenweichzeichner"
+"Anwendung einer kantensensitiven Oberflächenunschärfe zur Rauschunterdrückung "
+"oder Glättung von Texturen"
 
 #: ../src/iop/bilateral.cc:136 ../src/iop/blurs.c:108
 #: ../src/iop/channelmixer.c:172 ../src/iop/colorequal.c:233
@@ -12537,15 +12538,15 @@ msgstr "Ausdehnung des Gaußschen Weichzeichners"
 
 #: ../src/iop/bilateral.cc:341
 msgid "how much to blur red"
-msgstr "wie stark soll Rot weichgezeichnet werden"
+msgstr "wie stark Rot verwischt werden soll"
 
 #: ../src/iop/bilateral.cc:346
 msgid "how much to blur green"
-msgstr "wie stark soll Grün weichgezeichnet werden"
+msgstr "wie stark Grün verwischt werden soll"
 
 #: ../src/iop/bilateral.cc:351
 msgid "how much to blur blue"
-msgstr "wie stark soll Blau weichgezeichnet werden"
+msgstr "wie stark Blau verwischt werden soll"
 
 #: ../src/iop/bloom.c:97
 msgid "apply Orton effect for a dreamy aetherical look"
@@ -12570,7 +12571,7 @@ msgstr "Stärke der Überstrahlung"
 
 #: ../src/iop/blurs.c:96
 msgid "blurs"
-msgstr "Unschärfe"
+msgstr "Unschärfen"
 
 #: ../src/iop/blurs.c:101
 msgid "blur|lens|motion"
@@ -12911,11 +12912,11 @@ msgstr "noise"
 
 #: ../src/iop/censorize.c:437
 msgid "radius of gaussian blur before pixellation"
-msgstr "Radius des Gaußschen Weichzeichners vor Verpixelung"
+msgstr "Radius der Gaußschen Unschärfe vor der Pixelierung"
 
 #: ../src/iop/censorize.c:438
 msgid "radius of gaussian blur after pixellation"
-msgstr "Radius des Gaußschen Weichzeichners nach Verpixelung"
+msgstr "Radius der Gaußschen Unschärfe nach der Pixelierung"
 
 # Ugh ...
 #: ../src/iop/censorize.c:439
@@ -15722,7 +15723,7 @@ msgstr "Verschleiern oder Schärfen"
 
 #: ../src/iop/diffuse.c:171
 msgid "diffusion|deconvolution|blur|sharpening"
-msgstr "Diffusion|Dekonvolution|Weichzeichnen|Schärfen"
+msgstr "Diffusion|Dekonvolution|Verschwimmen lassen|Schärfen"
 
 #: ../src/iop/diffuse.c:177
 msgid ""
@@ -15738,15 +15739,15 @@ msgstr ""
 
 #: ../src/iop/diffuse.c:320
 msgid "lens deblur: soft"
-msgstr "Objektivschärfe: leicht"
+msgstr "Objektiv-Schärfung: weich"
 
 #: ../src/iop/diffuse.c:324
 msgid "lens deblur: medium"
-msgstr "Objektivschärfe: mittel"
+msgstr "Objektiv-Schärfung: mittel"
 
 #: ../src/iop/diffuse.c:328
 msgid "lens deblur: hard"
-msgstr "Objektivschärfe: stark"
+msgstr "Objektiv-Schärfung: stark"
 
 #: ../src/iop/diffuse.c:346
 msgid "dehaze"
@@ -15858,7 +15859,7 @@ msgstr ""
 "in Richtung der Anisotropie 1. Ordnung (siehe unten).\n"
 "\n"
 "Negative Werte schärfen, \n"
-"positive Werte diffundieren und verwischen, \n"
+"positive Werte diffusieren und verwischen, \n"
 "Null bewirkt nichts."
 
 #: ../src/iop/diffuse.c:1683
@@ -15874,7 +15875,7 @@ msgstr ""
 "in Richtung der Anisotropie 2. Ordnung (siehe unten).\n"
 "\n"
 "Negative Werte schärfen,\n"
-"positive Werte vergrößern Diffusion und Weichzeichnung,\n"
+"positive Werte vergrößern Diffusion und Unschärfe,\n"
 "Null bewirkt nichts."
 
 #: ../src/iop/diffuse.c:1692
@@ -15890,7 +15891,7 @@ msgstr ""
 "in Richtung der Anisotropie 3. Ordnung (siehe unten).\n"
 "\n"
 "Negative Werte schärfen,\n"
-"positive Werte vergrößern Diffusion und Weichzeichnung,\n"
+"positive Werte vergrößern Diffusion und Unschärfe,\n"
 "Null bewirkt nichts."
 
 #: ../src/iop/diffuse.c:1701
@@ -15906,7 +15907,7 @@ msgstr ""
 "in Richtung der Anisotropie 4. Ordnung (siehe unten).\n"
 "\n"
 "Negative Werte schärfen,\n"
-"positive Werte vergrößern Diffusion und Weichzeichnung,\n"
+"positive Werte vergrößern Diffusion und Unschärfe,\n"
 "Null bewirkt nichts."
 
 #: ../src/iop/diffuse.c:1713
@@ -16038,7 +16039,7 @@ msgstr "dithern"
 
 #: ../src/iop/dither.c:684
 msgid "radius for blurring step"
-msgstr "Radius des Weichzeichners"
+msgstr "Unschärferadius"
 
 #: ../src/iop/dither.c:696
 msgid "the gradient range where to apply random dither"
@@ -16247,7 +16248,7 @@ msgstr "löschen"
 
 #: ../src/iop/drawlayer.c:2930 ../src/iop/retouch.c:1946
 msgid "blur"
-msgstr "weichzeichnen"
+msgstr "verschwommen machen"
 
 #: ../src/iop/drawlayer.c:2931
 msgid "smudge"
@@ -18225,7 +18226,7 @@ msgstr "Maske aus lokalem Kontrast"
 
 #: ../src/iop/lowpass.c:600
 msgid "radius of gaussian/bilateral blur"
-msgstr "Radius des Gaußschen/bilateralen Weichzeichners"
+msgstr "Radius der Gaußschen/bilateralen Unschärfe"
 
 #: ../src/iop/lowpass.c:601
 msgid "contrast of lowpass filter"
@@ -19136,7 +19137,7 @@ msgid ""
 msgstr ""
 "Um eine Form hinzuzufügen, wählen Sie einen Algorithmus und einen Formtyp aus "
 "und klicken Sie auf das Bild.\n"
-"Die Formen werden im aktuellen Maßstab hinzugefügt."
+"Die Formen werden im aktuellen Maßstab hinzugefügt"
 
 #. display & suppress masks
 #. copy/paste shapes
@@ -19167,7 +19168,7 @@ msgstr "Werkzeuge"
 
 #: ../src/iop/retouch.c:2342 ../src/iop/retouch.c:2360
 msgid "Activate blur tool"
-msgstr "Weichzeichner-Werkzeug aktivieren"
+msgstr "Weichzeichnungswerkzeug aktivieren"
 
 #: ../src/iop/retouch.c:2342 ../src/iop/retouch.c:2346 ../src/iop/retouch.c:2350
 #: ../src/iop/retouch.c:2354
@@ -19286,11 +19287,11 @@ msgstr "Füllfarbe aus Bild wählen"
 msgid "Adjusts color brightness to fine-tune it. Works with erase as well"
 msgstr ""
 "Passt die Farbhelligkeit an, um sie fein abzustimmen. Funktioniert auch beim "
-"Löschen."
+"Löschen"
 
 #: ../src/iop/retouch.c:2526
 msgid "Type for the blur algorithm"
-msgstr "Typ des Weichzeichnen-Algorithmus"
+msgstr "Typ des Weichzeichnungs-Algorithmus"
 
 # Ugh ...
 #: ../src/iop/retouch.c:2530
