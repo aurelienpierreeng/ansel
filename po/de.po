@@ -7,7 +7,7 @@ msgstr ""
 "Project-Id-Version: darktable\n"
 "Report-Msgid-Bugs-To: \n"
 "POT-Creation-Date: 2026-09-07 23:37+0200\n"
-"PO-Revision-Date: 2026-10-31 19:28+0100\n"
+"PO-Revision-Date: 2026-11-04 18:33+0100\n"
 "Last-Translator: Jobst Hoffmann <j.hoffmann@fh-aachen.de>\n"
 "Language-Team: German <>\n"
 "Language: de\n"
@@ -2526,7 +2526,6 @@ msgid "Linear"
 msgstr "Linear"
 
 #: ../build/src/iop/introspection_retouch.c:492
-#, fuzzy
 msgid "Square root"
 msgstr "Quadratwurzel"
 
@@ -4126,45 +4125,49 @@ msgid "orphaned image"
 msgstr "verwaistes Bild"
 
 #: ../src/caches/pixelpipe_cache.c:155
-#, fuzzy, c-format
+#, c-format
 msgid ""
 "The pipeline cache is full while allocating\n"
 "`%s` (module `%s`).\n"
 "Either your RAM settings are too frugal or your RAM is too small."
 msgstr ""
-"Der Pipeline-Cache ist bei der Zuweisung von `%s` (Modul `%s`) voll. "
+"Der Pipeline-Cache ist bei der Zuweisung von\n"
+"`%s` (Modul `%s`) voll.\n"
 "Entweder sind Ihre RAM-Einstellungen zu knapp bemessen oder Ihr "
 "Arbeitsspeicher ist zu klein."
 
 #: ../src/caches/pixelpipe_cache.c:160
-#, fuzzy, c-format
+#, c-format
 msgid ""
 "The pipeline cache is full while allocating\n"
 "`%s`.\n"
 "Either your RAM settings are too frugal or your RAM is too small."
 msgstr ""
-"Der Pipeline-Cache ist bei der Zuweisung von `%s` voll. Entweder sind Ihre "
-"RAM-Einstellungen zu knapp bemessen oder Ihr Arbeitsspeicher ist zu klein."
+"Der Pipeline-Cache ist bei der Zuweisung von\n"
+"`%s` voll.\n"
+"Entweder sind Ihre RAM-Einstellungen zu knapp bemessen oder Ihr "
+"Arbeitsspeicher ist zu klein."
 
 #: ../src/caches/pixelpipe_cache.c:165
-#, fuzzy, c-format
+#, c-format
 msgid ""
 "The pipeline cache is full while processing module\n"
 "`%s`.\n"
 "Either your RAM settings are too frugal or your RAM is too small."
 msgstr ""
-"Der Pipeline-Cache ist bei der Verarbeitung des Moduls `%s` voll. Entweder "
-"sind Ihre RAM-Einstellungen zu knapp bemessen oder Ihr Arbeitsspeicher ist "
+"Der Pipeline-Cache ist bei der Verarbeitung des Moduls\n"
+"`%s` voll.\n"
+"Entweder sind Ihre RAM-Einstellungen zu sparsam oder Ihr Arbeitsspeicher ist "
 "zu klein."
 
 #: ../src/caches/pixelpipe_cache.c:169 ../src/caches/pixelpipe_cache.c:190
-#, fuzzy
 msgid ""
 "The pipeline cache is full.\n"
 "Either your RAM settings are too frugal or your RAM is too small."
 msgstr ""
-"Der Pipeline-Cache ist voll. Entweder sind Ihre RAM-Einstellungen zu knapp "
-"bemessen oder Ihr Arbeitsspeicher ist zu klein."
+"Der Pipeline-Cache ist voll.\n"
+"Entweder sind Ihre RAM-Einstellungen zu knapp bemessen oder Ihr "
+"Arbeitsspeicher ist zu klein."
 
 #: ../src/caches/pixelpipe_cache.c:184
 #, c-format
@@ -4852,9 +4855,8 @@ msgstr "‚%s‘ auf ‚%s‘"
 
 #: ../src/common/cups_print.c:588 ../src/libs/print_settings.c:396
 #: ../src/libs/print_settings.c:413 ../src/libs/print_settings.c:564
-#, fuzzy
 msgid "Printing failed"
-msgstr "wärmender Filter"
+msgstr "Der Druckvorgang ist fehlgeschlagen"
 
 #: ../src/common/cups_print.c:588
 msgid "error while printing"
@@ -4998,11 +5000,10 @@ msgid "File operation failed"
 msgstr "Die Dateioperation ist fehlgeschlagen"
 
 #: ../src/common/image.c:2142
-#, fuzzy
 msgid "the file was moved, but the library could not record its new place"
 msgstr ""
-"Die importierte Datei wurde überprüft, das Original konnte jedoch nicht "
-"gelöscht werden: %s"
+"die Datei wurde verschoben, aber die Bibliothek konnte den neuen Speicherort "
+"nicht erfassen"
 
 #: ../src/common/image.c:2176
 msgid "cannot access local copy"
@@ -5922,17 +5923,14 @@ msgid "Error importing file in collection"
 msgstr "Fehler beim Importieren der Datei in die Sammlung"
 
 #: ../src/control/jobs/import_jobs.c:458
-#, fuzzy
 msgid "The imported file differs from the original, which was not deleted"
-msgstr ""
-"Die importierte Datei weicht vom Original ab, das nicht gelöscht wurde: %s"
+msgstr "Die importierte Datei weicht vom Original ab, das nicht gelöscht wurde"
 
 #: ../src/control/jobs/import_jobs.c:464
-#, fuzzy
 msgid "The imported file was verified but the original could not be deleted"
 msgstr ""
 "Die importierte Datei wurde überprüft, das Original konnte jedoch nicht "
-"gelöscht werden: %s"
+"gelöscht werden"
 
 #: ../src/control/jobs/import_jobs.c:494
 #, c-format
@@ -6174,9 +6172,8 @@ msgid "detail mask blending error"
 msgstr "Detailmasken Überblendproblem"
 
 #: ../src/develop/blend.c:764 ../src/develop/blend.c:1219
-#, fuzzy
 msgid "skipped blending: roi's do not match"
-msgstr "Überblenden in Modul ‚%s‘ ausgelassen: ROIs stimmen nicht überein"
+msgstr "Mischen übersprungen: Die ROI-Werte stimmen nicht überein"
 
 #: ../src/develop/blend.c:791 ../src/develop/blend.c:831
 #: ../src/develop/blend.c:1251
@@ -7918,10 +7915,9 @@ msgstr ""
 "Sie die Rastermaske in dem Modul, das diese wiederverwendet."
 
 #: ../src/develop/tiling.c:487 ../src/develop/tiling.c:795
-#, fuzzy
 msgid "tiling failed. output might be garbled."
 msgstr ""
-"Tiling für Modul ‚%s‘ fehlgeschlagen. Die Ausgabe könnte fehlerhaft sein."
+"Das Tiling ist fehlgeschlagen. Die Ausgabe ist möglicherweise fehlerhaft."
 
 #. Parent sub-menu color profile
 #: ../src/gui/actions/display.c:465
@@ -8830,9 +8826,8 @@ msgid "free in the budget"
 msgstr "im Budget vorgesehen"
 
 #: ../src/gui/actions/supervisor_window.c:929
-#, fuzzy
 msgid "pipeline cache, lines in vRAM"
-msgstr "Pipeline Cache (vRAM)"
+msgstr "Pipeline Cache, Zeilen im vRAM"
 
 #: ../src/gui/actions/supervisor_window.c:930
 #: ../src/gui/actions/supervisor_window.c:1048
@@ -8867,9 +8862,8 @@ msgstr "frei in den Cache-Budgets"
 #. * budget: no RAM, but the cache evicts and refuses on it as on the rest. The bar below tells
 #. * the three apart.
 #: ../src/gui/actions/supervisor_window.c:1034
-#, fuzzy
 msgid "pipeline cache (RAM)"
-msgstr "Pipeline Cache (vRAM)"
+msgstr "Pipeline Cache (RAM)"
 
 #: ../src/gui/actions/supervisor_window.c:1035
 #: ../src/gui/actions/supervisor_window.c:1111
@@ -8883,9 +8877,8 @@ msgstr ""
 
 #. The caches it holds, under it; each device, with what it holds, after it.
 #: ../src/gui/actions/supervisor_window.c:1039
-#, fuzzy
 msgid "RAM"
-msgstr "Rohdaten"
+msgstr "RAM"
 
 #: ../src/gui/actions/supervisor_window.c:1047
 msgid "lines in RAM"
@@ -8900,9 +8893,9 @@ msgid "reserved by lines in vRAM only"
 msgstr "nur durch Zeilen im vRAM reserviert"
 
 #: ../src/gui/actions/supervisor_window.c:1051
-#, fuzzy, c-format
+#, c-format
 msgid "Pipeline cache (RAM budget) — %u items"
-msgstr "Pipeline Cache (RAM) — %u Einträge"
+msgstr "Pipeline Cache (RAM-Budget) — %u Einträge"
 
 #: ../src/gui/actions/supervisor_window.c:1083
 msgid "allocation"
@@ -9038,10 +9031,9 @@ msgid "Image operation"
 msgstr "Bildbearbeitung"
 
 #: ../src/gui/closing.c:191
-#, fuzzy
 msgctxt "job type"
 msgid "Thumbnail"
-msgstr "_Vorschaubilder"
+msgstr "Vorschaubild"
 
 #: ../src/gui/closing.c:193
 msgctxt "job type"
@@ -10677,9 +10669,8 @@ msgstr ""
 "Ansel muss neu gestartet werden, damit die Einstellungen wirksam werden"
 
 #: ../src/gui/preferences.c:809
-#, fuzzy
 msgid "Settings not saved"
-msgstr "nichts zu speichern"
+msgstr "Einstellungen wurden nicht gespeichert"
 
 #: ../src/gui/preferences.c:809
 msgid "the settings file could not be written in this folder"
@@ -10731,9 +10722,8 @@ msgid "export..."
 msgstr "exportieren..."
 
 #: ../src/gui/preferences.c:1224
-#, fuzzy
 msgid "Preset not imported"
-msgstr "%u Tags importiert"
+msgstr "Voreinstellung wurde nicht importiert"
 
 #: ../src/gui/preferences.c:1224
 msgid "failed to import preset"
@@ -14902,10 +14892,8 @@ msgid "input profile could not be generated!"
 msgstr "Eingabeprofil konnte nicht erzeugt werden!"
 
 #: ../src/iop/colorin.c:980
-#, fuzzy
 msgid "The color profile referenced as input profile has not been found."
-msgstr ""
-"Das als Eingabeprofil referenzierte Farbprofil ‚%s‘ wurde nicht gefunden."
+msgstr "Das als Eingabeprofil angegebene Farbprofil wurde nicht gefunden."
 
 #: ../src/iop/colorin.c:1159
 msgid "input profile"
@@ -19187,14 +19175,13 @@ msgid "shapes:"
 msgstr "Formen:"
 
 #: ../src/iop/retouch.c:2304
-#, fuzzy
 msgid ""
 "To add a shape select an algorithm and a shape type and click on the image.\n"
 "Shapes are added to the current scale"
 msgstr ""
-"um eine Form hinzuzufügen, wähle einen Algorithmus und einen Formtyp aus und "
-"klicke auf das Bild.\n"
-"Formen werden zur aktuellen Skalierung hinzugefügt"
+"Um eine Form hinzuzufügen, wählen Sie einen Algorithmus und einen Formtyp "
+"aus und klicken Sie auf das Bild.\n"
+"Die Formen werden im aktuellen Maßstab hinzugefügt."
 
 #. display & suppress masks
 #. copy/paste shapes
@@ -19208,9 +19195,8 @@ msgid "editing"
 msgstr "Bearbeiten"
 
 #: ../src/iop/retouch.c:2307
-#, fuzzy
 msgid "Show and edit shapes on the current scale"
-msgstr "Anzeigen und Bearbeiten von Formen in der aktuellen Größe"
+msgstr "Formen im aktuellen Maßstab anzeigen und bearbeiten"
 
 #: ../src/iop/retouch.c:2308
 msgid "show and edit shapes in restricted mode"
@@ -19252,9 +19238,8 @@ msgid "Ctrl+click to change tool for current form"
 msgstr "Strg+Klick um zum Werkzeug für aktuelle Form zu wechseln"
 
 #: ../src/iop/retouch.c:2359
-#, fuzzy
 msgid "Shift+click to set the tool as default"
-msgstr "Umschalt+Klick: als Standard setzen"
+msgstr "Umschalt+Klick, um das Werkzeug als Standard festzulegen"
 
 #: ../src/iop/retouch.c:2378
 msgid "scales:"
@@ -19269,7 +19254,6 @@ msgid "merge from:"
 msgstr "zusammenführen von:"
 
 #: ../src/iop/retouch.c:2396
-#, fuzzy
 msgid ""
 "Top slider adjusts where the merge scales start\n"
 "Bottom slider adjusts the number of scales\n"
@@ -19277,20 +19261,18 @@ msgid ""
 "Top line indicates that the scale is visible at current zoom level\n"
 "Bottom line indicates that the scale has shapes on it"
 msgstr ""
-"Der obere Schieberegler bestimmt die Startposition der "
-"Zusammenführungsskala. \n"
-"Der untere Schieberegler legt die Skaleneinteilung fest. \n"
-"Der Punkt kennzeichnet die aktuelle Skala. \n"
+"Der obere Schieberegler legt fest, wo die Zusammenführungsskalen beginnen.\n"
+"Der untere Schieberegler legt die Anzahl der Skalen fest.\n"
+"Der Punkt kennzeichnet die aktuelle Skala.\n"
 "Die obere Linie zeigt an, dass die Skala bei der aktuellen Zoomstufe "
-"sichtbar ist. \n"
-"Retuschierte Skalen werden durch die untere Linie kenntlich gemacht"
+"sichtbar ist.\n"
+"Die untere Linie zeigt an, dass die Skala Formen enthält"
 
 #: ../src/iop/retouch.c:2416
 msgid "Display masks"
 msgstr "Masken anzeigen"
 
 #: ../src/iop/retouch.c:2421
-#, fuzzy
 msgid "Temporarily switch off shapes"
 msgstr "Formen vorübergehend ausschalten"
 
@@ -19339,12 +19321,10 @@ msgid "fill color: "
 msgstr "Füllfarbe: "
 
 #: ../src/iop/retouch.c:2506 ../src/iop/retouch.c:2507
-#, fuzzy
 msgid "Select fill color"
 msgstr "Füllfarbe auswählen"
 
 #: ../src/iop/retouch.c:2512
-#, fuzzy
 msgid "Pick fill color from image"
 msgstr "Füllfarbe aus Bild wählen"
 
@@ -19360,18 +19340,16 @@ msgstr "Typ des Weichzeichnen-Algorithmus"
 
 # Ugh ...
 #: ../src/iop/retouch.c:2530
-#, fuzzy
 msgid "Radius of the selected blur type"
-msgstr "Radius des selektierten Weichzeichnungsfilters"
+msgstr "Radius der ausgewählten Unschärfeart"
 
 #: ../src/iop/retouch.c:2534
 msgid "Mask opacity"
 msgstr "Deckkraft der Maske"
 
 #: ../src/iop/retouch.c:2536
-#, fuzzy
 msgid "Set the opacity on the selected shape"
-msgstr "setzt die Deckkraft der selektierten Form"
+msgstr "Stelle die Deckkraft der ausgewählten Form ein"
 
 #: ../src/iop/retouch.c:2542
 msgid "retouch tools"
@@ -22608,14 +22586,12 @@ msgid "this is the module's own mask"
 msgstr "das ist die modul-eigene Maske"
 
 #: ../src/libs/shape_manager.c:1180
-#, fuzzy
 msgid "this group holds the module's own mask"
-msgstr "Dies ist die modulinterne Maske."
+msgstr "diese Gruppe enthält die modulinterne Maske"
 
 #: ../src/libs/shape_manager.c:1182
-#, fuzzy
 msgid "the module already applies every shape of this group"
-msgstr "Die Maske „%s“ verwendet bereits alle Formen dieser Gruppe."
+msgstr "das Modul wendet bereits alle Formen dieser Gruppe an"
 
 #: ../src/libs/shape_manager.c:1200
 msgid "No module in the pipeline can carry a drawn mask."
@@ -22683,7 +22659,6 @@ msgstr ""
 "gemeinsam genutzt wird."
 
 #: ../src/libs/shape_manager.c:2126
-#, fuzzy
 msgid "Select a mask in the module groups list to attach this shape to it."
 msgstr ""
 "Wählen Sie eine Maske in der Liste der Modulgruppen aus, um diese Form der "
@@ -24419,9 +24394,8 @@ msgid "No embedded thumbnail"
 msgstr "Kein eingebettetes Vorschaubild"
 
 #: ../src/views/view.c:1064
-#, fuzzy
 msgid "Processing error"
-msgstr "Bearbeitung"
+msgstr "Verarbeitungsfehler"
 
 #: ../src/views/view.c:1065
 msgid "Aborted"
