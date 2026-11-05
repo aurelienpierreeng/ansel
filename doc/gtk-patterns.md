@@ -409,3 +409,34 @@ Windows shows its icons as text, or draws them in a `draw` handler, never as one
 row.
 
 ---
+
+## A panel scroll request lasts one allocation
+
+`dt_gui_gtk_t.scroll_to[side]` asks a side panel to bring a widget to its top once that widget
+has its new allocation. `_ui_panel_size_changed()` (`gui/window_manager.c`) serves it from the
+vadjustment's `notify::lower`, which comes with every allocation of the viewport, resized or not:
+two per focus change at a constant `upper`, measured. So the handler takes the request at the
+first allocation that follows, and moves the panel only if that allocation changed the height.
+
+That expiry keeps a request from being served by a resize it has nothing to do with. Kept armed
+until the next height change, a request on a module at y=179 with the panel at 60 took effect
+when 30 px were added to another module: the panel went to 179 and everything under the pointer
+moved by 119 px.
+
+- **Arm what resizes the panel.** Opening a module does (`_gui_set_single_expanded()`, on a real
+  closed-to-open change), and so can a module groups refresh (`_update_iop_visibility()`).
+  `dt_iop_request_focus()` arms nothing: focus resizes nothing.
+- **An allocation must follow the arming**, or the request waits for one.
+  `_update_iop_visibility()` ends with `gtk_widget_queue_resize()`, which also clears a request
+  left by a change that did not move the height.
+
+The module focus frame takes no room for the same reason: `.dt_module_focus` recolours the border
+and adds its second pixel as a `box-shadow`. A frame that grows on focus moves every module below
+it (38 to 48 px high at the default font size), and with nothing focused yet, as after opening an
+image, no other frame gives that room back: the height changes, which serves any armed request.
+
+Measured 2026-11-01 on top of `11fe9d529a`, on Xephyr at 1280×720, with an `LD_PRELOAD` shim: a
+`notify::value` handler on the right panel's vadjustment printing a `backtrace()`, real clicks sent
+with `xdotool`, positions read with `gtk_widget_translate_coordinates()`, and
+`gtk_widget_set_visible()` interposed to keep the mask button of unmasked modules shown. A margin
+on the lowest module makes the panel long enough for a jump not to be clamped by `upper`.

@@ -1275,13 +1275,6 @@ void dt_iop_request_focus(dt_iop_module_t *module)
   if(dt_gui_widgets_suppressed() || (out_focus_module == module)) return;
 
   dev->gui_module = module;
-  if(!IS_NULL_PTR(module) && !IS_NULL_PTR(module->gui))
-  {
-    const gboolean scroll_new_instance_to_header
-      = (dt_gui_get_global()->scroll_to_header_once == module->gui->expander
-         && !IS_NULL_PTR(module->gui->header) && GTK_IS_WIDGET(module->gui->header));
-    dt_gui_get_global()->scroll_to[1] = scroll_new_instance_to_header ? module->gui->header : module->gui->expander;
-  }
 
   /* lets lose the focus of previous focus module*/
   if(out_focus_module)
@@ -1375,6 +1368,15 @@ static void _gui_set_single_expanded(dt_iop_module_t *module, gboolean expanded)
   // reached for every module in dev->iop via the collapse_others fan-out: gui-less
   // (hidden / not-yet-inited) modules have nothing to collapse
   if(IS_NULL_PTR(module->gui) || IS_NULL_PTR(module->gui->expander)) return;
+
+  /* make gtk scroll to the module once it updated its allocation size */
+  if(expanded && !module->gui->expanded)
+  {
+    const gboolean scroll_new_instance_to_header
+      = (dt_gui_get_global()->scroll_to_header_once == module->gui->expander
+         && !IS_NULL_PTR(module->gui->header) && GTK_IS_WIDGET(module->gui->header));
+    dt_gui_get_global()->scroll_to[1] = scroll_new_instance_to_header ? module->gui->header : module->gui->expander;
+  }
 
   /* update expander arrow state */
   dtgtk_expander_set_expanded(DTGTK_EXPANDER(module->gui->expander), expanded);
@@ -1615,7 +1617,6 @@ static gboolean _iop_plugin_header_button_release(GtkWidget *w, GdkEventButton *
     return TRUE;
   }
 
-  // make gtk scroll to the module once it updated its allocation size
   const gboolean collapse_others = dt_modifier_is(e->state, GDK_SHIFT_MASK) ? FALSE : TRUE;
   dt_iop_request_focus(module);
   dt_iop_gui_set_expanded(module, !module->gui->expanded, collapse_others);
