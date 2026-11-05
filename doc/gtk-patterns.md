@@ -119,6 +119,32 @@ The views are plugins: `ninja ansel` does NOT compile `src/views/*.c`. Build eve
 (`ninja`) before trusting a darkroom edit; a use of an undeclared variable in `darkroom.c`
 survived an `ansel` build here.
 
+## A widget under an overlay child is repainted whenever the overlay child is, so its draw must be cheap
+
+*Measured 2026-10-29 on `7d819416b4`.*
+
+The resize grips (`widgets/resize_handle.c`) are 5 px `GtkEventBox` overlay children floating over
+what they resize, invisible until hovered (`.resize-handle:hover` in the theme): one along the
+bottom edge of every `dt_ui_resizable_drawing_area()` (`widgets/scroll_wrap.c`), one along the
+inner edge of each side panel (`gui/window_manager.c`), over whatever module sits at that edge.
+GTK3 composites overlay children over the main child, so a grip that changes state on enter and
+leave exposes what lies under it, clipped to the grip's strip, and that widget's `draw` handler
+runs. Measured on the navigation area, 385x179: crossing the left panel's grip gives exposes
+clipped to `5x179 at 380,0`.
+
+The pointer moving onto a grip also leaves the widget under it, and the theme's
+`*:hover { font-weight: 500; }` (`data/themes/ansel.css`) matches every widget, so that widget is
+restyled, and GTK repaints a restyled widget whole. Measured: 15 of the 22 navigation exposes
+while crossing its own bottom grip were the whole area, none the grip's strip alone (the restyle
+is read in the theme, not isolated). The same restyle was suspected of running layout passes up
+to the darkroom centre's configure-event; that did not reproduce
+([`darkroom-redraw.md`](darkroom-redraw.md)).
+
+So a `draw` handler on a hoverable widget, or under an overlay, paints from a cache keyed on its
+inputs and never re-derives per expose: `_lib_navigation_picture_key()` (`libs/navigation.c`) is
+the pattern, priced in [`darkroom-redraw.md`](darkroom-redraw.md). The clip a handler receives
+does not say who asked for the redraw.
+
 ## A GTK class overriding `style_updated` must chain up, or CSS opacity freezes
 
 *Found `b35c95990d`, 2026-09-16.*

@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 #   This file is part of the Ansel project.
 #   Copyright (C) 2026 Aurélien PIERRE.
+#   Copyright (C) 2026 Guillaume Stutin.
 #   
 #   Ansel is free software: you can redistribute it and/or modify
 #   it under the terms of the GNU General Public License as published by
@@ -119,7 +120,8 @@ done
 
 if (( ${#missing_packages[@]} > 0 )); then
   printf 'Missing Homebrew packages after install: %s\n' "${missing_packages[*]}" >&2
-  exit "${brew_install_status:-1}"
+  # Not brew's status: it is 0 when brew reported success and a package is missing anyway.
+  exit 1
 fi
 
 if (( brew_install_status != 0 )); then

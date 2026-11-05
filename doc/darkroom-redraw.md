@@ -179,6 +179,56 @@ The same positions hit the same shapes before and after. What remains is the sha
 IS near, walked at the screen's density; the comb spans most of the frame, so its box prunes
 little.
 
+## The navigation thumbnail, and a configure that changes nothing
+
+*Measured 2026-10-29 on `7d819416b4`, against master `fc54f74b5d`*: in the GUI, one config copy
+and one image for both, the pointer moved by hand, `-d perf -d dev -d signal --d-signal-act raise
+--d-signal DT_SIGNAL_CONTROL_REDRAW_ALL`, the navigation area 385x179 at device scale 1.
+
+The navigation thumbnail was seen repainting on hovers over a notebook tab or a panel edge. Two
+changes answer that report; only the first answers something that was measured.
+
+- **The navigation composes its picture once per state.** `_lib_navigation_picture_key()`
+  (`libs/navigation.c`) hashes everything the picture depends on: the preview frame's hash, the
+  widget's size, the image, the viewport state and the preview's plan. An expose with the key of
+  the picture already composed is one blit, which prints `took 0.000 secs`; a composition, which
+  is a full-size surface, a background render, the thumbnail copy and a pango layout for the zoom
+  label and the arrow, costs 2 ms with no preview frame and 13 ms (39 ms CPU) when the preview
+  frame lands. The key holds no style input: after a theme switch or a move to a screen of
+  another scale, the previous picture stays until the next state change.
+- **Most exposes are not the module's.** `-d perf` prints `[navigation] redraw: cached|composed,
+  clip WxH at x,y of WxH`. Crossing the area's bottom grip about ten times gave 22 exposes on the
+  branch, all `cached`, where master composed 29 times, `took 0.001 secs` each, with nothing
+  changed. Of the 22, 7 were clipped to `5x179 at 380,0`, the left panel's 5 px edge
+  grip floating over the area's right edge (see [`gtk-patterns.md`](gtk-patterns.md)), and 15 to
+  the whole area. None was the 5 px strip of the bottom grip that was being crossed. Read in the
+  theme, not isolated by a measurement: `*:hover { font-weight: 500; }`
+  (`data/themes/ansel.css`) matches the area itself, which the pointer leaves when it moves onto
+  the grip, and GTK repaints a restyled widget whole, the grip's strip with it. So a whole-area
+  clip does not say who asked: the area's own hover gives one as well as a request of the module.
+- **A configure that changes nothing does nothing.** `dt_dev_configure_real()` returns before it
+  re-plans both pipes, recomputes the thumbnail size and raises `DT_SIGNAL_CONTROL_REDRAW_ALL`
+  when `dt_dev_viewport_set_box()` reports the box unchanged; `-d dev` prints the request either
+  way, `unchanged` appended when it returned. The mechanism it was written against, a hovered
+  tab's heavier font weight running a layout pass that reaches the centre's configure-event,
+  **did not reproduce**: about 60 s of hovering the module-group tabs gave 0 configures and 0
+  `REDRAW_ALL` raises on either build. Over a window resize, ISO 12646 on and off, the margin
+  slider, zoom, switches between landscape and portrait images and a lighttable round trip,
+  372 configures were re-planned and 4 returned unchanged, all 4 on an image switch, where
+  `_darkroom_image_loaded_callback()` has already run `dt_dev_pixelpipe_rebuild_all()` and
+  `dt_dev_get_thumbnail_size()`; each was followed by a fresh main backbuffer. `studio_capture`
+  rebuilds the same way before it configures (read, not run).
+
+To find out who raised a redraw, the signal layer traces its raisers: `ansel -d signal
+--d-signal-act raise --d-signal-act print-trace --d-signal <name>` prints a backtrace for every
+raise of that signal (`DT_SIGNAL_CONTROL_REDRAW_ALL`, `DT_SIGNAL_CONTROL_NAVIGATION_REDRAW` and
+`DT_SIGNAL_HISTORY_RESYNC` are the ones that reach the navigation). Each `--d-signal-act` takes one
+value, compared whole (`src/darktable.c`), so `raise,print-trace` prints the usage and exits 1.
+`print-trace` is compiled in for GCC builds only (`DT_HAVE_SIGNAL_TRACE`, `src/CMakeLists.txt`):
+a clang build prints `[signal] print-trace not available, skipping` and still logs each raise. A
+redraw with no signal behind it is GTK's own: an overlay exposed, a widget restyled, an allocation
+that moved.
+
 ## Reading it
 
 `-d perf` prints `[darkroom] surface prepared / image painted / overlay predicates / overlays
