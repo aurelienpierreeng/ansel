@@ -2132,7 +2132,7 @@ void enter(dt_view_t *self)
   dt_control_set_mouse_over_id(imgid);
   dt_control_set_keyboard_over_id(imgid);
   g_idle_add((GSourceFunc)dt_thumbtable_scroll_to_selection, dt_gui_get_ui()->thumbtable_filmstrip);
-  int ret = dt_dev_load_image(dt_dev_get_global(), imgid);
+  int ret = dt_dev_load_image(dt_dev_get_global(), imgid, NULL);
   _darkroom_image_loaded_callback(NULL, imgid, ret, self);
 }
 
