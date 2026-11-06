@@ -65,8 +65,6 @@ typedef struct dt_preview_window_geometry_t
 static dt_preview_window_geometry_t _preview_geometry = { 0 };
 static dt_preview_window_t *_last_opened_preview = NULL;
 static int _preview_count = 0;
-static gboolean _previews_fullscreen = FALSE;
-static gboolean _previews_maximized = FALSE;
 
 void _preview_redraw(gpointer instance, dt_preview_window_t *preview);
 static void _preview_window_store_geometry(GtkWidget *dialog);
@@ -115,19 +113,15 @@ static gboolean _preview_window_state_changed(GtkWidget *dialog, GdkEventWindowS
   dt_preview_window_t *preview = (dt_preview_window_t *)user_data;
   preview->maximized = (event->new_window_state & GDK_WINDOW_STATE_MAXIMIZED) != 0;
   preview->fullscreen = (event->new_window_state & GDK_WINDOW_STATE_FULLSCREEN) != 0;
-  if(preview->fullscreen)
-    _previews_fullscreen = TRUE;
-  if(preview->maximized)
-    _previews_maximized = TRUE;
   return FALSE;
 }
 
 static void _preview_window_monitor_changed(GdkDisplay *, GdkMonitor *, gpointer user_data)
 {
   dt_preview_window_t *preview = (dt_preview_window_t *)user_data;
-  if(_previews_fullscreen || preview->fullscreen)
+  if(preview->fullscreen)
     gtk_window_fullscreen(GTK_WINDOW(preview->dialog));
-  else if(_previews_maximized || preview->maximized)
+  else if(preview->maximized)
     gtk_window_maximize(GTK_WINDOW(preview->dialog));
 }
 
@@ -162,8 +156,6 @@ static void _preview_window_destroy(GtkWidget *dialog, gpointer user_data)
   {
     _preview_geometry.valid = FALSE;
     _last_opened_preview = NULL;
-    _previews_fullscreen = FALSE;
-    _previews_maximized = FALSE;
   }
 }
 
