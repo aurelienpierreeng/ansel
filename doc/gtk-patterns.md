@@ -371,6 +371,70 @@ Measured: left in place, the entry's handler received Return on a highlighted su
 raw typed text, `subjects|animals, pla`; reconnected, the completion took that Return, and the
 entry's handler saw only the next one, once the popup had closed.
 
+## A side panel keeps the wheel once it has started scrolling
+
+*Found on top of `11fe9d529a`, 2026-11-05, against GTK 3.24.41 (`gtk/gtkscrolledwindow.c`,
+`gtk/gtkeventcontrollerscroll.c`, `gtk/gtkwidget.c` at that tag).*
+
+GTK gives a wheel step to the widget under the pointer and passes it up to the parents only if
+that widget does not take it. A side panel's scrolled window therefore scrolls only on the steps
+that none of its widgets want. While the panel scrolls, its content moves under a pointer that
+does not move, and the first widget that takes the wheel stops the panel and takes the following
+steps: a curve graph, a list with its own scrollbar, a slider holding the keyboard focus.
+
+Measured with an `LD_PRELOAD` shim on Xephyr at 1280×720: an emission hook on `scroll-event`
+logging each widget a step reached, `value-changed` on the panel's vadjustment, and wheel steps
+sent with `xdotool`. The right panel was on the basic tab, with rgb curve, color balance rgb,
+filmic rgb and tone equalizer expanded. The panel was scrolled to its bottom, the pointer held
+still at 40 % of its height, and 150 steps up were sent 60 ms apart. The panel took the first 32
+steps. The rgb curve graph then reached the pointer and took the remaining 118, and the panel
+stopped 157 px short of its top. The graphs of filmic and the sliders of the three other modules
+passed the steps on: a bauhaus slider takes the wheel only with the scroll focus, which a click
+gives it.
+
+`dt_ui_scroll_latch()` (`widgets/scroll_latch.c`), attached to both side panels in
+`_ui_init_panel_container_center()`, keeps the wheel on the panel. Once the panel has taken a
+step, a `GtkEventControllerScroll` on its child (the viewport) moves to the capture phase. There
+it sees each step over the content before the widget under the pointer does, and hands the step
+to the panel with `gtk_widget_event()`. The latch ends when the wheel rests for 500 ms, or when
+the pointer moves more than 4 px away from where the last step found it, which a
+`GtkEventControllerMotion` on the same child watches. A change of the panel's adjustment counts
+as scrolling, so a panel still gliding after a touchpad flick keeps the latch.
+
+Measured with the same shim and layout. The panel took all 150 steps and reached its top. Four
+more scenarios each sent 40 steps 60 ms apart, followed by 5 more steps:
+
+| between the 40 steps and the 5 | the 5 steps went to |
+|---|---|
+| a 300 ms rest | the panel |
+| a 2 px pointer move after 200 ms | the panel |
+| an 800 ms rest | the rgb curve graph |
+| a 10 px pointer move after 200 ms | the rgb curve graph |
+
+A touchpad was not measured: `xdotool` sends discrete steps only, so neither the glide nor the
+last event of a gesture went through this test.
+
+- **Outside a latch, the controller is in no phase at all.** For every scroll event,
+  `gtk_event_controller_scroll_handle_event()` returns `TRUE`, which stops propagation. A scroll
+  controller in the capture phase therefore takes every step, and its callback cannot give a
+  step back.
+- **The controller sits on the child, not on the scrolled window.** In the capture phase, a
+  widget's controllers run before GTK's private captured-event handler on the same widget, and
+  the scrolled window's handler cancels its deceleration on each scroll event. On the window
+  itself, a touchpad's last event, handed over, would start the deceleration that this handler
+  then cancels. On the child, the window's handler has already run.
+- **A latch starts only along an axis that shows a scrollbar.** The test is
+  `gtk_widget_get_child_visible()` on the scrollbars, which mirrors the flag GtkScrolledWindow
+  tests itself before it takes a step. A panel whose content fits does not hold the wheel.
+- **The motion controller sets no event mask in GTK 3.24.** The child gets
+  `GDK_POINTER_MOTION_MASK` explicitly. Without it, a motion over a part of the panel that no
+  child window listens to goes to an ancestor's window and never reaches the child's capture
+  phase.
+
+The two thresholds are a choice, not a measurement on users. For comparison, Firefox ends its
+wheel transaction after 1500 ms of rest, or after a pointer motion more than 100 ms after the
+last step (`mousewheel.transaction.timeout` and `mousewheel.transaction.ignoremovedelay`).
+
 ## On Windows, every GtkImage drawn holds two GDI objects
 
 *Found `2fadf8a366`, 2026-10-24, GTK 3.24.52 (MSYS2 UCRT64).*

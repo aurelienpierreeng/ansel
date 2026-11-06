@@ -106,7 +106,8 @@ Intel now lands on exactly the NVIDIA figure.
 ## Overriding per device
 
 The defaults above are only what Ansel writes the **first time** it sees a device. The live value
-is a per-device key in `anselrc` and is never overwritten once present:
+is a per-device key in `anselrc` and is never overwritten once present — with one exception,
+below:
 
 ```
 cldevice_v4/<index>/<canonical-name>/building=-cl-mad-enable -cl-no-signed-zeros
@@ -123,9 +124,99 @@ After changing it, drop the compiled kernel cache so it rebuilds:
 rm -rf ~/.cache/ansel/cached_kernels_for_*
 ```
 
-**Because the key is sticky, an existing installation keeps the old unsafe flags.** Users who
-already ran an affected build must either edit that key or delete it and let Ansel rewrite the
-new default. Testing a default change therefore requires a fresh `--configdir`.
+**The key is sticky, except for the legacy default.** A key that still reads exactly
+`-cl-fast-relaxed-math -cl-no-signed-zeros -cl-unsafe-math-optimizations` — the default before
+`d90978a75c` — is replaced by the current default at the next start (`dt_opencl_device_init()`);
+any other value, i.e. one a user wrote, is kept. The key is written before `opencl` is read, so
+an install that ran a build older than `d90978a75c` carries it whether OpenCL was enabled or
+not. Testing any *future* default change requires a fresh `--configdir` or a migration of the
+same kind.
+
+The migration matters because the compensated sums of `data/kernels/compensated.h` and the
+double-float of `hl_real.h` rely on the compiler not reassociating, and the legacy default
+licenses it. Whether a compiler actually uses the licence is a property of the compiler. The
+error term of `csum_two_sum()` under each option set:
+
+| where | `-cl-mad-enable -cl-no-signed-zeros` | legacy default |
+|---|---|---|
+| clang 18 and 23 offline, `-cc1 -triple spir64-unknown-unknown -O2 -emit-llvm` | 6 flops | `store float 0.0` (also under `-cl-unsafe-math-optimizations` or `-cl-fast-relaxed-math` alone) |
+| NVIDIA GTX 1060, proprietary driver 580.178.04 (has fp64) † | exact | **0** (also under `-cl-fast-relaxed-math` alone, not under `-cl-unsafe-math-optimizations` alone) |
+| Mesa 25.2.8 rusticl, Radeon 780M radeonsi, LLVM 20 (no fp64) | exact | exact |
+| Mesa 25.2.8 rusticl, llvmpipe, LLVM 20 (no fp64) † | exact | exact (also under either option alone) |
+| Apple OpenCL, Apple M1, macOS 26.7.1 (no fp64) | exact; double-float intact ‡ | **0**, and the double-float collapses to fp32 |
+| Apple OpenCL, Intel Macs | not measured | not measured |
+
+"exact" means the probe read back the true rounding error (1 for `1e8 + 1`, 1e-8 for `3 + 1e-8`)
+from the device. † measured by a reviewer on 2026-11-02 against `d8f7522b37`: a kernel running
+`csum_two_sum()` from `data/kernels/compensated.h`, built with `-w <options> -I data/kernels`, its
+inputs read from a buffer so that nothing folds at compile time. The rusticl radeonsi row on
+2026-11-02 against `bca94b57fd`, the Apple M1 row on 2026-11-02 against `b2dfd3ce9b`, clang 23 on
+2026-10-28 against `8e628de1c2`.
+
+On the M1 the probe also ran the double-float of `hl_real.h`, the arithmetic of the sparse solvers
+on this fp64-less device, through `clBuildProgram()` with each option set and the kernel directory
+as `-I`. Under the current default `hl_add(1e8, 1)` reads `(1e8, 1)` and `hl_div(1, 3)` is off by
+8.9e-16; under the legacy default they read `(1e8, 0)` and 3.0e-08 — single precision. Two runs,
+same figures.
+
+‡ Beyond the M1, not probed directly: read from the sparse solver self-test (`HL_SPCL_TEST`, the
+GPU Cholesky in `hl_real_t` against its CPU `double` twin) of the community test campaign, 2026-09-30 to
+2026-10-20, builds of the branch from before the migration but each run on a fresh
+`--configdir`, hence under the current default. Eight runs, M2 Pro, M3 Pro, M4, M4 Pro, M4 Max
+and M5, all read 4.25e-10 maximum relative difference, two orders of magnitude below single
+precision's unit roundoff (6e-8), which a solve carried out in plain fp32 cannot reach. For
+comparison, the same test reads 3.1e-12 with native double (seven NVIDIA cards), 1.2e-14 on an
+RX 6600 under AMD's driver, and 3.0e-10 with the double-float on rusticl. None of the campaign's
+runs used the legacy options: on those chips the legacy column is the M1's, assumed to hold for
+the same compiler, not measured.
+
+On the GTX 1060 (driver 580.178.04, `d8f7522b37`, measured by the same reviewer) native double
+does not move: `hl_div(1, 3)` is off by 1.9e-17 under all five option sets, and `HL_SPCL_TEST`
+reads 3.12e-12 under the current default and 3.13e-12 under `-cl-fast-relaxed-math`. The
+compensation does: a serial `csum_add()` over 4096 positive values spanning six decades is off by
+1.5e-08 under the current default and by 4.3e-06 under `-cl-fast-relaxed-math`, the same as a
+plain float sum. On a 24.5 Mpx export with the harmonic reconstruction forced (32-bit float TIFF,
+103 `hl_` kernels, five runs per key, bit-identical from run to run):
+
+| against the current default | RMS | max | pixels over 1e-6 | pixels over 1/255 |
+|---|---|---|---|---|
+| `-cl-fast-relaxed-math` | 8.66e-07 | 5.02e-03 | 3.19 % | 1 |
+| current default, `csum_two_sum()` error term forced to 0 in the kernel source | 8.21e-08 | 1.21e-04 | 0.41 % | 0 |
+
+The first row is not all the harmonic's: with the module disabled, the same options still move
+3.07 % of the pixels, and the base pipeline plus `lens` alone moves 1.52 %. Reduced to raw
+preparation, white balance, harmonic, demosaic and colour profiles, `-cl-fast-relaxed-math` moves
+0.021 % of the pixels; its worst error, 6.4e-04, is on the pixel where forcing the error term to
+0 gives the same 6.4e-04. Of the five self-tests run with the error term forced to 0 (sparse,
+core, knee, cgrad, region), only the mean of the region test moves, from 7.46e-09 to 7.61e-09.
+Nor do the legacy options buy time worth having there: the `hl_` kernels of that export take
+4.59 s under the legacy options and 4.62 s under the current default (median of five runs), 0.6 %.
+
+On llvmpipe, where the module itself runs on the CPU, the four self-tests read the same under the
+current default and `-cl-fast-relaxed-math`: sparse 3.37e-10, core 2.98e-07, aniso 3.58e-07, dome
+1.79e-07.
+
+So two compilers are measured to fold it, with very different costs. On the NVIDIA card what is
+lost is the compensation of the reductions, and its effect on an image is measured: forcing the
+error term to 0 moves 0.41 % of the pixels by at most 1.21e-04, about 3 % of a 1/255 step, small
+next to what the same options do to the rest of the pipeline; its solvers run in native double. On Apple Silicon, which
+has no fp64, the double-float folds down to plain fp32 as well: the biharmonic systems, conditioned
+around 3e8, would then be solved in single precision. That is the case the migration exists for:
+until it, every Mac that had run a build older than `d90978a75c` carried the legacy key, OpenCL
+enabled or not, and would have built these kernels with it as soon as OpenCL came on by default.
+
+Why rusticl does not fold, read from Mesa's dumps (`CLC_DEBUG=dump_llvm,dump_spirv`,
+`AMD_DEBUG=cs,nir,asm`) and its source at `mesa-25.2.8`: clang emits `fadd fast`, but Mesa runs
+it at `-O0` (`src/compiler/clc/clc_helpers.cpp`), so no LLVM pass uses the flags; the SPIR-V
+carries them as the legacy `FPFastMathMode Fast` bit (0x10); and `spirv_to_nir`
+(`src/compiler/spirv/vtn_alu.c`, `handle_fp_fast_math()`) marks an operation `exact` unless it
+carries all four `SPV_KHR_float_controls2` bits (`AllowRecip`, `AllowContract`, `AllowReassoc`,
+`AllowTransform`), which `Fast` does not. The final RDNA3 code keeps all six additions. A Mesa
+whose translator emits the `float_controls2` bits would no longer be protected by this.
+
+No `#error` tripwire on `__FAST_RELAXED_MATH__` guards those headers: a program that fails to
+build fails `dt_opencl_device_init()` as a whole, which would cost the user the GPU, not just
+this module.
 
 ## If you are adding a kernel
 

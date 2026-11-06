@@ -21,6 +21,7 @@
 #include "common/utility.h"
 #include "widgets/widget_settings.h"
 #include "widgets/resize_handle.h"
+#include "widgets/scroll_latch.h"
 #include "common/conf.h"
 #include "control/control.h"
 #include "develop/develop.h"
@@ -388,6 +389,8 @@ static GtkWidget *_ui_init_panel_container_center(GtkWidget *container, gboolean
   widget = gtk_viewport_new(a[2], a[3]);
   gtk_viewport_set_shadow_type(GTK_VIEWPORT(widget), GTK_SHADOW_NONE);
   gtk_container_add(GTK_CONTAINER(container), widget);
+  // Graphs, lists and sliders take the wheel: one passing under the pointer would stop the panel.
+  dt_ui_scroll_latch(container);
 
   /* create the container */
   container = widget;

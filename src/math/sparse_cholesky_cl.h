@@ -1,6 +1,7 @@
 /*
    This file is part of Ansel,
    Copyright (C) 2026 Aurélien PIERRE.
+   Copyright (C) 2026 Miguel Moquillon.
 
    Ansel is free software: you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -19,7 +20,7 @@
 #ifndef DT_MATH_SPARSE_CHOLESKY_CL_H
 #define DT_MATH_SPARSE_CHOLESKY_CL_H
 
-// Reusable GPU sparse SPD Cholesky solver (double precision, level-scheduled), factored out
+// Reusable GPU sparse SPD Cholesky solver (double or double-float, level-scheduled), factored out
 // of the highlights harmonic-transposition code. Host-side symbolic analysis (reusing the
 // CPU solver's elimination tree / reach), device-side numeric factorization and triangular
 // solves. The numeric kernels live in data/kernels/highlights_sparse.cl; the caller owns
@@ -27,11 +28,16 @@
 
 #include "common/logging.h"
 #include "system/macros.h"
+#include "system/mem_alloc.h"   // dt_free()
 #include "math/sparse_cholesky.h" // _sp_etree / _sp_ereach (host symbolic)
 #include "common/times.h"
 
 #ifdef HAVE_OPENCL
 #include "common/opencl.h"
+
+// hl_real_t on the device is 8 bytes either way: a double where the device has fp64, a float2
+// (hi, lo) double-float elsewhere (data/kernels/hl_real.h). Buffers are sized with this.
+#define DT_HL_REAL_BYTES 8
 
 // Handles of the four data/kernels/highlights_sparse.cl kernels the solver enqueues.
 typedef struct
@@ -57,12 +63,13 @@ typedef struct
   int devid;
 } _sp_chol_cl_t;
 
-// ===== GPU sparse Cholesky (double precision, level-scheduled) ==============================
+// ===== GPU sparse Cholesky (hl_real_t, level-scheduled) =====================================
 // Same symmetric-positive-definite systems as the CPU solver, factored and solved on the
 // device: the host performs the symbolic analysis on integer metadata only (elimination tree,
 // pattern of the factor L, flat column-modification update schedules, level schedule = groups
 // of mutually independent columns that can be processed in parallel), then the kernels in
-// data/kernels/highlights_sparse.cl run the numeric work in 64-bit floats. This is the
+// data/kernels/highlights_sparse.cl run the numeric work in hl_real_t: native double where the
+// device has fp64, a (hi, lo) float2 double-float elsewhere (data/kernels/hl_real.h). This is the
 // foundation of the no-roundtrip GPU pipeline (no mid-pipeline download/re-upload of pixels):
 // the right-hand side b and the solution x live in device buffers.
 
@@ -102,8 +109,40 @@ static inline cl_mem _sp_cl_upload(const int devid, const void *data, const size
   return mem;
 }
 
+// A host double vector on its way to the device: as is where the device computes in double,
+// split into (hi, lo) floats where it computes in double-float. Same byte count either way.
+static inline cl_mem _sp_cl_upload_real(const int devid, const double *const src, const size_t n)
+{
+  if(dt_opencl_device_has_fp64(devid)) return _sp_cl_upload(devid, src, sizeof(double) * n);
+  cl_float2 *split = g_try_malloc(sizeof(cl_float2) * n);
+  if(IS_NULL_PTR(split)) return NULL;
+  for(size_t i = 0; i < n; i++)
+  {
+    const float hi = (float)src[i];
+    split[i].s[0] = hi;
+    split[i].s[1] = (float)(src[i] - (double)hi);
+  }
+  cl_mem mem = _sp_cl_upload(devid, split, sizeof(cl_float2) * n);
+  dt_free(split);
+  return mem;
+}
+
+// ... and back: 1 on success, 0 on a failed read
+static inline int _sp_cl_read_real(const int devid, double *const dst, cl_mem mem, const size_t n)
+{
+  if(dt_opencl_device_has_fp64(devid))
+    return dt_opencl_read_buffer_from_device(devid, dst, mem, 0, sizeof(double) * n, CL_TRUE) == CL_SUCCESS;
+  cl_float2 *split = g_try_malloc(sizeof(cl_float2) * n);
+  if(IS_NULL_PTR(split)) return 0;
+  const int ok = dt_opencl_read_buffer_from_device(devid, split, mem, 0, sizeof(cl_float2) * n, CL_TRUE) == CL_SUCCESS;
+  if(ok)
+    for(size_t i = 0; i < n; i++) dst[i] = (double)split[i].s[0] + (double)split[i].s[1];
+  dt_free(split);
+  return ok;
+}
+
 // Factor the matrix A (upper-triangular compressed-sparse-column, symmetric positive
-// definite, double precision) on the GPU: host-side symbolic analysis (integer metadata),
+// definite, host double values) on the GPU: host-side symbolic analysis (integer metadata),
 // device-side numeric factorization, level by level. gd carries the kernel handles.
 // Mirrors _sp_chol_factor on the CPU: any change here must be mirrored there and re-validated
 // with the HL_SPCL_TEST self-test (_sp_chol_cl_selftest).
@@ -396,7 +435,7 @@ static inline _sp_chol_cl_t *_sp_chol_factor_cl(const int devid, const _sp_chol_
 
   // upload all the symbolic metadata + the seeded values to the device
   const double _tf1 = dt_get_wtime();
-  factor->values = _sp_cl_upload(devid, values_host, sizeof(double) * factor->n_nonzero);
+  factor->values = _sp_cl_upload_real(devid, values_host, factor->n_nonzero);
   factor->colptr = _sp_cl_upload(devid, colptr, sizeof(int) * (dimension + 1));
   factor->rowind = _sp_cl_upload(devid, rowind, sizeof(int) * factor->n_nonzero);
   factor->contptr = _sp_cl_upload(devid, contptr_h, sizeof(int) * ((size_t)factor->n_nonzero + 1));
@@ -519,8 +558,10 @@ fail:
   return NULL;
 }
 
-// Solve the factored system L L^T x = b on the GPU, with b in a device double buffer
-// (n doubles), overwritten in place with the solution; level-scheduled forward then backward
+// Solve the factored system L L^T x = b on the GPU, with b in a device hl_real_t buffer
+// (n values, uploaded from host doubles with _sp_cl_upload_real() and read back with
+// _sp_cl_read_real() -- raw doubles are garbage on a device without fp64), overwritten in
+// place with the solution; level-scheduled forward then backward
 // substitution. Returns 0 on success. gd = kernel handles.
 // Mirrors _sp_chol_solve on the CPU: any change here must be mirrored there and re-validated
 // with the HL_SPCL_TEST self-test (_sp_chol_cl_selftest).
@@ -551,7 +592,7 @@ static inline int _sp_chol_solve_cl(const _sp_chol_cl_t *const factor, const _sp
     dt_opencl_set_kernel_arg(devid, kernel_fwd, 6, sizeof(cl_mem), &factor->levcols);
     dt_opencl_set_kernel_arg(devid, kernel_fwd, 7, sizeof(int), &factor->lev_off[level]);
     dt_opencl_set_kernel_arg(devid, kernel_fwd, 8, sizeof(int), &n_level_cols);
-    dt_opencl_set_kernel_arg(devid, kernel_fwd, 9, sizeof(double) * local_size, NULL);
+    dt_opencl_set_kernel_arg(devid, kernel_fwd, 9, DT_HL_REAL_BYTES * local_size, NULL);
     if(dt_opencl_enqueue_kernel_2d_with_local(devid, kernel_fwd, sizes, local) != CL_SUCCESS) return 1;
   }
 
@@ -570,7 +611,7 @@ static inline int _sp_chol_solve_cl(const _sp_chol_cl_t *const factor, const _sp
     dt_opencl_set_kernel_arg(devid, kernel_bwd, 4, sizeof(cl_mem), &factor->levrows_bwd);
     dt_opencl_set_kernel_arg(devid, kernel_bwd, 5, sizeof(int), &factor->lev_off_bwd[level]);
     dt_opencl_set_kernel_arg(devid, kernel_bwd, 6, sizeof(int), &n_level_cols);
-    dt_opencl_set_kernel_arg(devid, kernel_bwd, 7, sizeof(double) * local_size, NULL);
+    dt_opencl_set_kernel_arg(devid, kernel_bwd, 7, DT_HL_REAL_BYTES * local_size, NULL);
     if(dt_opencl_enqueue_kernel_2d_with_local(devid, kernel_bwd, sizes, local) != CL_SUCCESS) return 1;
   }
   return 0;
