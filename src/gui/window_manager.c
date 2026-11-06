@@ -3,6 +3,7 @@
     Copyright (C) 2023, 2025-2026 Aurélien PIERRE.
     Copyright (C) 2023 Luca Zulberti.
     Copyright (C) 2025 Alynx Zhou.
+    Copyright (C) 2026 Guillaume Stutin.
     
     Ansel is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -338,26 +339,22 @@ static void _ui_panel_size_changed(GtkAdjustment *adjustment, GParamSpec *pspec,
   const int side = GPOINTER_TO_INT(user_data);
   if(side != LEFT_PANNEL && side != RIGHT_PANNEL) return;
 
-  // don't do anything when the size didn't actually change.
+  // This runs at every allocation of the viewport, whether the size changed or not.
   const float height = gtk_adjustment_get_upper(adjustment) - gtk_adjustment_get_lower(adjustment);
-
-  if(height == last_height[side]) return;
+  const gboolean resized = (height != last_height[side]);
   last_height[side] = height;
 
-  if(IS_NULL_PTR(dt_gui_get_global()->scroll_to[side])) return;
-  if(!_ui_scroll_target_is_live_widget(dt_gui_get_global()->scroll_to[side], side))
-  {
-    dt_gui_get_global()->scroll_to[side] = NULL;
-    return;
-  }
+  // A request lasts one allocation: kept any longer, the next resize would serve it, whatever caused that resize.
+  GtkWidget *target = dt_gui_get_global()->scroll_to[side];
+  dt_gui_get_global()->scroll_to[side] = NULL;
 
-  if(GTK_IS_WIDGET(dt_gui_get_global()->scroll_to[side]))
+  if(!resized || IS_NULL_PTR(target) || !_ui_scroll_target_is_live_widget(target, side)) return;
+
+  if(GTK_IS_WIDGET(target))
   {
-    gtk_widget_get_allocation(dt_gui_get_global()->scroll_to[side], &allocation);
+    gtk_widget_get_allocation(target, &allocation);
     gtk_adjustment_set_value(adjustment, allocation.y);
   }
-
-  dt_gui_get_global()->scroll_to[side] = NULL;
 }
 
 /* initialize the center container of panel */

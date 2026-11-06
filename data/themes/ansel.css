@@ -708,11 +708,11 @@ dialog .sidebar row:selected:hover label,
   border-radius: 10px;
 }
 
+/* The focus frame takes no room: anything that changes the box here moves the whole panel under the pointer. */
 .dt_iop_module.dt_module_focus,
 .dt_iop_module.dt_module_frame:focus {
-  border: 2px solid @grey_75;
-  margin-top: calc(0.625em - 4px);
-  margin-bottom: calc(0.625em - 4px);
+  border-color: @grey_75;
+  box-shadow: 0 0 0 1px @grey_75;
 }
 
 #module-header {
