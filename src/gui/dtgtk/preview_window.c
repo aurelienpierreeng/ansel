@@ -2,6 +2,7 @@
     This file is part of the Ansel project.
     Copyright (C) 2025 Aurélien PIERRE.
     Copyright (C) 2026 Guillaume Stutin.
+    Copyright (C) 2026 Roland Sahli.
     
     Ansel is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -48,7 +49,6 @@ typedef struct dt_preview_window_t
   struct dt_preview_window_t *prev_preview;
   gboolean close_prepared;
   gboolean maximized;
-  gboolean fullscreen;
   int width;
   int height;
 } dt_preview_window_t;
@@ -112,16 +112,13 @@ static gboolean _preview_window_state_changed(GtkWidget *dialog, GdkEventWindowS
 {
   dt_preview_window_t *preview = (dt_preview_window_t *)user_data;
   preview->maximized = (event->new_window_state & GDK_WINDOW_STATE_MAXIMIZED) != 0;
-  preview->fullscreen = (event->new_window_state & GDK_WINDOW_STATE_FULLSCREEN) != 0;
   return FALSE;
 }
 
 static void _preview_window_monitor_changed(GdkDisplay *, GdkMonitor *, gpointer user_data)
 {
   dt_preview_window_t *preview = (dt_preview_window_t *)user_data;
-  if(preview->fullscreen)
-    gtk_window_fullscreen(GTK_WINDOW(preview->dialog));
-  else if(preview->maximized)
+  if(preview->maximized)
     gtk_window_maximize(GTK_WINDOW(preview->dialog));
 }
 
@@ -311,10 +308,6 @@ void dt_preview_window_spawn(const int32_t imgid)
   }
   gtk_window_set_type_hint(GTK_WINDOW(dialog), GDK_WINDOW_TYPE_HINT_NORMAL);
   gtk_window_set_decorated(GTK_WINDOW(dialog), TRUE);
-  gtk_widget_realize(dialog);
-#ifdef _WIN32
-  gdk_window_set_functions(gtk_widget_get_window(dialog), GDK_FUNC_ALL & ~GDK_FUNC_MINIMIZE);
-#endif
   if(_preview_geometry.valid)
     gtk_window_move(GTK_WINDOW(dialog), _preview_geometry.x, _preview_geometry.y);
   g_signal_connect(G_OBJECT(dialog), "response", G_CALLBACK(_close_preview_popup), preview);
