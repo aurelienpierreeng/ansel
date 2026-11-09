@@ -525,7 +525,7 @@ static void _brush_init_ctrl_points(dt_masks_form_t *mask_form)
 
 /** fill the gap between 2 points with an arc of circle */
 /** this function is here because we can have gap in border, esp. if the corner is very sharp */
-static void _brush_points_recurs_border_gaps(float *cmax, float *bmin, float *bmax,
+static void _brush_points_recurs_border_gaps(const float *cmax, const float *bmin, const float *bmax,
                                              dt_masks_dynbuf_t *dpoints, dt_masks_dynbuf_t *dborder,
                                              gboolean clockwise, const int step)
 {
@@ -591,7 +591,7 @@ static void _brush_points_recurs_border_gaps(float *cmax, float *bmin, float *bm
 /** fill small gap between 2 points with an arc of circle */
 /** in contrast to the previous function it will always run the shortest path (max. PI) and does not consider
  * clock or anti-clockwise action */
-static void _brush_points_recurs_border_small_gaps(float *cmax, float *bmin, float *bmax,
+static void _brush_points_recurs_border_small_gaps(const float *cmax, const float *bmin, const float *bmax,
                                                    dt_masks_dynbuf_t *dpoints, dt_masks_dynbuf_t *dborder,
                                                    const int step)
 {
@@ -2152,8 +2152,9 @@ static void _apply_pen_pressure(dt_masks_form_gui_t *mask_gui, float *payload_bu
 }
 
 
-static int _brush_events_button_released(struct dt_iop_module_t *module, double widget_x, double widget_y,
-                                         int which, uint32_t state, dt_masks_form_t *mask_form, int parentid,
+static int _brush_events_button_released(struct dt_iop_module_t *module __attribute__((unused)),
+                                         double widget_x, double widget_y, int which, uint32_t state,
+                                         dt_masks_form_t *mask_form, int parentid,
                                          dt_masks_form_gui_t *mask_gui, int index)
 {
   
