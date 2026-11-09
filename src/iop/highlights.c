@@ -137,28 +137,6 @@ void output_format(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixel
   default_output_format(self, pipe, piece, dsc);
 }
 
-void autoset(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_t *pipe,
-             const struct dt_dev_pixelpipe_iop_t *piece, const void *input)
-{
-  dt_iop_highlights_params_t *p = (dt_iop_highlights_params_t *)self->params;
-  const dt_iop_roi_t *const roi_out = &piece->roi_out;
-  const float *const restrict in = (const float *)input;
-  float max_RGB[3] = { 0.0f };
-
-  __OMP_PARALLEL_FOR__(reduction(max : max_RGB[:3]) collapse(2))
-  for(size_t i = 0; i < roi_out->height; i++)
-    for(size_t j = 0; j < roi_out->width; j++)
-    {
-      const size_t channel = (piece->dsc_in.filters == 9u)
-                                 ? FCxtrans(i, j, roi_out, piece->dsc_in.xtrans)
-                                 : FC(i + roi_out->y, j + roi_out->x, piece->dsc_in.filters);
-      const float pixel_max = in[i * roi_out->width + j] / piece->dsc_in.processed_maximum[channel];
-      max_RGB[channel] = MAX(max_RGB[channel], pixel_max);
-    }
-
-  p->clip = MIN(MIN(max_RGB[0], max_RGB[1]), max_RGB[2]);
-}
-
 int legacy_params(dt_iop_module_t *self, const void *const old_params, const int old_version, void *new_params,
                   const int new_version)
 {
@@ -252,6 +230,86 @@ static inline void _hl_count_thresholds(const int mode, const float user_clip,
   }
   for(int c = 0; c < 3; c++) thresholds[c] = (factor > 0.f) ? factor * user_clip * pmax[c] : clip;
   thresholds[3] = clip;
+}
+
+// ===== autoset: the detection threshold just under the lowest saturation plateau =============
+#define DT_HL_AUTOSET_MARGIN 0.0015f
+#define DT_HL_AUTOSET_SITES 36 // the largest period, 6x6 X-Trans
+
+/**
+ * @brief Set the clip that puts the active mode's detection threshold just under the lowest
+ * saturation plateau of the module input.
+ *
+ * A site of the colour filter period saturates where at least DT_HL_MIN_CLIPPED_PIXELS photosites
+ * sit exactly on its maximum: the sensor cannot go higher, so they pile up there, while a site
+ * that does not saturate tops out on a lone brightest photosite. Sites, not colours: the two
+ * greens of a Bayer quad, or the blue sites of an X-Trans period, plateau at different levels.
+ * The threshold goes DT_HL_AUTOSET_MARGIN under the lowest plateau, in the active mode's terms.
+ * Measurements: doc/highlights-reconstruction.md.
+ */
+void autoset(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_t *pipe,
+             const struct dt_dev_pixelpipe_iop_t *piece, const void *input)
+{
+  dt_iop_highlights_params_t *p = (dt_iop_highlights_params_t *)self->params;
+  const dt_iop_roi_t *const roi = &piece->roi_in;
+  const float *const restrict in = (const float *)input;
+  const uint32_t filters = piece->dsc_in.filters;
+  // a mosaic counts the sites of its period (6x6 X-Trans, 2x2 Bayer), RGB input its 3 channels
+  const size_t period = (filters == 9u) ? 6 : 2;
+  const size_t n_sites = filters ? period * period : 3;
+  const size_t n_colours = filters ? 1 : 3;
+  const size_t ch = filters ? 1 : piece->dsc_in.channels;
+  const size_t width = roi->width;
+  const size_t height = roi->height;
+
+  // every photosite, for the level each site tops out at
+  float site_max[DT_HL_AUTOSET_SITES] = { 0.f };
+  __OMP_PARALLEL_FOR__(reduction(max : site_max[:DT_HL_AUTOSET_SITES]) collapse(2))
+  for(size_t i = 0; i < height; i++)
+    for(size_t j = 0; j < width; j++)
+      for(size_t c = 0; c < n_colours; c++)
+      {
+        const size_t site = filters ? (i % period) * period + j % period : c;
+        site_max[site] = fmaxf(site_max[site], in[(i * width + j) * ch + c]);
+      }
+
+  // every photosite again, for how many of each site sit exactly on that level
+  size_t site_at_max[DT_HL_AUTOSET_SITES] = { 0 };
+  __OMP_PARALLEL_FOR__(reduction(+ : site_at_max[:DT_HL_AUTOSET_SITES]) collapse(2))
+  for(size_t i = 0; i < height; i++)
+    for(size_t j = 0; j < width; j++)
+      for(size_t c = 0; c < n_colours; c++)
+      {
+        const size_t site = filters ? (i % period) * period + j % period : c;
+        site_at_max[site] += (in[(i * width + j) * ch + c] == site_max[site]);
+      }
+
+  // The threshold each colour gets at clip = 1, as process() derives it: a level divided by it is
+  // the clip that puts the threshold on that level.
+  dt_aligned_pixel_t pmax;
+  for(int c = 0; c < 4; c++)
+    pmax[c] = (piece->dsc_in.processed_maximum[c] > 0.f) ? piece->dsc_in.processed_maximum[c] : 1.0f;
+  dt_aligned_pixel_t unit;
+  _hl_count_thresholds(p->mode, 1.f, pmax, fminf(pmax[0], fminf(pmax[1], pmax[2])), unit);
+
+  // every site, as a clip, for the lowest saturated one and the brightest one
+  float plateau = 0.f;
+  float brightest = 0.f;
+  gboolean saturated = FALSE;
+  for(size_t s = 0; s < n_sites; s++)
+  {
+    const int colour = !filters        ? (int)s
+                       : filters == 9u ? FCxtrans(s / period, s % period, roi, piece->dsc_in.xtrans)
+                                       : FC(s / period + roi->y, s % period + roi->x, filters);
+    const float level = site_max[s] / unit[colour];
+    brightest = fmaxf(brightest, level);
+    if(site_at_max[s] < DT_HL_MIN_CLIPPED_PIXELS) continue;
+    plateau = saturated ? fminf(plateau, level) : level;
+    saturated = TRUE;
+  }
+
+  // without a plateau, a threshold on the brightest photosite leaves nothing to reconstruct
+  p->clip = saturated ? plateau * (1.f - DT_HL_AUTOSET_MARGIN) : fmaxf(1.f, brightest);
 }
 
 // Count the input pixels the active mode would treat as clipped, against those thresholds. A
