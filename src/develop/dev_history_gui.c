@@ -26,29 +26,14 @@
 #include "develop/gui_throttle.h"
 #include "develop/develop.h"
 #include "develop/imageop.h"
+#include "develop/masks_gui.h"
 #include "develop/pixelpipe_hb.h"
 #include "system/macros.h"
 
 #include <gtk/gtk.h>
 
-/* Undoing an edit also undoes what the user was LOOKING at: the recorded mask-edit view
- * for the focused module. The data half (dt_masks_set_edit_mode, request_mask_display) is
- * restored by the engine; this pokes the blending panel's widgets to match. */
-static void _undo_restore_gui(dt_develop_t *dev, const int mask_edit_mode,
-                              const int request_mask_display)
-{
-  (void)mask_edit_mode;   // consumed by the engine's dt_masks_set_edit_mode() call
-
-  dt_iop_gui_update_blendif(dev->gui_module);
-  dt_iop_gui_blend_data_t *bd = dev->gui_module && dev->gui_module->gui
-                                  ? (dt_iop_gui_blend_data_t *)dev->gui_module->gui->blend_data
-                                  : NULL;
-  if(bd)
-    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(bd->showmask),
-                                 request_mask_display == DT_DEV_PIXELPIPE_DISPLAY_MASK);
-}
-
-void dt_dev_history_gui_update(dt_develop_t *dev)
+/* The module widgets after a backend history reload. */
+static void _history_gui_refresh(dt_develop_t *dev)
 {
   if(!dev->gui_attached) return;
 
@@ -102,6 +87,36 @@ void dt_dev_history_gui_update(dt_develop_t *dev)
   dt_gui_freeze_end();
 
   dt_dev_signal_modules_moved(dev);
+}
+
+/* Undoing an edit also undoes what the user was LOOKING at: the recorded mask-edit view for the
+ * focused module. Undo and redo refresh the widgets here rather than through
+ * dt_dev_history_gui_update(), because they keep a shape creation session armed. */
+static void _undo_restore_gui(dt_develop_t *dev, const int mask_edit_mode,
+                              const int request_mask_display)
+{
+  _history_gui_refresh(dev);
+
+  dt_iop_module_t *module = dev->gui_module;
+  if(IS_NULL_PTR(module)) return;
+
+  // Changing the edit mode would end an armed creation session.
+  if(IS_NULL_PTR(dev->form_gui) || !dev->form_gui->creation)
+    dt_masks_set_edit_mode(module, mask_edit_mode);
+  module->request_mask_display = request_mask_display;
+
+  dt_iop_gui_update_blendif(module);
+  dt_iop_gui_blend_data_t *bd = module->gui ? (dt_iop_gui_blend_data_t *)module->gui->blend_data : NULL;
+  if(bd)
+    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(bd->showmask),
+                                 request_mask_display == DT_DEV_PIXELPIPE_DISPLAY_MASK);
+}
+
+void dt_dev_history_gui_update(dt_develop_t *dev)
+{
+  // A history reload is an edit made off the canvas: it ends a shape creation session, as Esc does.
+  if(dev->gui_attached) dt_masks_form_exit_creation(NULL, dev->form_gui);
+  _history_gui_refresh(dev);
 }
 /* ---------------------------------------------------------------------------------------
  * Throttling the history commit, at the one place every widget already goes through.
@@ -305,6 +320,9 @@ void dt_dev_history_drop_pending_commits(dt_develop_t *dev)
 void dt_dev_add_history_item_real(dt_develop_t *dev, dt_iop_module_t *module, gboolean enable, gboolean redraw)
 {
   (void)redraw;
+  // A shape creation session is a tool for the canvas: an edit made anywhere else ends it, as Esc
+  // does. The session's own strokes commit through dt_dev_history_commit_item_now() instead.
+  dt_masks_form_exit_creation(NULL, dev->form_gui);
   _queue_pending_commit(dev, module, enable);
 }
 

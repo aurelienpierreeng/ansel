@@ -121,6 +121,70 @@ button that menu just chose unpressed.
 built from it through `dt_masks_shape_menu_item_new()`, so a menu and the button offering the same
 shape cannot drift apart — they did, as "add path" against "add polygon".
 
+## A creation session ends with the first edit made off the canvas
+
+*Found on top of `5c15b7c508`, 2026-11-09.*
+
+A shape creation session is a tool for the canvas. The strokes, and the canvas's own edits of the
+shapes they make, keep it armed; so do zooming, panning, undo and redo. Every other edit ends it,
+as Escape does, through `dt_masks_form_exit_creation()`:
+
+- every edit made by a GUI control, at `dt_dev_add_history_item_real()`
+  (`develop/dev_history_gui.c`), the entry every widget commits through: a module's parameters,
+  its on/off switch, presets, the whole blending panel, a module moved in the pipe;
+- every history reload, at `dt_dev_history_gui_update()` (same file): a jump in the history list,
+  a style, a pasted or a compressed history applied to the image being edited
+  (`dt_apply_dev_history_update()`), a module-order preset.
+
+A module reset already ended it through `dt_iop_gui_blending_lose_focus()`, and so does giving
+another module the focus. Undo and redo reload the history too, but `_pop_undo()` refreshes the
+widgets through the GUI handler it is given (`_undo_restore_gui()`), not through
+`dt_dev_history_gui_update()`; that handler also restores the recorded mask view, except the edit
+mode while a session is armed, since changing it would end the session. Both entries live in
+`dev_history_gui.c`, the one file outside the module that includes `masks_gui.h` for this. The
+history list, the reset, the focus change and the module-order preset are read from the code, not
+measured; the history list and the preset go through the same function as the measured
+`dt_apply_dev_history_update()`.
+
+**The session's own commits must not go through the widget entry**, or each stroke would end the
+session it was drawn in. `dt_masks_gui_form_save_creation()` (each saved shape) and the darkroom's
+mask-edit commit (`_delayed_history_commit()`, `views/darkroom.c`, already throttled by
+`gui_throttle`) call `dt_dev_history_commit_item_now()` instead, after
+`dt_dev_history_flush_pending_commits()` so that the edits queued before them keep their order.
+The darkroom's commit is the one that was missed first: through the widget entry, it ended every
+session right after its first shape. A new commit made from the canvas must do the same.
+
+**Two refreshes used to end a session behind the user's back.** `dt_iop_gui_blend_masks_update()`
+switched the masks off when the module's group had no shape, which is always the case before a
+session's first stroke; it left the module's brush button pressed after `dt_iop_gui_update()`,
+with creation off. Undo restored the edit mode recorded with the step, which ends any session.
+Both now leave an armed session alone.
+
+**The session overlay counts only the shapes the history still holds.** Its cache key was the
+number and the ids of the shapes saved in the session; an undo that takes one away leaves both
+unchanged, so the overlay kept painting the undone stroke from its cache until the next stroke.
+`_masks_draw_creation_session_forms()` now counts the ids that still resolve in `dev->forms`.
+
+Measured under ASan (Debug, clang 19) with a `LD_PRELOAD` shim. On the GUI thread, it arms the
+brush on "diffuse or sharpen", fires one gesture, then plays two strokes through
+`dt_control_button_pressed()`, `dt_control_mouse_moved()` and `dt_control_button_released()`, and
+counts the shapes they saved. Each case runs with the module's group empty and with one shape
+already saved:
+
+| gesture | before, empty | before, 1 shape | after, empty | after, 1 shape |
+|---|---|---|---|---|
+| none | armed, 2 saved | armed, 2 | armed, 2 | armed, 2 |
+| a module slider (1 → 2) | armed, 2 | armed, 2 | ended, 0 | ended, 0 |
+| the module's on/off switch | armed, 2 | armed, 2 | ended, 0 | ended, 0 |
+| the parametric mask's toggle | ended, 0 | armed, 2 | ended, 0 | ended, 0 |
+| `dt_apply_dev_history_update()` | ended, 0 | armed, 2 | ended, 0 | ended, 0 |
+| `dt_undo_do_undo()` | ended, 0 | ended, 0 | armed, 2 | armed, 2 |
+| `dt_iop_gui_update()` alone | ended, button still pressed | armed, 2 | armed, 2 | armed, 2 |
+
+With `-d perf`, the undo of the session's only stroke is followed by a re-render of the overlay
+counting 0 shapes; before the count changed, none came until the next stroke. No run reads freed
+memory.
+
 ## The shape manager's two lists, and the graph questions behind them
 
 *Found `fdcee2ad8d`, 2026-09-04.*

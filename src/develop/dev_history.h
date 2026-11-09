@@ -386,9 +386,9 @@ void dt_dev_write_history(struct dt_develop_t *dev, gboolean async);
  *
  * @param dev Develop context.
  */
-/* Implemented in dev_history_gui.c: attaches missing expanders and refreshes every module
- * widget after a backend history reload. Declared here because its callers are the ones
- * already driving the engine, and the signature carries no GTK type. */
+/* Implemented in dev_history_gui.c: ends a shape creation session, attaches missing expanders
+ * and refreshes every module widget after a backend history reload. Declared here because its
+ * callers are the ones already driving the engine, and the signature carries no GTK type. */
 void dt_dev_history_gui_update(struct dt_develop_t *dev);
 
 /**
@@ -406,15 +406,16 @@ void dt_dev_history_commit_item_now(struct dt_develop_t *dev, struct dt_iop_modu
                                     gboolean switched);
 
 /**
- * @brief Restores the presentation half of an undo record: the blending panel's mask
- * toggles for the focused module.
+ * @brief Restores the presentation half of an undo or redo step: the module widgets, and the
+ * mask view recorded for the focused module.
  *
  * @details Undo records capture `mask_edit_mode` and `request_mask_display` alongside the
  * history snapshot, because undoing an edit should also undo what the user was LOOKING at.
- * Restoring the data half is the engine's job; restoring the widgets is not, so the engine
- * calls this handler -- installed by dt_dev_history_gui_init(), absent headless -- with the
- * recorded values (dt_masks_edit_mode_t and dt_dev_pixelpipe_display_mask_t, widened to
- * int so this header does not need their enums).
+ * The engine replaces the history, then calls this handler -- installed by
+ * dt_dev_history_gui_init(), absent headless -- with the recorded values
+ * (dt_masks_edit_mode_t and dt_dev_pixelpipe_display_mask_t, widened to int so this header
+ * does not need their enums). It refreshes the widgets as dt_dev_history_gui_update() does,
+ * but keeps a shape creation session armed.
  */
 typedef void (*dt_dev_history_undo_restore_gui_handler_t)(struct dt_develop_t *dev,
                                                           int mask_edit_mode,
