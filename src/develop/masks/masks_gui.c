@@ -1790,12 +1790,17 @@ static gboolean _dt_masks_events_flush_rebuild_if_needed(struct dt_iop_module_t 
  *
  * Pitfall: set_hint_message() may rely on gui->form_selected, so we may need
  *          a temporary override when no hint is produced.
+ *
+ * The hint describes the form visible NOW, so it is read here and not taken from the caller:
+ * a shape's event handler may replace the visible form and free the old one (doc/masks-gui.md).
  */
-static gboolean _set_hinter_message(dt_masks_form_gui_t *mask_gui, const dt_masks_form_t *mask_form)
+static gboolean _set_hinter_message(dt_masks_form_gui_t *mask_gui)
 {
   // Sized for the longest hint once translated: a truncated message would also cut a Pango
   // markup tag in half, and dt_hinter_set_message() feeds the result to gtk_label_set_markup().
   char message[512] = "";
+
+  const dt_masks_form_t *mask_form = dt_masks_get_visible_form(mask_gui->dev);
 
   // Checked before use, not after: this function tests IS_NULL_PTR(mask_form) further down
   // and its own dt_print writes `mask_form ? mask_form->type : -1`, so a NULL was always
@@ -2890,17 +2895,10 @@ static int _dt_masks_events_mouse_moved(dt_develop_t *dev, struct dt_iop_module_
 
   if(!IS_NULL_PTR(mask_gui))
   {
-    // Re-read the visible form. dt_masks_cow_touch() above may have cloned it, spliced the
-    // clone into dev->forms in place of the original, re-pointed form_gui->form_visible at
-    // the clone and dropped the original's last reference -- freeing it. mask_form was
-    // captured BEFORE that call, so it can be dangling here; form_visible is the pointer the
-    // COW maintains.
-    //
-    // Sentry 143237622: SIGSEGV inside g_list_length() walking the freed points list, via
-    // _set_hinter_message() -> _polygon_set_hint_message(), on an ordinary darkroom
-    // mouse-move over a polygon.
-    mask_form = dt_masks_get_visible_form(dev);
-    if(!IS_NULL_PTR(mask_form)) _set_hinter_message(mask_gui, mask_form);
+    // The hint reads the visible form itself, never mask_form: dt_masks_cow_touch() above may
+    // have cloned the visible form and freed the original mask_form still points at (Sentry
+    // 143237622: SIGSEGV in _polygon_set_hint_message() walking the freed points list).
+    _set_hinter_message(mask_gui);
     _set_cursor_shape(mask_gui);
   }
   return result;
@@ -2925,13 +2923,6 @@ int dt_masks_events_button_released(dt_develop_t *dev, struct dt_iop_module_t *m
       = _dt_masks_events_get_dispatch_form(mask_form, mask_gui, &group_entry, &parent_id, &form_index);
   dispatch_form = dt_masks_cow_touch(dev, dispatch_form);
 
-  // dt_masks_cow_touch() above may have cloned the visible form, spliced the clone into
-  // dev->forms in place of the original, re-pointed form_gui->form_visible at it and
-  // dropped the original's last reference -- freeing it. mask_form was captured before
-  // that call, so re-read what form_visible points at now rather than using a pointer
-  // that may already be dangling. Same defect as Sentry 143237622 in mouse_moved.
-  mask_form = dt_masks_get_visible_form(dev);
-
   int result = 0;
   if(!IS_NULL_PTR(dispatch_form) && dispatch_form->functions && dispatch_form->functions->button_released)
     result = dispatch_form->functions->button_released(module, x, y, button,
@@ -2940,6 +2931,11 @@ int dt_masks_events_button_released(dt_develop_t *dev, struct dt_iop_module_t *m
   if(_dt_masks_events_flush_rebuild_if_needed(module, dispatch_form, mask_gui, form_index, button))
     result = 1;
 
+  // Re-read the visible form: mask_form may be freed by now. dt_masks_cow_touch() above may
+  // have cloned it, and the shape's handler may have replaced it -- a creation session shows
+  // the next unfinished shape once one is saved, and a brush release that gathered no points
+  // ends the session, freeing the unfinished shape (doc/masks-gui.md).
+  mask_form = dt_masks_get_visible_form(dev);
   if(!IS_NULL_PTR(mask_form) && (mask_form->type & DT_MASKS_GROUP) && !IS_NULL_PTR(mask_gui))
   {
     const dt_masks_form_group_t *selected_group_entry
@@ -2954,7 +2950,7 @@ int dt_masks_events_button_released(dt_develop_t *dev, struct dt_iop_module_t *m
 
   if(!IS_NULL_PTR(mask_gui))
   {
-    _set_hinter_message(mask_gui, mask_form);
+    _set_hinter_message(mask_gui);
     _set_cursor_shape(mask_gui);
   }
 
@@ -2996,6 +2992,12 @@ int dt_masks_events_button_pressed(dt_develop_t *dev, struct dt_iop_module_t *mo
   mask_form = dt_masks_get_visible_form(dev);
   _dt_masks_events_update_hover(dispatch_form, mask_gui, form_index);
 
+  // Read before the shape's handler, which may replace the visible form and free mask_form:
+  // finishing a shape in a creation session shows the next unfinished one (doc/masks-gui.md).
+  const gboolean shape_was_selected = (mask_form->type & DT_MASKS_GROUP)
+                                          ? (prev_group_selected >= 0 && prev_group_selected == form_index)
+                                          : prev_any_selected;
+
   gboolean return_val = FALSE;
   if(!IS_NULL_PTR(dispatch_form) && dispatch_form->functions && dispatch_form->functions->button_pressed)
     return_val = dispatch_form->functions->button_pressed(module, x, y, pressure,
@@ -3005,9 +3007,6 @@ int dt_masks_events_button_pressed(dt_develop_t *dev, struct dt_iop_module_t *mo
   // `dispatch_form` can pass NULL in case of deselection.
   dt_masks_select_form(dev, module, dispatch_form);
 
-  const gboolean shape_was_selected = (mask_form->type & DT_MASKS_GROUP)
-                                          ? (prev_group_selected >= 0 && prev_group_selected == form_index)
-                                          : prev_any_selected;
   _apply_gui_button_pressed_state(mask_gui, button, state, shape_was_selected);
 
   // Refresh hover/highlight state, the hint message and the cursor shape now that the click
@@ -3017,7 +3016,7 @@ int dt_masks_events_button_pressed(dt_develop_t *dev, struct dt_iop_module_t *mo
   // what the click just did on the next physical mouse move -- same class of staleness as
   // mouse_moved()/button_released(), which already refresh all three at their own tail.
   _dt_masks_events_update_hover(dispatch_form, mask_gui, form_index);
-  _set_hinter_message(mask_gui, mask_form);
+  _set_hinter_message(mask_gui);
   _set_cursor_shape(mask_gui);
 
   if(button == 3 && !return_val)
@@ -3244,13 +3243,6 @@ int dt_masks_events_mouse_scrolled(dt_develop_t *dev, struct dt_iop_module_t *mo
       = _dt_masks_events_get_dispatch_form(mask_form, mask_gui, &group_entry, &parent_id, &form_index);
   dispatch_form = dt_masks_cow_touch(dev, dispatch_form);
 
-  // dt_masks_cow_touch() above may have cloned the visible form, spliced the clone into
-  // dev->forms in place of the original, re-pointed form_gui->form_visible at it and
-  // dropped the original's last reference -- freeing it. mask_form was captured before
-  // that call, so re-read what form_visible points at now rather than using a pointer
-  // that may already be dangling. Same defect as Sentry 143237622 in mouse_moved.
-  mask_form = dt_masks_get_visible_form(dev);
-
   if(!mask_gui->creation && !dt_masks_is_anything_selected(mask_gui))
     return 0;
 
@@ -3269,9 +3261,12 @@ int dt_masks_events_mouse_scrolled(dt_develop_t *dev, struct dt_iop_module_t *mo
                                                       key_state, dispatch_form, parent_id, mask_gui, form_index,
                                                       interaction);
 
+  // Re-read the visible form: mask_form may be freed by now, by dt_masks_cow_touch() above or
+  // by the shape's handler (doc/masks-gui.md).
+  mask_form = dt_masks_get_visible_form(dev);
   if(!IS_NULL_PTR(mask_gui))
   {
-    const gboolean hinted = _set_hinter_message(mask_gui, mask_form);
+    const gboolean hinted = _set_hinter_message(mask_gui);
     dt_print(DT_DEBUG_INPUT,
              "[masks] scroll: ret=%d hinted=%d form=%p type=%d gui=%p group_selected=%d flow=%d state=0x%x\n",
              result, hinted, (void *)mask_form, mask_form ? mask_form->type : -1, (void *)mask_gui,
