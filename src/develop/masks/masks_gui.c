@@ -2931,10 +2931,9 @@ int dt_masks_events_button_released(dt_develop_t *dev, struct dt_iop_module_t *m
   if(_dt_masks_events_flush_rebuild_if_needed(module, dispatch_form, mask_gui, form_index, button))
     result = 1;
 
-  // Re-read the visible form: mask_form may be freed by now. dt_masks_cow_touch() above may
-  // have cloned it, and the shape's handler may have replaced it -- a creation session shows
-  // the next unfinished shape once one is saved, and a brush release that gathered no points
-  // ends the session, freeing the unfinished shape (doc/masks-gui.md).
+  // Re-read the visible form: dt_masks_cow_touch() above may have cloned it and freed the
+  // original mask_form points at, and the shape's handler may have replaced it -- a creation
+  // session shows the next unfinished shape once one is saved (doc/masks-gui.md).
   mask_form = dt_masks_get_visible_form(dev);
   if(!IS_NULL_PTR(mask_form) && (mask_form->type & DT_MASKS_GROUP) && !IS_NULL_PTR(mask_gui))
   {
