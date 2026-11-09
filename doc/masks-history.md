@@ -86,7 +86,8 @@ are now refcounted (`dt_masks_form_t.refcount`, `src/develop/masks/masks_history
   `blend_gui.c` group operations, the shape-manager panel in `libs/shape_manager.c`) must route through
   this before touching `form->points` or any other field. `dt_masks_cow_touch` also re-points
   `dev->form_gui->form_visible` if it was the form that got cloned — that's the only other raw
-  `dt_masks_form_t*` cached outside `dev->forms`.
+  `dt_masks_form_t*` cached outside `dev->forms`. It holds no reference, so a copy of it does not
+  outlive a shape's event handler either ([`masks-gui.md`](masks-gui.md)).
 - `dt_masks_replace_current_forms()` swaps `dev->forms` wholesale (used when history navigation
   rebuilds it) by releasing the old references and taking new ones — never a raw deep copy.
 - `pipe->forms` (the pixel-pipeline's own snapshot, taken once per `dt_dev_pixelpipe_process()`

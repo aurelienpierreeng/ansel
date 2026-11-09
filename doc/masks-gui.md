@@ -91,6 +91,40 @@ instead would survive that, since `dt_masks_gui_selected_segment_index()` (`mask
 `seg_hovered` outright and consults no selection flag — but two spellings of one question is what
 this section exists to prevent, so the flags are kept honest at the source instead.
 
+## A shape's event handler may replace the visible form, so the dispatcher reads it again after
+
+*Found on top of `3ce1ec6716`, 2026-11-09.*
+
+`dev->form_gui->form_visible` is a raw pointer and holds no reference. The event dispatchers in
+`masks/masks_gui.c` read it, hand one shape's handler the event, and then still have work to do —
+the group selection change after a release, the hint, the cursor. The handler may have replaced
+the visible form by then, and freed the one it replaced:
+
+- finishing a shape in a creation session (`dt_masks_gui_form_save_creation()`) makes the next
+  unfinished shape visible — the saved one survives, `dev->forms` holds it;
+- a brush release that gathered no points (`_brush_events_button_released()`) ends the session
+  through `dt_masks_set_edit_mode()` and `dt_masks_change_form_gui()`, and the unfinished shape is
+  freed, since nothing but the visible pointer held it. Such a release is one whose press never
+  collected a point: the press carried Shift and the release did not, the press did not reach the
+  masks, or the device sent the release twice.
+
+So nothing the dispatcher read before the handler is valid after it. `_set_hinter_message()` reads
+the visible form itself instead of taking one from its caller, `dt_masks_events_button_released()`
+and `dt_masks_events_mouse_scrolled()` read it again after the handler, and
+`dt_masks_events_button_pressed()` computes what describes the state before the click
+(`shape_was_selected`) before the handler runs. `dt_masks_cow_touch()` replaces the visible form
+the same way one step earlier, which the re-read after the handler covers too.
+`dt_masks_events_key_pressed()` reads its `mask_form` again only after a handler that declined the
+key, and no handler replaces the visible form while declining.
+
+Measured under ASan (Debug, clang 19) with a `LD_PRELOAD` shim that, on the GUI thread, arms the
+brush on "diffuse or sharpen" and plays two strokes through `dt_control_button_pressed()`,
+`dt_control_mouse_moved()` and `dt_control_button_released()`. Two ordinary strokes are clean. A
+second stroke without a press, with a Shift press, or followed by a second release read freed
+memory in `dt_masks_events_button_released()` three times out of three, the block allocated by
+`dt_masks_gui_form_save_creation()` at the end of the first stroke and freed by
+`dt_masks_change_form_gui()` under the brush's handler; with the re-read, the four runs are clean.
+
 ## A shape toolbar's pressed button is a view on the creation state, not a state of its own
 
 *Found `1083ebf27b`, 2026-09-01.*
