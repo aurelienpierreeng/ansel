@@ -781,7 +781,11 @@ static gboolean _ls_find_camera(const char *maker, const char *model, ls_camera_
     return tls->cam_found ? TRUE : FALSE;
   }
 
-  ls_camera_t cam;
+  /* Zeroed because ls_db_find_camera() leaves it untouched on a miss, and the miss is
+   * cached below: tls->cam is assigned either way, so without this the copy reads
+   * indeterminate bytes. Nothing ever looks at them -- tls->cam_found gates every read --
+   * but GCC 16 is right to call it out. */
+  ls_camera_t cam = { 0 };
   /* A miss is cached too: it costs a lookup to establish and it will not change. */
   const gboolean found = (ls_db_find_camera(db, maker, model, &cam) == 1) ? TRUE : FALSE;
 
