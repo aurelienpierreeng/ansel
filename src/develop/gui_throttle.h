@@ -29,6 +29,10 @@ void dt_gui_throttle_init(int saved_runtime_us);
  *  disables the timeout. */
 void dt_gui_throttle_set_timeout_ms(guint timeout_ms);
 
+/** The timeout the host set, in ms, whatever redraws take: dt_gui_throttle_get_timeout_ms()
+ *  shortens it to the average redraw time, and that time says nothing of how fast input repeats. */
+guint dt_gui_throttle_get_user_timeout_ms(void);
+
 
 void dt_gui_throttle_cleanup(void);
 

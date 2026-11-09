@@ -33,6 +33,7 @@
     Copyright (C) 2022 Victor Forsiuk.
     Copyright (C) 2024 Alynx Zhou.
     Copyright (C) 2025-2026 Guillaume Stutin.
+    Copyright (C) 2026 Miguel Moquillon.
     
     darktable is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -554,6 +555,8 @@ static int dt_opencl_device_init(dt_opencl_t *cl, const int dev, cl_device_id *d
   cl->dev[dev].summary = CL_COMPLETE;
   cl->dev[dev].used_global_mem = 0;
   cl->dev[dev].nvidia_sm_20 = 0;
+  cl->dev[dev].fp64 = 0;
+  cl->dev[dev].aperture_clamp = TRUE;
   cl->dev[dev].vendor = NULL;
   cl->dev[dev].runtime_id = NULL;
   cl->dev[dev].name = NULL;
@@ -679,6 +682,7 @@ static int dt_opencl_device_init(dt_opencl_t *cl, const int dev, cl_device_id *d
   dt_print_nts(DT_DEBUG_OPENCL, "   DEVICE:                   %d: '%s'%s\n", k, infostr, (newdevice) ? ", NEW" : "" );
   dt_print_nts(DT_DEBUG_OPENCL, "   CANONICAL NAME:           %s\n", cname);
   dt_print_nts(DT_DEBUG_OPENCL, "   PLATFORM NAME & VENDOR:   %s, %s\n", platform_name, platform_vendor);
+  dt_print_nts(DT_DEBUG_OPENCL, "   DEVICE VENDOR:            %s (id 0x%x)\n", vendor, vendor_id);
 
   err = dt_opencl_get_device_info(cl, devid, CL_DRIVER_VERSION, (void **)&driverversion, &driverversion_size);
   if(err != CL_SUCCESS)
@@ -713,6 +717,19 @@ static int dt_opencl_device_init(dt_opencl_t *cl, const int dev, cl_device_id *d
 
   cl->dev[dev].cltype = (unsigned int)type;
 
+  // real double-precision support, from the device itself and not from the compiler macro
+  cl_device_fp_config fp64_config = 0;
+  (cl->dlocl->symbols->dt_clGetDeviceInfo)(devid, CL_DEVICE_DOUBLE_FP_CONFIG, sizeof(cl_device_fp_config),
+                                           &fp64_config, NULL);
+  cl->dev[dev].fp64 = (fp64_config != 0);
+
+  /* Apple Silicon's GPU, under Apple's own runtime, is the one host-unified device the
+   * max_mem_alloc / 2 clamp is known to starve (dt_opencl_get_device_available()). Both names
+   * are tested: an Intel Mac publishes the same "Apple" platform but its GPUs report "Intel Inc."
+   * or "AMD" as their vendor, and nothing has been measured there. Measured on an M1 and an
+   * M4 Pro (clinfo): platform "Apple", device vendor "Apple", vendor id 0x1027f00 on both. */
+  const gboolean apple_silicon = !strncasecmp(platform_name, "Apple", 5) && !strncasecmp(vendor, "Apple", 5);
+  cl->dev[dev].aperture_clamp = !apple_silicon;
 
   if(!strncasecmp(vendor, "NVIDIA", 6))
   {
@@ -728,8 +745,9 @@ static int dt_opencl_device_init(dt_opencl_t *cl, const int dev, cl_device_id *d
     cl->dev[dev].micro_nap = (is_cpu_device) ? 1000 : 250;
 
   dt_print_nts(DT_DEBUG_OPENCL, "   DRIVER VERSION:           %s\n", driverversion);
-  dt_print_nts(DT_DEBUG_OPENCL, "   DEVICE VERSION:           %s%s\n", deviceversion,
-     cl->dev[dev].nvidia_sm_20 ? ", SM_20 SUPPORT" : "");
+  dt_print_nts(DT_DEBUG_OPENCL, "   DEVICE VERSION:           %s%s%s\n", deviceversion,
+     cl->dev[dev].nvidia_sm_20 ? ", SM_20 SUPPORT" : "",
+     cl->dev[dev].fp64 ? ", FP64" : ", NO FP64 (double-float kernels)");
   dt_print_nts(DT_DEBUG_OPENCL, "   DEVICE_TYPE:              %s%s%s\n",
       ((type & CL_DEVICE_TYPE_CPU) == CL_DEVICE_TYPE_CPU) ? "CPU" : "",
       ((type & CL_DEVICE_TYPE_GPU) == CL_DEVICE_TYPE_GPU) ? "GPU" : "",
@@ -948,11 +966,23 @@ static int dt_opencl_device_init(dt_opencl_t *cl, const int dev, cl_device_id *d
 #endif
 
   gchar* compile_option_name_cname = g_strdup_printf("%s/%i/%s/building", DT_CLDEVICE_HEAD, dev, cl->dev[dev].cname);
-  const char* compile_opt = NULL;
+  const char* compile_opt = dt_conf_key_exists(compile_option_name_cname)
+                                ? dt_conf_get_string_const(compile_option_name_cname)
+                                : NULL;
 
-  if(dt_conf_key_exists(compile_option_name_cname))
-    compile_opt = dt_conf_get_string_const(compile_option_name_cname);
-  else
+  /* The key is written once and never rewritten, so every install that ran Ansel before
+   * d90978a75c (2026-08-18) still carries the default of that time, unsafe math included --
+   * Macs too, where OpenCL was off, since the key is written before `opencl` is read. Those
+   * options license reassociation, and clang does reassociate: measured with clang 23
+   * (-cc1 -triple spir64 -O2), the error term of a Knuth two-sum (data/kernels/compensated.h,
+   * hl_real.h) folds to `store float 0.0` under them and keeps its 6 flops under the current
+   * default. The old default, and only it verbatim, is therefore replaced by the current one;
+   * options a user wrote by hand stay theirs. */
+  if(!IS_NULL_PTR(compile_opt)
+     && !strcmp(compile_opt, "-cl-fast-relaxed-math -cl-no-signed-zeros -cl-unsafe-math-optimizations"))
+    compile_opt = NULL;
+
+  if(IS_NULL_PTR(compile_opt))
   {
     switch(vendor_id)
     {
@@ -972,9 +1002,10 @@ static int dt_opencl_device_init(dt_opencl_t *cl, const int dev, cl_device_id *d
   gchar *my_option = g_strdup(compile_opt);
   dt_conf_set_string(compile_option_name_cname, my_option);
 
-  cl->dev[dev].options = g_strdup_printf("-w %s %s -D%s=1 -I%s",
+  cl->dev[dev].options = g_strdup_printf("-w %s %s%s -D%s=1 -I%s",
                             my_option,
                             (cl->dev[dev].nvidia_sm_20 ? " -DNVIDIA_SM_20=1" : ""),
+                            (cl->dev[dev].fp64 ? " -DDT_DEVICE_FP64=1" : ""),
                             dt_opencl_get_vendor_by_id(vendor_id), escapedkerneldir);
   // Keep kernel checksum stable when the runtime kernel path changes (e.g. AppImage mount point).
   const char *kerneldir_token = "<ansel-kernels>";
@@ -984,9 +1015,10 @@ static int dt_opencl_device_init(dt_opencl_t *cl, const int dev, cl_device_id *d
 #else
   escapedkerneldir_md5 = g_strdup(kerneldir_token);
 #endif
-  cl->dev[dev].options_md5 = g_strdup_printf("-w %s %s -D%s=1 -I%s",
+  cl->dev[dev].options_md5 = g_strdup_printf("-w %s %s%s -D%s=1 -I%s",
                                my_option,
                                (cl->dev[dev].nvidia_sm_20 ? " -DNVIDIA_SM_20=1" : ""),
+                               (cl->dev[dev].fp64 ? " -DDT_DEVICE_FP64=1" : ""),
                                dt_opencl_get_vendor_by_id(vendor_id), escapedkerneldir_md5);
 
   dt_print_nts(DT_DEBUG_OPENCL, "   CL COMPILER OPTION:       %s\n", my_option);
@@ -1001,7 +1033,7 @@ static int dt_opencl_device_init(dt_opencl_t *cl, const int dev, cl_device_id *d
    * binaries that were built from it -- an omission here does not fail, it silently keeps
    * running yesterday's kernel. lensserious_eval.h is LensSerious's evaluator, installed
    * beside the kernels by data/kernels/CMakeLists.txt. */
-  const char *clincludes[DT_OPENCL_MAX_INCLUDES] = { "rgb_norms.h", "noise_generator.h", "color_conversion.h", "colorspaces.cl", "colorspace.h", "common.h", "lensserious_eval.h", NULL };
+  const char *clincludes[DT_OPENCL_MAX_INCLUDES] = { "rgb_norms.h", "noise_generator.h", "color_conversion.h", "colorspaces.cl", "colorspace.h", "common.h", "compensated.h", "hl_real.h", "lensserious_eval.h", NULL };
   char *includemd5[DT_OPENCL_MAX_INCLUDES] = { NULL };
   dt_opencl_md5sum(clincludes, includemd5);
 
@@ -3200,6 +3232,12 @@ void dt_opencl_check_tuning(const int devid)
       cl->dev[devid].name, devid);
 }
 
+gboolean dt_opencl_device_has_fp64(const int devid)
+{
+  if(!(_opencl && _opencl->inited) || devid < 0 || devid >= _opencl->num_devs) return FALSE;
+  return _opencl->dev[devid].fp64 ? TRUE : FALSE;
+}
+
 cl_ulong dt_opencl_get_device_available(const int devid)
 {
   if(!(_opencl && _opencl->inited) || devid < 0) return 0;
@@ -3240,7 +3278,18 @@ cl_ulong dt_opencl_get_device_available(const int devid)
     if(system_available > 0)
       available = MIN(available, (cl_ulong)((system_available > reserved) ? system_available - reserved : 0));
 
-    available = MIN(available, (cl_ulong)(_opencl->dev[devid].max_mem_alloc / 2));
+    /* Limit 2 is Intel's. Apple's OpenCL on Apple Silicon reports CL_DEVICE_MAX_MEM_ALLOC_SIZE
+     * as 3/16 of its global memory -- 1024 MiB of 5461 on an 8 GB M1, 2048 of 10923 on a
+     * 16 GB M2 Pro, 3410 of 18186 on a 24 GB M4 Pro -- so this clamp made the budget about a
+     * sixteenth of the RAM (512 MiB, 1 GiB, 1.7 GiB), and unified memory on Apple Silicon has
+     * no per-context aperture of that kind (Metal's own per-buffer limit is about half the
+     * machine). Such a device has aperture_clamp unset (dt_opencl_device_init()). The two bounds
+     * above track real memory and keep refusing what does not fit: measured on the 8 GB M1, the
+     * live-RAM bound left 1.2 to 2.1 GiB, so profiled denoise (3.5 to 3.8 GiB asked) stays on the
+     * CPU and the harmonic highlights (1734 MiB) runs on the GPU when free RAM allows, while on
+     * the five Macs from 16 to 36 GB the whole pipeline runs on the GPU. */
+    if(_opencl->dev[devid].aperture_clamp)
+      available = MIN(available, (cl_ulong)(_opencl->dev[devid].max_mem_alloc / 2));
   }
   return available;
 }

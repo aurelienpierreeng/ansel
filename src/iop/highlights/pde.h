@@ -129,8 +129,9 @@ cl_int _region_blur1_cl(const int devid, cl_mem in, cl_mem out, const int region
 // dscalar = lambda_solid = solid_color^2*4 (the flat-colour reaction strength) and tscalar = the
 // mean valid chromaticity r_target. A = d*I - Delta is never formed; each iteration applies its
 // action A p = d*p + Op(p) via the hl_cg_* kernels (Op = -Delta, order 1) in highlights_sparse.cl.
-// Dot products accumulate in double precision on the device (64-bit-float program); only the
-// 2 KB of reduction partials cross the bus per iteration. The CPU conjugate gradient is
+// Dot products accumulate in compensated single precision (data/kernels/compensated.h) on
+// every device, fp64 or not; their partials are folded on the device and the solver state
+// stays there, so an iteration makes no host round-trip. The CPU conjugate gradient is
 // itself OpenMP-summation-order nondeterministic, so tolerance-level (not bit-exact) parity
 // is the honest target here. Any change here must be mirrored in _region_pde_solve and
 // re-validated with the HL_CORECL_TEST self-test (_joint_core_stage_cl_selftest).

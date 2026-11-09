@@ -1,6 +1,7 @@
 /*
     This file is part of darktable,
     Copyright (C) 2026 Aurélien PIERRE.
+    Copyright (C) 2026 Guillaume Stutin.
 
     darktable is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -74,7 +75,7 @@ void dt_gui_throttle_set_timeout_ms(guint timeout_ms)
   _user_timeout_ms = timeout_ms;
 }
 
-static guint _get_user_timeout_ms(void)
+guint dt_gui_throttle_get_user_timeout_ms(void)
 {
   return _user_timeout_ms;
 }
@@ -87,7 +88,7 @@ static guint _runtime_us_to_ms(const int runtime_us)
 
 static guint _effective_timeout_ms(void)
 {
-  const guint user_timeout_ms = _get_user_timeout_ms();
+  const guint user_timeout_ms = dt_gui_throttle_get_user_timeout_ms();
   const guint runtime_timeout_ms = _runtime_us_to_ms(dt_atomic_get_int(&_gui_throttle.avg_runtime_us));
   if(runtime_timeout_ms == 0) return user_timeout_ms;
   return MIN(user_timeout_ms, runtime_timeout_ms);

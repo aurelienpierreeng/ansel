@@ -28,6 +28,7 @@ set(ANSEL_WIDGETS_SOURCES
   popup.c
   resize_handle.c
   resetlabel.c
+  scroll_latch.c
   scroll_wrap.c
   sidepanel.c
   stroke_raster.c

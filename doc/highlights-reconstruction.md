@@ -240,6 +240,101 @@ reference):
   continuation there — the MAC magenta fix therefore CANNOT come from this stage; it belongs to the
   joint-floor family and its clip-asymmetry gate (now implemented, see the previous section).
 
+## Highlights: Apple's OpenCL defines `cl_khr_fp64` without having it — never guard on that macro
+
+*Found against `e83ba5865d`, 2026-09-26, measured on an Apple M1 (macOS OpenCL 1.2).*
+
+`double` had three uses in this module's kernels, and only one is double precision: the sparse
+Cholesky factor and solves of `highlights_sparse.cl` (`sparse_chol_*`) and the second-member
+vector they consume (`hl_pde_*`, `hl_aniso_*`). The nine reduction kernels — the four stage-2
+finalizers of `highlights_harmonic.cl` and the CG dot products of `highlights_sparse.cl` —
+accumulated in double and narrowed every result to float on the way out, so the double only
+ever bought the accuracy of the SUMMATION. They now sum in compensated single precision
+(`data/kernels/compensated.h`: a `float2` of value + running error, Knuth two-sum, no multiply
+so `-cl-mad-enable` cannot contract it) and sit outside any fp64 guard: available on every
+device, the host twins agreeing to a float ulp rather than bit for bit. A new kernel header
+must be listed in BOTH `clincludes[]` (`common/opencl.c`, the kernel-cache checksum) and
+`DT_OPENCL_EXTRA` (`data/kernels/CMakeLists.txt`, the install); an omission in the first keeps
+serving yesterday's binaries, in the second the kernel does not build at all in a package.
+
+Measured on Apple M1 (macOS OpenCL 1.2, no `cl_khr_fp64` in `CL_DEVICE_EXTENSIONS`,
+`CL_DEVICE_DOUBLE_FP_CONFIG` = 0): the runtime DEFINES the `cl_khr_fp64` preprocessor macro
+anyway. A `#if defined(cl_khr_fp64)` block therefore compiles, `clBuildProgram` succeeds, and
+every kernel that loads, stores or computes a `double` fails at `clCreateKernel` with -48
+(`CL_INVALID_KERNEL_NAME`) — per kernel, not per program — the runtime logging `UNSUPPORTED
+(log once): createKernel: newComputePipelineState failed` once, for the first. A `double` that
+appears only in a signature is fine. The guard thus does not do on Apple what its comment said
+it does elsewhere, and the tell in a `-d opencl` log is a kernel INSIDE the guard that does not
+fail: `hl_cg_beta_step` named no double and was the one survivor of its block. When fp64 has to
+be selected, select it host-side from `CL_DEVICE_DOUBLE_FP_CONFIG` and pass a define the way
+`-DNVIDIA_SM_20=1` is passed (`opencl.c`, into `options` AND `options_md5`) — never from the
+macro. `ansel-cli` takes `-d` through `--core` (`ansel-cli in out --core -d opencl -d perf`).
+
+### The eight solver kernels compute in a real type the host picks per device
+
+*Found against `e83ba5865d`, 2026-09-26; the per-operation figures were measured on an Apple M1.*
+
+That is now how the eight solver kernels work. `data/kernels/hl_real.h` defines `hl_real_t`
+and `hl_add/sub/mul/div/sqrt`: native `double` when the host passed `-DDT_DEVICE_FP64=1`
+(`cl->dev[dev].fp64`, from `CL_DEVICE_DOUBLE_FP_CONFIG != 0`, `dt_opencl_device_has_fp64()`),
+a `float2` (hi, lo) double-float otherwise — Knuth two-sum, fma two-product, Newton division
+and square root, measured on the M1 at 5e-15..1.2e-14 relative per operation, i.e. ~46 bits.
+Both are 8 bytes (`DT_HL_REAL_BYTES`), so no device buffer changes size; a host `double`
+vector crosses through `_sp_cl_upload_real()` / `_sp_cl_read_real()`
+(`math/sparse_cholesky_cl.h`), which split and rejoin only where the device lacks fp64. A
+device with fp64 therefore runs the exact code it always ran. The precision budget that makes
+df32 acceptable is thin: the biharmonic systems are conditioned like h⁻⁴, about 3e8 at
+`DT_HL_SPARSE_MAX` (16384 unknowns), so ~45 bits are needed and df32 has ~46-47 — raising that
+cap without redoing the arithmetic silently loses digits on fp64-less devices only.
+`HL_SPCL_TEST=1` is the parity check (GPU solver vs the CPU `double` twin on a 13-point
+biharmonic disc); it also runs from the CPU `process_harmonic()` when a device exists, because
+a run whose memory budget sends the module to the CPU never enters `process_harmonic_cl()` (an
+8 GB Apple M1 when its free RAM is short, see the next section). Do not write a new `.cl`
+reduction in `double` for accuracy: `compensated.h` already covers that case in fp32.
+
+Both headers rely on the compiler not reassociating: under `-cl-unsafe-math-optimizations` or
+`-cl-fast-relaxed-math`, clang folds the error term of a two-sum to `0.0` (measured with clang
+23, see `doc/opencl-math-accuracy.md`, which also covers the migration of the per-device
+`building` key away from the pre-2026-08-18 default that carried them). `hl_real.h` takes its
+two-sum from `compensated.h`, so there is one copy. Under `DT_DEVICE_FP64` it enables
+`cl_khr_fp64`, or `cl_amd_fp64` where only that one is defined, as the old guard did — the host
+has then read real fp64 off the device, so the macros can be trusted. CI test-compiles
+`highlights_sparse.cl` a second time with `-DDT_DEVICE_FP64=1` (`data/kernels/CMakeLists.txt`),
+since the native half is otherwise compiled only by users' drivers.
+
+### On Apple Silicon the device budget is not `max_mem_alloc / 2`
+
+*Measured 2026-09-26 to 2026-10-02 on six Apple Silicon Macs (8 to 36 GB), base `e83ba5865d`;
+the device field below added 2026-10-28 against `8e628de1c2`; its vendor test measured on an
+M1 the same day, and on a tester's M4 Pro with `clinfo` (discussion #1466, comment 19248411).*
+
+`dt_opencl_get_device_available()` (`common/opencl.c`) bounds a host-unified device's working
+set by `max_mem_alloc / 2`, a proxy for Intel NEO's per-context aperture calibrated on a P630.
+Apple's OpenCL on Apple Silicon reports `CL_DEVICE_MAX_MEM_ALLOC_SIZE` as 3/16 of its global
+memory: 1024 of 5461 MB (8 GB M1), 2048 of 10923 (16 GB), 2557 of 13640 (18 GB), 3410 of 18186
+(24 GB), 5391 of 28754 (36 GB). The clamp therefore made the budget about a sixteenth of the
+RAM: 512 MiB on the 8 GB M1, 1.7 GiB on a 24 GB M4 Pro (`vRAM has 1704 MiB left` in a master
+log, where highlights, demosaic and denoise went to the CPU). Do not assume
+max alloc is a fixed figure on Apple: it scales with the RAM.
+
+The clamp is skipped where `dt_opencl_device_t.aperture_clamp` is unset, which
+`dt_opencl_device_init()` decides once: platform name AND device vendor both "Apple" (measured
+on an M1 and an M4 Pro: platform `Apple`, vendor `Apple`, vendor id `0x1027f00` on both; M2, M3
+and M5 not checked yet — the `DEVICE VENDOR` line of the `-d opencl` log shows it). The platform alone would
+also take in Intel Macs, which publish the same "Apple" platform for GPUs whose vendor is
+"Intel Inc." or "AMD", and where nothing was measured. It is deliberately not keyed on the
+crash-attribution table (`_gpu_runtimes[]`): that table's module column must name a runtime's
+own object, and on macOS the only candidate, `OpenCL.framework`, is the loader every OpenCL call
+goes through. The same reasoning keeps OpenCL off by default for any build that can run on
+Intel (`data/CMakeLists.txt`).
+
+Without the clamp the budget is the declared memory less the headroom, bounded by the RAM
+actually free. On the 8 GB M1 it read 1.2 to 2.1 GiB, and the harmonic reconstruction of
+a 24 Mpx raw (1734 MiB asked) ran on the GPU in most exports and on the CPU when free RAM was
+short; profiled denoise (3.5 to 3.8 GiB) stayed on the CPU. On the five 16 to 36 GB machines the
+whole pipeline ran on the GPU in every export. The self-tests are still
+called from the CPU entry point as well, for the runs that do not reach `process_harmonic_cl()`.
+
 ## The article bench (guided-laplacian-highlights-research) — traps and extensions
 
 *Found `e4195dec51`, 2026-08-05.*
