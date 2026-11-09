@@ -54,8 +54,8 @@ reaches the raw buffer, through `dt_pixel_cache_entry_get_buffer()`, since it st
 output's pinned OpenCL image.
 
 **Reusing in place forgets the previous state.** That is right for a slider drag or a pan, whose
-previous states do not come back, and wrong for a module toggle, an undo or a jump in history,
-after which going back is the likely next step. Those raise `DT_DEV_PIPE_SWITCHED`, which sets
+previous states do not come back, and wrong for a module toggle, an undo, a jump in history or a
+keyboard edit (a slider step with the arrow keys), after which going back is the likely next step. Those raise `DT_DEV_PIPE_SWITCHED`, which sets
 `pipe->keep_outputs` for the run that renders the new state: it writes every output into a new
 cacheline, so the outputs of the state just left are still there, and switching back is a chain of
 exact hits. The flag drops when that run completes. Only the source of a change knows it is a
@@ -1279,6 +1279,7 @@ later one is a chain of exact hits, 1-28 ms on the CPU and 3-24 ms with OpenCL. 
 by `dt_dev_history_commit_item_now()` when `add_new_pipe_node` (the module's first history entry,
 or an entry enabled differently from its last one -- the top item rewritten in place included),
 and by `dt_dev_history_pixelpipe_update()`, which every wholesale history replacement goes through.
+It is also raised for an edit made from the keyboard, see the next section.
 
 Two things a reviewer would otherwise simplify:
 
@@ -1290,6 +1291,56 @@ Two things a reviewer would otherwise simplify:
 - **`add_new_pipe_node` is computed from the module's last history entry in every case**, whether
   the top item is rewritten in place, a new item appended or one forced. A toggle it misses reaches
   the pipe as `TOP_CHANGED`, and nothing downstream knows it was a switch.
+
+### A slider step and its reverse find the state they left
+
+*Found on top of `3ce1ec6716`, 2026-11-09.*
+
+Stepping a slider with the arrow keys, then back, recomputed everything downstream of the module
+every time. There were two causes, and either one alone was enough.
+
+**The step rekeyed the state it left.** A slider commit reaches the pipe as `TOP_CHANGED` (`SYNCH`
+on a masked module), not as a switch. Every module downstream therefore rekeyed its cacheline to
+the new state, and stepping back found nothing. The keyboard is the source that knows:
+`_queue_pending_commit()` (`develop/dev_history_gui.c`) marks a request `switched` when
+`gtk_get_current_event()` is a key press, and `dt_dev_history_commit_item_now()` raises
+`DT_DEV_PIPE_SWITCHED` for it, as it does for a toggle. A drag, a click and a scroll are not
+marked, and keep rekeying. Neither is a press that follows the previous one by less than the
+user's timeout (`processing/timeout`, 200 ms by default): see the held key below.
+
+**A step and its reverse did not land on the same float.** `dt_bauhaus_slider_set_normalized()`
+rounds the value to the displayed precision but stores a position in [0, 1].
+`dt_bauhaus_slider_get()` turned that position back into `min + pos * (max - min)`, which for most
+values is one ulp off the rounded value. A value the slider had produced itself was a fixed point.
+A value from anywhere else (module defaults, presets, a picker) was not: 0.7 EV, exposure's default
+for raws, stepped by +0.04 and back, committed 0.700000048 instead of 0.699999988, and so hashed
+differently. `dt_bauhaus_slider_get()` now rounds again. Measured offline with a copy of the
+slider's arithmetic, over 15 003 start values in [-2, 3] and steps of 0.04, 0.2 and 0.008: 9 243
+first returns differed before the change, 0 after. A second return never differed.
+
+Measured in the darkroom with `--disable-opencl` and `-d perf -d history -d dev`, on a 418x628 px
+preview. Exposure was stepped by key presses 8 s apart, sent through `gtk_main_do_event()` to the
+focused slider. Before the change, every return to a state already rendered ran the 8 modules from
+exposure down in the preview pipe. With `-d nocache_reuse` (no rekeying), none ran, except the
+first return to 0.7 EV loaded from history: it landed on another history hash and ran all 8. After
+the change, every press is switched and no return runs any module, including 0.7 EV and two steps
+back. The same presses emitted on the widget outside a GTK dispatch (no current event) still rekey,
+as a drag does.
+
+**A held key is a stream, like a drag.** It repeats every 30 to 40 ms, and its states come back no
+more than a drag's. With every press switched, each commit of a hold kept its outputs. Measured
+with OpenCL on a GTX 1060 6 GB, 845x1268 px render, 600 presses at 30 Hz: vRAM rose by about
+80 MiB/s for as long as the key was held, peaking at 3012 MiB against 1447 MiB with rekeying, and
+stayed there after the release. A press less than the user's timeout after the previous one is
+therefore not switched. In the same hold, 1 commit of 142 is switched (the first press), and vRAM
+peaks at 1421 MiB. The test reads the user's timeout (`dt_gui_throttle_get_user_timeout_ms()`),
+not the batching window: `dt_gui_throttle_get_timeout_ms()` shortens the window to the average
+redraw time, which on a fast pipe falls below the repeat period. With the timeout set to 0, every
+press is switched, held ones included.
+
+The test compares event times, which are the server's and stay spaced by the repeat period however
+late the application reads them. A shim that stamps presses when it dispatches them sees a busy
+main loop as gaps, and marks repeats switched: stamp a simulated hold on its schedule.
 
 ### An export reads the cache and keeps nothing of its own
 

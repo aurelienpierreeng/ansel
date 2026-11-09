@@ -1017,7 +1017,8 @@ uint64_t dt_dev_history_compute_hash(dt_develop_t *dev) REQUIRES_SHARED(dev->his
  * slider-drag input on the GTK main loop, and its headless timeout is zero -- the
  * engine entry it drains into is dt_dev_history_commit_item_now() below. */
 
-void dt_dev_history_commit_item_now(dt_develop_t *dev, dt_iop_module_t *module, gboolean enable)
+void dt_dev_history_commit_item_now(dt_develop_t *dev, dt_iop_module_t *module, gboolean enable,
+                                    gboolean switched)
 {
   gboolean add_new_pipe_node = FALSE;
 
@@ -1078,7 +1079,16 @@ void dt_dev_history_commit_item_now(dt_develop_t *dev, dt_iop_module_t *module, 
     }
   }
 
-  // Recompute pipeline last
+  // Recompute pipeline last.
+  // A module switched on or off is the change the user is likely to take back, and so is an edit
+  // the caller marks as switched: the outputs it replaces are kept for that
+  // (dt_dev_pixelpipe_t.keep_outputs).
+  if(add_new_pipe_node || switched)
+  {
+    dt_dev_pixelpipe_or_changed(dev->preview_pipe, DT_DEV_PIPE_SWITCHED);
+    dt_dev_pixelpipe_or_changed(dev->pipe, DT_DEV_PIPE_SWITCHED);
+  }
+
   const gboolean has_raster = module && dt_iop_module_has_raster_mask(module);
   if(!IS_NULL_PTR(module) && !(has_forms || has_raster) && !add_new_pipe_node)
   {
@@ -1100,13 +1110,6 @@ void dt_dev_history_commit_item_now(dt_develop_t *dev, dt_iop_module_t *module, 
     // Note that the blendop params (thus their hash) references the raster mask provider
     // in its consumer, and the consumer in its provider. So updating the whole pipe
     // resyncs the cumulative hashes too, and triggers a new recompute from the provider on update.
-    // A module switched on or off is the one of these the user is likely to switch back: the
-    // outputs it replaces are kept for that (dt_dev_pixelpipe_t.keep_outputs).
-    if(add_new_pipe_node)
-    {
-      dt_dev_pixelpipe_or_changed(dev->preview_pipe, DT_DEV_PIPE_SWITCHED);
-      dt_dev_pixelpipe_or_changed(dev->pipe, DT_DEV_PIPE_SWITCHED);
-    }
     dt_dev_pixelpipe_resync_history_all(dev);
   }
 

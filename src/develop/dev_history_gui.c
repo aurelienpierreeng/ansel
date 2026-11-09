@@ -1,6 +1,7 @@
 /*
     This file is part of Ansel,
     Copyright (C) 2026 Aurélien PIERRE.
+    Copyright (C) 2026 Guillaume Stutin.
 
     Ansel is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -126,17 +127,22 @@ void dt_dev_history_gui_update(dt_develop_t *dev)
  *    distinct request is kept, in order.
  *
  * 2. A REPEAT OF THE PENDING TAIL IS NOT A NEW REQUEST. If the last thing queued is already
- *    "commit `module`, enable=`enable`" and that is exactly what is being asked for again,
- *    there is nothing to add: the queued request reads module->params when it drains, so it
- *    necessarily commits the newest value. This is consecutive-duplicate suppression against
- *    the TAIL only -- never a search of the queue, never a combination of two different
- *    requests -- so ordering is exactly preserved. It is what keeps a 300-tick scroll from
- *    queueing 300 commits, which is the whole point: a transient intermediate value of an
- *    ongoing gesture is not a history event.
+ *    "commit `module`, enable=`enable`, switched=`switched`" and that is exactly what is being
+ *    asked for again, there is nothing to add: the queued request reads module->params when it
+ *    drains, so it necessarily commits the newest value. This is consecutive-duplicate
+ *    suppression against the TAIL only -- never a search of the queue, never a combination of
+ *    two different requests -- so ordering is exactly preserved. It is what keeps a 300-tick
+ *    scroll from queueing 300 commits, which is the whole point: a transient intermediate value
+ *    of an ongoing gesture is not a history event.
  *
  * This is a batching window, not a debounce: the timer is armed by the first request and is
  * NOT re-armed by the ones that follow, so a sustained drag keeps committing once per window
  * instead of freezing until the user stops moving.
+ *
+ * A request queued while GTK dispatches a key press -- a slider step, a typed value, a shortcut --
+ * is `switched`: the pipes keep the outputs it replaces (dt_dev_pixelpipe_t.keep_outputs), since
+ * going back is the likely next keystroke. A held key (a press less than the user's timeout after
+ * the previous one), a drag or a click is not. See doc/pipeline-cache.md.
  *
  * dt_dev_add_history_item_ext() is NOT throttled and never was. Anything that must land
  * before the next statement (bulk history loads, style application, image duplication)
@@ -151,10 +157,12 @@ typedef struct dt_dev_pending_commit_t
   dt_develop_t *dev;
   dt_iop_module_t *module;
   gboolean enable;
+  gboolean switched;
 } dt_dev_pending_commit_t;
 
 static GQueue _pending_commits = G_QUEUE_INIT;
 static guint _pending_commit_source = 0;
+static guint32 _last_key_press_time = 0;
 
 
 static gboolean _drain_pending_commits(gpointer user_data)
@@ -174,7 +182,7 @@ static gboolean _drain_pending_commits(gpointer user_data)
   while(!g_queue_is_empty(&ready))
   {
     dt_dev_pending_commit_t *request = (dt_dev_pending_commit_t *)g_queue_pop_head(&ready);
-    dt_dev_history_commit_item_now(request->dev, request->module, request->enable);
+    dt_dev_history_commit_item_now(request->dev, request->module, request->enable, request->switched);
     dt_free(request);
   }
 
@@ -183,12 +191,23 @@ static gboolean _drain_pending_commits(gpointer user_data)
 
 static void _queue_pending_commit(dt_develop_t *dev, dt_iop_module_t *module, const gboolean enable)
 {
+  const guint timeout_ms = dt_gui_throttle_get_timeout_ms();
+
+  // A key press, unless it repeats the previous one (see above). Event times are in ms and
+  // wrap, hence the unsigned difference.
+  GdkEvent *event = gtk_get_current_event();
+  const gboolean key_press = !IS_NULL_PTR(event) && gdk_event_get_event_type(event) == GDK_KEY_PRESS;
+  const guint32 key_time = key_press ? gdk_event_get_time(event) : 0;
+  g_clear_pointer(&event, gdk_event_free);
+  const gboolean switched = key_press
+                            && key_time - _last_key_press_time >= dt_gui_throttle_get_user_timeout_ms();
+  if(key_press) _last_key_press_time = key_time;
+
   // A zero timeout means the user turned throttling off in the preferences (and is also what
   // a headless run gets, since nothing ever sets one there). Same call, same place, just now.
-  const guint timeout_ms = dt_gui_throttle_get_timeout_ms();
   if(timeout_ms == 0)
   {
-    dt_dev_history_commit_item_now(dev, module, enable);
+    dt_dev_history_commit_item_now(dev, module, enable, switched);
     return;
   }
 
@@ -196,19 +215,22 @@ static void _queue_pending_commit(dt_develop_t *dev, dt_iop_module_t *module, co
   const dt_dev_pending_commit_t *tail = (const dt_dev_pending_commit_t *)_pending_commits.tail
                                         ? (const dt_dev_pending_commit_t *)_pending_commits.tail->data
                                         : NULL;
-  if(!IS_NULL_PTR(tail) && tail->dev == dev && tail->module == module && tail->enable == enable) return;
+  if(!IS_NULL_PTR(tail) && tail->dev == dev && tail->module == module && tail->enable == enable
+     && tail->switched == switched)
+    return;
 
   dt_dev_pending_commit_t *queued = (dt_dev_pending_commit_t *)calloc(1, sizeof(*queued));
   if(IS_NULL_PTR(queued))
   {
     // Out of memory for a 24-byte record: commit now rather than lose the edit.
-    dt_dev_history_commit_item_now(dev, module, enable);
+    dt_dev_history_commit_item_now(dev, module, enable, switched);
     return;
   }
 
   queued->dev = dev;
   queued->module = module;
   queued->enable = enable;
+  queued->switched = switched;
   g_queue_push_tail(&_pending_commits, queued);
 
   if(!_pending_commit_source)
@@ -236,7 +258,7 @@ void dt_dev_history_flush_pending_commits(dt_develop_t *dev)
     if(IS_NULL_PTR(dev) || request->dev == dev)
     {
       g_queue_delete_link(&_pending_commits, iter);
-      dt_dev_history_commit_item_now(request->dev, request->module, request->enable);
+      dt_dev_history_commit_item_now(request->dev, request->module, request->enable, request->switched);
       dt_free(request);
     }
     iter = next;

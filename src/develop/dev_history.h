@@ -2,6 +2,7 @@
     This file is part of the Ansel project.
     Copyright (C) 2025 Alynx Zhou.
     Copyright (C) 2025-2026 Aurélien PIERRE.
+    Copyright (C) 2026 Guillaume Stutin.
     
     Ansel is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -397,8 +398,12 @@ void dt_dev_history_gui_update(struct dt_develop_t *dev);
  * @details The engine core behind dt_dev_add_history_item(): that entry (implemented in
  * dev_history_gui.c) coalesces slider-drag input through a GTK main-loop timer and drains
  * into this. Call it directly only where queueing would be wrong.
+ *
+ * @param switched TRUE for an edit the user is likely to take back next (one made from the
+ * keyboard): the pipes keep the outputs it replaces, as for a module switched on or off.
  */
-void dt_dev_history_commit_item_now(struct dt_develop_t *dev, struct dt_iop_module_t *module, gboolean enable);
+void dt_dev_history_commit_item_now(struct dt_develop_t *dev, struct dt_iop_module_t *module, gboolean enable,
+                                    gboolean switched);
 
 /**
  * @brief Restores the presentation half of an undo record: the blending panel's mask
