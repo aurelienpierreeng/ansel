@@ -3735,7 +3735,9 @@ void dt_iop_gui_blend_masks_update(dt_iop_module_t *module)
     gtk_widget_queue_draw(bd->masks_combo);
   }
 
-  if(!has_group_shapes)
+  // A refresh shows the masks state, it does not end the creation session armed for this module,
+  // whose group stays empty until its first stroke is saved.
+  if(!has_group_shapes && !module_creation)
   {
     bd->masks_shown = DT_MASKS_EDIT_OFF;
     // reset the gui

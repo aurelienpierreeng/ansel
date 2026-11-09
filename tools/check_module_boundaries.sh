@@ -471,7 +471,10 @@ fi
 # and the test still names those types. Lowered because the rule is that a count which falls
 # is written down, not because ground was won here.
 masks_include_baseline=18
-masks_gui_include_baseline=11
+# 11 -> 12 when develop/dev_history_gui.c started ending a shape creation session: every widget
+# commit and every history reload goes through it, and it asks dt_masks_form_exit_creation(),
+# naming no masks struct member.
+masks_gui_include_baseline=12
 masks_types_include_baseline=4
 masks_group_include_baseline=4
 # 75 -> 73 when the shape manager's "Add shape ..." menu took a shape's id and kind from

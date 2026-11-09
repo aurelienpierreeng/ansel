@@ -678,7 +678,10 @@ static void _pop_undo(gpointer user_data, dt_undo_type_t type, dt_undo_data_t da
   dt_dev_write_history_ext(dev, dev->image_storage.id);
   dt_pthread_rwlock_unlock(&dev->history_mutex);
 
-  dt_dev_history_gui_update(dev);
+  // The GUI half: the module widgets and the mask view recorded with this step. Not
+  // dt_dev_history_gui_update(), which ends the shape creation session undo and redo keep.
+  if(_undo_restore_gui_handler)
+    _undo_restore_gui_handler(dev, hist->mask_edit_mode, hist->request_mask_display);
   // TODO: check if we need to rebuild the full pipeline and do it only if needed
   dt_dev_history_pixelpipe_update(dev, TRUE);
 
@@ -696,15 +699,6 @@ static void _pop_undo(gpointer user_data, dt_undo_type_t type, dt_undo_data_t da
    * makes this survivable is a safety net, not a licence -- the sibling call sites all note the
    * same ordering constraint. */
   if(dev->gui_attached) dt_dev_get_thumbnail_size(dev);
-
-  if(dev->gui_module)
-  {
-    dt_masks_set_edit_mode(dev->gui_module, hist->mask_edit_mode);
-    dev->gui_module->request_mask_display = hist->request_mask_display;
-    // the blending panel's widgets are the GUI half's to poke (dev_history_gui.c)
-    if(_undo_restore_gui_handler)
-      _undo_restore_gui_handler(dev, hist->mask_edit_mode, hist->request_mask_display);
-  }
 
   // Ensure all UI pieces (history treeview, iop order, etc.) resync after undo/redo.
   // Undo callbacks bypass dt_dev_undo_end_record(), so we need to raise the change signal here.
@@ -1456,8 +1450,9 @@ void dt_dev_pop_history_items(dt_develop_t *dev)
   if(dt_gui_get_global() && dev->gui_attached) dt_gui_freeze_end();
 }
 
-/* dt_dev_history_gui_update() lives in dev_history_gui.c: it attaches missing GTK
- * expanders and refreshes every module widget after a backend history reload. */
+/* dt_dev_history_gui_update() lives in dev_history_gui.c: it ends a shape creation session,
+ * attaches missing GTK expanders and refreshes every module widget after a backend history
+ * reload. */
 
 void dt_dev_history_pixelpipe_update(dt_develop_t *dev, gboolean rebuild)
 {

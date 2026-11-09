@@ -2458,8 +2458,13 @@ static void _delayed_history_commit(gpointer data)
   // (dt_dev_masks_update_hash takes its own, correctly-scoped masks_mutex lock.)
   dt_dev_masks_update_hash(dev);
 
+  // Committed now: this callback is already throttled, and dt_dev_add_history_item() would end
+  // the creation session the edited shapes belong to.
   if(dev->forms_changed)
-    dt_dev_add_history_item(dev, module, FALSE, TRUE);
+  {
+    dt_dev_history_flush_pending_commits(dev);
+    dt_dev_history_commit_item_now(dev, module, FALSE, FALSE);
+  }
   else if(was_transient)
     // Nothing to commit, but the pipe was rendering from the transient slot: re-sync it from
     // history so it does not keep a render keyed to a slot that no longer exists.

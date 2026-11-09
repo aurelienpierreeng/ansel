@@ -2279,11 +2279,11 @@ gboolean dt_masks_form_exit_creation(dt_iop_module_t *module, dt_masks_form_gui_
     dt_masks_creation_mode_quit(mask_gui);
 
     /* The user-facing ways to abandon a creation session all land here -- Esc, the right-click
-     * menu entry, backspace on a polygon with no node placed, the darkroom tearing down
-     * mid-creation -- and none of them told the shape toolbars, so a shape abandoned with Esc
-     * left its button pressed. Only the click-the-armed-button-again path deactivated, because
-     * it does so itself before calling us. Finishing a shape is NOT one of these: continuous
-     * creation deliberately keeps the tool armed for the next one.
+     * menu entry, backspace on a polygon with no node placed, an edit made off the canvas, the
+     * darkroom tearing down mid-creation -- and none of them told the shape toolbars, so a shape
+     * abandoned with Esc left its button pressed. Only the click-the-armed-button-again path
+     * deactivated, because it does so itself before calling us. Finishing a shape is NOT one of
+     * these: continuous creation deliberately keeps the tool armed for the next one.
      *
      * This is not the only place mask_gui->creation is cleared -- dt_masks_clear_form_gui()
      * does it too, so entering edit mode leaves creation through dt_masks_change_form_gui()
@@ -2600,7 +2600,10 @@ void dt_masks_gui_form_save_creation(dt_develop_t *develop, dt_iop_module_t *mod
     // we update module gui
 
     if(IS_NULL_PTR(mask_gui)) dt_iop_gui_blend_masks_update(module);
-    dt_dev_add_history_item(develop, module, TRUE, TRUE);
+    // Committed now rather than queued: dt_dev_add_history_item() ends the creation session
+    // this shape belongs to. The flush keeps the edits queued before it in their order.
+    dt_dev_history_flush_pending_commits(develop);
+    dt_dev_history_commit_item_now(develop, module, TRUE, FALSE);
   }
 
   if(!IS_NULL_PTR(mask_gui))
@@ -3860,7 +3863,11 @@ static void _masks_draw_creation_session_forms(dt_develop_t *develop, dt_iop_mod
     return;
   }
 
-  const int count = g_list_length(creation_gui->creation_formids);
+  // Only the shapes the history still holds are drawn, so only they count: an undo or a redo
+  // takes shapes away or brings them back while the session stays armed.
+  int count = 0;
+  for(const GList *node = creation_gui->creation_formids; node; node = g_list_next(node))
+    if(!IS_NULL_PTR(dt_masks_get_from_id(develop, GPOINTER_TO_INT(node->data)))) count++;
 
   if(!creation_gui->creation)
   {
