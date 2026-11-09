@@ -12,6 +12,63 @@
 > that is recorded rather than quietly corrected: how a claim was wrong is usually the more
 > useful thing to know.
 
+## Highlights: autoset puts the threshold just under the lowest saturation plateau
+
+> **Established 2026-11-09 on top of `5c15b7c508`.** 282 Bayer and 11 X-Trans local raws read with
+> LibRaw (rawpy 0.27, top-end counts per CFA site), and a probe in `process()` printing the same
+> counts, and `autoset()` itself, on the module's real input in `ansel-cli` (rawspeed white and
+> black points, white balance applied) for 305 raws: 282 Bayer, 16 X-Trans, 7 linear DNG.
+
+The detection threshold a mode tests is `factor · clip · processed_maximum[c]` (factor 0.995 for
+harmonic and guided laplacians, 0.987 for colour inpainting; clip and LCh test the scalar
+`clip · min(processed_maximum)`). Autoset counts, per site of the colour filter period (2×2 Bayer,
+6×6 X-Trans, the three channels of RGB input), the maximum and the photosites exactly on it. A site
+with at least `DT_HL_MIN_CLIPPED_PIXELS` (25) there is saturated, and the threshold goes
+`DT_HL_AUTOSET_MARGIN` (0.15 %) under the lowest saturated site's maximum. Each level becomes a
+`clip` through the active mode's own threshold at `clip = 1` (`_hl_count_thresholds()`), so the
+value depends on the mode: switching mode afterwards moves the threshold by the ratio of the two
+factors. With no saturated site, the threshold only has to stay above the brightest photosite, which
+the default 1.0 does unless the data runs above the white point: `clip = max(1, brightest)`.
+
+Why each part:
+
+- **A colour's maximum is not its saturation level.** A colour that does not saturate tops out on its
+  brightest photosite: 22 of the 282 Bayer raws have saturated and unsaturated colours side by side
+  (Z 6 `20260705_0080.nef`: R tops out at 0.2996 while G and B pile up at 1.0595), and on a frame
+  with nothing clipped, no colour saturates (smallest colour maximum 0.024 on a Z 6 frame, 0.03 to
+  0.06 on a series of S1R frames). A threshold put there reconstructs valid data.
+- **A saturated site piles up exactly on its maximum.** Unsaturated sites have at most 7 photosites on
+  their maximum, but up to 273 within 0.2 % under it (a large flat bright area), so a tolerance
+  window cannot tell them apart and exact equality can. No pile-up of 10 photosites or more sits
+  below 0.938 of LibRaw's white point in the 282 Bayer raws: no dark frame quantised into a false
+  plateau was seen.
+- **Sites saturate at different levels, within a colour too.** X-H1: R 16383, G 16376, B 16316
+  (0.9956 of the white point). X-T5: the blue sites at 16255 and 16263 (0.9917), under the default
+  threshold 0.995, which never detects them. Nikon D3200 `DSC_0535.NEF`: G1 0.9377, G2 0.9404
+  (LibRaw normalisation), which a per-colour maximum merges.
+- **The margin is 0.15 % because harmonic eats valid data under a wider one.** A GFX50S II sky was
+  reported with cyan-green spots along the clipped zone at `clip = 0.9965` (the threshold 0.5 % under
+  that plateau) and clean at 1.000 (its raw was not available here). On a Z 6 (`20260705_0081.nef`,
+  plateau 1.0595 in the pipe), with the threshold 0.05 % or 0.15 % under the plateau the edge of the
+  blown patch is clean; at 0.3 % and 0.5 % it spills over the valid cyan band next to it, speckled.
+  Canon `IMG_9028.CR3` at 0.5 % shows a yellow-green blotch on a curtain that 0.15 % does not. The
+  knee did not engage on the Z 6, so the band override is not what amplifies these 0.35 %; the
+  mechanism inside the reconstruction was not traced. The other bound is the plateau's spread under
+  its top: 1–2 raw levels on Olympus ORF and Canon `_23A3591.CR3`, a tail of about 10 levels (0.07 %
+  of the 14-bit range) on `IMG_9028.CR3`, 8 levels between the X-T5 blue sites.
+- **The declared white point misses saturation in both directions.** rawspeed declares 15520 for the
+  Z 6 in 14 bits, which saturates at 16383 at ISO 100 (plateau 1.0595 in the pipe); Canon plateaus
+  sit up to 1.43, an Olympus ORF at 1.025. At `clip = 1`, every valid value between 0.995 and the
+  plateau is reconstructed.
+
+On the 305 raws in harmonic mode autoset gives 0.9945 to 1.4356: below 1 only where a plateau is
+below the white point (the D3200 green site, the X-T5 and X-H1 blue sites), above 1 where rawspeed's
+white point is under the plateau (Canon bodies, the Z 6 at 1.063), and exactly 1 on the 143 frames
+with no plateau and nothing above the white point.
+
+Not measured: DNGs whose embedded GainMap rawprepare applies spread a plateau over the gain, so no
+site piles up and autoset falls back to the brightest photosite.
+
 ## Highlights (harmonic) on OpenCL: the device middle outgrows the working set it declares
 
 > **Established 2026-10-24 against `2fadf8a366`.** GTX 1060 6 GB (driver 580.178.04), i7-3770K
