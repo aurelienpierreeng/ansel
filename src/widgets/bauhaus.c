@@ -3276,7 +3276,11 @@ float dt_bauhaus_slider_get(GtkWidget *widget)
   // first cast to bh widget, to check that type:
   const struct dt_bauhaus_widget_t *w = DT_BAUHAUS_WIDGET(widget);
   const dt_bauhaus_slider_data_t *d = &w->data.slider;
-  return d->min + d->pos * (d->max - d->min);
+  // d->pos holds the value dt_bauhaus_slider_set_normalized() rounded to the displayed precision,
+  // but normalizing it loses an ulp: round again, or a step and its reverse commit params that
+  // hash differently from the ones they started from.
+  const float precision = (float)ipow(10, d->digits) * d->factor;
+  return roundf((d->min + d->pos * (d->max - d->min)) * precision) / precision;
 }
 
 float dt_bauhaus_slider_get_val(GtkWidget *widget)
