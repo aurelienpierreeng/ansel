@@ -554,6 +554,27 @@ The color picker additionally re-samples on `DT_SIGNAL_DEVELOP_PREVIEW_PIPE_FINI
 `PREVIEW_PIPE_FINISHED`. It is gated on the picker still being `update_pending`, so it
 is a no-op once a sample has landed.
 
+### A served wait moves its consumer where the consumer's other callers do not look
+
+> **Established 2026-11-09 on top of `5c15b7c508`**, in the darkroom under gdb with `-d pipecache`.
+
+`DT_SIGNAL_CACHELINE_READY` is asynchronous, so a restart runs on the GUI thread, but it moves
+its consumer forward from a place none of the consumer's own callers sees. A GUI state that
+mirrors the consumer must be published by the code that changes it, not refreshed by some of its
+callers. Autoset is the case in point: a run moves on from the click, from
+`DT_SIGNAL_DEVELOP_PREVIEW_PIPE_FINISHED` and from a served `input_wait`, and the manager announces
+its running state through `dt_autoset_manager_t.running_changed`, called where it enters and leaves
+the busy cursor. The darkroom button is that listener.
+
+To put the last module of a run through the wait path: select only one module, change something
+upstream of it (white balance for highlights), and click autoset before the preview re-renders.
+The click finds no input and queues a wait on the module before (`[cache-wait] queued … owner=
+autoset-input target=temperature`); the wait is served 1.4 s and 5 s later in two runs on a Z 6
+raw, and its restart processes the module and ends the run. A listener refreshed only after the
+click and on preview-finished while `pipe->autoset` holds misses that end: the queue is empty, the
+busy cursor gone, `preview_pipe->autoset` false, and the button stays insensitive for the rest of
+the session.
+
 ### The writable-acquire exact-hit and host-residency policy
 
 `process_rec()`'s cache acquisition for a node's own output tries two lookups in order:
