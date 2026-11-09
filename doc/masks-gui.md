@@ -125,9 +125,9 @@ shape cannot drift apart — they did, as "add path" against "add polygon".
 
 *Found on top of `5c15b7c508`, 2026-11-09.*
 
-A shape creation session is a tool for the canvas. The strokes, and the canvas's own edits of the
-shapes they make, keep it armed; so do zooming, panning, undo and redo. Every other edit ends it,
-as Escape does, through `dt_masks_form_exit_creation()`:
+A shape creation session is a tool for the canvas. The strokes, the canvas's own edits of the
+shapes they make and the settings of the armed tool keep it armed; so do zooming, panning, undo and
+redo. Every other edit ends it, as Escape does, through `dt_masks_form_exit_creation()`:
 
 - every edit made by a GUI control, at `dt_dev_add_history_item_real()`
   (`develop/dev_history_gui.c`), the entry every widget commits through: a module's parameters,
@@ -153,6 +153,33 @@ mask-edit commit (`_delayed_history_commit()`, `views/darkroom.c`, already throt
 `dt_dev_history_flush_pending_commits()` so that the edits queued before them keep their order.
 The darkroom's commit is the one that was missed first: through the widget entry, it ended every
 session right after its first shape. A new commit made from the canvas must do the same.
+
+So do the settings of an armed shape tool. Retouch's algorithm buttons
+(`rt_select_algorithm_callback()`, `iop/retouch.c`) arm the tool again for the new algorithm and,
+while a tool is armed, commit through `dt_dev_history_commit_item_now()`. A widget built from the
+params commits through `dt_iop_gui_changed()` (`develop/imageop_gui.c`), which commits now instead
+of queueing when the widget carries the `"dt-masks-tool-setting"` object data; retouch's "heal
+algorithm" list does. Committing through the widget entry and arming again afterwards is not the
+same: ending the session sets the module's shapes to full edit (`masks_shown`), and retouch's
+"editing" button lit up at the next stroke.
+
+In retouch's "retouch tools" section, the buttons made to end the session still do: the armed
+shape's own button, and "editing", which switches to editing the shapes. Another shape's button
+arms the tool again for that shape.
+
+*Measured on top of `59d3244c5d`, 2026-11-09*, with the shim below on retouch: the brush armed by
+its button, one stroke, one control, then two more strokes:
+
+| control | before | through the widget entry | now |
+|---|---|---|---|
+| "blur" | armed, brush turned non-clone, 2 saved | ended, 0 | armed, non-clone, 2 |
+| "heal algorithm" list | armed, 2 | ended, 0 | armed, 2 |
+| the circle button | armed, circle, 2 | armed, circle, 2 | armed, circle, 2 |
+| the brush button again | ended | ended | ended |
+| "editing" | ended | ended | ended |
+
+"Editing" stays off while the tool is armed in every "now" case, as before. The "blur" click and the
+list change each add one undo step at once; before, the step came later, from the queue.
 
 **Two refreshes used to end a session behind the user's back.** `dt_iop_gui_blend_masks_update()`
 switched the masks off when the module's group had no shape, which is always the case before a
