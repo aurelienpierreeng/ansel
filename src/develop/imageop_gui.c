@@ -2038,7 +2038,15 @@ void dt_iop_gui_changed(dt_iop_module_t *action, GtkWidget *widget, gpointer dat
 
   dt_iop_color_picker_reset(module, TRUE);
 
-  dt_dev_add_history_item(module->dev, module, TRUE, TRUE);
+  // A setting of the module's shape tool commits now: dt_dev_add_history_item() ends a creation
+  // session, which such a setting keeps armed.
+  if(!IS_NULL_PTR(widget) && g_object_get_data(G_OBJECT(widget), "dt-masks-tool-setting"))
+  {
+    dt_dev_history_flush_pending_commits(module->dev);
+    dt_dev_history_commit_item_now(module->dev, module, TRUE, FALSE);
+  }
+  else
+    dt_dev_add_history_item(module->dev, module, TRUE, TRUE);
 
   if(!IS_NULL_PTR(widget) && g_object_get_data(G_OBJECT(widget), "dt-blendop-header-update"))
     dt_iop_gui_update_header(module);

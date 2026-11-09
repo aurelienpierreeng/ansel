@@ -1896,6 +1896,7 @@ static gboolean rt_select_algorithm_callback(GtkToggleButton *togglebutton, GdkE
     return FALSE;
   }
 
+  const gboolean armed = self->dev->form_gui->creation && (self->dev->form_gui->creation_module == self);
   if(index >= 0 && dt_modifier_is(e->state, DT_PRIMARY_MASK))
   {
     if(p->algorithm != p->rt_forms[index].algorithm)
@@ -1904,7 +1905,7 @@ static gboolean rt_select_algorithm_callback(GtkToggleButton *togglebutton, GdkE
       dt_control_queue_redraw_center();
     }
   }
-  else if(self->dev->form_gui->creation && (self->dev->form_gui->creation_module == self))
+  else if(armed)
   {
     dt_iop_request_focus(self);
 
@@ -1931,7 +1932,15 @@ static gboolean rt_select_algorithm_callback(GtkToggleButton *togglebutton, GdkE
 
   dt_gui_freeze_end();
 
-  dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
+  // The algorithm sets the armed shape tool: committed now, since dt_dev_add_history_item() ends
+  // the creation session, as any edit made off the canvas does.
+  if(armed)
+  {
+    dt_dev_history_flush_pending_commits(self->dev);
+    dt_dev_history_commit_item_now(self->dev, self, TRUE, FALSE);
+  }
+  else
+    dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
 
   // if we have the shift key pressed, we set it as default
   if(dt_modifier_is(e->state, GDK_SHIFT_MASK))
@@ -2552,6 +2561,7 @@ void gui_init(dt_iop_module_t *self)
                               _("- Linear: the source keeps its own noise and texture amplitude,\n"
                                 "          a source brighter than the target makes it noisier\n"
                                 "- Square root: the source noise is scaled to the brightness of the target"));
+  g_object_set_data(G_OBJECT(g->cmb_heal_algorithm), "dt-masks-tool-setting", GINT_TO_POINTER(TRUE));
 
   // wavelet decompose
   GtkWidget *lbl_wd = dt_ui_section_label_new(_("wavelet decompose"));
