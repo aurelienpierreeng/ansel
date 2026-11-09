@@ -196,8 +196,8 @@ static void _darkroom_ioporder_quickbutton_clicked(GtkButton *button, gpointer u
  * @brief Reflect autoset processing state on the darkroom quick button.
  *
  * @details
- * The autoset pipeline advances asynchronously across preview-finished callbacks.
- * We keep the button state explicit so users can see when a run is in progress.
+ * The autoset manager calls it as its `running_changed`: a run moves on from the click, from the
+ * preview-finished signal and from a served cache wait, and only the manager sees all three.
  *
  * @param running TRUE while autoset still has operations to process.
  */
@@ -1640,11 +1640,7 @@ static void _preview_pipe_finished(gpointer instance, gpointer user_data)
   gboolean cache_ready = !IS_NULL_PTR(tmp.buf);
   dt_mipmap_cache_release(&tmp);
 
-  if(pipe->autoset)
-  {
-    dt_iop_autoset_advance(dt_dev_get_global(), _autoset_manager);
-    _darkroom_autoset_button_set_running(_autoset_manager && _autoset_manager->progress_cursor_active);
-  }
+  if(pipe->autoset) dt_iop_autoset_advance(dt_dev_get_global(), _autoset_manager);
 
   const gboolean autoset_running_after
       = !IS_NULL_PTR(_autoset_manager) && _autoset_manager->progress_cursor_active;
@@ -1678,7 +1674,6 @@ static gboolean _darkroom_toolbox_button_activate_accel(GtkAccelGroup *accel_gro
 static void _darkroom_autoset_quickbutton_clicked(GtkButton *button, gpointer user_data)
 {
   dt_iop_autoset_build_list(dt_dev_get_global(), _autoset_manager);
-  _darkroom_autoset_button_set_running(_autoset_manager && _autoset_manager->progress_cursor_active);
   fprintf(stdout, "lauching autoset\n");
 }
 
@@ -1984,6 +1979,7 @@ void gui_init(dt_view_t *self)
   // Auto-set feature
   {
     _autoset_manager = dt_calloc_align(sizeof(dt_autoset_manager_t));
+    _autoset_manager->running_changed = _darkroom_autoset_button_set_running;
 
     _darkroom_autoset_button = dtgtk_togglebutton_new(dtgtk_cairo_paint_wand, 0, NULL);
     gtk_widget_set_tooltip_text(_darkroom_autoset_button, _("Run autoset on selected modules\nRight click for options"));

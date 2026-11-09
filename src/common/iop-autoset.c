@@ -1,6 +1,7 @@
 /*
     This file is part of Ansel
     Copyright (C) 2026 - Aurélien PIERRE
+    Copyright (C) 2026 - Guillaume Stutin
 
     Ansel is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -43,6 +44,7 @@ static void _dt_iop_autoset_progress_leave(dt_autoset_manager_t *manager)
   {
     dt_control_log_busy_leave();
     manager->progress_cursor_active = FALSE;
+    manager->running_changed(FALSE);
   }
 }
 
@@ -154,6 +156,7 @@ int dt_iop_autoset_advance(struct dt_develop_t *dev, dt_autoset_manager_t *manag
     dt_control_log_busy_enter();
     dt_control_change_cursor_by_name_and_flush("progress");
     manager->progress_cursor_active = TRUE;
+    manager->running_changed(TRUE);
   }
 
   // Module pieces (pipeline nodes) are not stable in time: the pipeline can be
