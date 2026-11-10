@@ -53,6 +53,7 @@
 #include "math/openmp_maths.h"
 #include "gui/actions/menu.h"
 #include "widgets/accelerators.h"
+#include "widgets/stroke_raster.h"
 #include "widgets/widget_settings.h"
 
 #define FADING_MIN 0.00001f
@@ -2719,6 +2720,9 @@ static void _brush_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_fo
       cairo_set_line_width(cr,  DT_PIXEL_APPLY_DPI(2 * radius));
       dt_widget_set_source_rgba(cr, DT_GUI_COLOR_BRUSH_TRACE, opacity);
 
+      // The trace and the cursor are stroked by cairo, which the overlay's composite does not see:
+      // each stroke declares what it covers, or a creation session, which composites the box of
+      // the shapes already made, shows none of the trace outside it.
       cairo_move_to(cr, guipoints[0], guipoints[1]);
       for(int i = 1; i < mask_gui->guipoints_count; i++)
       {
@@ -2757,6 +2761,7 @@ static void _brush_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_fo
 
         if(radius != oldradius || opacity != oldopacity)
         {
+          dt_stroke_raster_touch_path(cr, TRUE);
           cairo_stroke(cr);
           stroked = 1;
           cairo_set_line_width(cr,  DT_PIXEL_APPLY_DPI(2 * radius));
@@ -2766,7 +2771,11 @@ static void _brush_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_fo
           cairo_move_to(cr, guipoints[i * 2], guipoints[i * 2 + 1]);
         }
       }
-      if(!stroked) cairo_stroke(cr);
+      if(!stroked)
+      {
+        dt_stroke_raster_touch_path(cr, TRUE);
+        cairo_stroke(cr);
+      }
 
       cairo_set_line_width(cr, DT_DRAW_SIZE_LINE / zoom_scale);
       dt_widget_set_source_rgba(cr, DT_GUI_COLOR_BRUSH_CURSOR, opacity);
@@ -2774,6 +2783,7 @@ static void _brush_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_fo
       cairo_arc(cr, guipoints[2 * (mask_gui->guipoints_count - 1)],
                 guipoints[2 * (mask_gui->guipoints_count - 1) + 1],
                 radius, 0, 2.0 * M_PI);
+      dt_stroke_raster_touch_path(cr, TRUE);
       cairo_fill_preserve(cr);
       cairo_set_source_rgba(cr, .8, .8, .8, .8);
       cairo_stroke(cr);
@@ -2782,6 +2792,7 @@ static void _brush_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_fo
       cairo_arc(cr, guipoints[2 * (mask_gui->guipoints_count - 1)],
                 guipoints[2 * (mask_gui->guipoints_count - 1) + 1], masks_border * min_iwd_iht, 0,
                 2.0 * M_PI);
+      dt_stroke_raster_touch_path(cr, TRUE);
       cairo_stroke(cr);
 
       dt_masks_form_t *visible_form = dt_masks_get_visible_form(mask_gui->dev);

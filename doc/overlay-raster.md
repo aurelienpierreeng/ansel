@@ -58,7 +58,18 @@ context is clipped to it, so a handle that lands outside the estimate is not pai
 left behind for the next frame (the harness draws a panned frame after every state and fails on
 any pixel a fresh surface would not show). The rectangle is then cleared by hand for the next frame.
 A creation session, which paints through its own cached pattern, is bounded by the union of its
-outlines' boxes and not clipped.
+outlines' boxes and not clipped. The shape being drawn has no outline yet: what of it the
+rasteriser paints it records, and what cairo strokes itself — a brush's trace and cursor
+(`_brush_events_post_expose()`), a clone's source cross (`dt_draw_cross()`) — is declared with
+`dt_stroke_raster_touch_path()`, which adds the path's extents, grown by half the line width, to
+the same touched rectangle. Undeclared, it is painted into the canvas and composited only where
+the session's box happens to cover it. The first stroke of a session is the exception that hid
+this: with no box yet, the bound is the whole canvas.
+
+*Measured on top of `0a3d158d66`, 2026-11-10*, with the same shim: retouch's brush armed, a first
+stroke from (75, 97) to (150, 130), then a second from inside its box to (400, 518), the frame
+dumped at the second stroke's last motion. The composited rectangle ended at (199, 187), the trace
+beyond it drawn and never shown; it ends at (418, 536).
 
 The outline's box (`dt_masks_gui_points_update_bbox()`) holds its samples, its border, its clone
 source's samples, and the shape's box carried onto the source by the shift between the first
