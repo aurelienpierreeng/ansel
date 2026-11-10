@@ -1,6 +1,7 @@
 /*
     This file is part of Ansel
     Copyright (C) 2026 - Aurélien PIERRE
+    Copyright (C) 2026 - Guillaume Stutin
 
     Ansel is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -27,6 +28,9 @@ typedef struct dt_autoset_manager_t
   gboolean progress_cursor_active;
   struct dt_develop_t *dev;
   gpointer input_wait;
+  /** Told TRUE when a run starts and FALSE when it ends, on the GUI thread, whichever of the click,
+   * the preview-finished signal or a served cache wait moved the run. */
+  void (*running_changed)(gboolean running);
 } dt_autoset_manager_t;
 
 typedef struct dt_develop_t dt_develop_t;
