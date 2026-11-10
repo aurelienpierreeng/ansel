@@ -48,7 +48,9 @@ two ends fall back to the first nodes. The source outline built for the GUI carr
 the dot's source is its border shifted by the source node minus the main node, the shift
 `_brush_get_distance()` already uses to hit the source, and drawn solid like every source
 outline. The shift is exact where the distortions after the module are affine; behind a lens
-correction or a perspective it is the same approximation the hit test makes.
+correction or a perspective it is the same approximation the hit test makes. The overlay only
+composites what lies in the outline's box, so that box holds the shape's box carried onto the
+source (`dt_masks_gui_points_update_bbox()`, see [`overlay-raster.md`](overlay-raster.md)).
 
 *Measured on top of `17a0cfe80b`, 2026-11-10*, with an `LD_PRELOAD` shim on a RelWithDebInfo
 build, Xephyr at 1280×900, a JPEG at fit zoom: retouch's brush armed by its button, a click, a
