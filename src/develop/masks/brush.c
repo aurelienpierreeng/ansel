@@ -1255,11 +1255,11 @@ static int _brush_get_pts_border(dt_develop_t *develop, dt_masks_form_t *mask_fo
     }
   }
 
-  // for the border, we store value too
-  if(!IS_NULL_PTR(dborder))
-  {
-    dt_masks_dynbuf_add_zeros(dborder, 6 * node_count);  // we need six zeros for each border point
-  }
+  /* The border's header repeats the outline's: zeros there put the image's origin in every box
+   * taken over the buffer, the overlay's and the hit test's. */
+  float *const border_header = IS_NULL_PTR(dborder) ? NULL : dt_masks_dynbuf_reserve_n(dborder, 6 * node_count);
+  if(!IS_NULL_PTR(border_header))
+    memcpy(border_header, dt_masks_dynbuf_buffer(dpoints), sizeof(float) * 6 * node_count);
 
   // for the payload, we reserve an equivalent number of cells to keep it in sync
   if(!IS_NULL_PTR(dpayload))

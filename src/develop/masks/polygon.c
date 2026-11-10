@@ -663,7 +663,7 @@ static void _polygon_walk_write_header(const _polygon_walk_t *const w)
   {
     int from = k;
     for(int step = 0; step < w->node_count && !w->node_has_border[from]; step++) from = (from + 1) % w->node_count;
-    if(!w->node_has_border[from]) return;   /* no segment had a direction: the header stays zero */
+    if(!w->node_has_border[from]) return;   /* no segment had a direction: the header stays the outline's */
     border[k * 6] = w->node_border[from * 2];
     border[k * 6 + 1] = w->node_border[from * 2 + 1];
   }
@@ -749,7 +749,11 @@ static int _polygon_get_pts_border(dt_develop_t *develop, dt_masks_form_t *mask_
       buf[5] = node->ctrl2[1] * input_height - dy;
     }
   }
-  if(!IS_NULL_PTR(dborder)) dt_masks_dynbuf_add_zeros(dborder, 6 * node_count);
+  /* The border's header repeats the outline's until _polygon_walk_write_header() puts each node's
+   * border handle in it: zeros there put the image's origin in every box taken over the buffer. */
+  float *const border_header = IS_NULL_PTR(dborder) ? NULL : dt_masks_dynbuf_reserve_n(dborder, 6 * node_count);
+  if(!IS_NULL_PTR(border_header))
+    memcpy(border_header, dt_masks_dynbuf_buffer(dpoints), sizeof(float) * 6 * node_count);
 
   const gboolean clockwise = _polygon_is_clockwise(mask_form);
   if(dt_get_debug_flags() & DT_DEBUG_PERF)

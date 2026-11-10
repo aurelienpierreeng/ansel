@@ -93,6 +93,19 @@ The box was x −1684 to inf, y −642 to inf; it is x −1684 to 4082, y −642
 gradient draws the same pixels. The session frame draws 3230 more, all within 2 px of where the
 gradient is drawn once selected; master drew none of them either.
 
+The border's header holds no point the shape does not draw: a brush's and a polygon's repeat the
+outline's header there ([`masks-geometry.md`](masks-geometry.md)). It was zeros, the image's origin,
+so the box of every brush and polygon reached the top-left corner of the image, and with it the
+rectangle composited and cleared each frame and the session's bound.
+
+*Measured on top of `815455e77b`, 2026-11-10*, at fit zoom in a 500×648 view, shapes at the bottom
+right of the image. A brush's box went from x 0..2407, y 0..1529 to x 1717..2407, y 1097..1529 (image
+pixels), its composited rectangle from 500×421 to 204×202, and the composite from 0.31 to 0.10 ms per
+frame (400 frames each; 0.10 ms is the print's resolution). A dot's rectangle went from 247×133 to
+88×87, a polygon's from 500×457 to 213×263, a two-stroke creation session's from 418×473 to 387×473.
+Every overlay drew the same pixels, nothing painted was left outside the rectangle, and a mouse move
+cost the same, about 180 µs, inside the old box or outside both.
+
 The rectangle is cut to the frame before it is composited and recorded. One reaching out of the
 view is a rectangle no expose covers: `_overlay_damage_record()` asks a redraw of what the expose
 did not cover, so such a rectangle repaints the overlay frame after frame for as long as it lasts.
