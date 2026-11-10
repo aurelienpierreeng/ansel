@@ -23,6 +23,13 @@ node, `ctrl2`), then the centerline sampled **forward** from the first node to t
 **same** centerline sampled backward. The border wraps around the stroke, so the line under it is
 walked there and back (`_brush_get_pts_border()`); the backward half is never drawn.
 
+The border is index-aligned with the points, header included. A brush's and a polygon's border
+header repeats the outline's, three entries per node, and a polygon then writes each node's border
+handle into the first of the three (`_polygon_walk_write_header()`). Nothing reads the rest: the
+pipeline's area starts after the header (`_brush_bounding_box_raw()`). It used to be zeros, the
+image's origin, which every box taken over the whole buffer counted (see
+[`overlay-raster.md`](overlay-raster.md)).
+
 The forward half ends at `_brush_centerline_end()` — `node_count * 3 + (points_count - node_count
 * 3) / 2`, i.e. half of the **samples**. Half of the whole array is a different number: the header
 belongs to neither pass, so counting it in falls one and a half points per node short, and the
