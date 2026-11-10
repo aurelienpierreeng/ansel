@@ -77,6 +77,22 @@ points of the two outlines. Cairo strokes the source and the arrow, wherever the
 source, and a source may be drawn as large as the border: a brush too short to have a line draws
 its border there ([`masks-geometry.md`](masks-geometry.md)).
 
+A point that is not finite is not a sample, and the box leaves it out. A gradient's border joins its
+two curves with an `(INFINITY, INFINITY)` separator (`_gradient_get_pts_border()`), and counting it
+made the box infinite: no hit test could rule a gradient out, and the bounds carried the infinity
+into `_rect_include()`, whose conversion to `int` is undefined. On x86 it gives `INT_MIN`, which
+here happened to make a rectangle that covered everything; nothing was measured on ARM.
+
+The session clip (`_session_clip()`) took that box too: a rectangle of infinite width, which let
+nothing through, so in a gradient creation session the gradient already made was not drawn while
+the next one was placed.
+
+*Measured on top of `8e5892d09f`, 2026-11-10*, with a shim that makes a gradient in exposure's drawn
+mask, dumps the frame with the session still open, then selects the gradient the way Escape does.
+The box was x −1684 to inf, y −642 to inf; it is x −1684 to 4082, y −642 to 2242. The selected
+gradient draws the same pixels. The session frame draws 3230 more, all within 2 px of where the
+gradient is drawn once selected; master drew none of them either.
+
 The rectangle is cut to the frame before it is composited and recorded. One reaching out of the
 view is a rectangle no expose covers: `_overlay_damage_record()` asks a redraw of what the expose
 did not cover, so such a rectangle repaints the overlay frame after frame for as long as it lasts.
