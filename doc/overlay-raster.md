@@ -52,12 +52,32 @@ surface the size of the clip in pixels (created once, kept across frames, given 
 device scale), draws every shape into it through a `cairo_t` carrying `cr`'s matrix shifted to
 the clip's origin, and composites onto the view only the rectangle that was painted: the
 rasteriser's own record, plus a bound on what cairo may draw on top — the node header of every
-outline, node and both control points, three per node, with a margin for a node's disc and an
-arrow head. That bound is computed *before* anything is drawn and the canvas context is clipped
-to it, so a handle that lands outside the estimate is not painted rather than left behind for
-the next frame (the harness draws a panned frame after every state and fails on any pixel a
-fresh surface would not show). The rectangle is then cleared by hand for the next frame. A creation
-session, which paints through its own cached pattern, takes the whole canvas.
+outline, node and both control points, three per node, and the outline's box, with a margin for a
+node's disc and an arrow head. That bound is computed *before* anything is drawn and the canvas
+context is clipped to it, so a handle that lands outside the estimate is not painted rather than
+left behind for the next frame (the harness draws a panned frame after every state and fails on
+any pixel a fresh surface would not show). The rectangle is then cleared by hand for the next frame.
+A creation session, which paints through its own cached pattern, is bounded by the union of its
+outlines' boxes and not clipped.
+
+The outline's box (`dt_masks_gui_points_update_bbox()`) holds its samples, its border, its clone
+source's samples, and the shape's box carried onto the source by the shift between the first
+points of the two outlines. Cairo strokes the source and the arrow, wherever the user put the
+source, and a source may be drawn as large as the border: a brush too short to have a line draws
+its border there ([`masks-geometry.md`](masks-geometry.md)).
+
+The rectangle is cut to the frame before it is composited and recorded. One reaching out of the
+view is a rectangle no expose covers: `_overlay_damage_record()` asks a redraw of what the expose
+did not cover, so such a rectangle repaints the overlay frame after frame for as long as it lasts.
+
+*Measured on top of `6fde4487bb`, 2026-11-10*, with an `LD_PRELOAD` shim on a RelWithDebInfo
+build, Xephyr at 1280×900, a 2400×1600 JPEG at fit zoom, the rectangle read from
+`MASKS_DUMP_OVERLAY`: retouch's shape armed by its button, its source placed by Shift+click, a click
+to make the shape. In the creation session, a circle of radius 0.3 had its source down to canvas
+row 485 and a composited rectangle ending at row 323; it ends at 511. A one-point brush, its source
+at row 389 and its rectangle ending at 230, ends at 424. Selected outside the session, the brush's
+rectangle began at column −15: the overlay drew 57 frames in the next second with nothing moving,
+and draws 1.
 
 ## Measured
 

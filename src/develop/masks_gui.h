@@ -73,8 +73,10 @@ typedef struct dt_masks_form_gui_points_t
   int source_count;
   gboolean clockwise;
   /* The box every sample above spans -- points, border and source alike, in the same space --
-   * so a hit test can answer "nothing here" without walking them: minx, maxx, miny, maxy; empty
-   * (min above max) when there is no sample. dt_masks_gui_points_update_bbox() fills it. */
+   * and the shape's own box carried onto its source, where a source may be drawn as large as
+   * the border: a hit test answers "nothing here" without walking the samples, and the overlay
+   * bounds what it paints. minx, maxx, miny, maxy; empty (min above max) when there is no
+   * sample. dt_masks_gui_points_update_bbox() fills it. */
   float bbox[4];
 } dt_masks_form_gui_points_t;
 

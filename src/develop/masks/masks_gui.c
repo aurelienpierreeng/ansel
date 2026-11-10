@@ -2432,7 +2432,21 @@ void dt_masks_gui_points_update_bbox(dt_masks_form_gui_points_t *gp)
   gp->bbox[3] = -FLT_MAX;
   if(!IS_NULL_PTR(gp->points)) _gui_points_bbox_extend(gp->bbox, gp->points, gp->points_count);
   if(!IS_NULL_PTR(gp->border)) _gui_points_bbox_extend(gp->bbox, gp->border, gp->border_count);
-  if(!IS_NULL_PTR(gp->source)) _gui_points_bbox_extend(gp->bbox, gp->source, gp->source_count);
+  if(IS_NULL_PTR(gp->source) || gp->source_count <= 0) return;
+
+  /* A source is its shape carried elsewhere, drawn at most as large as the shape's border: a
+   * brush too short to have a line draws its border there (doc/masks-geometry.md). That is the
+   * shape's box carried by the shift between the first points of the two outlines, which every
+   * shape puts at the same spot of both -- a circle's or an ellipse's centre, a path's first
+   * control point. Taken before the source's samples join the box, which would carry them too. */
+  if(!IS_NULL_PTR(gp->points) && gp->points_count > 0)
+  {
+    const float dx = gp->source[0] - gp->points[0];
+    const float dy = gp->source[1] - gp->points[1];
+    const float carried[4] = { gp->bbox[0] + dx, gp->bbox[2] + dy, gp->bbox[1] + dx, gp->bbox[3] + dy };
+    _gui_points_bbox_extend(gp->bbox, carried, 2);
+  }
+  _gui_points_bbox_extend(gp->bbox, gp->source, gp->source_count);
 }
 
 void dt_masks_gui_form_remove(dt_masks_form_t *mask_form, dt_masks_form_gui_t *mask_gui, int form_index)
@@ -3760,18 +3774,19 @@ static void _bbox_include_array(const float *const array, const int count, doubl
   }
 }
 
-/* The box of everything the session draws: the spines AND the borders. It held the spines
- * alone, and a brush's dashed border lies a radius outside its spine, further than the clip's
- * margin; the pattern was clipped to it on a cache hit after a pan or zoom. */
+/* The box of everything the session draws: the spines, the borders and the clone sources --
+ * each outline's own box (dt_masks_gui_points_update_bbox()). A brush's dashed border lies a
+ * radius outside its spine and a source anywhere, both further than the clip's margin: the
+ * pattern is clipped to this box on a cache hit, and the canvas composites no more of it. */
 static gboolean _session_bbox_from_points(const dt_masks_form_gui_t *gui, double bbox[4])
 {
   gboolean any = FALSE;
   for(const GList *node = gui->points; node; node = g_list_next(node))
   {
     const dt_masks_form_gui_points_t *const pts = (const dt_masks_form_gui_points_t *)node->data;
-    if(IS_NULL_PTR(pts)) continue;
-    _bbox_include_array(pts->points, pts->points_count, bbox, &any);
-    _bbox_include_array(pts->border, pts->border_count, bbox, &any);
+    if(IS_NULL_PTR(pts) || pts->bbox[0] > pts->bbox[1] || pts->bbox[2] > pts->bbox[3]) continue;
+    const float corners[4] = { pts->bbox[0], pts->bbox[2], pts->bbox[1], pts->bbox[3] };
+    _bbox_include_array(corners, 2, bbox, &any);
   }
   return any;
 }
@@ -4111,11 +4126,12 @@ static void _rect_include(cairo_rectangle_int_t *rect, gboolean *any, const doub
  * rectangle, possibly after a pan -- a ghost, which is seen much later and understood never.
  *
  * The bound: every header point of every outline -- node and both control points, three per
- * node, plus the border's own header, where the border handle sits, and the source's --
- * grown by the longest control vector, because a curvature handle is that vector rotated a
- * quarter turn about its node (same length, any direction), by a node's disc and by an arrow
- * head. A buffer too short to have a header (a circle's, a source's) contributes its first
- * points. The outlines themselves the rasteriser reports exactly, on top of this. */
+ * node, plus the border's own header, where the border handle sits, and the source's -- and
+ * the outline's box, which holds the clone source cairo strokes wherever it lies, grown by
+ * the longest control vector, because a curvature handle is that vector rotated a quarter
+ * turn about its node (same length, any direction), by a node's disc and by an arrow head. A
+ * buffer too short to have a header (a circle's, a source's) contributes its first points.
+ * The outlines themselves the rasteriser reports exactly, on top of this. */
 /* A frame of the canvas: where it sits in cr's device space, and the context that draws
  * into it in cr's coordinates. */
 typedef struct _canvas_frame_t
@@ -4174,6 +4190,21 @@ static void _bound_include_headers(cairo_t *canvas_cr, const dt_masks_form_gui_p
   }
 }
 
+/* Include an outline's box -- its samples, its border and where its clone source is drawn,
+ * which cairo strokes along with the arrow joining the two -- in @p rect. */
+static void _bound_include_box(cairo_t *canvas_cr, const dt_masks_form_gui_points_t *const pts, const double scale,
+                               cairo_rectangle_int_t *rect, gboolean *any)
+{
+  if(pts->bbox[0] > pts->bbox[1] || pts->bbox[2] > pts->bbox[3]) return;   /* no sample */
+  for(int c = 0; c < 4; c++)
+  {
+    double x = pts->bbox[(c & 1) ? 1 : 0];
+    double y = pts->bbox[(c & 2) ? 3 : 2];
+    cairo_user_to_device(canvas_cr, &x, &y);
+    _rect_include(rect, any, x * scale, y * scale, 0);   /* device units to canvas pixels */
+  }
+}
+
 /* The longest control vector of an outline's node header, in canvas pixels: how far from a
  * node its curvature handle can be drawn. */
 static double _bound_header_reach(cairo_t *canvas_cr, const dt_masks_form_gui_points_t *const pts, const int nodes,
@@ -4229,6 +4260,7 @@ static void _canvas_cairo_bound(cairo_t *canvas_cr, const dt_masks_form_gui_t *g
     if(IS_NULL_PTR(pts)) continue;
     const int nodes = _outline_nodes(gui->dev, form, index);
     _bound_include_headers(canvas_cr, pts, nodes, scale, rect, any);
+    _bound_include_box(canvas_cr, pts, scale, rect, any);
     reach = MAX(reach, _bound_header_reach(canvas_cr, pts, nodes, scale));
   }
   if(!*any) return;
@@ -4661,6 +4693,20 @@ static gboolean _overlay_dirty(const _canvas_frame_t *frame, const cairo_rectang
   return TRUE;
 }
 
+/* Cut @p dirty to the frame: nothing outside it was painted, and a rectangle reaching out of
+ * the view is one no expose ever covers -- _overlay_damage_record() would ask a redraw of it
+ * after every frame, and the overlay would repaint for as long as the bound crossed the edge.
+ * Returns whether anything is left. */
+static gboolean _overlay_dirty_in_frame(const _canvas_frame_t *frame, cairo_rectangle_int_t *dirty)
+{
+  const int x0 = CLAMP(dirty->x, 0, frame->width);
+  const int y0 = CLAMP(dirty->y, 0, frame->height);
+  const int x1 = CLAMP(dirty->x + dirty->width, 0, frame->width);
+  const int y1 = CLAMP(dirty->y + dirty->height, 0, frame->height);
+  *dirty = (cairo_rectangle_int_t){ x0, y0, x1 - x0, y1 - y0 };
+  return x1 > x0 && y1 > y0;
+}
+
 void dt_masks_events_post_expose_with(dt_develop_t *dev, struct dt_iop_module_t *module, cairo_t *cr,
                                       int32_t width, int32_t height, int32_t pointerx, int32_t pointery,
                                       const dt_masks_overlay_transform_t *transform)
@@ -4751,7 +4797,8 @@ void dt_masks_events_post_expose_with(dt_develop_t *dev, struct dt_iop_module_t 
    * The transform is still in effect here, which is what the header bounds need; a creation
    * session paints through its own cached pattern and takes the whole canvas. */
   cairo_rectangle_int_t dirty = { 0, 0, 0, 0 };
-  const gboolean any = _overlay_dirty(&frame, &cairo_bound, cairo_bounded, &dirty);
+  const gboolean any = _overlay_dirty(&frame, &cairo_bound, cairo_bounded, &dirty)
+                       && _overlay_dirty_in_frame(&frame, &dirty);
   _overlay_dump(&frame, mask_gui, &dirty);
   cairo_restore(mask_draw);
   cairo_destroy(mask_draw);
