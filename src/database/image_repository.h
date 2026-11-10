@@ -32,9 +32,8 @@
  * needs a row read or written; this file holds every `sqlite3_*` call and the prepared
  * statements behind them, and knows nothing about caching, refcounting or eviction.
  *
- * @warning The statement cache below is process-wide and guarded by one mutex, so the calls
- * here serialise against each other. That is inherited behaviour, not a new constraint: the
- * cache took the same mutex around the same statements before the split.
+ * @warning The statement cache below is process-wide and guarded by the database connection
+ * mutex, so the calls here serialise against each other.
  */
 
 #ifndef DT_DATABASE_IMAGE_REPOSITORY_H
@@ -286,11 +285,18 @@ gboolean dt_image_repository_set_flags(const int32_t imgid, const int flags);
  *  between, which is a filesystem round-trip on a network share. */
 gboolean dt_image_repository_set_flags_masked(const int32_t imgid, const int mask, const int value);
 
-/** @brief One row of dt_image_repository_foreach_with_path(). @p image_path is borrowed:
- *  it lives until the callback returns.
- *  @return TRUE to go on to the next row, FALSE to end the walk at this one. */
+/**
+ * @brief One row of dt_image_repository_foreach_with_path().
+ *
+ * @p image_path is borrowed and lives until the callback returns. @p write_timestamp_present is
+ * FALSE when the database value is SQL NULL; when TRUE, @p write_timestamp holds its stored value,
+ * including numeric zero.
+ *
+ * @return TRUE to go on to the next row, FALSE to end the walk at this one.
+ */
 typedef gboolean (*dt_image_repository_path_row_cb)(const int32_t imgid,
                                                     const int64_t write_timestamp,
+                                                    const gboolean write_timestamp_present,
                                                     const int version,
                                                     const char *image_path,
                                                     const int flags,
@@ -301,8 +307,8 @@ typedef gboolean (*dt_image_repository_path_row_cb)(const int32_t imgid,
  *
  * @details Hands the callback what is needed to find an image's files on disk and compare
  * them against the row: its path, its version (for the sidecar's `_NN` suffix), the
- * `write_timestamp` a sidecar's mtime is checked against, and the `flags` word recording
- * which companion files it had last time.
+ * `write_timestamp` a sidecar's mtime is checked against and whether that value exists, and the
+ * `flags` word recording which companion files it had last time.
  *
  * The statement is prepared and finalised around the walk rather than cached, and no
  * internal lock is held while the callback runs: the callback is expected to write back

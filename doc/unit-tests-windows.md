@@ -68,6 +68,31 @@ created the process's multithreaded apartment first: at the crash, a GIO `pool-0
 inside `Windows.ApplicationModel`. **Unconfirmed**: nothing logged the `HRESULT` of the calls
 that failed.
 
+## The XMP import tests' first Windows run
+
+*2026-10-28, on top of `7d0fa49dd7`, GCC 16.2 UCRT64 Debug on GitHub's `windows-latest`.*
+
+Three tests written for the transactional XMP import had only ever run on Linux. They failed the
+first time the Windows Debug cells ran them:
+
+- **`test_image_repository` and `test_xmp_import_safety`** fell into the separator and `_dup2()`
+  traps above. The `_dup2()` one hid its own message. The assertion on its result failed while
+  stderr was already redirected to a temporary file, cmocka's `longjmp` skipped the restore, and
+  every later failure message from that binary went into the file. The ctest log showed three
+  `[  FAILED  ]` lines with no `[  ERROR   ]` or `[   LINE   ]` before them, and no
+  `[xmp] rejected` line after the first one. **A `[  FAILED  ]` with no message means stderr was
+  left redirected.**
+- **`test_exif_read_contract`** aborted with `0xc0000409`, on
+  `Assertion '__n < this->size()' failed` in `std::array::operator[]`: a test wrote a
+  four-entry event log 200 times.
+  - Our CMake defines no `_GLIBCXX_ASSERTIONS`. libstdc++ turns it on by default in unoptimised
+    builds from GCC 15 on, so the Windows Debug cells (GCC 16.2) check every index. The Linux
+    cells, on Ubuntu noble's older libstdc++, do not.
+  - On Linux the same overflow wrote past the array into the members after it
+    (`transaction_event_count` first), and the test passed.
+  - Building the test on Linux with `-D_GLIBCXX_ASSERTIONS` aborts the same way (libstdc++ 13,
+    measured). That is how to reproduce such a failure locally.
+
 ## `check_statelessness.sh` on Windows
 
 `tools/statelessness_audit.py` only knew ELF: it looked for `.o` files and parsed

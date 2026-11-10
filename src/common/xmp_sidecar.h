@@ -32,8 +32,8 @@
  * @details This is the half of the old `common/exif.cc` that is not about the photograph's
  * own description. It reads and writes `Xmp.darktable.history`, `masks_history`,
  * `iop_order_list` and their neighbours, so it necessarily names `develop/` (layer 5) and
- * `imageio/` (layer 6) -- eleven `dt_ioppr_*` symbols, `dt_develop_blend_params_t`,
- * `dt_masks_form_group_t`, `dt_imageio_dng_write_tiff_header`. That is precisely why it
+ * `imageio/` (layer 6) -- eleven `dt_ioppr_*` symbols, `dt_develop_blend_params_t`, and
+ * `dt_imageio_dng_write_tiff_header`. That is precisely why it
  * could not follow the tag half into `src/metadata` (layer 1), and why the metadata module
  * gate still reads zero without it.
  *
@@ -65,8 +65,29 @@ int dt_exif_xmp_attach_export(const int32_t imgid, const char *filename, void *m
 /** get the xmp blob for imgid. */
 char *dt_exif_xmp_read_string(const int32_t imgid);
 
-/** read xmp sidecar file. */
-int dt_exif_xmp_read(dt_image_t *img, const char *filename, const int history_only);
+/** Result of an XMP import. Partial commits descriptive metadata without replacing development. */
+typedef enum dt_xmp_import_result_t
+{
+  DT_XMP_IMPORT_OK = 0,
+  DT_XMP_IMPORT_PARTIAL,
+  DT_XMP_IMPORT_READ_ERROR,
+  DT_XMP_IMPORT_PERSIST_ERROR
+} dt_xmp_import_result_t;
+
+/** Read an XMP sidecar and optionally update the image write timestamp in its transaction. */
+dt_xmp_import_result_t dt_exif_xmp_read(dt_image_t *img, const char *filename, const int history_only,
+                                        const int64_t *write_timestamp);
+
+/** Read a sidecar and report whether committed tag state changed. The function never signals. */
+dt_xmp_import_result_t dt_exif_xmp_read_with_tags(dt_image_t *img, const char *filename,
+                                                  const int history_only,
+                                                  const int64_t *write_timestamp,
+                                                  gboolean *tags_changed);
+
+/** Read a sidecar and report committed metadata and development changes independently. */
+dt_xmp_import_result_t dt_exif_xmp_read_with_result(dt_image_t *img, const char *filename,
+                                                    int history_only, const int64_t *write_timestamp,
+                                                    gboolean *tags_changed, gboolean *development_changed);
 
 #ifdef __cplusplus
 }

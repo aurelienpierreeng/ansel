@@ -11,11 +11,14 @@
 #include "common/utility.h"
 #include "common/variables.h"
 #include "common/conf.h"
+#include "common/film.h"
 #include "common/image.h"
+#include "caches/image_cache.h"
 #include "control/control.h"
 #include "control/jobs/import_jobs.h"
 #include "darktable.h"
 #include "imageio/imageio_jpeg.h"
+#include "metadata/notify.h"
 #include "system/macros.h"
 #include "system/mem_alloc.h"
 
@@ -71,6 +74,48 @@ static char *_integration_config = NULL;
 static char *_integration_cache = NULL;
 static char *_integration_tmp = NULL;
 static char *_integration_datadir = NULL;
+static const char _valid_xmp[] = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
+                                 "<x:xmpmeta xmlns:x=\"adobe:ns:meta/\">"
+                                 "<rdf:RDF xmlns:rdf=\"http://www.w3.org/1999/02/22-rdf-syntax-ns#\">"
+                                 "<rdf:Description rdf:about=\"\" xmlns:darktable=\"http://darktable.sf.net/\" "
+                                 "darktable:xmp_version=\"5\"/>"
+                                 "</rdf:RDF></x:xmpmeta>";
+
+typedef struct sidecar_alerts_t
+{
+  const char *title;
+  const char *message;
+  GPtrArray *items;
+  int groups;
+} sidecar_alerts_t;
+
+static sidecar_alerts_t _sidecar_alerts = { 0 };
+
+static void _record_sidecar_alert(const char *title, const char *message, const char *item, const int once)
+{
+  assert_false(once);
+  if(IS_NULL_PTR(_sidecar_alerts.title))
+  {
+    _sidecar_alerts.title = title;
+    _sidecar_alerts.message = message;
+    _sidecar_alerts.groups++;
+  }
+  else
+  {
+    assert_string_equal(title, _sidecar_alerts.title);
+    assert_string_equal(message, _sidecar_alerts.message);
+  }
+  g_ptr_array_add(_sidecar_alerts.items, g_strdup(item));
+}
+
+/** Return the sole sidecar fallback message in captured standard error output. */
+static const char *_find_sidecar_fallback(const char *diagnostic)
+{
+  const char *fallback = strstr(diagnostic, "Import problem: Failed to read sidecar file\n");
+  assert_non_null(fallback);
+  assert_null(strstr(fallback + 1, "Sidecar file rejected: Failed to read sidecar file\n"));
+  return fallback;
+}
 
 typedef struct import_completion_t
 {
@@ -80,6 +125,30 @@ typedef struct import_completion_t
   gboolean job_disposed;
   GHashTable *sources;
 } import_completion_t;
+
+typedef struct tag_change_probe_t
+{
+  const char *path;
+  int count;
+  gboolean cache_released;
+} tag_change_probe_t;
+
+static tag_change_probe_t *_tag_change_probe = NULL;
+
+static void _record_tag_change(void)
+{
+  tag_change_probe_t *probe = _tag_change_probe;
+  if(IS_NULL_PTR(probe)) return;
+  probe->count++;
+  if(IS_NULL_PTR(probe->path)) return;
+
+  const int32_t imgid = dt_image_get_id_full_path(probe->path);
+  dt_image_t *image = dt_image_cache_testget(imgid, 'r');
+  if(IS_NULL_PTR(image)) return;
+
+  probe->cache_released = TRUE;
+  dt_image_cache_read_release(image);
+}
 
 static void _import_completed(const char *source, gboolean success, gpointer user_data)
 {
@@ -239,6 +308,235 @@ static void _test_public_in_place_import_preserves_source(void **state G_GNUC_UN
   dt_free(unused_destination);
   dt_free(source_path);
   dt_free(root);
+}
+
+static void _test_public_bulk_import_emits_one_tag_change_notification(void **state G_GNUC_UNUSED)
+{
+  char *directory = g_dir_make_tmp("ansel-import-tag-change-bulk-XXXXXX", NULL);
+  assert_non_null(directory);
+  char *first = _make_jpeg(directory, "first.jpg", 26);
+  char *second = _make_jpeg(directory, "second.jpg", 27);
+  import_completion_t completion = { 0 };
+  _completion_init(&completion, 2);
+  tag_change_probe_t probe = { 0 };
+  GList *sources = g_list_append(g_list_append(NULL, first), second);
+  _tag_change_probe = &probe;
+  dt_control_import_t data = _copy_import(sources, 2, directory, "unused.jpg", DT_IMPORT_ONCONFLICT_SKIP, &completion);
+  data.copy = FALSE;
+
+  const int import_result = dt_control_import(data);
+
+  _tag_change_probe = NULL;
+  assert_int_equal(import_result, 0);
+  _assert_import(&completion, 2);
+  assert_int_equal(probe.count, 1);
+  _completion_cleanup(&completion);
+  _remove_tree(directory);
+  dt_free(directory);
+}
+
+static void _test_public_no_op_import_emits_no_tag_change_notification(void **state G_GNUC_UNUSED)
+{
+  char *directory = g_dir_make_tmp("ansel-import-tag-change-no-op-XXXXXX", NULL);
+  assert_non_null(directory);
+  char *source = _make_jpeg(directory, "capture.jpg", 28);
+  char *source_path = g_strdup(source);
+  import_completion_t completion = { 0 };
+  _completion_init(&completion, 1);
+  dt_control_import_t initial = _copy_import(g_list_append(NULL, source), 1, directory, "unused.jpg",
+                                             DT_IMPORT_ONCONFLICT_SKIP, &completion);
+  initial.copy = FALSE;
+  assert_int_equal(dt_control_import(initial), 0);
+  _assert_import(&completion, 1);
+  _completion_cleanup(&completion);
+
+  completion = (import_completion_t){ 0 };
+  _completion_init(&completion, 1);
+  tag_change_probe_t probe = { 0 };
+  _tag_change_probe = &probe;
+  dt_control_import_t no_op = _copy_import(g_list_append(NULL, g_strdup(source_path)), 1, directory, "unused.jpg",
+                                           DT_IMPORT_ONCONFLICT_SKIP, &completion);
+  no_op.copy = FALSE;
+
+  const int import_result = dt_control_import(no_op);
+
+  _tag_change_probe = NULL;
+  assert_int_equal(import_result, 0);
+  _assert_import(&completion, 1);
+  assert_int_equal(probe.count, 0);
+  _completion_cleanup(&completion);
+  _remove_tree(directory);
+  dt_free(source_path);
+  dt_free(directory);
+}
+
+static void _test_single_image_import_notifies_after_cache_release(void **state G_GNUC_UNUSED)
+{
+  char *directory = g_dir_make_tmp("ansel-import-tag-change-single-XXXXXX", NULL);
+  assert_non_null(directory);
+  char *source = _make_jpeg(directory, "capture.jpg", 29);
+  dt_film_t film;
+  assert_true(dt_film_new(&film, directory) > 0);
+  tag_change_probe_t probe = { .path = source };
+  _tag_change_probe = &probe;
+
+  const int32_t imgid = dt_image_import(film.id, source, TRUE);
+
+  _tag_change_probe = NULL;
+  assert_true(imgid > UNKNOWN_IMAGE);
+  assert_int_equal(probe.count, 1);
+  assert_true(probe.cache_released);
+  _remove_tree(directory);
+  dt_free(source);
+  dt_free(directory);
+}
+
+static void _test_import_sidecar_rejections_alert_without_stopping_import(void **state G_GNUC_UNUSED)
+{
+  char *directory = g_dir_make_tmp("ansel-test-sidecar-alert-XXXXXX", NULL);
+  assert_non_null(directory);
+  char *source = _make_jpeg(directory, "capture.jpg", 30);
+  char *valid = g_strconcat(source, ".xmp", NULL);
+  char *rejected_a = g_build_filename(directory, "capture_01.jpg.xmp", NULL);
+  char *rejected_b = g_build_filename(directory, "capture_02.jpg.xmp", NULL);
+  char *diagnostic_path = NULL;
+  assert_true(g_file_set_contents(valid, _valid_xmp, -1, NULL));
+  assert_true(g_file_set_contents(rejected_a, "not an XMP sidecar", -1, NULL));
+  assert_true(g_file_set_contents(rejected_b, "not an XMP sidecar", -1, NULL));
+
+  _sidecar_alerts.items = g_ptr_array_new_with_free_func(dt_free_gpointer);
+  const int diagnostic_fd = g_file_open_tmp("ansel-test-sidecar-diagnostic-XXXXXX", &diagnostic_path, NULL);
+  assert_true(diagnostic_fd >= 0);
+  if(diagnostic_fd < 0) return;
+  const int stderr_fd = test_dup(fileno(stderr));
+  assert_true(stderr_fd >= 0);
+  if(stderr_fd < 0)
+  {
+    test_close(diagnostic_fd);
+    g_remove(diagnostic_path);
+    dt_free(diagnostic_path);
+    return;
+  }
+  fflush(stderr);
+  assert_int_equal(test_dup2(diagnostic_fd, fileno(stderr)), fileno(stderr));
+  dt_control_set_alert_handler(_record_sidecar_alert);
+  import_completion_t completion = { 0 };
+  _completion_init(&completion, 1);
+  dt_control_import_t data = _copy_import(g_list_append(NULL, source), 1, directory, "capture.jpg",
+                                          DT_IMPORT_ONCONFLICT_SKIP, &completion);
+  data.copy = FALSE;
+  assert_int_equal(dt_control_import(data), 0);
+  dt_control_set_alert_handler(NULL);
+  fflush(stderr);
+  assert_int_equal(test_dup2(stderr_fd, fileno(stderr)), fileno(stderr));
+  assert_int_equal(test_close(stderr_fd), 0);
+  assert_int_equal(test_close(diagnostic_fd), 0);
+
+  _assert_import(&completion, 1);
+  assert_int_equal(_sidecar_alerts.groups, 1);
+  assert_non_null(_sidecar_alerts.title);
+  assert_non_null(_sidecar_alerts.message);
+  assert_int_equal(_sidecar_alerts.items->len, 2);
+  assert_string_equal(g_ptr_array_index(_sidecar_alerts.items, 0), rejected_a);
+  assert_string_equal(g_ptr_array_index(_sidecar_alerts.items, 1), rejected_b);
+  char *diagnostic = NULL;
+  assert_true(g_file_get_contents(diagnostic_path, &diagnostic, NULL, NULL));
+  const char *first_a = strstr(diagnostic, "[xmp] rejected 'capture_01.jpg.xmp'");
+  const char *second_a = first_a ? strstr(first_a + 1, "[xmp] rejected 'capture_01.jpg.xmp'") : NULL;
+  const char *first_b = strstr(diagnostic, "[xmp] rejected 'capture_02.jpg.xmp'");
+  const char *second_b = first_b ? strstr(first_b + 1, "[xmp] rejected 'capture_02.jpg.xmp'") : NULL;
+  assert_non_null(first_a);
+  assert_null(second_a);
+  assert_non_null(first_b);
+  assert_null(second_b);
+  dt_free(diagnostic);
+  g_remove(diagnostic_path);
+  dt_free(diagnostic_path);
+  g_ptr_array_free(_sidecar_alerts.items, TRUE);
+  _sidecar_alerts = (sidecar_alerts_t){ 0 };
+  _completion_cleanup(&completion);
+
+  g_remove(rejected_b);
+  g_remove(rejected_a);
+  g_remove(valid);
+  dt_free(rejected_b);
+  dt_free(rejected_a);
+  dt_free(valid);
+  _remove_tree(directory);
+  dt_free(directory);
+}
+
+static void _test_import_sidecar_rejections_preserve_long_fallback_without_handler(void **state G_GNUC_UNUSED)
+{
+  char *directory = g_dir_make_tmp("ansel-test-sidecar-alert-long-fallback-XXXXXX", NULL);
+  assert_non_null(directory);
+  char component[111] = { 0 };
+  memset(component, 'x', sizeof(component) - 1);
+  char *source_name = g_strdup_printf("capture_%s.jpg", component);
+  assert_true(strlen(source_name) < 255);
+  char *source = _make_jpeg(directory, source_name, 32);
+  char *source_root = g_strndup(source_name, strlen(source_name) - strlen(".jpg"));
+  GPtrArray *rejected = g_ptr_array_new_with_free_func(dt_free_gpointer);
+  for(int index = 1; index <= 8; index++)
+  {
+    char *name = g_strdup_printf("%s_%02d.jpg.xmp", source_root, index);
+    assert_true(strlen(name) < 255);
+    char *path = g_build_filename(directory, name, NULL);
+    assert_true(g_file_set_contents(path, "not an XMP sidecar", -1, NULL));
+    g_ptr_array_add(rejected, path);
+    dt_free(name);
+  }
+  dt_free(source_root);
+  dt_free(source_name);
+
+  dt_control_set_alert_handler(NULL);
+  char *diagnostic_path = NULL;
+  const int diagnostic_fd = g_file_open_tmp("ansel-test-sidecar-diagnostic-XXXXXX", &diagnostic_path, NULL);
+  assert_true(diagnostic_fd >= 0);
+  const int stderr_fd = test_dup(fileno(stderr));
+  assert_true(stderr_fd >= 0);
+  fflush(stderr);
+  assert_int_equal(test_dup2(diagnostic_fd, fileno(stderr)), fileno(stderr));
+  import_completion_t completion = { 0 };
+  _completion_init(&completion, 1);
+  dt_control_import_t data = _copy_import(g_list_append(NULL, source), 1, directory, "capture.jpg",
+                                          DT_IMPORT_ONCONFLICT_SKIP, &completion);
+  data.copy = FALSE;
+  assert_int_equal(dt_control_import(data), 0);
+  fflush(stderr);
+  assert_int_equal(test_dup2(stderr_fd, fileno(stderr)), fileno(stderr));
+  assert_int_equal(test_close(stderr_fd), 0);
+  assert_int_equal(test_close(diagnostic_fd), 0);
+
+  _assert_import(&completion, 1);
+  char *diagnostic = NULL;
+  assert_true(g_file_get_contents(diagnostic_path, &diagnostic, NULL, NULL));
+  const char *fallback = _find_sidecar_fallback(diagnostic);
+  assert_true(strlen(fallback) > 1000);
+  for(guint index = 0; index < rejected->len; index++)
+  {
+    const char *path = g_ptr_array_index(rejected, index);
+    const char *first = strstr(fallback, path);
+    assert_non_null(first);
+    assert_null(strstr(first + 1, path));
+    if(index > 0) assert_true(strstr(fallback, g_ptr_array_index(rejected, index - 1)) < first);
+    char *basename = g_path_get_basename(path);
+    char *rejection = g_strdup_printf("[xmp] rejected '%s'", basename);
+    const char *first_rejection = strstr(diagnostic, rejection);
+    assert_non_null(first_rejection);
+    assert_null(strstr(first_rejection + 1, rejection));
+    dt_free(rejection);
+    dt_free(basename);
+  }
+  dt_free(diagnostic);
+  g_remove(diagnostic_path);
+  dt_free(diagnostic_path);
+
+  _completion_cleanup(&completion);
+  for(guint index = 0; index < rejected->len; index++) g_remove(g_ptr_array_index(rejected, index));
+  g_ptr_array_free(rejected, TRUE);
+  _remove_tree(directory);
+  dt_free(directory);
 }
 
 static void _test_public_delete_source_requires_successful_copy(void **state G_GNUC_UNUSED)
@@ -887,7 +1185,17 @@ static int _directory_failure_teardown(void **state)
   if(!IS_NULL_PTR(fixture->diagnostics)) g_remove(fixture->diagnostics);
   dt_free(fixture->diagnostics);
   dt_free(fixture->data.target_dir);
-  if(fixture->mutex_initialized) dt_pthread_mutex_destroy(&fixture->control.log_mutex);
+  if(fixture->mutex_initialized)
+  {
+    dt_pthread_mutex_lock(&fixture->control.log_mutex);
+    for(int index = 0; index < DT_CTL_LOG_SIZE; index++)
+    {
+      dt_free(fixture->control.log_message[index]);
+      fixture->control.log_message[index] = NULL;
+    }
+    dt_pthread_mutex_unlock(&fixture->control.log_mutex);
+    dt_pthread_mutex_destroy(&fixture->control.log_mutex);
+  }
   darktable.control = fixture->saved_control;
   if(fixture->target_created)
   {
@@ -1021,11 +1329,17 @@ int main(int argc, char *argv[])
                         "--disable-opencl", "--conf", "write_sidecar_files=FALSE", "-t", "1", NULL };
   assert_int_equal(dt_init(G_N_ELEMENTS(init_argv) - 1, init_argv, FALSE, FALSE), 0);
   dt_pthread_mutex_init(&darktable.control->progress_system.mutex, NULL);
+  dt_metadata_set_tags_changed_handler(_record_tag_change);
   dt_free(noiseprofiles);
 
   const struct CMUnitTest integration_tests[] = {
     cmocka_unit_test(_test_public_siblings_keep_sequence_for_distinct_destinations),
     cmocka_unit_test(_test_public_in_place_import_preserves_source),
+    cmocka_unit_test(_test_public_bulk_import_emits_one_tag_change_notification),
+    cmocka_unit_test(_test_public_no_op_import_emits_no_tag_change_notification),
+    cmocka_unit_test(_test_single_image_import_notifies_after_cache_release),
+    cmocka_unit_test(_test_import_sidecar_rejections_alert_without_stopping_import),
+    cmocka_unit_test(_test_import_sidecar_rejections_preserve_long_fallback_without_handler),
     cmocka_unit_test(_test_public_delete_source_requires_successful_copy),
     cmocka_unit_test(_test_public_sibling_collision_reexpands_once),
     cmocka_unit_test(_test_public_fixed_destination_follows_all_policies),
@@ -1036,6 +1350,8 @@ int main(int argc, char *argv[])
     cmocka_unit_test(_test_public_reserved_fallback_reaches_policy_without_third_expansion),
   };
   const int integration_result = cmocka_run_group_tests(integration_tests, NULL, NULL);
+  _tag_change_probe = NULL;
+  dt_metadata_set_tags_changed_handler(NULL);
   dt_pthread_mutex_destroy(&darktable.control->progress_system.mutex);
   dt_cleanup();
   _remove_tree(_integration_config);

@@ -48,6 +48,7 @@
  * widespread is its own change, not a relocation's.
  */
 typedef char dt_dev_operation_t[20];
+typedef struct dt_image_t dt_image_t;
 
 #ifdef __cplusplus
 extern "C" {
@@ -66,8 +67,15 @@ void dt_history_item_free(gpointer data);
 /** delete all history for the given image */
 void dt_history_delete_on_image(int32_t imgid);
 
-/** as above but control whether to record undo/redo */
-void dt_history_delete_on_image_ext(int32_t imgid, gboolean undo);
+/**
+ * @brief Delete all history for the caller-locked image and optionally record undo/redo.
+ *
+ * @param image Image held with its cache write lock. The caller retains ownership and must
+ *              release the lock after this function returns.
+ * @param undo Whether to record the deletion in the lighttable undo stack.
+ * @return TRUE when all persisted history state was deleted, FALSE on repository failure.
+ */
+gboolean dt_history_delete_on_image_ext(dt_image_t *image, gboolean undo);
 
 /* dt_history_duplicate() used to be declared here. It walks dt_dev_history_item_t and calls
  * dt_iop_get_module(), both of which develop/ owns, so its definition cannot come down to
