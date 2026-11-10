@@ -116,12 +116,11 @@ form while declining.
 *Found on top of `58765cdb5b`, 2026-11-09.*
 
 A shape's event handlers never end a creation session on their own. Finishing a shape keeps the
-tool armed for the next one, and a brush release that gathered at most one point
+tool armed for the next one, and a brush release whose press gathered no point
 (`_brush_events_button_released()`) draws nothing and leaves the session as it was: the same
-unfinished shape stays visible, `creation` stays set. A release with no point is one whose press
-never collected one — the press carried Shift and the release did not, the press did not reach the
-masks, or the device sent the release twice. A release with one point is a click without a drag:
-the press records the first point and only the drag adds more, so a click saves no brush. What ends a session is a gesture of the user's:
+unfinished shape stays visible, `creation` stays set. Such a release is one whose press never
+collected a point — the press carried Shift and the release did not, the press did not reach the
+masks, or the device sent the release twice. What ends a session is a gesture of the user's:
 Escape, the context menu's entry, the armed toolbar button clicked again, BackSpace on a polygon
 with no node placed (all through `dt_masks_form_exit_creation()`), entering edit mode
 (`dt_masks_change_form_gui()`), giving another module the focus (`dt_masks_reset_form_gui()` from
@@ -134,12 +133,6 @@ brush on "diffuse or sharpen" and plays three strokes through `dt_control_button
 shapes. When the second stroke has no press, a Shift press, or a second release after its own, that
 release leaves the unfinished shape's `formid` and the count of `dev->forms` unchanged with
 `creation` still set, and the third stroke is saved. No run reads freed memory.
-
-*Measured on top of `3d5367e9cf`, 2026-11-10*, with the same shim on a RelWithDebInfo build: a
-stroke, a click (press and release at one place, no motion), then a stroke. The click reaches the
-release with `guipoints_count` 1. It leaves the unfinished shape's `formid`, the module's group and
-`dev->forms` unchanged with `creation` still set, and the third stroke is saved: 2 shapes for the
-three gestures. With the click padded into a brush, as `3d5367e9cf` did, they made 3.
 
 ## A shape toolbar's pressed button is a view on the creation state, not a state of its own
 
