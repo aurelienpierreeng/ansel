@@ -2566,14 +2566,45 @@ static gboolean _brush_get_source_center(const dt_masks_form_gui_points_t *gui_p
   const int first_pt = 0;
   const int last_pt = line_count - 1;
 
-  if(!_brush_get_line_midpoint(points_line, first_pt, last_pt,
-                               &center_pt->main.x, &center_pt->main.y))
-    return FALSE;
-  if(!_brush_get_line_midpoint(source_line, first_pt, last_pt,
-                               &center_pt->source.x, &center_pt->source.y))
-    return FALSE;
+  if(_brush_get_line_midpoint(points_line, first_pt, last_pt, &center_pt->main.x, &center_pt->main.y)
+     && _brush_get_line_midpoint(source_line, first_pt, last_pt, &center_pt->source.x, &center_pt->source.y))
+    return TRUE;
+
+  // A line with no length has no midpoint: it is a dot, centred on its first node.
+  center_pt->main.x = gui_points->points[2];
+  center_pt->main.y = gui_points->points[3];
+  center_pt->source.x = gui_points->source[2];
+  center_pt->source.y = gui_points->source[3];
   return TRUE;
 }
+
+/* A brush whose centreline is shorter than a pixel -- a click without a drag, whose second node
+ * sits a hundredth of a pixel from the first -- is a dot. Its centreline stroked is a speck the
+ * width of the line, while what it paints is the disc of its border: a dot is drawn by its
+ * border instead, and so is its source. */
+static gboolean _brush_is_dot(const dt_masks_form_gui_points_t *gui_points, const int node_count)
+{
+  // Walked only as far as the first pixel: every stroke is measured on every expose.
+  const float *const line = gui_points->points;
+  const int end = _brush_centerline_end(gui_points->points_count, node_count);
+  float length = 0.0f;
+  for(int i = node_count * 3; i + 1 < end && length < 1.0f; i++)
+    length += dt_fast_hypotf(line[2 * i + 2] - line[2 * i], line[2 * i + 3] - line[2 * i + 1]);
+  return length < 1.0f;
+}
+
+/* The border walked as a line of its own, for the shape-line drawers that would otherwise take
+ * the centreline half of the array they are handed. */
+static void _brush_draw_border_shape(struct dt_develop_t *dev, cairo_t *cr, const float *points,
+                                     const int points_count, const int node_nb, const gboolean border,
+                                     const gboolean source, const dt_masks_skip_range_t *skips,
+                                     const int skip_count)
+{
+  (void)border;
+  _brush_draw_shape(dev, cr, points, points_count, node_nb, TRUE, source, skips, skip_count);
+}
+
+static const shape_draw_function_t _brush_draw_border_function = _brush_draw_border_shape;
 
 static void _brush_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_form_gui_t *mask_gui, int index,
                                       int node_count)
@@ -2778,6 +2809,18 @@ static void _brush_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_fo
                                   node_count, zoom_scale, TRUE);
   }
 
+  // The dashed border: the selected brush's, and a dot's in every state, its centreline being a
+  // speck selected or not.
+  const gboolean dot = _brush_is_dot(gui_points, node_count);
+  if((dot || mask_gui->group_selected == index) && gui_points->border
+     && gui_points->border_count > node_count * 3 + 2)
+  {
+    const gboolean selected = (mask_gui->group_selected == index) && mask_gui->border_selected;
+    dt_draw_shape_lines(mask_gui->dev, DT_MASKS_DASH_STICK, FALSE, cr, node_count, selected, zoom_scale,
+                        gui_points->border, gui_points->border_count, &dt_masks_functions_brush.draw_shape,
+                        CAIRO_LINE_CAP_ROUND, gui_points->border_skips, gui_points->border_skip_count);
+  }
+
   if(0)
   {
     const int total_points = gui_points->points_count * 2;
@@ -2827,14 +2870,6 @@ static void _brush_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_fo
   // draw nodes and attached stuff
   if(mask_gui->group_selected == index)
   {
-    // draw borders
-    if(gui_points->border && gui_points->border_count > node_count * 3 + 2)
-    {
-      dt_draw_shape_lines(mask_gui->dev, DT_MASKS_DASH_STICK, FALSE, cr, node_count, (mask_gui->border_selected), zoom_scale,
-                          gui_points->border, gui_points->border_count, &dt_masks_functions_brush.draw_shape,
-                          CAIRO_LINE_CAP_ROUND, gui_points->border_skips, gui_points->border_skip_count);
-    }
-
     // draw the current node's handle if it's a curve node
     if(mask_gui->node_selected && selected_node >= 0 && selected_node < node_count
        && !dt_masks_node_is_cusp(gui_points, selected_node))
@@ -2884,6 +2919,20 @@ static void _brush_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_fo
     if(_brush_get_source_center(gui_points, node_count, &center_pt))
       dt_masks_draw_source(cr, mask_gui, index, node_count, zoom_scale, &center_pt,
                            &dt_masks_functions_brush.draw_shape);
+
+    // The source outline carries no border: a dot's source is its border carried onto the
+    // source, the shift the hit test already uses for it (_brush_get_distance()).
+    if(dot && gui_points->border && gui_points->border_count > node_count * 3 + 2)
+    {
+      const gboolean selected = (mask_gui->group_selected == index)
+                                && (mask_gui->form_selected || mask_gui->form_dragging);
+      cairo_save(cr);
+      cairo_translate(cr, gui_points->source[2] - gui_points->points[2],
+                      gui_points->source[3] - gui_points->points[3]);
+      dt_draw_source_shape(mask_gui->dev, cr, zoom_scale, selected, gui_points->border,
+                           gui_points->border_count, node_count, &_brush_draw_border_function);
+      cairo_restore(cr);
+    }
 
     //draw the current node projection
     for(int k = 0; k < node_count; k++)
