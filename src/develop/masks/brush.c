@@ -2178,25 +2178,8 @@ static int _brush_events_button_released(struct dt_iop_module_t *module __attrib
 
     dt_iop_module_t *creation_module = mask_gui->creation_module;
 
-    if(mask_gui->guipoints && mask_gui->guipoints_count > 0)
+    if(mask_gui->guipoints && mask_gui->guipoints_count > 1)
     {
-      // if the path consists only of one x/y pair we add a second one close so we don't need to deal with
-      // this special case later
-      if(mask_gui->guipoints_count == 1)
-      {
-        // add a helper node very close to the single spot
-        const float x = dt_masks_dynbuf_get(mask_gui->guipoints, -2) + 0.01f;
-        const float y = dt_masks_dynbuf_get(mask_gui->guipoints, -1) - 0.01f;
-        dt_masks_dynbuf_add_2(mask_gui->guipoints, x, y);
-        const float border = dt_masks_dynbuf_get(mask_gui->guipoints_payload, -4);
-        const float fading = dt_masks_dynbuf_get(mask_gui->guipoints_payload, -3);
-        const float density = dt_masks_dynbuf_get(mask_gui->guipoints_payload, -2);
-        const float pressure = dt_masks_dynbuf_get(mask_gui->guipoints_payload, -1);
-        dt_masks_dynbuf_add_2(mask_gui->guipoints_payload, border, fading);
-        dt_masks_dynbuf_add_2(mask_gui->guipoints_payload, density, pressure);
-        mask_gui->guipoints_count++;
-      }
-
       float *guipoints = dt_masks_dynbuf_buffer(mask_gui->guipoints);
       float *guipoints_payload = dt_masks_dynbuf_buffer(mask_gui->guipoints_payload);
 
@@ -2251,8 +2234,8 @@ static int _brush_events_button_released(struct dt_iop_module_t *module __attrib
     }
     else
     {
-      // A release whose press gathered no point draws nothing, and creation stays armed: only
-      // the user's own ways out end a creation session (doc/masks-gui.md).
+      // A release that gathered at most one point -- a click without a drag -- draws nothing, and
+      // creation stays armed: only the user's own ways out end a creation session (doc/masks-gui.md).
       dt_masks_dynbuf_free(mask_gui->guipoints);
       dt_masks_dynbuf_free(mask_gui->guipoints_payload);
       mask_gui->guipoints = NULL;
