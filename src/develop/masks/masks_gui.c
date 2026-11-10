@@ -4190,21 +4190,6 @@ static void _bound_include_headers(cairo_t *canvas_cr, const dt_masks_form_gui_p
   }
 }
 
-/* Include an outline's box -- its samples, its border and where its clone source is drawn,
- * which cairo strokes along with the arrow joining the two -- in @p rect. */
-static void _bound_include_box(cairo_t *canvas_cr, const dt_masks_form_gui_points_t *const pts, const double scale,
-                               cairo_rectangle_int_t *rect, gboolean *any)
-{
-  if(pts->bbox[0] > pts->bbox[1] || pts->bbox[2] > pts->bbox[3]) return;   /* no sample */
-  for(int c = 0; c < 4; c++)
-  {
-    double x = pts->bbox[(c & 1) ? 1 : 0];
-    double y = pts->bbox[(c & 2) ? 3 : 2];
-    cairo_user_to_device(canvas_cr, &x, &y);
-    _rect_include(rect, any, x * scale, y * scale, 0);   /* device units to canvas pixels */
-  }
-}
-
 /* The longest control vector of an outline's node header, in canvas pixels: how far from a
  * node its curvature handle can be drawn. */
 static double _bound_header_reach(cairo_t *canvas_cr, const dt_masks_form_gui_points_t *const pts, const int nodes,
@@ -4260,7 +4245,11 @@ static void _canvas_cairo_bound(cairo_t *canvas_cr, const dt_masks_form_gui_t *g
     if(IS_NULL_PTR(pts)) continue;
     const int nodes = _outline_nodes(gui->dev, form, index);
     _bound_include_headers(canvas_cr, pts, nodes, scale, rect, any);
-    _bound_include_box(canvas_cr, pts, scale, rect, any);
+    /* The box spans the border and where the source is drawn, which cairo strokes along with
+     * the arrow joining the two. It is empty before the first sample. */
+    const float box[8] = { pts->bbox[0], pts->bbox[2], pts->bbox[1], pts->bbox[2],
+                           pts->bbox[0], pts->bbox[3], pts->bbox[1], pts->bbox[3] };
+    if(pts->bbox[0] <= pts->bbox[1]) _bound_include_points(canvas_cr, box, 4, scale, rect, any);
     reach = MAX(reach, _bound_header_reach(canvas_cr, pts, nodes, scale));
   }
   if(!*any) return;
@@ -4673,38 +4662,18 @@ static void _overlay_draw_form(cairo_t *cr, const float zoom_scale, dt_masks_for
 /* What was painted this frame: the rasteriser's own record, and the bounds of what cairo drew
  * on top. The transform must still be in effect on @p canvas_cr, which is what the header
  * bounds need; a creation session paints through its own cached pattern and takes the whole
- * canvas. Returns FALSE when nothing was painted. */
+ * canvas. Cut to the frame: a rectangle reaching out of the view is one no expose covers, and
+ * _overlay_damage_record() would ask a redraw of it after every frame. Returns FALSE when
+ * nothing was painted. */
 static gboolean _overlay_dirty(const _canvas_frame_t *frame, const cairo_rectangle_int_t *cairo_bound,
                                const gboolean cairo_bounded, cairo_rectangle_int_t *dirty)
 {
-  gboolean any = dt_stroke_raster_touched(frame->canvas, dirty);
-  if(!cairo_bounded) return any;
-  if(!any)
-  {
-    *dirty = *cairo_bound;
-    return TRUE;
-  }
-  const int x1 = MAX(dirty->x + dirty->width, cairo_bound->x + cairo_bound->width);
-  const int y1 = MAX(dirty->y + dirty->height, cairo_bound->y + cairo_bound->height);
-  dirty->x = MIN(dirty->x, cairo_bound->x);
-  dirty->y = MIN(dirty->y, cairo_bound->y);
-  dirty->width = x1 - dirty->x;
-  dirty->height = y1 - dirty->y;
-  return TRUE;
-}
-
-/* Cut @p dirty to the frame: nothing outside it was painted, and a rectangle reaching out of
- * the view is one no expose ever covers -- _overlay_damage_record() would ask a redraw of it
- * after every frame, and the overlay would repaint for as long as the bound crossed the edge.
- * Returns whether anything is left. */
-static gboolean _overlay_dirty_in_frame(const _canvas_frame_t *frame, cairo_rectangle_int_t *dirty)
-{
-  const int x0 = CLAMP(dirty->x, 0, frame->width);
-  const int y0 = CLAMP(dirty->y, 0, frame->height);
-  const int x1 = CLAMP(dirty->x + dirty->width, 0, frame->width);
-  const int y1 = CLAMP(dirty->y + dirty->height, 0, frame->height);
-  *dirty = (cairo_rectangle_int_t){ x0, y0, x1 - x0, y1 - y0 };
-  return x1 > x0 && y1 > y0;
+  const cairo_rectangle_int_t view = { 0, 0, frame->width, frame->height };
+  if(!dt_stroke_raster_touched(frame->canvas, dirty))
+    *dirty = cairo_bounded ? *cairo_bound : (cairo_rectangle_int_t){ 0, 0, 0, 0 };
+  else if(cairo_bounded)
+    gdk_rectangle_union(dirty, cairo_bound, dirty);
+  return gdk_rectangle_intersect(dirty, &view, dirty);
 }
 
 void dt_masks_events_post_expose_with(dt_develop_t *dev, struct dt_iop_module_t *module, cairo_t *cr,
@@ -4797,8 +4766,7 @@ void dt_masks_events_post_expose_with(dt_develop_t *dev, struct dt_iop_module_t 
    * The transform is still in effect here, which is what the header bounds need; a creation
    * session paints through its own cached pattern and takes the whole canvas. */
   cairo_rectangle_int_t dirty = { 0, 0, 0, 0 };
-  const gboolean any = _overlay_dirty(&frame, &cairo_bound, cairo_bounded, &dirty)
-                       && _overlay_dirty_in_frame(&frame, &dirty);
+  const gboolean any = _overlay_dirty(&frame, &cairo_bound, cairo_bounded, &dirty);
   _overlay_dump(&frame, mask_gui, &dirty);
   cairo_restore(mask_draw);
   cairo_destroy(mask_draw);
