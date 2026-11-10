@@ -75,7 +75,8 @@ typedef struct dt_masks_form_gui_points_t
   /* The box every sample above spans -- points, border and source alike, in the same space --
    * and the shape's own box carried onto its source, where a source may be drawn as large as
    * the border: a hit test answers "nothing here" without walking the samples, and the overlay
-   * bounds what it paints. minx, maxx, miny, maxy; empty (min above max) when there is no
+   * bounds what it paints. A point that is not finite -- the separator between a gradient's two
+   * curves -- is no sample. minx, maxx, miny, maxy; empty (min above max) when there is no
    * sample. dt_masks_gui_points_update_bbox() fills it. */
   float bbox[4];
 } dt_masks_form_gui_points_t;

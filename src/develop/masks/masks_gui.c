@@ -2416,6 +2416,7 @@ static void _gui_points_bbox_extend(float *const bbox, const float *const sample
   {
     const float x = samples[2 * i];
     const float y = samples[2 * i + 1];
+    if(!isfinite(x) || !isfinite(y)) continue;   /* a gradient's separator between its two curves */
     bbox[0] = fminf(bbox[0], x);
     bbox[1] = fmaxf(bbox[1], x);
     bbox[2] = fminf(bbox[2], y);
