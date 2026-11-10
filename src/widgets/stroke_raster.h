@@ -95,11 +95,11 @@ gboolean dt_stroke_raster_touched(cairo_surface_t *surface, cairo_rectangle_int_
 void dt_stroke_raster_touched_reset(cairo_surface_t *surface);
 
 /** Add to the touched rectangle of the surface @p cr draws on what the current path covers once
- * filled or, with @p stroke, stroked at cr's line width: for what cairo paints itself, which
- * this file never sees, on a surface whose composite is bounded by dt_stroke_raster_touched().
- * Nothing is drawn and the path is kept. Exact for round, butt and square caps and round joins;
- * a miter join reaches further. */
-void dt_stroke_raster_touch_path(cairo_t *cr, const gboolean stroke);
+ * stroked at cr's line width: for what cairo paints itself, which this file never sees, on a
+ * surface whose composite is bounded by dt_stroke_raster_touched(). Nothing is drawn and the
+ * path is kept. Exact for round, butt and square caps and round joins; a miter join reaches
+ * further. */
+void dt_stroke_raster_touch_path(cairo_t *cr);
 
 G_END_DECLS
 

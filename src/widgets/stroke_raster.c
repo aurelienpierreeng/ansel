@@ -99,45 +99,39 @@ void dt_stroke_raster_touched_reset(cairo_surface_t *surface)
   if(record) record->any = FALSE;
 }
 
-void dt_stroke_raster_touch_path(cairo_t *cr, const gboolean stroke)
+void dt_stroke_raster_touch_path(cairo_t *cr)
 {
-  if(!cr || !cairo_has_current_point(cr)) return;
+  if(!cairo_has_current_point(cr)) return;
   cairo_surface_t *surface = cairo_get_group_target(cr);
   if(!dt_stroke_raster_can_paint(surface)) return;
 
   /* The path's own extents, grown by half the line width: what a stroke with round or square
    * ends covers, without paying for stroking it twice as cairo_stroke_extents() would. */
-  double x0 = 0.0, y0 = 0.0, x1 = 0.0, y1 = 0.0;
-  cairo_path_extents(cr, &x0, &y0, &x1, &y1);
-  if(stroke)
-  {
-    const double half = 0.5 * cairo_get_line_width(cr);
-    x0 -= half;
-    y0 -= half;
-    x1 += half;
-    y1 += half;
-  }
+  const double half = 0.5 * cairo_get_line_width(cr);
+  double box[4] = { 0.0 };   /* x0, y0, x1, y1 */
+  cairo_path_extents(cr, &box[0], &box[1], &box[2], &box[3]);
 
   /* to the surface's pixels as dt_stroke_raster_path() maps them, corner by corner since the
    * matrix may rotate */
-  double scale_x = 1.0, scale_y = 1.0, offset_x = 0.0, offset_y = 0.0;
-  cairo_surface_get_device_scale(surface, &scale_x, &scale_y);
-  cairo_surface_get_device_offset(surface, &offset_x, &offset_y);
-  double px0 = DBL_MAX, py0 = DBL_MAX, px1 = -DBL_MAX, py1 = -DBL_MAX;
+  double scale[2] = { 1.0, 1.0 };
+  double offset[2] = { 0.0, 0.0 };
+  cairo_surface_get_device_scale(surface, &scale[0], &scale[1]);
+  cairo_surface_get_device_offset(surface, &offset[0], &offset[1]);
+  double lo[2] = { DBL_MAX, DBL_MAX };
+  double hi[2] = { -DBL_MAX, -DBL_MAX };
   for(int c = 0; c < 4; c++)
   {
-    double x = (c & 1) ? x1 : x0;
-    double y = (c & 2) ? y1 : y0;
-    cairo_user_to_device(cr, &x, &y);
-    x = x * scale_x + offset_x;
-    y = y * scale_y + offset_y;
-    px0 = fmin(px0, x);
-    py0 = fmin(py0, y);
-    px1 = fmax(px1, x);
-    py1 = fmax(py1, y);
+    double p[2] = { (c & 1) ? box[2] + half : box[0] - half, (c & 2) ? box[3] + half : box[1] - half };
+    cairo_user_to_device(cr, &p[0], &p[1]);
+    for(int k = 0; k < 2; k++)
+    {
+      p[k] = p[k] * scale[k] + offset[k];
+      lo[k] = fmin(lo[k], p[k]);
+      hi[k] = fmax(hi[k], p[k]);
+    }
   }
   /* one more pixel each way for the antialiased edge */
-  _touched_add(surface, (int)floor(px0) - 1, (int)floor(py0) - 1, (int)ceil(px1) + 1, (int)ceil(py1) + 1);
+  _touched_add(surface, (int)floor(lo[0]) - 1, (int)floor(lo[1]) - 1, (int)ceil(hi[0]) + 1, (int)ceil(hi[1]) + 1);
 }
 
 gboolean dt_stroke_raster_can_paint(cairo_surface_t *surface)

@@ -1374,13 +1374,15 @@ static inline int _brush_centerline_end(const int points_count, const int node_c
  * border instead, and so is its source. */
 static gboolean _brush_is_dot(const dt_masks_form_gui_points_t *gui_points, const int node_count)
 {
-  // Walked only as far as the first pixel: every stroke is measured on every expose.
   const float *const line = gui_points->points;
   const int end = _brush_centerline_end(gui_points->points_count, node_count);
   float length = 0.0f;
-  for(int i = node_count * 3; i + 1 < end && length < 1.0f; i++)
+  for(int i = node_count * 3; i + 1 < end; i++)
+  {
     length += dt_fast_hypotf(line[2 * i + 2] - line[2 * i], line[2 * i + 3] - line[2 * i + 1]);
-  return length < 1.0f;
+    if(length >= 1.0f) return FALSE;   // every stroke is measured on every expose: stop at a pixel
+  }
+  return TRUE;
 }
 
 /**
@@ -1426,7 +1428,7 @@ static void _brush_get_distance(float point_x, float point_y, float radius,
     // A dot's source is drawn as its border carried onto the source, and is hit anywhere inside
     // it, as the dot itself is: its centreline carried there is a speck the cursor barely finds.
     // Inside, the walk below changes nothing.
-    if(_brush_is_dot(gui_points, corner_count) && gui_points->border
+    if(_brush_is_dot(gui_points, corner_count) && !IS_NULL_PTR(gui_points->border)
        && gui_points->border_count > corner_count * 3 + 2)
     {
       const float carried_back[2] = { point_x - dx, point_y - dy };
@@ -2204,7 +2206,8 @@ static void _apply_pen_pressure(dt_masks_form_gui_t *mask_gui, float *payload_bu
 
 
 static int _brush_events_button_released(struct dt_iop_module_t *module __attribute__((unused)),
-                                         double widget_x, double widget_y, int which, uint32_t state,
+                                         double widget_x __attribute__((unused)),
+                                         double widget_y __attribute__((unused)), int which, uint32_t state,
                                          dt_masks_form_t *mask_form, int parentid,
                                          dt_masks_form_gui_t *mask_gui, int index)
 {
@@ -2610,19 +2613,6 @@ static gboolean _brush_get_source_center(const dt_masks_form_gui_points_t *gui_p
   return TRUE;
 }
 
-/* The border walked as a line of its own, for the shape-line drawers that would otherwise take
- * the centreline half of the array they are handed. */
-static void _brush_draw_border_shape(struct dt_develop_t *dev, cairo_t *cr, const float *points,
-                                     const int points_count, const int node_nb, const gboolean border,
-                                     const gboolean source, const dt_masks_skip_range_t *skips,
-                                     const int skip_count)
-{
-  (void)border;
-  _brush_draw_shape(dev, cr, points, points_count, node_nb, TRUE, source, skips, skip_count);
-}
-
-static const shape_draw_function_t _brush_draw_border_function = _brush_draw_border_shape;
-
 static void _brush_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_form_gui_t *mask_gui, int index,
                                       int node_count)
 {
@@ -2761,7 +2751,7 @@ static void _brush_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_fo
 
         if(radius != oldradius || opacity != oldopacity)
         {
-          dt_stroke_raster_touch_path(cr, TRUE);
+          dt_stroke_raster_touch_path(cr);
           cairo_stroke(cr);
           stroked = 1;
           cairo_set_line_width(cr,  DT_PIXEL_APPLY_DPI(2 * radius));
@@ -2773,7 +2763,7 @@ static void _brush_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_fo
       }
       if(!stroked)
       {
-        dt_stroke_raster_touch_path(cr, TRUE);
+        dt_stroke_raster_touch_path(cr);
         cairo_stroke(cr);
       }
 
@@ -2783,7 +2773,7 @@ static void _brush_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_fo
       cairo_arc(cr, guipoints[2 * (mask_gui->guipoints_count - 1)],
                 guipoints[2 * (mask_gui->guipoints_count - 1) + 1],
                 radius, 0, 2.0 * M_PI);
-      dt_stroke_raster_touch_path(cr, TRUE);
+      dt_stroke_raster_touch_path(cr);
       cairo_fill_preserve(cr);
       cairo_set_source_rgba(cr, .8, .8, .8, .8);
       cairo_stroke(cr);
@@ -2792,7 +2782,7 @@ static void _brush_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_fo
       cairo_arc(cr, guipoints[2 * (mask_gui->guipoints_count - 1)],
                 guipoints[2 * (mask_gui->guipoints_count - 1) + 1], masks_border * min_iwd_iht, 0,
                 2.0 * M_PI);
-      dt_stroke_raster_touch_path(cr, TRUE);
+      dt_stroke_raster_touch_path(cr);
       cairo_stroke(cr);
 
       dt_masks_form_t *visible_form = dt_masks_get_visible_form(mask_gui->dev);
@@ -2839,8 +2829,8 @@ static void _brush_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_fo
   // The dashed border: the selected brush's, and a dot's in every state, its centreline being a
   // speck selected or not.
   const gboolean dot = _brush_is_dot(gui_points, node_count);
-  if((dot || mask_gui->group_selected == index) && gui_points->border
-     && gui_points->border_count > node_count * 3 + 2)
+  const gboolean has_border = !IS_NULL_PTR(gui_points->border) && gui_points->border_count > node_count * 3 + 2;
+  if((dot || mask_gui->group_selected == index) && has_border)
   {
     const gboolean selected = (mask_gui->group_selected == index) && mask_gui->border_selected;
     dt_draw_shape_lines(mask_gui->dev, DT_MASKS_DASH_STICK, FALSE, cr, node_count, selected, zoom_scale,
@@ -2949,15 +2939,16 @@ static void _brush_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_fo
 
     // The source outline carries no border: a dot's source is its border carried onto the
     // source, the shift the hit test already uses for it (_brush_get_distance()).
-    if(dot && gui_points->border && gui_points->border_count > node_count * 3 + 2)
+    if(dot && has_border)
     {
       const gboolean selected = (mask_gui->group_selected == index)
                                 && (mask_gui->form_selected || mask_gui->form_dragging);
       cairo_save(cr);
       cairo_translate(cr, gui_points->source[2] - gui_points->points[2],
                       gui_points->source[3] - gui_points->points[3]);
-      dt_draw_source_shape(mask_gui->dev, cr, zoom_scale, selected, gui_points->border,
-                           gui_points->border_count, node_count, &_brush_draw_border_function);
+      _brush_draw_shape(mask_gui->dev, cr, gui_points->border, gui_points->border_count, node_count, TRUE, TRUE,
+                        NULL, 0);
+      dt_draw_source_shape(mask_gui->dev, cr, zoom_scale, selected, NULL, 0, node_count, NULL);
       cairo_restore(cr);
     }
 

@@ -1074,7 +1074,7 @@ static inline void dt_draw_cross(cairo_t *cr, const float zoom_scale, const floa
   cairo_move_to(cr, x, y + dy);
   cairo_line_to(cr, x, y - dy);
   // stroked by cairo: declared to a canvas that composites only what was touched
-  dt_stroke_raster_touch_path(cr, TRUE);
+  dt_stroke_raster_touch_path(cr);
   cairo_stroke_preserve(cr);
 
   cairo_set_line_width(cr, DT_DRAW_SIZE_LINE / zoom_scale);
