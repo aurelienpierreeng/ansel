@@ -1349,6 +1349,40 @@ static int _brush_get_pts_border(dt_develop_t *develop, dt_masks_form_t *mask_fo
 }
 
 /**
+ * @brief Index (exclusive) where the centerline's forward pass ends in a brush point array.
+ *
+ * @details `points' holds, in this order: three header points per node (ctrl1, node, ctrl2), then
+ * the centerline sampled FORWARD from the first node to the last, then the SAME centerline sampled
+ * backward. The border wraps around the whole stroke, so the line under it is walked there and
+ * back (see _brush_get_pts_border()); only the forward half is ever drawn.
+ *
+ * Half of the SAMPLES, not half of the array: the header belongs to neither pass, and counting it
+ * in leaves the forward half short by one and a half points per node -- which is the whole last
+ * segment, since the last node's own coordinate sits at the very end of that pass.
+ */
+static inline int _brush_centerline_end(const int points_count, const int node_count)
+{
+  const int first = node_count * 3;
+  if(points_count <= first) return points_count;
+  return first + (points_count - first) / 2;
+}
+
+/* A brush whose centreline is shorter than a pixel -- a click without a drag, whose second node
+ * sits a hundredth of a pixel from the first -- is a dot. Its centreline stroked is a speck the
+ * width of the line, while what it paints is the disc of its border: a dot is drawn by its
+ * border instead, and so is its source. */
+static gboolean _brush_is_dot(const dt_masks_form_gui_points_t *gui_points, const int node_count)
+{
+  // Walked only as far as the first pixel: every stroke is measured on every expose.
+  const float *const line = gui_points->points;
+  const int end = _brush_centerline_end(gui_points->points_count, node_count);
+  float length = 0.0f;
+  for(int i = node_count * 3; i + 1 < end && length < 1.0f; i++)
+    length += dt_fast_hypotf(line[2 * i + 2] - line[2 * i], line[2 * i + 3] - line[2 * i + 1]);
+  return length < 1.0f;
+}
+
+/**
  * @brief Get the distance between a point and the brush path/border.
  */
 static void _brush_get_distance(float point_x, float point_y, float radius,
@@ -1387,6 +1421,22 @@ static void _brush_get_distance(float point_x, float point_y, float radius,
     // distance from form origin and source origin
     const float dx = -gui_points->points[2] + gui_points->source[2];
     const float dy = -gui_points->points[3] + gui_points->source[3];
+
+    // A dot's source is drawn as its border carried onto the source, and is hit anywhere inside
+    // it, as the dot itself is: its centreline carried there is a speck the cursor barely finds.
+    // Inside, the walk below changes nothing.
+    if(_brush_is_dot(gui_points, corner_count) && gui_points->border
+       && gui_points->border_count > corner_count * 3 + 2)
+    {
+      const float carried_back[2] = { point_x - dx, point_y - dy };
+      if(dt_masks_point_in_form_exact(carried_back, 1, gui_points->border, corner_count * 3,
+                                      gui_points->border_count, gui_points->border_skips,
+                                      gui_points->border_skip_count) >= 0)
+      {
+        *inside_source = 1;
+        *inside = 1;
+      }
+    }
 
     int current_seg = 1;
     for(int i = corner_count * 3; i < gui_points->points_count; i++)
@@ -2441,25 +2491,6 @@ static int _brush_events_mouse_moved(struct dt_iop_module_t *module, double widg
   return 0;
 }
 
-/**
- * @brief Index (exclusive) where the centerline's forward pass ends in a brush point array.
- *
- * @details `points' holds, in this order: three header points per node (ctrl1, node, ctrl2), then
- * the centerline sampled FORWARD from the first node to the last, then the SAME centerline sampled
- * backward. The border wraps around the whole stroke, so the line under it is walked there and
- * back (see _brush_get_pts_border()); only the forward half is ever drawn.
- *
- * Half of the SAMPLES, not half of the array: the header belongs to neither pass, and counting it
- * in leaves the forward half short by one and a half points per node -- which is the whole last
- * segment, since the last node's own coordinate sits at the very end of that pass.
- */
-static inline int _brush_centerline_end(const int points_count, const int node_count)
-{
-  const int first = node_count * 3;
-  if(points_count <= first) return points_count;
-  return first + (points_count - first) / 2;
-}
-
 static void _brush_draw_shape(struct dt_develop_t *dev, cairo_t *cr, const float *points, const int points_count, const int node_nb, const gboolean border, const gboolean source,
                               const dt_masks_skip_range_t *skips, const int skip_count)
 {
@@ -2576,21 +2607,6 @@ static gboolean _brush_get_source_center(const dt_masks_form_gui_points_t *gui_p
   center_pt->source.x = gui_points->source[2];
   center_pt->source.y = gui_points->source[3];
   return TRUE;
-}
-
-/* A brush whose centreline is shorter than a pixel -- a click without a drag, whose second node
- * sits a hundredth of a pixel from the first -- is a dot. Its centreline stroked is a speck the
- * width of the line, while what it paints is the disc of its border: a dot is drawn by its
- * border instead, and so is its source. */
-static gboolean _brush_is_dot(const dt_masks_form_gui_points_t *gui_points, const int node_count)
-{
-  // Walked only as far as the first pixel: every stroke is measured on every expose.
-  const float *const line = gui_points->points;
-  const int end = _brush_centerline_end(gui_points->points_count, node_count);
-  float length = 0.0f;
-  for(int i = node_count * 3; i + 1 < end && length < 1.0f; i++)
-    length += dt_fast_hypotf(line[2 * i + 2] - line[2 * i], line[2 * i + 3] - line[2 * i + 1]);
-  return length < 1.0f;
 }
 
 /* The border walked as a line of its own, for the shape-line drawers that would otherwise take

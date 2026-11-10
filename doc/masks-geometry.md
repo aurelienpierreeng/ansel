@@ -52,6 +52,12 @@ correction or a perspective it is the same approximation the hit test makes. The
 composites what lies in the outline's box, so that box holds the shape's box carried onto the
 source (`dt_masks_gui_points_update_bbox()`, see [`overlay-raster.md`](overlay-raster.md)).
 
+The source is hit where it is drawn: `_brush_get_distance()` tests a brush's source by the cursor's
+reach around its centreline carried onto the source, which for a dot is its centre alone, so the
+dot's source is hit anywhere inside its border carried there, as a circle's source is inside its
+outline. It needs the box above as well: a cursor outside the box is answered "nothing here"
+before any sample is walked.
+
 *Measured on top of `17a0cfe80b`, 2026-11-10*, with an `LD_PRELOAD` shim on a RelWithDebInfo
 build, Xephyr at 1280×900, a JPEG at fit zoom: retouch's brush armed by its button, a click, a
 stroke, creation ended, every `dt_masks_draw_outline_runs()` call logged as a device-space bounding
@@ -59,6 +65,11 @@ box. Before, the unselected click drew its centreline walk and nothing else, wit
 `dt_masks_draw_source()` call; the stroke drew its source. After, the click draws a 32×32 px ring
 at the shape and another at its source, and `dt_masks_draw_source()` runs for it. Selected, it
 had drawn its dashed border and still no source; it draws the same border and its source.
+
+*Measured on top of `f4960a122d`, 2026-11-10*, with the same shim, the source placed by Shift+click
+and drawn as a ring of radius 16 px: the cursor moved from the source's centre outwards along
+each axis. It selected the source up to 4 px from the centre and nothing at 8, 12 and 15 px, not
+even the shape; it selects the source at every one of them.
 
 ## `inside_border` is proximity to the feather's outer line, not the feather band
 
