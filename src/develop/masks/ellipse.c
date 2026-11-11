@@ -497,8 +497,10 @@ static int _find_closest_handle(dt_masks_form_t *mask_form, dt_masks_form_gui_t 
 {
   if(mask_gui) mask_gui->pivot_selected = FALSE;
   return dt_masks_find_closest_handle_common(mask_form, mask_gui, form_index, 5,
-                                             NULL, NULL, _ellipse_node_position_cb,
-                                             _ellipse_distance_cb, _ellipse_post_select_cb, NULL);
+                                             &(const dt_masks_hit_callbacks_t){
+                                                 .node_position = _ellipse_node_position_cb,
+                                                 .distance = _ellipse_distance_cb,
+                                                 .post_select = _ellipse_post_select_cb });
 }
 
 static int _init_fading(dt_masks_form_t *form, const float amount, const dt_masks_increment_t increment, const int flow)
@@ -1015,16 +1017,17 @@ static void _ellipse_draw_handles(const dt_masks_form_gui_t *gui, cairo_t *cr, c
   }
 }
 
-static void _ellipse_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_form_gui_t *gui, int index,
-                                        int num_points)
+static void _ellipse_events_post_expose(cairo_t *cr, float zoom_scale,
+                                        __attribute__((unused)) const dt_masks_form_t *form,
+                                        dt_masks_form_gui_t *gui, int index, int num_points)
 {
   // add a preview when creating an ellipse
   // in creation mode
   if(gui->creation)
   {
-    dt_masks_form_t *form = dt_masks_get_visible_form(gui->dev);
+    dt_masks_form_t *creation_form = dt_masks_get_visible_form(gui->dev);
     dt_masks_preview_buffers_t preview;
-    if(_ellipse_get_creation_preview(form, gui, &preview)) return;
+    if(_ellipse_get_creation_preview(creation_form, gui, &preview)) return;
 
     dt_masks_draw_preview_shape(gui->dev, cr, zoom_scale, num_points, preview.points, preview.points_count,
                                 preview.border, preview.border_count,
@@ -1033,7 +1036,7 @@ static void _ellipse_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_
 
 
     // draw a cross where the source will be created
-    if(dt_masks_form_is_clone(form))
+    if(dt_masks_form_is_clone(creation_form))
     {
       dt_masks_draw_source_preview(cr, zoom_scale, gui, gui->pos[0], gui->pos[1], gui->pos[0], gui->pos[1], FALSE);
       dt_masks_draw_preview_shape(gui->dev, cr, zoom_scale, num_points, preview.source_points, preview.points_count,

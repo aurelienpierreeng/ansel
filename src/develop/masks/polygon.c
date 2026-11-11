@@ -1328,8 +1328,10 @@ static void _polygon_distance_cb(float pointer_x, float pointer_y, float cursor_
 static int _find_closest_handle(dt_masks_form_t *mask_form, dt_masks_form_gui_t *mask_gui, int form_index)
 {
   return dt_masks_find_closest_handle_common(mask_form, mask_gui, form_index, -1,
-                                             _polygon_border_handle_cb, _polygon_curve_handle_cb, NULL,
-                                             _polygon_distance_cb, NULL, NULL);
+                                             &(const dt_masks_hit_callbacks_t){
+                                                 .border_handle = _polygon_border_handle_cb,
+                                                 .curve_handle = _polygon_curve_handle_cb,
+                                                 .distance = _polygon_distance_cb });
 }
 
 /**
@@ -2035,8 +2037,9 @@ static void _polygon_draw_shape(struct dt_develop_t *dev, cairo_t *cr, const flo
 /**
  * @brief Draw polygon overlays (nodes, handles, borders, source) after exposure.
  */
-static void _polygon_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_form_gui_t *mask_gui,
-                                        int form_index, int node_count)
+static void _polygon_events_post_expose(cairo_t *cr, float zoom_scale,
+                                        __attribute__((unused)) const dt_masks_form_t *form,
+                                        dt_masks_form_gui_t *mask_gui, int form_index, int node_count)
 {
   dt_masks_form_gui_points_t *gui_points
       = (dt_masks_form_gui_points_t *)g_list_nth_data(mask_gui->points, form_index);

@@ -62,6 +62,10 @@
 #define BORDER_MIN 0.00005f
 #define BORDER_MAX 0.5f
 
+// The narrowest solid radius or ramp the size and fading controls leave, normalized like a
+// border: the circle's narrowest border.
+#define PART_MIN 0.0005f
+
 /**
  * @brief Get squared distance of a point to the segment, including payload deltas.
  *
@@ -1689,33 +1693,107 @@ static void _brush_distance_cb(float pointer_x, float pointer_y, float cursor_ra
                       inside, inside_border, near_handle, inside_source, dist);
 }
 
+/**
+ * @brief The handle on the edge of a node's solid part, which the size of the node follows.
+ *
+ * It sits on the border handle's ray, at the node's solid fraction of the way out: where the
+ * node's own spoke turns from solid to ramp.
+ *
+ * @param user_data The brush form, whose nodes hold the fractions.
+ */
+static gboolean _brush_get_solid_handle(const dt_masks_form_gui_points_t *gui_points, int node_count, int node_index,
+                                        float *handle_x, float *handle_y, void *user_data)
+{
+  const dt_masks_node_brush_t *node
+      = (const dt_masks_node_brush_t *)g_list_nth_data(((const dt_masks_form_t *)user_data)->points, node_index);
+  if(IS_NULL_PTR(node) || !_brush_get_border_handle_mirrored(gui_points, node_count, node_index, handle_x, handle_y))
+    return FALSE;
+
+  const float node_x = gui_points->points[node_index * 6 + 2];
+  const float node_y = gui_points->points[node_index * 6 + 3];
+  *handle_x = node_x + node->fading * (*handle_x - node_x);
+  *handle_y = node_y + node->fading * (*handle_y - node_y);
+  return TRUE;
+}
+
 static int _find_closest_handle(dt_masks_form_t *mask_form, dt_masks_form_gui_t *mask_gui, int form_index)
 {
   return dt_masks_find_closest_handle_common(mask_form, mask_gui, form_index, -1,
-                                             _brush_border_handle_cb, _brush_curve_handle_cb, NULL,
-                                             _brush_distance_cb, NULL, NULL);
+                                             &(const dt_masks_hit_callbacks_t){
+                                                 .border_handle = _brush_border_handle_cb,
+                                                 .solid_handle = _brush_get_solid_handle,
+                                                 .curve_handle = _brush_curve_handle_cb,
+                                                 .distance = _brush_distance_cb,
+                                                 .user_data = mask_form });
 }
 
 
-static int _init_fading(dt_masks_form_t *mask_form, int parentid, dt_masks_form_gui_t *mask_gui,
-                        const float amount, const dt_masks_increment_t increment, const int flow)
+/**
+ * @brief Apply a size or fading change to one brush radius.
+ *
+ * A node stores its whole radius `border` and the fraction `fading` of it that is solid. Size
+ * acts on the solid radius and fading on the width of the ramp outside it, each leaving the
+ * other part as it is, as a circle's size and fading act on its radius and its border.
+ *
+ * @param fading In: the solid fraction of `border`. Out: the solid fraction of the radius returned.
+ * @param part DT_MASKS_INTERACTION_SIZE or DT_MASKS_INTERACTION_FADING.
+ * @return The new whole radius, at most 1.
+ */
+static float _brush_resize_part(const float border, float *const fading, const dt_masks_interaction_t part,
+                                const float amount, const float scale_amount, const float offset_amount,
+                                const dt_masks_increment_t increment)
 {
-  const float masks_fading = dt_masks_get_set_conf_value_with_toast(mask_form, "fading", amount,
-                                                                    FADING_MIN, FADING_MAX, increment, flow,
-                                                                    _("fading: %3.2f%%"), 100.0f);
-  if(mask_gui->guipoints_count > 0)
-    dt_masks_dynbuf_set(mask_gui->guipoints_payload, -3, masks_fading);
-  return 1;
+  const float solid = *fading * border;
+  const float kept = (part == DT_MASKS_INTERACTION_SIZE) ? border - solid : solid;
+  const float wanted
+      = dt_masks_apply_increment_precomputed(border - kept, amount, scale_amount, offset_amount, increment);
+  const float edited = CLAMPF(wanted, PART_MIN, fmaxf(1.0f - kept, PART_MIN));
+  const float new_border = edited + kept;
+  const float new_fading = ((part == DT_MASKS_INTERACTION_SIZE) ? edited : kept) / new_border;
+  *fading = CLAMPF(new_fading, FADING_MIN, FADING_MAX);
+  return new_border;
 }
 
-static int _init_size(dt_masks_form_t *mask_form, int parentid, dt_masks_form_gui_t *mask_gui,
-                      const float amount, const dt_masks_increment_t increment, const int flow)
+/**
+ * @brief Apply a size or fading change to the radius the next brush is drawn with.
+ *
+ * @param fading Out: the new solid fraction.
+ * @return The new whole radius.
+ */
+static float _brush_conf_resize_part(dt_masks_form_t *mask_form, const dt_masks_interaction_t part,
+                                     const float amount, const dt_masks_increment_t increment, const int flow,
+                                     float *const fading)
 {
-  const float masks_border = dt_masks_get_set_conf_value_with_toast(mask_form, "border", amount,
-                                                                    FADING_MIN, FADING_MAX, increment, flow,
-                                                                    _("size: %3.2f%%"), 2.f * 100.f);
+  // Scaling by 1 reads a value without changing it.
+  const float border = dt_masks_get_set_conf_value(mask_form, "border", 1.0f, FADING_MIN, FADING_MAX,
+                                                   DT_MASKS_INCREMENT_SCALE, 1);
+  *fading = dt_masks_get_set_conf_value(mask_form, "fading", 1.0f, FADING_MIN, FADING_MAX,
+                                        DT_MASKS_INCREMENT_SCALE, 1);
+  const float new_border = _brush_resize_part(border, fading, part, amount, powf(amount, (float)flow),
+                                              amount * (float)flow, increment);
+  dt_masks_get_set_conf_value(mask_form, "border", new_border, FADING_MIN, FADING_MAX,
+                              DT_MASKS_INCREMENT_ABSOLUTE, 1);
+  dt_masks_get_set_conf_value(mask_form, "fading", *fading, FADING_MIN, FADING_MAX,
+                              DT_MASKS_INCREMENT_ABSOLUTE, 1);
+  return new_border;
+}
+
+static int _init_part(dt_masks_form_t *mask_form, dt_masks_form_gui_t *mask_gui,
+                      const dt_masks_interaction_t part, const float amount,
+                      const dt_masks_increment_t increment, const int flow)
+{
+  float fading = 1.0f;
+  const float border = _brush_conf_resize_part(mask_form, part, amount, increment, flow, &fading);
+  if(part == DT_MASKS_INTERACTION_SIZE)
+    dt_toast_log(_("size: %3.2f%%"), fading * border * 2.f * 100.f);
+  else
+    dt_toast_log(_("fading: %3.2f%%"), (1.0f - fading) * border * 100.f);
+
   if(mask_gui->guipoints_count > 0)
-    dt_masks_dynbuf_set(mask_gui->guipoints_payload, -4, masks_border);
+  {
+    dt_masks_dynbuf_set(mask_gui->guipoints_payload, -4, border);
+    dt_masks_dynbuf_set(mask_gui->guipoints_payload, -3, fading);
+  }
   return 1;
 }
 
@@ -1741,6 +1819,7 @@ static float _brush_get_interaction_value(const dt_masks_form_t *mask_form, dt_m
     }
     case DT_MASKS_INTERACTION_FADING:
     {
+      // The width of the ramp, which is what the fading controls set (_brush_resize_part).
       float fading_sum = 0.0f;
       int fading_count = 0;
 
@@ -1748,7 +1827,7 @@ static float _brush_get_interaction_value(const dt_masks_form_t *mask_form, dt_m
       {
         const dt_masks_node_brush_t *node = (const dt_masks_node_brush_t *)point_node->data;
         if(IS_NULL_PTR(node)) continue;
-        fading_sum += node->fading;
+        fading_sum += (1.0f - node->fading) * fmaxf(node->border[0], node->border[1]);
         fading_count++;
       }
 
@@ -1784,11 +1863,8 @@ static gboolean _brush_get_gravity_center(dt_develop_t *dev, const dt_masks_form
   return ok;
 }
 
-static int _change_fading(dt_masks_form_t *mask_form, int parentid, dt_masks_form_gui_t *mask_gui,
-                          struct dt_iop_module_t *module, int index, const float amount,
-                          const dt_masks_increment_t increment, const int flow);
-static int _change_size(dt_masks_form_t *mask_form, int parentid, dt_masks_form_gui_t *mask_gui,
-                        struct dt_iop_module_t *module, int index, const float amount,
+static int _change_part(dt_masks_form_t *mask_form, dt_masks_form_gui_t *mask_gui, struct dt_iop_module_t *module,
+                        int index, const dt_masks_interaction_t part, const float amount,
                         const dt_masks_increment_t increment, const int flow);
 
 static float _brush_set_interaction_value(dt_masks_form_t *mask_form, dt_masks_interaction_t interaction, float value,
@@ -1804,82 +1880,38 @@ static float _brush_set_interaction_value(dt_masks_form_t *mask_form, dt_masks_i
   switch(interaction)
   {
     case DT_MASKS_INTERACTION_SIZE:
-      if(!_change_size(mask_form, 0, mask_gui, module, index, value, increment, flow)) return NAN;
-      return _brush_get_interaction_value(mask_form, interaction);
     case DT_MASKS_INTERACTION_FADING:
-      if(!_change_fading(mask_form, 0, mask_gui, module, index, value, increment, flow)) return NAN;
+      if(!_change_part(mask_form, mask_gui, module, index, interaction, value, increment, flow)) return NAN;
       return _brush_get_interaction_value(mask_form, interaction);
     default:
       return NAN;
   }
 }
 
-static int _change_fading(dt_masks_form_t *mask_form, int parentid, dt_masks_form_gui_t *mask_gui,
-                          struct dt_iop_module_t *module, int index, const float amount,
-                          const dt_masks_increment_t increment, const int flow)
-{
-  if(IS_NULL_PTR(mask_form) || IS_NULL_PTR(mask_form->points)) return 0;
-  int node_index = 0;
-  const float scale_amount = 1.f / powf(amount, (float)flow);
-  const float offset_amount = -amount * (float)flow;
-  float result_amount = 0.0f;
-  for(GList *node_entry = mask_form->points; node_entry; node_entry = g_list_next(node_entry), node_index++)
-  {
-    if(dt_masks_gui_change_affects_selected_node_or_all(mask_gui, node_index))
-    {
-      dt_masks_node_brush_t *node = (dt_masks_node_brush_t *)node_entry->data;
-      const float current_fading = node->fading;
-      result_amount = dt_masks_apply_increment_precomputed(current_fading, amount, scale_amount, offset_amount, increment);
-
-      node->fading = CLAMPF(result_amount, FADING_MIN, FADING_MAX);
-    }
-  }
-
-  dt_masks_get_set_conf_value(mask_form, "fading", result_amount, FADING_MIN, FADING_MAX, increment, flow);
-
-  // we recreate the form points
-  dt_masks_gui_form_create(mask_form, mask_gui, index, module);
-
-  return 1;
-}
-
-static int _change_size(dt_masks_form_t *mask_form, int parentid, dt_masks_form_gui_t *mask_gui,
-                        struct dt_iop_module_t *module, int index, const float amount,
+static int _change_part(dt_masks_form_t *mask_form, dt_masks_form_gui_t *mask_gui, struct dt_iop_module_t *module,
+                        int index, const dt_masks_interaction_t part, const float amount,
                         const dt_masks_increment_t increment, const int flow)
 {
   if(IS_NULL_PTR(mask_form) || IS_NULL_PTR(mask_form->points)) return 0;
-  // Sanitize loop
-  // do not exceed upper limit of 1.0 and lower limit of 0.004
+  const float scale_amount = powf(amount, (float)flow);
+  const float offset_amount = amount * (float)flow;
   int node_index = 0;
   for(GList *node_entry = mask_form->points; node_entry; node_entry = g_list_next(node_entry), node_index++)
   {
-    if(dt_masks_gui_change_affects_selected_node_or_all(mask_gui, node_index))
-    {
-      dt_masks_node_brush_t *node = (dt_masks_node_brush_t *)node_entry->data;
-      if(!node) continue;
-      if(amount > 1.0f && (node->border[0] > 1.0f || node->border[1] > 1.0f))
-        return 1;
-    }
+    dt_masks_node_brush_t *node = (dt_masks_node_brush_t *)node_entry->data;
+    if(IS_NULL_PTR(node) || !dt_masks_gui_change_affects_selected_node_or_all(mask_gui, node_index)) continue;
+    const float border = fmaxf(node->border[0], node->border[1]);
+    if(border <= 0.0f) continue;
+
+    // Both sides keep their ratio, so both keep the solid fraction computed on the larger.
+    const float ratio
+        = _brush_resize_part(border, &node->fading, part, amount, scale_amount, offset_amount, increment) / border;
+    node->border[0] *= ratio;
+    node->border[1] *= ratio;
   }
 
-  // Growing/shrinking loop
-  const float scale_amount = amount;
-  const float offset_amount = amount;
-  node_index = 0;
-  for(GList *node_entry = mask_form->points; node_entry; node_entry = g_list_next(node_entry), node_index++)
-  {
-    if(dt_masks_gui_change_affects_selected_node_or_all(mask_gui, node_index))
-    {
-      dt_masks_node_brush_t *node = (dt_masks_node_brush_t *)node_entry->data;
-      if(!node) continue;
-      node->border[0] = dt_masks_apply_increment_precomputed(node->border[0], amount,
-                                                              scale_amount, offset_amount, increment);
-      node->border[1] = dt_masks_apply_increment_precomputed(node->border[1], amount,
-                                                              scale_amount, offset_amount, increment);
-    }
-  }
-
-  dt_masks_get_set_conf_value(mask_form, "border", amount, FADING_MIN, FADING_MAX, increment, flow);
+  float conf_fading = 1.0f;
+  _brush_conf_resize_part(mask_form, part, amount, increment, flow, &conf_fading);
 
   // we recreate the form points
   if(!IS_NULL_PTR(mask_gui) && !IS_NULL_PTR(module)) dt_masks_gui_form_create(mask_form, mask_gui, index, module);
@@ -1909,14 +1941,12 @@ static int _brush_events_mouse_scrolled(struct dt_iop_module_t *module, double w
     switch(interaction)
     {
       case DT_MASKS_INTERACTION_FADING:
-        return _init_fading(mask_form, parentid, mask_gui, scroll_up ? 1.02f : 0.98f,
-                            DT_MASKS_INCREMENT_SCALE, flow);
+      case DT_MASKS_INTERACTION_SIZE:
+        return _init_part(mask_form, mask_gui, interaction, scroll_up ? 1.02f : 0.98f,
+                          DT_MASKS_INCREMENT_SCALE, flow);
       case DT_MASKS_INTERACTION_OPACITY:
         return _init_opacity(mask_form, parentid, mask_gui, scroll_up ? +0.02f : -0.02f,
                              DT_MASKS_INCREMENT_OFFSET, flow);
-      case DT_MASKS_INTERACTION_SIZE:
-        return _init_size(mask_form, parentid, mask_gui, scroll_up ? 1.02f : 0.98f,
-                          DT_MASKS_INCREMENT_SCALE, flow);
       default:
         return 0;
     }
@@ -1935,10 +1965,8 @@ static int _brush_events_mouse_scrolled(struct dt_iop_module_t *module, double w
       case DT_MASKS_INTERACTION_OPACITY:
         return dt_masks_form_change_opacity(mask_gui->dev, mask_form, parentid, scroll_up, flow);
       case DT_MASKS_INTERACTION_FADING:
-        return _change_fading(mask_form, parentid, mask_gui, module, index, scroll_up ? -0.01f : 0.01f,
-                              DT_MASKS_INCREMENT_OFFSET, flow);
       case DT_MASKS_INTERACTION_SIZE:
-        return _change_size(mask_form, parentid, mask_gui, module, index, scroll_up ? 1.02f : 0.98f,
+        return _change_part(mask_form, mask_gui, module, index, interaction, scroll_up ? 1.02f : 0.98f,
                             DT_MASKS_INCREMENT_SCALE, flow);
       default:
         return 0;
@@ -2138,8 +2166,11 @@ static int _brush_events_button_pressed(struct dt_iop_module_t *module, double w
     else if(mask_gui->handle_border_hovered >= 0)
     {
       float handle_x = 0.0f, handle_y = 0.0f;
-      if(_brush_get_border_handle_mirrored(gui_points, node_count, mask_gui->handle_border_hovered,
-                                           &handle_x, &handle_y))
+      if(mask_gui->handle_border_solid
+             ? _brush_get_solid_handle(gui_points, node_count, mask_gui->handle_border_hovered, &handle_x,
+                                       &handle_y, mask_form)
+             : _brush_get_border_handle_mirrored(gui_points, node_count, mask_gui->handle_border_hovered,
+                                                 &handle_x, &handle_y))
       {
         mask_gui->delta[0] = handle_x - mask_gui->pos[0];
         mask_gui->delta[1] = handle_y - mask_gui->pos[1];
@@ -2487,7 +2518,15 @@ static int _brush_events_mouse_moved(struct dt_iop_module_t *module, double widg
 
     const float border = dt_masks_border_from_projected_handle(dev, node->node, pts, fminf(iwidth, iheight));
 
-    node->border[0] = node->border[1] = border;
+    /* `border` is how far from the node the cursor is, along the handles' ray. The solid handle
+     * puts the edge of the solid part there, and the outer one the edge of the ramp; either way
+     * the other part keeps its width. */
+    const float old_border = fmaxf(node->border[0], node->border[1]);
+    const float part = mask_gui->handle_border_solid ? border : border - node->fading * old_border;
+    node->border[0] = node->border[1]
+        = _brush_resize_part(old_border, &node->fading,
+                             mask_gui->handle_border_solid ? DT_MASKS_INTERACTION_SIZE : DT_MASKS_INTERACTION_FADING,
+                             part, 1.0f, 0.0f, DT_MASKS_INCREMENT_ABSOLUTE);
     // we recreate the form points
     dt_masks_gui_form_create_throttled(mask_form, mask_gui, index, module, mask_gui->pos[0], mask_gui->pos[1]);
     return 1;
@@ -2637,8 +2676,8 @@ static gboolean _brush_get_source_center(const dt_masks_form_gui_points_t *gui_p
   return TRUE;
 }
 
-static void _brush_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_form_gui_t *mask_gui, int index,
-                                      int node_count)
+static void _brush_events_post_expose(cairo_t *cr, float zoom_scale, const dt_masks_form_t *form,
+                                      dt_masks_form_gui_t *mask_gui, int index, int node_count)
 {
   // in creation mode
   if(mask_gui->creation)
@@ -2943,19 +2982,21 @@ static void _brush_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_fo
       dt_draw_node(cr, corner, action, selected, zoom_scale, x, y);
     }
 
-    // Draw the current node's border handle, if needed
+    // Draw the current node's border handles, if needed: the ramp's outer edge and the solid part's
     if(mask_gui->node_selected && selected_node >= 0 && selected_node < node_count)
     {
       const int edited = selected_node;
-      const gboolean selected = (mask_gui->node_hovered == edited
-                              || selected_handle_border == edited
-                              || mask_gui->handle_border_hovered == edited);
+      const gboolean on_handle = (selected_handle_border == edited || mask_gui->handle_border_hovered == edited);
+      const gboolean selected_outer
+          = (mask_gui->node_hovered == edited || (on_handle && !mask_gui->handle_border_solid));
+      const gboolean selected_solid
+          = (mask_gui->node_hovered == edited || (on_handle && mask_gui->handle_border_solid));
       float handle[2] = { 0.0f, 0.0f };
       // Show the border handle on the opposite side from the curve handle
       if(_brush_get_border_handle_mirrored(gui_points, node_count, edited, &handle[0], &handle[1]))
-      {
-        dt_draw_handle(cr, NULL, zoom_scale, handle, selected, TRUE);
-      }
+        dt_draw_handle(cr, NULL, zoom_scale, handle, selected_outer, TRUE);
+      if(_brush_get_solid_handle(gui_points, node_count, edited, &handle[0], &handle[1], (void *)form))
+        dt_draw_handle(cr, NULL, zoom_scale, handle, selected_solid, TRUE);
     }
   }
 
@@ -3547,8 +3588,10 @@ static void _brush_set_hint_message(const dt_masks_form_gui_t *const mask_gui,
   }
   else if(mask_gui->source_selected)
     g_strlcat(msgbuf, _("<b>Move source</b>: Drag"), msgbuf_len);
-  else if(mask_gui->handle_border_hovered >= 0)
+  else if(mask_gui->handle_border_hovered >= 0 && mask_gui->handle_border_solid)
     g_strlcat(msgbuf, _("<b>Node size</b>: Drag"), msgbuf_len);
+  else if(mask_gui->handle_border_hovered >= 0)
+    g_strlcat(msgbuf, _("<b>Node fading</b>: Drag"), msgbuf_len);
   else if(mask_gui->handle_hovered >= 0)
     g_strlcat(msgbuf, _("<b>Node curvature</b>: Drag"), msgbuf_len);
   // The node operations below need the node to be selected, which the first click does.

@@ -156,6 +156,10 @@ typedef struct dt_masks_form_gui_t
   gboolean handle_selected;   // this is the state of the handle referenced by handle_hovered
   gboolean seg_selected;      // this is the state of the segment referenced by segment_hovered
   gboolean handle_border_selected; // this is the state of the border handle referenced by handle_border_hovered
+  // TRUE when the border handle under the cursor, selected or dragged is the one on the edge of a
+  // brush node's solid part rather than on its whole radius. Set by the hit test with
+  // handle_border_hovered, and kept through a drag.
+  gboolean handle_border_solid;
   int node_selected_idx;      // stable selected node index, distinct from current hover
 
   gboolean form_selected;
@@ -950,6 +954,22 @@ typedef void (*dt_masks_post_select_fn)(dt_masks_form_gui_t *mask_gui, int insid
                                         int inside_source, void *user_data);
 
 /**
+ * @brief The shape-specific half of dt_masks_find_closest_handle_common(). Any member may be NULL.
+ */
+typedef struct dt_masks_hit_callbacks_t
+{
+  dt_masks_border_handle_fn border_handle; // the selected node's border handle
+  // The selected node's handle on the edge of its solid part (a brush's), tested after the node
+  // itself. It is a border handle too, told apart by mask_gui->handle_border_solid.
+  dt_masks_border_handle_fn solid_handle;
+  dt_masks_curve_handle_fn curve_handle;
+  dt_masks_node_position_fn node_position;
+  dt_masks_distance_fn distance;
+  dt_masks_post_select_fn post_select;
+  void *user_data; // passed to every callback
+} dt_masks_hit_callbacks_t;
+
+/**
  * @brief Shared selection logic for node/handle/segment hit testing.
  *
  * The shape-specific callbacks supply handles and distance tests while this function
@@ -959,12 +979,7 @@ typedef void (*dt_masks_post_select_fn)(dt_masks_form_gui_t *mask_gui, int insid
  */
 int dt_masks_find_closest_handle_common(dt_masks_form_t *mask_form, dt_masks_form_gui_t *mask_gui,
                                         int form_index, int node_count_override,
-                                        dt_masks_border_handle_fn border_handle_cb,
-                                        dt_masks_curve_handle_fn curve_handle_cb,
-                                        dt_masks_node_position_fn node_position_cb,
-                                        dt_masks_distance_fn distance_cb,
-                                        dt_masks_post_select_fn post_select_cb,
-                                        void *user_data);
+                                        const dt_masks_hit_callbacks_t *callbacks);
 
 void dt_masks_creation_mode_quit(dt_masks_form_gui_t *gui);
 gboolean dt_masks_creation_mode_enter(dt_develop_t *dev, dt_iop_module_t *module, const dt_masks_type_t type);

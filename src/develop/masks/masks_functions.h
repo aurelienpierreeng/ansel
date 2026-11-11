@@ -144,7 +144,8 @@ typedef struct dt_masks_functions_t
                          struct dt_masks_form_t *form, int parentid, struct dt_masks_form_gui_t *gui, int index);
   /* Key event */
   int (*key_pressed)(struct dt_iop_module_t *module, GdkEventKey *event, struct dt_masks_form_t *form, int parentid, struct dt_masks_form_gui_t *gui, int index);
-  void (*post_expose)(cairo_t *cr, float zoom_scale, struct dt_masks_form_gui_t *gui, int index, int num_points);
+  void (*post_expose)(cairo_t *cr, float zoom_scale, const struct dt_masks_form_t *form,
+                      struct dt_masks_form_gui_t *gui, int index, int num_points);
   // The function to draw the shape in question. Signature must match shape_draw_function_t.
   shape_draw_function_t draw_shape;
   /** initialise all control points to eventually match a catmull-rom like spline */

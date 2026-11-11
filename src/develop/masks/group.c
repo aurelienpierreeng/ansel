@@ -147,7 +147,8 @@ static void _group_events_post_expose_draw(cairo_t *cr, float zoom_scale, dt_mas
     dt_get_times((dt_times_t *)&start);
 
     gui->type = selected_form->type;
-    selected_form->functions->post_expose(cr, zoom_scale, gui, pos, g_list_length(selected_form->points));
+    selected_form->functions->post_expose(cr, zoom_scale, selected_form, gui, pos,
+                                          g_list_length(selected_form->points));
 
     if(dt_get_debug_flags() & DT_DEBUG_MASKS)
     {

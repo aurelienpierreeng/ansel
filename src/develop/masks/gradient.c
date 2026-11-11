@@ -362,8 +362,10 @@ static int _find_closest_handle(dt_masks_form_t *mask_form, dt_masks_form_gui_t 
 {
   if(mask_gui) mask_gui->pivot_selected = FALSE;
   return dt_masks_find_closest_handle_common(mask_form, mask_gui, index, 1,
-                                             NULL, NULL, _gradient_node_position_cb,
-                                             _gradient_distance_cb, _gradient_post_select_cb, NULL);
+                                             &(const dt_masks_hit_callbacks_t){
+                                                 .node_position = _gradient_node_position_cb,
+                                                 .distance = _gradient_distance_cb,
+                                                 .post_select = _gradient_post_select_cb });
 }
 
 
@@ -1104,7 +1106,9 @@ static void _gradient_draw_arrow(cairo_t *cr, const gboolean selected, const gbo
   dt_draw_node(cr, FALSE, FALSE, pivot_selected, zoom_scale, anchor_x, anchor_y);
 }
 
-static void _gradient_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_form_gui_t *gui, int index, int nb)
+static void _gradient_events_post_expose(cairo_t *cr, float zoom_scale,
+                                         __attribute__((unused)) const dt_masks_form_t *form,
+                                         dt_masks_form_gui_t *gui, int index, int nb)
 {
   // preview gradient creation
   if(gui->creation)
