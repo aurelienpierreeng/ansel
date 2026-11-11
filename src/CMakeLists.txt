@@ -245,6 +245,7 @@ FILE(GLOB SOURCE_FILES
   "develop/masks/masks_gui.c"
   "develop/masks/masks_history.c"
   "develop/masks/masks_outline.c"
+  "develop/masks/masks_solid.c"
   "develop/masks/polygon.c"
   "develop/format.c"
   "pixel/format.c"

@@ -970,7 +970,8 @@ static dt_masks_raster_result_t _polygon_get_points_border(dt_develop_t *develop
                                       float **point_buffer, int *point_count,
                                       float **border_buffer, int *border_count,
                                       dt_masks_skip_range_t **border_skips, int *border_skip_count,
-                                      int source, const dt_iop_module_t *module)
+                                      float **fading __attribute__((unused)), int source,
+                                      const dt_iop_module_t *module)
 {
   // Asking for the source outline without a module is a programming error, not an empty shape.
   if(source && IS_NULL_PTR(module)) return DT_MASKS_RASTER_ERROR;

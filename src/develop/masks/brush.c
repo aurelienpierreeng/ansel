@@ -1559,7 +1559,7 @@ static dt_masks_raster_result_t _brush_get_points_border(dt_develop_t *develop, 
                                     float **point_buffer, int *point_count,
                                     float **border_buffer, int *border_count,
                                     dt_masks_skip_range_t **border_skips, int *border_skip_count,
-                                    int use_source, const dt_iop_module_t *module)
+                                    float **fading, int use_source, const dt_iop_module_t *module)
 {
   if(!IS_NULL_PTR(border_skips)) *border_skips = NULL;
   if(!IS_NULL_PTR(border_skip_count)) *border_skip_count = 0;
@@ -1568,10 +1568,16 @@ static dt_masks_raster_result_t _brush_get_points_border(dt_develop_t *develop, 
   if(use_source && IS_NULL_PTR(module)) return DT_MASKS_RASTER_ERROR;
   const double ioporder = (module) ? module->iop_order : 0.0f;
   const dt_masks_distort_t gui_dist = dt_masks_distort_for_gui(develop);
+  // The payload holds each sample's fading, what the contour the fading starts on is made of.
+  float *payload = NULL;
+  int payload_count = 0;
+  const gboolean want_fading = !IS_NULL_PTR(fading) && !IS_NULL_PTR(border_buffer);
   const int status
       = _brush_get_pts_border(develop, mask_form, ioporder, DT_DEV_TRANSFORM_DIR_ALL,
                               &gui_dist, point_buffer, point_count, border_buffer,
-                              border_count, NULL, NULL, border_skips, border_skip_count, use_source);
+                              border_count, want_fading ? &payload : NULL, &payload_count, border_skips,
+                              border_skip_count, use_source);
+  const int header = (int)g_list_length(mask_form->points) * 3;
 
   /* This outline feeds the GUI only -- the rasterisers build their own from the pixel path and
    * paint every spoke. What the outline shows is the BOUNDARY of what they paint, decided per
@@ -1580,11 +1586,29 @@ static dt_masks_raster_result_t _brush_get_points_border(dt_develop_t *develop, 
   if(status == 0 && !IS_NULL_PTR(border_buffer) && !IS_NULL_PTR(*border_buffer)
      && !IS_NULL_PTR(border_skips) && !IS_NULL_PTR(border_skip_count))
   {
-    const int header = (int)g_list_length(mask_form->points) * 3;
     dt_pixelpipe_cache_free_align(*border_skips);
     *border_skips = NULL;
     *border_skip_count = dt_masks_outline_boundary_skips(*point_buffer, *border_buffer, *border_count, header,
                                                          border_skips);
+  }
+
+  /* _brush_falloff() paints each spoke solid over the first `fading' of its length, from the
+   * outline sample to the border sample: that point of every spoke is where the fading starts.
+   * The payload holds two values per sample as the outline holds two coordinates, so it becomes
+   * that contour in place, each sample's fading read before its two cells are written. The
+   * payload is only ever built along with the border, and dropped with it on failure. */
+  if(!IS_NULL_PTR(payload))
+  {
+    const float *const points = *point_buffer;
+    const float *const border = *border_buffer;
+    memcpy(payload, points, sizeof(float) * 2 * header);
+    for(int i = header; i < *border_count; i++)
+    {
+      const float f = payload[2 * i];
+      payload[2 * i] = points[2 * i] + f * (border[2 * i] - points[2 * i]);
+      payload[2 * i + 1] = points[2 * i + 1] + f * (border[2 * i + 1] - points[2 * i + 1]);
+    }
+    *fading = payload;
   }
 
   return dt_masks_raster_from_status(status);
@@ -2810,6 +2834,17 @@ static void _brush_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_fo
 
   // minimum points
   if(gui_points->points_count <= node_count * 3 + 2) return;
+
+  // Where the fading starts, solid and always shown, as a circle's own outline is: the centreline
+  // below carries the nodes, but the mask keeps its full density all the way out to here. Its
+  // path is built here: dt_draw_shape_lines() takes every solid line for a centreline.
+  if(!IS_NULL_PTR(gui_points->fading))
+  {
+    const gboolean selected = (mask_gui->group_selected == index) && (mask_gui->form_selected || mask_gui->form_dragging);
+    dt_masks_draw_outline_runs(cr, gui_points->fading, 0, gui_points->fading_count, gui_points->fading_breaks,
+                               gui_points->fading_break_count);
+    dt_draw_stroke_line(DT_MASKS_NO_DASH, FALSE, cr, selected, zoom_scale, CAIRO_LINE_CAP_ROUND);
+  }
 
   // draw path
   if(node_count > 0 && gui_points->points_count > node_count * 3 + 6) // there must be something to draw

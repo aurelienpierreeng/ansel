@@ -69,6 +69,13 @@ typedef struct dt_masks_form_gui_points_t
   // every shape whose border cannot fold over itself (all but polygon today).
   dt_masks_skip_range_t *border_skips;
   int border_skip_count;
+  // Where a brush's fading starts: the edge of the part it paints at full density, closed loops
+  // one after the other, a zero-length break starting each but the first (dt_masks_solid_edge()).
+  // NULL for every other shape: its outline is that edge.
+  float *fading;
+  int fading_count;
+  dt_masks_skip_range_t *fading_breaks;
+  int fading_break_count;
   float *source;   // source point in absolute coordinates in output image space
   int source_count;
   gboolean clockwise;

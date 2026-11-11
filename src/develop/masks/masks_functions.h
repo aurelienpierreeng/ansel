@@ -79,12 +79,17 @@ typedef struct dt_masks_functions_t
    * distinction is load-bearing: the outline cache key covers the whole group, so caching a
    * FAILURE hides the shape until the geometry next moves, while refusing to cache an
    * legitimately EMPTY one rebuilds every shape of the group on every expose, forever.
+   *
+   * `fading', when given with `border', receives the contour the fading starts on, for a shape
+   * whose outline is not that contour: index-aligned with the border and as long, or NULL. Only a
+   * brush has one -- its outline is its centreline -- and the other shapes leave it as
+   * dt_masks_get_points_border() set it, NULL.
    */
   dt_masks_raster_result_t (*get_points_border)(struct dt_develop_t *dev, struct dt_masks_form_t *form,
                            float **points, int *points_count,
                            float **border, int *border_count,
                            dt_masks_skip_range_t **border_skips, int *border_skip_count,
-                           int source, const dt_iop_module_t *const module);
+                           float **fading, int source, const dt_iop_module_t *const module);
   /** Rasterise into a freshly allocated buffer covering the shape's own bounding box.
    * Same three outcomes as get_mask_roi. On anything but OK the out-parameters are still
    * written (NULL buffer, zero geometry): callers read them unconditionally. */
@@ -163,7 +168,7 @@ dt_masks_raster_result_t dt_masks_get_points_border(struct dt_develop_t *dev, dt
                                float **points, int *points_count,
                                float **border, int *border_count,
                                dt_masks_skip_range_t **border_skips, int *border_skip_count,
-                               int source, dt_iop_module_t *module);
+                               float **fading, int source, dt_iop_module_t *module);
 
 /** The boundary of a shape's outline: which border samples are not strictly inside any other
  * sample's disc, published as the skip ranges every consumer of the outline already reads.
