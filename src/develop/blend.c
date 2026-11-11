@@ -716,6 +716,28 @@ static void _develop_blend_release_mask_entry(dt_pixel_cache_entry_t *mask_entry
 }
 
 
+/* Blending skipped because the input region does not hold the output region: the alert carries no
+ * value, so every value the fit was decided on goes to the log. */
+static void _blend_log_roi_mismatch(const dt_iop_module_t *const self, const dt_dev_pixelpipe_t *const pipe,
+                                    const dt_dev_pixelpipe_iop_t *const piece)
+{
+  const dt_iop_roi_t *const roi_in = &piece->roi_in;
+  const dt_iop_roi_t *const roi_out = &piece->roi_out;
+  const int xoffs = roi_out->x - roi_in->x;
+  const int yoffs = roi_out->y - roi_in->y;
+  const char *const why = (roi_out->scale != roi_in->scale) ? "the input and output scales differ"
+                          : (xoffs < 0 || yoffs < 0)        ? "the input starts right of or below the output"
+                                                            : "the output reaches past the input's right or bottom edge";
+  dt_print(DT_DEBUG_ALWAYS,
+           "[blend] %s%s%s, %s pipe: blending skipped, %s. Output %dx%d at (%d, %d), scale %.9g; input %dx%d"
+           " at (%d, %d), scale %.9g; input buffer %dx%d, %.2fx%.2f at the input's scale; %s\n",
+           self->op, self->multi_name[0] ? " " : "", self->multi_name, dt_pixelpipe_name(pipe->type), why,
+           roi_out->width, roi_out->height, roi_out->x, roi_out->y, roi_out->scale, roi_in->width,
+           roi_in->height, roi_in->x, roi_in->y, roi_in->scale, piece->buf_in.width, piece->buf_in.height,
+           piece->buf_in.width * roi_in->scale, piece->buf_in.height * roi_in->scale,
+           pipe->dev->image_storage.fullpath);
+}
+
 int dt_develop_blend_process(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe,
                              const struct dt_dev_pixelpipe_iop_t *piece, const void *const ivoid,
                              void *const ovoid)
@@ -760,6 +782,7 @@ int dt_develop_blend_process(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *p
   if(oscale != iscale || xoffs < 0 || yoffs < 0
      || ((xoffs > 0 || yoffs > 0) && (owidth + xoffs > iwidth || oheight + yoffs > iheight)))
   {
+    _blend_log_roi_mismatch(self, pipe, piece);
     gchar *item = g_strdup_printf(_("`%s` on %s"), self->op, pipe->dev->image_storage.fullpath);
     dt_control_alert(_("Module failed"), _("skipped blending: roi's do not match"), item);
     dt_free(item);
@@ -1215,6 +1238,7 @@ int dt_develop_blend_process_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_t
   if(oscale != iscale || xoffs < 0 || yoffs < 0
      || ((xoffs > 0 || yoffs > 0) && (owidth + xoffs > iwidth || oheight + yoffs > iheight)))
   {
+    _blend_log_roi_mismatch(self, pipe, piece);
     gchar *item = g_strdup_printf(_("`%s` on %s"), self->op, pipe->dev->image_storage.fullpath);
     dt_control_alert(_("Module failed"), _("skipped blending: roi's do not match"), item);
     dt_free(item);

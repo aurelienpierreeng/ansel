@@ -157,7 +157,7 @@ gradientslider and collapsible_section includes each exist for one struct member
 headers, none of them GUI. (The cut point was quoted as "line 264" and never was — :261-275 is
 the `dt_develop_name_value_t` typedef and its `extern`s.) TRAP: the blend-mode name tables are
 extern'd in blend.h, and the worry was that they were **defined in `blend_gui.c` while backend
-`supervisor.c` consumes them** — headless linking would break. **They are in `blend.c:2296`**,
+`supervisor.c` consumes them** — headless linking would break. **They are in `blend.c:2331`**,
 and `blend.h:263-265` now carries the comment saying so; `supervisor.c:762` consumes them
 safely. The five pipeline files' upward reaches were three families: `dt_control_log` from
 worker threads, the progress banner + forced redraws in pixelpipe_hb.c, and the cache-wait
