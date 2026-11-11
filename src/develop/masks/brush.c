@@ -59,9 +59,6 @@
 #define FADING_MIN 0.00001f
 #define FADING_MAX 1.0f
 
-#define BORDER_MIN 0.00005f
-#define BORDER_MAX 0.5f
-
 // The narrowest solid radius or ramp the size and fading controls leave, normalized like a
 // border: the circle's narrowest border.
 #define PART_MIN 0.0005f
@@ -2687,7 +2684,7 @@ static void _brush_events_post_expose(cairo_t *cr, float zoom_scale, const dt_ma
       dt_masks_form_t *mask_form = dt_masks_get_visible_form(mask_gui->dev);
       if(IS_NULL_PTR(mask_form)) return;
 
-      const float masks_border = dt_masks_get_set_conf_value(mask_form, "border", 1.0f, BORDER_MIN, BORDER_MAX,
+      const float masks_border = dt_masks_get_set_conf_value(mask_form, "border", 1.0f, FADING_MIN, FADING_MAX,
                                                              DT_MASKS_INCREMENT_SCALE, 1);
       const float masks_fading = dt_masks_get_set_conf_value(mask_form, "fading", 1.0f, FADING_MIN,
                                                              FADING_MAX, DT_MASKS_INCREMENT_SCALE, 1);

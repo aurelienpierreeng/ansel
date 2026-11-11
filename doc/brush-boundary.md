@@ -562,7 +562,7 @@ outline failed to hide (issue #1352's chords); a sample outside the permitted ma
 spoke to nowhere.
 
 A case is a table of **nine columns** per node — `node.x, node.y, ctrl1.x, ctrl1.y, ctrl2.x,
-ctrl2.y, border, density, fading` (`tests/masks/masks_geometry.c:113`) — and #1360 is the
+ctrl2.y, border, density, fading` (`tests/masks/masks_geometry.c:118`) — and #1360 is the
 reason `density` is per node rather than per shape: it cannot be expressed without a per-node
 density ramp. (`_brush_1313[11][9]` is eleven *nodes* of nine columns; an earlier draft read
 that shape as "eleven columns … both radii, density, fading, state", and there is neither a
