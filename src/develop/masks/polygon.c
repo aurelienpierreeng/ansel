@@ -1289,7 +1289,7 @@ static void _polygon_get_distance(float point_x, float point_y, float radius,
  * Polygon borders are stored directly in gui_points->border at node indices.
  */
 static gboolean _polygon_border_handle_cb(const dt_masks_form_gui_points_t *gui_points, int node_count,
-                                          int node_index, float *handle_x, float *handle_y, void *user_data)
+                                          int node_index, float *handle_x, float *handle_y, const void *user_data)
 {
   if(IS_NULL_PTR(gui_points) || node_index < 0 || node_index >= node_count) return FALSE;
   *handle_x = gui_points->border[node_index * 6];
@@ -1301,7 +1301,7 @@ static gboolean _polygon_border_handle_cb(const dt_masks_form_gui_points_t *gui_
  * @brief Polygon-specific curve handle lookup (depends on winding direction).
  */
 static void _polygon_curve_handle_cb(const dt_masks_form_gui_points_t *gui_points, int node_index,
-                                     float *handle_x, float *handle_y, void *user_data)
+                                     float *handle_x, float *handle_y, const void *user_data)
 {
   
   _polygon_ctrl2_to_handle(gui_points->points[node_index * 6 + 2], gui_points->points[node_index * 6 + 3],
@@ -1314,7 +1314,7 @@ static void _polygon_curve_handle_cb(const dt_masks_form_gui_points_t *gui_point
  */
 static void _polygon_distance_cb(float pointer_x, float pointer_y, float cursor_radius,
                                  dt_masks_form_gui_t *mask_gui, int form_index, int node_count, int *inside,
-                                 int *inside_border, int *near_handle, int *inside_source, float *dist, void *user_data)
+                                 int *inside_border, int *near_handle, int *inside_source, float *dist, const void *user_data)
 {
   
   _polygon_get_distance(pointer_x, pointer_y, cursor_radius, mask_gui, form_index, node_count,

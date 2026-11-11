@@ -1656,7 +1656,7 @@ static float _brush_get_position_in_segment(float point_x, float point_y,
  * Uses mirrored border handles computed from resampled border points.
  */
 static gboolean _brush_border_handle_cb(const dt_masks_form_gui_points_t *gui_points, int node_count, int node_index,
-                                        float *handle_x, float *handle_y, void *user_data)
+                                        float *handle_x, float *handle_y, const void *user_data)
 {
   return _brush_get_border_handle_mirrored(gui_points, node_count, node_index, handle_x, handle_y);
 }
@@ -1667,7 +1667,7 @@ static gboolean _brush_border_handle_cb(const dt_masks_form_gui_points_t *gui_po
  * Converts the node's second control point into the GUI handle position.
  */
 static void _brush_curve_handle_cb(const dt_masks_form_gui_points_t *gui_points, int node_index,
-                                   float *handle_x, float *handle_y, void *user_data)
+                                   float *handle_x, float *handle_y, const void *user_data)
 {
   _brush_ctrl2_to_handle(gui_points->points[node_index * 6 + 2], gui_points->points[node_index * 6 + 3],
                          gui_points->points[node_index * 6 + 4], gui_points->points[node_index * 6 + 5],
@@ -1679,7 +1679,7 @@ static void _brush_curve_handle_cb(const dt_masks_form_gui_points_t *gui_points,
  */
 static void _brush_distance_cb(float pointer_x, float pointer_y, float cursor_radius,
                                dt_masks_form_gui_t *mask_gui, int form_index, int node_count, int *inside,
-                               int *inside_border, int *near_handle, int *inside_source, float *dist, void *user_data)
+                               int *inside_border, int *near_handle, int *inside_source, float *dist, const void *user_data)
 {
   _brush_get_distance(pointer_x, pointer_y, cursor_radius, mask_gui, form_index, node_count,
                       inside, inside_border, near_handle, inside_source, dist);
@@ -1694,7 +1694,7 @@ static void _brush_distance_cb(float pointer_x, float pointer_y, float cursor_ra
  * @param user_data The brush form, whose nodes hold the fractions.
  */
 static gboolean _brush_get_solid_handle(const dt_masks_form_gui_points_t *gui_points, int node_count, int node_index,
-                                        float *handle_x, float *handle_y, void *user_data)
+                                        float *handle_x, float *handle_y, const void *user_data)
 {
   const dt_masks_node_brush_t *node
       = (const dt_masks_node_brush_t *)g_list_nth_data(((const dt_masks_form_t *)user_data)->points, node_index);
@@ -2515,10 +2515,12 @@ static int _brush_events_mouse_moved(struct dt_iop_module_t *module, double widg
      * the other part keeps its width. */
     const float old_border = fmaxf(node->border[0], node->border[1]);
     const float part = mask_gui->handle_border_solid ? border : border - node->fading * old_border;
-    node->border[0] = node->border[1]
+    const float new_border
         = _brush_resize_part(old_border, &node->fading,
                              mask_gui->handle_border_solid ? DT_MASKS_INTERACTION_SIZE : DT_MASKS_INTERACTION_FADING,
                              part, 1.0f, 0.0f, DT_MASKS_INCREMENT_ABSOLUTE);
+    node->border[0] = new_border;
+    node->border[1] = new_border;
     // we recreate the form points
     dt_masks_gui_form_create_throttled(mask_form, mask_gui, index, module, mask_gui->pos[0], mask_gui->pos[1]);
     return 1;
@@ -2987,7 +2989,7 @@ static void _brush_events_post_expose(cairo_t *cr, float zoom_scale, const dt_ma
       // Show the border handle on the opposite side from the curve handle
       if(_brush_get_border_handle_mirrored(gui_points, node_count, edited, &handle[0], &handle[1]))
         dt_draw_handle(cr, NULL, zoom_scale, handle, selected_outer, TRUE);
-      if(_brush_get_solid_handle(gui_points, node_count, edited, &handle[0], &handle[1], (void *)form))
+      if(_brush_get_solid_handle(gui_points, node_count, edited, &handle[0], &handle[1], form))
         dt_draw_handle(cr, NULL, zoom_scale, handle, selected_solid, TRUE);
     }
   }

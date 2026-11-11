@@ -330,7 +330,7 @@ static void _gradient_get_distance(float x, float y, float dist_mouse, dt_masks_
 }
 
 static void _gradient_node_position_cb(const dt_masks_form_gui_points_t *gui_points, int node_index,
-                                       float *node_x, float *node_y, void *user_data)
+                                       float *node_x, float *node_y, const void *user_data)
 {
   if(node_x) *node_x = NAN;
   if(node_y) *node_y = NAN;
@@ -338,14 +338,14 @@ static void _gradient_node_position_cb(const dt_masks_form_gui_points_t *gui_poi
 
 static void _gradient_distance_cb(float pointer_x, float pointer_y, float cursor_radius,
                                   dt_masks_form_gui_t *mask_gui, int form_index, int node_count, int *inside,
-                                  int *inside_border, int *near_handle, int *inside_source, float *dist, void *user_data)
+                                  int *inside_border, int *near_handle, int *inside_source, float *dist, const void *user_data)
 {
   _gradient_get_distance(pointer_x, pointer_y, cursor_radius, mask_gui, form_index, 0, inside,
                          inside_border, near_handle, inside_source, dist);
 }
 
 static void _gradient_post_select_cb(dt_masks_form_gui_t *mask_gui, int inside, int inside_border,
-                                     int inside_source, void *user_data)
+                                     int inside_source, const void *user_data)
 {
   if(inside)
   {
@@ -1149,10 +1149,10 @@ static void _gradient_events_post_expose(cairo_t *cr, float zoom_scale,
 }
 
 static dt_masks_raster_result_t _gradient_get_points_border(dt_develop_t *dev, dt_masks_form_t *form,
-                                                            const dt_masks_outline_out_t *const out, int source,
+                                                            const dt_masks_outline_out_t *const out,
+                                                            __attribute__((unused)) int source,
                                                             const dt_iop_module_t *module)
 {
-    // unused arg, keep compiler from complaining
   // No geometry: an empty outline is the correct result here, not a failure. See the circle.
   if(IS_NULL_PTR(form) || IS_NULL_PTR(form->points)) return DT_MASKS_RASTER_EMPTY;
   dt_masks_anchor_gradient_t *gradient = (dt_masks_anchor_gradient_t *)form->points->data;

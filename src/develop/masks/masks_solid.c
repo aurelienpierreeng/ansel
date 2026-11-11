@@ -55,7 +55,8 @@ enum { SOLID_TOP = 0, SOLID_RIGHT = 1, SOLID_BOTTOM = 2, SOLID_LEFT = 3 };
 
 typedef struct _solid_edge_t
 {
-  float x, y;   // upper end, image pixels
+  float x;      // upper end, image pixels
+  float y;
   float y_end;  // lower end
   float slope;  // dx / dy
   int dir;      // winding, +1 or -1
@@ -78,9 +79,11 @@ typedef struct _solid_bands_t
 
 typedef struct _solid_grid_t
 {
-  float x0, y0;   // image position of the grid's corner
+  float x0;       // image position of the grid's corner
+  float y0;
   float cell;     // a cell's side, image pixels
-  int w, h;
+  int w;
+  int h;
 } _solid_grid_t;
 
 /* Where band k's two spokes cross, if they do, as the fraction @p t of the first: such a band is a
@@ -89,9 +92,12 @@ static inline gboolean _solid_spokes_cross(const _solid_bands_t *const b, const 
 {
   const float *const c0 = b->spine + 2 * k;
   const float *const c1 = b->spine + 2 * l;
-  const float ax = b->contour[2 * k] - c0[0], ay = b->contour[2 * k + 1] - c0[1];
-  const float bx = b->contour[2 * l] - c1[0], by = b->contour[2 * l + 1] - c1[1];
-  const float wx = c1[0] - c0[0], wy = c1[1] - c0[1];
+  const float ax = b->contour[2 * k] - c0[0];
+  const float ay = b->contour[2 * k + 1] - c0[1];
+  const float bx = b->contour[2 * l] - c1[0];
+  const float by = b->contour[2 * l + 1] - c1[1];
+  const float wx = c1[0] - c0[0];
+  const float wy = c1[1] - c0[1];
   const float den = ax * by - ay * bx;
   if(den == 0.0f) return FALSE;
   *t = (wx * by - wy * bx) / den;
@@ -121,9 +127,12 @@ static int _solid_band_signs(const _solid_bands_t *const b, int8_t *const sign, 
     const int l = (k + 1 == n) ? 0 : k + 1;
     const float cx = spine[2 * k];
     const float cy = spine[2 * k + 1];
-    const float f0x = contour[2 * k] - cx, f0y = contour[2 * k + 1] - cy;
-    const float f1x = contour[2 * l] - cx, f1y = contour[2 * l + 1] - cy;
-    const float c1x = spine[2 * l] - cx, c1y = spine[2 * l + 1] - cy;
+    const float f0x = contour[2 * k] - cx;
+    const float f0y = contour[2 * k + 1] - cy;
+    const float f1x = contour[2 * l] - cx;
+    const float f1y = contour[2 * l + 1] - cy;
+    const float c1x = spine[2 * l] - cx;
+    const float c1y = spine[2 * l + 1] - cy;
     const float area2 = (f0x * f1y - f1x * f0y) + (f1x * c1y - c1x * f1y);
     const float perimeter = fabsf(f0x) + fabsf(f0y) + fabsf(f1x - f0x) + fabsf(f1y - f0y) + fabsf(f1x - c1x)
                             + fabsf(f1y - c1y) + fabsf(c1x) + fabsf(c1y);
@@ -239,7 +248,8 @@ static int _solid_edges(const _solid_bands_t *const bands, const int8_t *const s
  * leaves the grid. */
 static void _solid_grid_fit(_solid_grid_t *const g, const float bbox[4], float cell)
 {
-  double w = 0.0, h = 0.0;
+  double w = 0.0;
+  double h = 0.0;
   for(;;)
   {
     w = ceil((bbox[1] - bbox[0]) / cell) + 4.0;
@@ -273,7 +283,8 @@ static size_t _solid_count(const _solid_edge_t *const edges, const int count, co
   size_t total = 0;
   for(int k = 0; k < count; k++)
   {
-    int t0 = 0, t1 = 0;
+    int t0 = 0;
+    int t1 = 0;
     _solid_lines(edges + k, g, &t0, &t1);
     if(t1 <= t0) continue;
     offset[t0]++;
@@ -380,7 +391,8 @@ static int _solid_fill(const _solid_edge_t *const edges, const int count, const 
   for(int k = 0; k < count; k++)
   {
     const _solid_edge_t *const e = edges + k;
-    int t0 = 0, t1 = 0;
+    int t0 = 0;
+    int t1 = 0;
     _solid_lines(e, g, &t0, &t1);
     for(int t = t0; t < t1; t++)
     {
@@ -417,7 +429,8 @@ static int _solid_fill(const _solid_edge_t *const edges, const int count, const 
     {
       run += step[i];
       row[i] = (uint8_t)(fminf(fmaxf(partial[i] + run, 0.0f), 1.0f) * 255.0f + 0.5f);
-      partial[i] = step[i] = 0.0f;
+      partial[i] = 0.0f;
+      step[i] = 0.0f;
     }
     range[2 * j] = lo;
     range[2 * j + 1] = hi;

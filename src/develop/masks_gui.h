@@ -922,21 +922,21 @@ gboolean dt_masks_point_is_within_radius(const float px, const float py,
  * @return TRUE if the handle is valid and written to (handle_x, handle_y).
  */
 typedef gboolean (*dt_masks_border_handle_fn)(const dt_masks_form_gui_points_t *gui_points, int node_count,
-                                              int node_index, float *handle_x, float *handle_y, void *user_data);
+                                              int node_index, float *handle_x, float *handle_y, const void *user_data);
 /**
  * @brief Shape-specific callback to fetch a node's curve handle in GUI space.
  *
  * The handle is only queried for non-cusp nodes; implementations may assume that.
  */
 typedef void (*dt_masks_curve_handle_fn)(const dt_masks_form_gui_points_t *gui_points, int node_index,
-                                         float *handle_x, float *handle_y, void *user_data);
+                                         float *handle_x, float *handle_y, const void *user_data);
 /**
  * @brief Shape-specific callback to fetch a node's position in GUI space.
  *
  * When NULL, the common helper assumes Bezier-like layout at points[k*6+2].
  */
 typedef void (*dt_masks_node_position_fn)(const dt_masks_form_gui_points_t *gui_points, int node_index,
-                                          float *node_x, float *node_y, void *user_data);
+                                          float *node_x, float *node_y, const void *user_data);
 /**
  * @brief Shape-specific callback for inside/border/segment hit testing.
  *
@@ -946,12 +946,12 @@ typedef void (*dt_masks_node_position_fn)(const dt_masks_form_gui_points_t *gui_
 typedef void (*dt_masks_distance_fn)(float pointer_x, float pointer_y, float cursor_radius,
                                      dt_masks_form_gui_t *mask_gui, int form_index, int node_count,
                                      int *inside, int *inside_border, int *near_handle, int *inside_source, float *dist,
-                                     void *user_data);
+                                     const void *user_data);
 /**
  * @brief Optional hook to customize selection flags after inside/border/source resolution.
  */
 typedef void (*dt_masks_post_select_fn)(dt_masks_form_gui_t *mask_gui, int inside, int inside_border,
-                                        int inside_source, void *user_data);
+                                        int inside_source, const void *user_data);
 
 /**
  * @brief The shape-specific half of dt_masks_find_closest_handle_common(). Any member may be NULL.
@@ -966,7 +966,7 @@ typedef struct dt_masks_hit_callbacks_t
   dt_masks_node_position_fn node_position;
   dt_masks_distance_fn distance;
   dt_masks_post_select_fn post_select;
-  void *user_data; // passed to every callback
+  const void *user_data; // passed to every callback
 } dt_masks_hit_callbacks_t;
 
 /**

@@ -2485,7 +2485,9 @@ void dt_masks_gui_form_remove(dt_masks_form_t *mask_form, dt_masks_form_gui_t *m
   if(!IS_NULL_PTR(gui_points))
   {
     gui_points->points_count = gui_points->border_count = gui_points->source_count = 0;
-    gui_points->border_skip_count = gui_points->fading_count = gui_points->fading_break_count = 0;
+    gui_points->border_skip_count = 0;
+    gui_points->fading_count = 0;
+    gui_points->fading_break_count = 0;
     dt_pixelpipe_cache_free_align(gui_points->points);
     gui_points->points = NULL;
     dt_pixelpipe_cache_free_align(gui_points->border);
