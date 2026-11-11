@@ -37,21 +37,20 @@ last node's own coordinate sits at the very end of the forward pass. Everything 
 drawn centerline (the outline stroking, the source shape, the clone link's midpoint) uses that
 helper.
 
-## A brush shorter than a pixel is drawn by its border, and so is its source
+## A brush shorter than a pixel draws its source by its border
 
 *Found on top of `17a0cfe80b`, 2026-11-10.*
 
 A click without a drag makes a brush: the press records the first point, the release pads it with
 a second node a hundredth of a pixel away (`_brush_events_button_released()`), and the mask is the
-full disc of the border. Its centreline has no length. Drawn like any other brush, it showed
-almost nothing: an unselected brush draws its centreline only, which for a dot is two round end
-caps the width of the line, and its clone source was not drawn at all, arrow included —
+full disc of the border. Its centreline has no length. Unselected, a brush draws its centreline
+only, which for a dot is two round end caps the width of the line, and its dashed border, like any
+brush's, only while it is selected. Its clone source was not drawn at all, arrow included —
 `_brush_get_source_center()` anchors the link at the centreline's midpoint, and a line with no
 length has none.
 
-`_brush_is_dot()` is a centreline shorter than one pixel of the output image. Such a brush draws
-its dashed border in every state, where any other brush draws it only while selected. The link's
-two ends fall back to the first nodes. The source outline built for the GUI carries no border, so
+`_brush_is_dot()` is a centreline shorter than one pixel of the output image. For such a brush the
+link's two ends fall back to the first nodes. The source outline built for the GUI carries no border, so
 the dot's source is its border shifted by the source node minus the main node, the shift
 `_brush_get_distance()` already uses to hit the source, and drawn solid like every source
 outline. The shift is exact where the distortions after the module are affine; behind a lens
@@ -69,9 +68,13 @@ before any sample is walked.
 build, Xephyr at 1280×900, a JPEG at fit zoom: retouch's brush armed by its button, a click, a
 stroke, creation ended, every `dt_masks_draw_outline_runs()` call logged as a device-space bounding
 box. Before, the unselected click drew its centreline walk and nothing else, with no
-`dt_masks_draw_source()` call; the stroke drew its source. After, the click draws a 32×32 px ring
-at the shape and another at its source, and `dt_masks_draw_source()` runs for it. Selected, it
-had drawn its dashed border and still no source; it draws the same border and its source.
+`dt_masks_draw_source()` call; the stroke drew its source. After, `dt_masks_draw_source()` runs
+for the click and draws a 32×32 px ring at its source. Selected, it had drawn its dashed border
+and still no source; it draws the same border and its source.
+
+*Checked on top of `0801e6eed1`, 2026-11-11*, with the overlay dumped (`MASKS_DUMP_OVERLAY`) by the
+same kind of shim right after the click, the dot unselected in its creation session: the canvas
+holds the source's ring and arrow and the brush cursor, and no ring at the shape.
 
 *Measured on top of `f4960a122d`, 2026-11-10*, with the same shim, the source placed by Shift+click
 and drawn as a ring of radius 16 px: the cursor moved from the source's centre outwards along
