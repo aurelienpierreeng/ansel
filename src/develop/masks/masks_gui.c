@@ -1183,12 +1183,7 @@ gboolean dt_masks_point_is_within_radius(const float point_x, const float point_
  */
 int dt_masks_find_closest_handle_common(dt_masks_form_t *mask_form,
                                         dt_masks_form_gui_t *mask_gui, int form_index, int node_count_override,
-                                        dt_masks_border_handle_fn border_handle_cb,
-                                        dt_masks_curve_handle_fn curve_handle_cb,
-                                        dt_masks_node_position_fn node_position_cb,
-                                        dt_masks_distance_fn distance_cb,
-                                        dt_masks_post_select_fn post_select_cb,
-                                        void *user_data)
+                                        const dt_masks_hit_callbacks_t *callbacks)
 {
   if(IS_NULL_PTR(mask_form) || IS_NULL_PTR(mask_form->points)) return 0;
   if(!mask_gui->creation && mask_gui->group_selected != form_index) return 0;
@@ -1236,12 +1231,13 @@ int dt_masks_find_closest_handle_common(dt_masks_form_t *mask_form,
     mask_gui->seg_hovered = mask_gui->seg_dragging;
     return 1;
   }
+  mask_gui->handle_border_solid = FALSE;
 
   const int node_count = (node_count_override >= 0) ? node_count_override
                                                     : (int)g_list_length(mask_form->points);
 
   const gboolean has_bezier_layout = mask_form->uses_bezier_points_layout;
-  const gboolean can_test_nodes = (!IS_NULL_PTR(node_position_cb)) || has_bezier_layout;
+  const gboolean can_test_nodes = (!IS_NULL_PTR(callbacks->node_position)) || has_bezier_layout;
   const int first_node_index = has_bezier_layout ? 0 : 1; // skip center node for non-bezier shapes
   const gboolean has_selected_node = (node_count > 0) && can_test_nodes
                                      && (mask_gui->group_selected == form_index)
@@ -1252,8 +1248,8 @@ int dt_masks_find_closest_handle_common(dt_masks_form_t *mask_form,
     // Current node's border handle (feather handle).
     float handle_x = NAN;
     float handle_y = NAN;
-    if(border_handle_cb
-       && border_handle_cb(gui_points, node_count, selected_node, &handle_x, &handle_y, user_data)
+    if(callbacks->border_handle
+       && callbacks->border_handle(gui_points, node_count, selected_node, &handle_x, &handle_y, callbacks->user_data)
        && dt_masks_point_is_within_radius(cursor_x, cursor_y, handle_x, handle_y, cursor_radius2))
     {
       mask_gui->handle_border_hovered = selected_node;
@@ -1261,9 +1257,9 @@ int dt_masks_find_closest_handle_common(dt_masks_form_t *mask_form,
     }
 
     // Current node's curve handle.
-    if(!dt_masks_node_is_cusp(gui_points, selected_node) && curve_handle_cb)
+    if(!dt_masks_node_is_cusp(gui_points, selected_node) && callbacks->curve_handle)
     {
-      curve_handle_cb(gui_points, selected_node, &handle_x, &handle_y, user_data);
+      callbacks->curve_handle(gui_points, selected_node, &handle_x, &handle_y, callbacks->user_data);
       if(dt_masks_point_is_within_radius(cursor_x, cursor_y, handle_x, handle_y, cursor_radius2))
       {
         mask_gui->handle_hovered = selected_node;
@@ -1274,9 +1270,9 @@ int dt_masks_find_closest_handle_common(dt_masks_form_t *mask_form,
     // Current node itself.
     float node_x = NAN;
     float node_y = NAN;
-    if(node_position_cb)
+    if(callbacks->node_position)
     {
-      node_position_cb(gui_points, selected_node, &node_x, &node_y, user_data);
+      callbacks->node_position(gui_points, selected_node, &node_x, &node_y, callbacks->user_data);
     }
     else if(has_bezier_layout)
     {
@@ -1289,6 +1285,17 @@ int dt_masks_find_closest_handle_common(dt_masks_form_t *mask_form,
       mask_gui->node_hovered = selected_node;
       return 1;
     }
+
+    // Current node's solid-part handle: after the node, which it covers on a node whose solid part
+    // is narrower than the cursor, and which would otherwise be out of reach.
+    if(callbacks->solid_handle
+       && callbacks->solid_handle(gui_points, node_count, selected_node, &handle_x, &handle_y, callbacks->user_data)
+       && dt_masks_point_is_within_radius(cursor_x, cursor_y, handle_x, handle_y, cursor_radius2))
+    {
+      mask_gui->handle_border_hovered = selected_node;
+      mask_gui->handle_border_solid = TRUE;
+      return 1;
+    }
   }
 
   if(can_test_nodes)
@@ -1297,9 +1304,9 @@ int dt_masks_find_closest_handle_common(dt_masks_form_t *mask_form,
     {
       float node_x = NAN;
       float node_y = NAN;
-      if(node_position_cb)
+      if(callbacks->node_position)
       {
-        node_position_cb(gui_points, node_index, &node_x, &node_y, user_data);
+        callbacks->node_position(gui_points, node_index, &node_x, &node_y, callbacks->user_data);
       }
       else if(has_bezier_layout)
       {
@@ -1315,7 +1322,7 @@ int dt_masks_find_closest_handle_common(dt_masks_form_t *mask_form,
     }
   }
 
-  if(IS_NULL_PTR(distance_cb)) return 0;
+  if(IS_NULL_PTR(callbacks->distance)) return 0;
 
   // Segment or shape hit tests.
   int inside = 0;
@@ -1323,22 +1330,22 @@ int dt_masks_find_closest_handle_common(dt_masks_form_t *mask_form,
   int near_segment = -1;
   int inside_source = 0;
   float nearest_distance = 0.0f;
-  distance_cb(cursor_x, cursor_y, cursor_radius, mask_gui, form_index, node_count, &inside, &inside_border,
-              &near_segment, &inside_source, &nearest_distance, user_data);
+  callbacks->distance(cursor_x, cursor_y, cursor_radius, mask_gui, form_index, node_count, &inside, &inside_border,
+                      &near_segment, &inside_source, &nearest_distance, callbacks->user_data);
 
 
   if(inside_source)
   {
     mask_gui->form_selected = TRUE;
     mask_gui->source_selected = TRUE;
-    if(post_select_cb) post_select_cb(mask_gui, inside, inside_border, inside_source, user_data);
+    if(callbacks->post_select) callbacks->post_select(mask_gui, inside, inside_border, inside_source, callbacks->user_data);
     return 1;
   }
   if(inside_border)
   {
     mask_gui->form_selected = TRUE;
     mask_gui->border_selected = TRUE;
-    if(post_select_cb) post_select_cb(mask_gui, inside, inside_border, inside_source, user_data);
+    if(callbacks->post_select) callbacks->post_select(mask_gui, inside, inside_border, inside_source, callbacks->user_data);
     return 1;
   }
   if(near_segment >= 0)
@@ -1350,7 +1357,7 @@ int dt_masks_find_closest_handle_common(dt_masks_form_t *mask_form,
   if(inside)
   {
     mask_gui->form_selected = TRUE;
-    if(post_select_cb) post_select_cb(mask_gui, inside, inside_border, inside_source, user_data);
+    if(callbacks->post_select) callbacks->post_select(mask_gui, inside, inside_border, inside_source, callbacks->user_data);
     return 1;
   }
 
@@ -4007,7 +4014,7 @@ static void _masks_draw_creation_session_forms(dt_develop_t *develop, dt_iop_mod
     {
       const guint point_count = g_list_length(session_form->points);
       _session_gui.type = session_form->type;
-      session_form->functions->post_expose(cr, zoom_scale, &_session_gui, index, point_count);
+      session_form->functions->post_expose(cr, zoom_scale, session_form, &_session_gui, index, point_count);
     }
 
     /* Which half costs: rebuilding an outline, or stroking it. The session is 15.9 ms of a 25.7 ms
@@ -4669,7 +4676,7 @@ static void _overlay_draw_form(cairo_t *cr, const float zoom_scale, dt_masks_for
   {
     const guint point_count = g_list_length(mask_form->points);
     mask_gui->type = mask_form->type;
-    mask_form->functions->post_expose(cr, zoom_scale, mask_gui, 0, point_count);
+    mask_form->functions->post_expose(cr, zoom_scale, mask_form, mask_gui, 0, point_count);
   }
 }
 

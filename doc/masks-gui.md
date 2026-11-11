@@ -53,11 +53,50 @@ panel becomes the authority.
 Consequence for the on-canvas hints (`set_hint_message`, per shape): they document **gestures
 only** — drag, ctrl+click, right-click, Del, Enter, Esc — never the wheel, which the panel now
 shows. Their branches follow the hit-test order of `dt_masks_find_closest_handle_common()`
-(border handle, curve handle, node, segment, then the shape), because the innermost target under
+(border handle, curve handle, node, a brush's solid-part handle, segment, then the shape), because the innermost target under
 the cursor is what the next click acts on. Two traps when editing them: a node's Del and
 ctrl+click only work once that node is *selected* (a mere hover gets the shorter message), and
 `dt_hinter_set_message()` joins `\n` into `, `, so each line must read as a clause of one
 sentence.
+
+## A brush's size and fading edit its solid part and its ramp, as a circle's do
+
+*Found on top of `5a136d1a04`, 2026-11-11.*
+
+A brush node stores its whole radius (`border[0]` and `border[1]`, which every writer sets
+together) and the fraction `fading` of it that is solid. The controls edit neither number as
+such: **size** edits the solid radius `fading · border`, **fading** the width of the ramp outside
+it, `(1 − fading) · border`, and each leaves the other part as it is — the way a circle's size and
+fading edit its radius and its border. `_brush_resize_part()` (`brush.c`) is the one place that
+turns a change of one part into a new `border` and `fading`, and every control goes through it:
+the wheel, the context-menu sliders, both node handles, and the defaults a new brush is drawn
+with.
+
+- `get_interaction_value(DT_MASKS_INTERACTION_FADING)` answers the mean ramp width, in the
+  normalized units of the circle's and the polygon's border, so the absolute "Fading" slider
+  (0–100 %) sets the ramp width. "Size" is the shared relative log2 slider and scales the solid
+  radius.
+- The wheel scales the part it edits by 1.02 per notch, up growing it, for both parts.
+- Neither part goes below `PART_MIN` (0.0005, the circle's narrowest border) and the whole radius
+  stays at most 1. A part at that floor grows back slowly under the wheel, as a circle's border
+  does.
+- An edit applies the same change to the `border`/`fading` conf keys the next brush is created
+  with; during creation the wheel edits those keys alone, so size grows the preview's filled disc
+  and fading its ring.
+- Nothing stored is converted: a brush keeps exactly its mask until one of its nodes is edited.
+
+A selected node has two handles on one ray from the node. The outer one, on the whole radius,
+moves the ramp's outer edge; the inner one, `_brush_get_solid_handle()`, sits where the node's own
+spoke turns from solid to ramp and moves the edge of the solid part. Both are border handles to
+the selection state (`handle_border_hovered`, `_selected`, `_dragging`) and are told apart by
+`mask_gui->handle_border_solid`, which the hit test writes and a drag keeps. A third handle family
+would have needed every reset, `dt_masks_is_anything_selected/hovered()`,
+`dt_masks_gui_set/reset_dragging()` and the cursor shape to learn about it; sharing the state
+covers all of them untouched. The hit test offers the inner handle through
+`dt_masks_hit_callbacks_t.solid_handle`, tested **after** the node itself: on a node whose solid
+part is narrower than the cursor the handle covers the node, and testing it first would leave the
+node out of reach. The handle needs the node's fraction, which the GUI points do not carry, which
+is why `post_expose` is handed the form it draws.
 
 ## A right click targets, it never drags — and the context menu leans on that
 
