@@ -138,8 +138,8 @@ members in one per-shape table — that is the only reason every IOP that wants 
 sees cairo and GTK. The split is a parallel `dt_masks_gui_functions_t` registered per shape
 type. **The header split landed (T3b-1, `965e32ecbc`) but the vtable split did NOT**: `masks.h`
 keeps only the forward typedef at :128, and the body moved to
-`develop/masks/masks_functions.h:60` — where it still mixes `get_mask` (:96), `get_mask_roi`
-(:111), `mouse_moved` (:132), `mouse_scrolled` (:135) and `post_expose(cairo_t *cr, …)` (:147)
+`develop/masks/masks_functions.h:73` — where it still mixes `get_mask` (:109), `get_mask_roi`
+(:124), `mouse_moved` (:145), `mouse_scrolled` (:148) and `post_expose(cairo_t *cr, …)` (:160)
 in one table. **This is the one knot in this section still genuinely open.**
 `control/control.h` in masks.h supplied **zero symbols** — pure supply line, **deleted (T1c,
 `1127ce3d48`)**, and it had been feeding `control.h` to eight files that used none of it. Two traps: the spline sampler
@@ -201,7 +201,7 @@ completed sequence, not as work waiting.
   (the name-table definitions were already in `blend.c`, so that half was a false alarm —
   see the knot above); `masks.h` drops control.h outright and moves `dt_masks_form_gui_t` +
   draw.h into a new `masks_gui.h`. **The GUI vtable did not move** and is still mixed into
-  `dt_masks_functions_t`, now at `develop/masks/masks_functions.h:60`. After T1, **90 IOPs
+  `dt_masks_functions_t`, now at `develop/masks/masks_functions.h:73`. After T1, **90 IOPs
   stopped receiving GTK through develop headers**.
 * **T2 — pipeline message/notification inversions** ✅ `8173ad4af1`: `dt_control_log` → a
   pipe-registered message handler (the `history/notify.h` shape, third time); progress + redraw

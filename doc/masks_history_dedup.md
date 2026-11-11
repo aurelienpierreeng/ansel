@@ -32,7 +32,7 @@ exact same form is unchanged across dozens of consecutive steps:
 - SQL table `masks_history` (schema in `src/database/database.c`):
   `(imgid, num, formid, form, name, version, points, points_count, source)`, no `UNIQUE`
   constraint. Written by `dt_masks_write_masks_history_item()`
-  (`src/develop/masks/masks.c:1134`) — which no longer issues SQL itself but goes through the
+  (`src/develop/masks/masks.c:1130`) — which no longer issues SQL itself but goes through the
   history repository — called once per form per history item from
   `src/develop/dev_history.c:1574`, inside the rewrite `dt_dev_write_history_ext()` performs for
   **every** history step.
@@ -50,7 +50,7 @@ exact same form is unchanged across dozens of consecutive steps:
 `dt_dev_mask_history_overload()` (`src/develop/dev_history.c:1505`) already warns users about
 this via a toast ("consider compressing history...") without fixing it. The intended direction
 is flagged as a code comment near `dt_masks_read_masks_history()`
-(`src/develop/masks/masks.c:1121`): attach the forms snapshot to its own object, linked by ID
+(`src/develop/masks/masks.c:1117`): attach the forms snapshot to its own object, linked by ID
 to the history item, instead of duplicating it inline.
 
 **Historical precedent**: before XMP format version 3, `read_masks()` (now
@@ -122,7 +122,7 @@ lives (`:83-90` copies into `memory.undo_masks_history`, `:123-126` copies back,
 
 ### Read path (in-memory dedup bonus)
 
-`dt_masks_read_masks_history()` (`src/develop/masks/masks.c:1121`) reads rows through
+`dt_masks_read_masks_history()` (`src/develop/masks/masks.c:1117`) reads rows through
 `dt_history_repository_foreach_mask_item()`, so the join goes in the **repository**, not here:
 join the two tables on `content_id`, ordered by `num`, and keep handing `masks.c` one row at a
 time. Keep a local `GHashTable` (`content_id` →

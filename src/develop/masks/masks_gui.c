@@ -1946,11 +1946,15 @@ void dt_masks_gui_form_create(dt_masks_form_t *mask_form, dt_masks_form_gui_t *m
   dt_masks_form_gui_points_t *gui_points
       = (dt_masks_form_gui_points_t *)g_list_nth_data(mask_gui->points, form_index);
   float *fading_contour = NULL;
+  const dt_masks_outline_out_t outline = { .points = &gui_points->points,
+                                           .points_count = &gui_points->points_count,
+                                           .border = &gui_points->border,
+                                           .border_count = &gui_points->border_count,
+                                           .border_skips = &gui_points->border_skips,
+                                           .border_skip_count = &gui_points->border_skip_count,
+                                           .fading = &fading_contour };
   const dt_masks_raster_result_t border_status
-      = dt_masks_get_points_border(mask_gui->dev, mask_form, &gui_points->points, &gui_points->points_count,
-                                   &gui_points->border, &gui_points->border_count,
-                                   &gui_points->border_skips, &gui_points->border_skip_count,
-                                   &fading_contour, 0, NULL);
+      = dt_masks_get_points_border(mask_gui->dev, mask_form, &outline, 0, NULL);
 
   /* Only a genuine FAILURE may leave the cache key unset, and it must: the key covers the whole
    * group, so one unstamped shape rebuilds every shape of the group on every later expose --
@@ -1983,9 +1987,9 @@ void dt_masks_gui_form_create(dt_masks_form_t *mask_form, dt_masks_form_gui_t *m
   {
     if(border_status == DT_MASKS_RASTER_OK && (mask_form->type & DT_MASKS_CLONE))
     {
-      if(dt_masks_get_points_border(mask_gui->dev, mask_form, &gui_points->source, &gui_points->source_count,
-                                    NULL, NULL, NULL, NULL, NULL, TRUE, module)
-         != DT_MASKS_RASTER_OK)
+      const dt_masks_outline_out_t source = { .points = &gui_points->source,
+                                              .points_count = &gui_points->source_count };
+      if(dt_masks_get_points_border(mask_gui->dev, mask_form, &source, TRUE, module) != DT_MASKS_RASTER_OK)
         return;
     }
     dt_masks_gui_points_update_bbox(gui_points);

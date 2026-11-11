@@ -622,15 +622,9 @@ static void _circle_events_post_expose(cairo_t *cr, float zoom_scale,
 
 
 static dt_masks_raster_result_t _circle_get_points_border(dt_develop_t *dev, struct dt_masks_form_t *form,
-                                     float **points,
-                                     int *points_count, float **border, int *border_count,
-                                     dt_masks_skip_range_t **border_skips, int *border_skip_count,
-                                     float **fading __attribute__((unused)), int source,
-                                     const dt_iop_module_t *module)
+                                                          const dt_masks_outline_out_t *const out, int source,
+                                                          const dt_iop_module_t *module)
 {
-  if(!IS_NULL_PTR(border_skips)) *border_skips = NULL;
-  if(!IS_NULL_PTR(border_skip_count)) *border_skip_count = 0;
-
   /* No geometry to build an outline from: the outline is empty, which is a result, not a
    * failure. Reporting success here (as this did) told the caller to cache a NULL outline as
    * if it had been built. */
@@ -644,17 +638,19 @@ static dt_masks_raster_result_t _circle_get_points_border(dt_develop_t *dev, str
     float xs = form->source[0];
     float ys = form->source[1];
     return dt_masks_raster_from_status(
-        _circle_get_points_source(dev, x, y, xs, ys, circle->radius, circle->radius, 0.0f, points, points_count, module));
+        _circle_get_points_source(dev, x, y, xs, ys, circle->radius, circle->radius, 0.0f, out->points, out->points_count,
+                                  module));
   }
   else
   {
-    if(form->functions->get_points(dev, x, y, circle->radius, circle->radius, 0, points, points_count) != 0)
+    if(form->functions->get_points(dev, x, y, circle->radius, circle->radius, 0, out->points, out->points_count)
+       != 0)
       return DT_MASKS_RASTER_ERROR;
-    if(!IS_NULL_PTR(border))
+    if(!IS_NULL_PTR(out->border))
     {
       float outer_radius = circle->radius + circle->border;
-      return dt_masks_raster_from_status(
-          form->functions->get_points(dev, x, y, outer_radius, outer_radius, 0, border, border_count));
+      return dt_masks_raster_from_status(form->functions->get_points(dev, x, y, outer_radius, outer_radius, 0,
+                                                                     out->border, out->border_count));
     }
     return DT_MASKS_RASTER_OK;
   }

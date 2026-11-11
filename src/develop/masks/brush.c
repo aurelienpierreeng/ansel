@@ -1560,14 +1560,9 @@ static void _brush_get_distance(float point_x, float point_y, float radius,
 /** longest span first; ties broken by position so the order is deterministic */
 
 static dt_masks_raster_result_t _brush_get_points_border(dt_develop_t *develop, dt_masks_form_t *mask_form,
-                                    float **point_buffer, int *point_count,
-                                    float **border_buffer, int *border_count,
-                                    dt_masks_skip_range_t **border_skips, int *border_skip_count,
-                                    float **fading, int use_source, const dt_iop_module_t *module)
+                                                         const dt_masks_outline_out_t *const out, int use_source,
+                                                         const dt_iop_module_t *module)
 {
-  if(!IS_NULL_PTR(border_skips)) *border_skips = NULL;
-  if(!IS_NULL_PTR(border_skip_count)) *border_skip_count = 0;
-
   // Asking for the source outline without a module is a programming error, not an empty shape.
   if(use_source && IS_NULL_PTR(module)) return DT_MASKS_RASTER_ERROR;
   const double ioporder = (module) ? module->iop_order : 0.0f;
@@ -1575,25 +1570,25 @@ static dt_masks_raster_result_t _brush_get_points_border(dt_develop_t *develop, 
   // The payload holds each sample's fading, what the contour the fading starts on is made of.
   float *payload = NULL;
   int payload_count = 0;
-  const gboolean want_fading = !IS_NULL_PTR(fading) && !IS_NULL_PTR(border_buffer);
+  const gboolean want_fading = !IS_NULL_PTR(out->fading) && !IS_NULL_PTR(out->border);
   const int status
       = _brush_get_pts_border(develop, mask_form, ioporder, DT_DEV_TRANSFORM_DIR_ALL,
-                              &gui_dist, point_buffer, point_count, border_buffer,
-                              border_count, want_fading ? &payload : NULL, &payload_count, border_skips,
-                              border_skip_count, use_source);
+                              &gui_dist, out->points, out->points_count, out->border,
+                              out->border_count, want_fading ? &payload : NULL, &payload_count, out->border_skips,
+                              out->border_skip_count, use_source);
   const int header = (int)g_list_length(mask_form->points) * 3;
 
   /* This outline feeds the GUI only -- the rasterisers build their own from the pixel path and
    * paint every spoke. What the outline shows is the BOUNDARY of what they paint, decided per
    * sample by dt_masks_outline_boundary_skips(); the excluded samples travel out-of-band as skip
    * ranges, which is what every consumer of this outline already reads. */
-  if(status == 0 && !IS_NULL_PTR(border_buffer) && !IS_NULL_PTR(*border_buffer)
-     && !IS_NULL_PTR(border_skips) && !IS_NULL_PTR(border_skip_count))
+  if(status == 0 && !IS_NULL_PTR(out->border) && !IS_NULL_PTR(*out->border)
+     && !IS_NULL_PTR(out->border_skips) && !IS_NULL_PTR(out->border_skip_count))
   {
-    dt_pixelpipe_cache_free_align(*border_skips);
-    *border_skips = NULL;
-    *border_skip_count = dt_masks_outline_boundary_skips(*point_buffer, *border_buffer, *border_count, header,
-                                                         border_skips);
+    dt_pixelpipe_cache_free_align(*out->border_skips);
+    *out->border_skips = NULL;
+    *out->border_skip_count = dt_masks_outline_boundary_skips(*out->points, *out->border, *out->border_count,
+                                                              header, out->border_skips);
   }
 
   /* _brush_falloff() paints each spoke solid over the first `fading' of its length, from the
@@ -1603,16 +1598,16 @@ static dt_masks_raster_result_t _brush_get_points_border(dt_develop_t *develop, 
    * payload is only ever built along with the border, and dropped with it on failure. */
   if(!IS_NULL_PTR(payload))
   {
-    const float *const points = *point_buffer;
-    const float *const border = *border_buffer;
+    const float *const points = *out->points;
+    const float *const border = *out->border;
     memcpy(payload, points, sizeof(float) * 2 * header);
-    for(int i = header; i < *border_count; i++)
+    for(int i = header; i < *out->border_count; i++)
     {
       const float f = payload[2 * i];
       payload[2 * i] = points[2 * i] + f * (border[2 * i] - points[2 * i]);
       payload[2 * i + 1] = points[2 * i + 1] + f * (border[2 * i + 1] - points[2 * i + 1]);
     }
-    *fading = payload;
+    *out->fading = payload;
   }
 
   return dt_masks_raster_from_status(status);

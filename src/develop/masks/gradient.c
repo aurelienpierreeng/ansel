@@ -1149,28 +1149,22 @@ static void _gradient_events_post_expose(cairo_t *cr, float zoom_scale,
 }
 
 static dt_masks_raster_result_t _gradient_get_points_border(dt_develop_t *dev, dt_masks_form_t *form,
-                                       float **points, int *points_count,
-                                       float **border, int *border_count,
-                                       dt_masks_skip_range_t **border_skips, int *border_skip_count,
-                                       float **fading __attribute__((unused)), int source,
-                                       const dt_iop_module_t *module)
+                                                            const dt_masks_outline_out_t *const out, int source,
+                                                            const dt_iop_module_t *module)
 {
-  if(!IS_NULL_PTR(border_skips)) *border_skips = NULL;
-  if(!IS_NULL_PTR(border_skip_count)) *border_skip_count = 0;
-
     // unused arg, keep compiler from complaining
   // No geometry: an empty outline is the correct result here, not a failure. See the circle.
   if(IS_NULL_PTR(form) || IS_NULL_PTR(form->points)) return DT_MASKS_RASTER_EMPTY;
   dt_masks_anchor_gradient_t *gradient = (dt_masks_anchor_gradient_t *)form->points->data;
   if(IS_NULL_PTR(gradient)) return DT_MASKS_RASTER_EMPTY;
   if(_gradient_get_points(dev, gradient->center[0], gradient->center[1], gradient->rotation, gradient->curvature,
-                          points, points_count) != 0)
+                          out->points, out->points_count) != 0)
     return DT_MASKS_RASTER_ERROR;
-  if(border)
+  if(out->border)
     return dt_masks_raster_from_status(
         _gradient_get_pts_border(dev, gradient->center[0], gradient->center[1],
                                  gradient->rotation, gradient->extent, gradient->curvature,
-                                 border, border_count));
+                                 out->border, out->border_count));
   return DT_MASKS_RASTER_OK;
 }
 

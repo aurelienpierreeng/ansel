@@ -338,10 +338,11 @@ dash cut by a hidden stretch shows as a stub, which that metric owes.
 ## What is unified, and what is not
 
 The API did not change shape for this: `dt_masks_functions_t.get_points_border`
-(`masks_functions.h:88-92`) still fills `points`/`points_count`, `border`/`border_count` and
-`border_skips`/`border_skip_count`, returns a `dt_masks_raster_result_t`, and no consumer was
-touched. (There is no `payload` out-parameter; an earlier draft listed one. The `fading` one it
-has since grown carries a contour made from the payload, not the payload: see
+(`masks_functions.h:103-105`) still fills `points`/`points_count`, `border`/`border_count` and
+`border_skips`/`border_skip_count`, members of the `dt_masks_outline_out_t` it is handed,
+returns a `dt_masks_raster_result_t`, and no consumer was touched. (There is no `payload`
+out-parameter; an earlier draft listed one. The `fading` one it has since grown carries a
+contour made from the payload, not the payload: see
 [Where the fading starts](#where-the-fading-starts).) What
 changed is *where the truth comes from*. The skip ranges are now derived from the raster
 arrays by a definition, so the outline the GUI draws is the boundary of the mask the pipe
