@@ -143,7 +143,7 @@ last node.
 > switched off behind an always-FALSE `allow_border_gap_rounding` flag, so a joint had no border
 > samples across it and no spokes were stamped there. That flag had 3 occurrences at the report
 > commit and has **0** today; joints now go through `_brush_joint_arc()`
-> (`develop/masks/brush.c:947`) unconditionally, and the corpus runs a two-sided oracle with an
+> (`develop/masks/brush.c:948`) unconditionally, and the corpus runs a two-sided oracle with an
 > explicit MISSING map. Left marked OPEN, this section sent a reader to re-derive a landed fix.
 >
 > *One honest caveat:* the reporter's `_DSC9410.NEF` 57-node brush was never added to the corpus,
@@ -162,7 +162,7 @@ Two things make the diagnosis quick, and both were got wrong on the first pass:
   like that at a glance. Look at the small ones at full resolution instead: each has a
   *perfectly straight* edge cutting across the stroke, which no smooth outline produces.
 - **They are not the sparse-sampling path.** `use_sparse` is now
-  `pipe->mask_rasterization_step > 1` (`develop/masks/brush.c:3337`); the six hand-rolled copies
+  `pipe->mask_rasterization_step > 1` (`develop/masks/brush.c:3395`); the six hand-rolled copies
   of `has_preview_output() || type == THUMBNAIL` were deliberately removed because one pipe could
   be classified two ways inside a single frame (`develop/pixelpipe_hb.h:491`). The conclusion is
   unchanged and now holds structurally: the step defaults to 1 and only `dev->gui_attached`
