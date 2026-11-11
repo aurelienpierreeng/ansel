@@ -1285,7 +1285,8 @@ static void _judge_fading_edge(dt_develop_t *dev, dt_masks_form_t *form, const _
 
   int boundary = 0;
   int missed = 0;
-  int mx = 0, my = 0;
+  int mx = 0;
+  int my = 0;
   float farthest = 0.0f;
   for(int y = 1; y + 1 < c->h; y++)
     for(int x = 1; x + 1 < c->w; x++)
