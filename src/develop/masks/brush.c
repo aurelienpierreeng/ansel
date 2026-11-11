@@ -2849,12 +2849,9 @@ static void _brush_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_fo
   // draw path
   if(node_count > 0 && gui_points->points_count > node_count * 3 + 6) // there must be something to draw
   {
-    // Rounded, not flat: a brush stroke is a paintbrush, not a ruled polygon edge, and a butt
-    // cap on the outline shown here (the node-to-node centerline, not the painted falloff)
-    // looked cut off square at its two open ends. Only the two true ends of the whole stroke,
-    // not every node's own joint -- see dt_masks_draw_path_seg_by_seg().
-    // The whole array, not the forward half: the walk stops itself on the last node (an open path
-    // has node_count - 1 segments), and it must be able to REACH that node. Handing it a count
+    // Dotted: the centreline carries the nodes but is no edge of the mask, which the solid line
+    // above draws. The whole array, not the forward half: the walk stops itself on the last node
+    // (an open path has node_count - 1 segments), and it must be able to REACH that node. Handing it a count
     // derived from the array length instead left it short of the last node on every brush, so the
     // last segment was never stroked -- it stayed a pending path in the cairo context.
     dt_masks_draw_path_seg_by_seg(cr, mask_gui, index, gui_points->points, gui_points->points_count,

@@ -127,11 +127,11 @@ something else happens to be drawn: a leftover tail comes out dashed when the sh
 border is stroked next, comes out highlighted when another shape is hovered, and is invisible when
 nothing is drawn after it. That is a path leak, not a style or selection bug.
 
-Which segments exist at all is decided by the caller's shape: an open path (a brush — the only
-caller asking for round ends, since only an open path has two true ends) has `node_count - 1`
-segments, a closed one has one more, and a shape still being created has no closing segment yet.
-The walk stops once it has stroked them all, so it must be handed a point count that lets it
-**reach** the last node.
+Which segments exist at all is decided by the caller's shape: an open path (a brush's centreline,
+the only caller passing `centreline`, and the only open path) has `node_count - 1` segments, a
+closed one has one more, and a shape still being created has no closing segment yet. The walk
+stops once it has stroked them all, so it must be handed a point count that lets it **reach** the
+last node.
 
 ## Brush masks rasterize as radial spokes — wedge holes across the stroke (CLOSED)
 
