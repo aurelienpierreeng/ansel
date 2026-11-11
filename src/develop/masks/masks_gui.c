@@ -3512,7 +3512,7 @@ void dt_masks_draw_source(cairo_t *cr, dt_masks_form_gui_t *mask_gui, const int 
 
 void dt_masks_draw_path_seg_by_seg(cairo_t *cr, dt_masks_form_gui_t *mask_gui, const int form_index,
                                    const float *points, const int points_count, const int node_count,
-                                   const float zoom_scale, const gboolean round_ends)
+                                   const float zoom_scale, const gboolean centreline)
 {
   if(IS_NULL_PTR(cr) || IS_NULL_PTR(points) || IS_NULL_PTR(mask_gui)) return;
   if(node_count <= 0 || points_count <= node_count * 3 + 6) return;
@@ -3522,29 +3522,20 @@ void dt_masks_draw_path_seg_by_seg(cairo_t *cr, dt_masks_form_gui_t *mask_gui, c
 
   const gboolean group_selected = (mask_gui->group_selected == form_index);
 
-  /* The last segment there is to draw. An OPEN path -- a brush, the only caller asking for round
-   * ends, since only an open path has two true ends -- has one segment fewer than it has nodes; a
-   * closed one also has the segment returning to node 0. A shape still being created has no
-   * closing segment either: the last one is the one the cursor is dragging. */
-  const int last_segment_index = (round_ends || mask_gui->creation) ? node_count - 2 : node_count - 1;
+  /* The last segment there is to draw. An OPEN path -- a brush's centreline -- has one segment
+   * fewer than it has nodes; a closed one also has the segment returning to node 0. A shape still
+   * being created has no closing segment either: the last one is the one the cursor is dragging. */
+  const int last_segment_index = (centreline || mask_gui->creation) ? node_count - 2 : node_count - 1;
 
-  /* Round only the OUTWARD side of the two true ends of the WHOLE path (e.g. a brush stroke), not
-   * every segment's own two ends -- that would also round every interior node joint, which is a
-   * line JOIN, not a cap, and looks like a bump at each node instead of the intended smooth stroke
-   * tip. cairo_line_cap is a property of the whole stroke() call, and each segment below is
-   * stroked independently with CAIRO_LINE_CAP_BUTT (so that per-segment selection/dash state
-   * works AND consecutive segments join flush, without a cap bump at every node), so there is no
-   * single stroke covering just the two true ends to set a cap on.
-   *
-   * Instead: paint a full disc (radius = half the line width) at each true end FIRST, before any
-   * segment is stroked. The first and last segments below then get their normal, unchanged
-   * BUTT-capped stroke painted OVER these discs -- flush at the true end, extending only inward --
-   * which exactly covers the inward half of each disc (same centerline, same width, same colour
-   * passes) and leaves only the outward half showing: precisely what CAIRO_LINE_CAP_ROUND draws
-   * for a real one-sided cap. Node positions come straight from the node header (points[i*6+2/+3]
-   * is node i's own coordinate), not the tessellated tail, so this needs no walk of the outline
-   * and no assumption about whether that tail wraps back to node 0. */
-  if(round_ends)
+  /* A dot on each true end of the whole path: every segment's dots start on its first node, but
+   * the last segment's may stop short of the last node, in a gap. Node positions come straight
+   * from the node header (points[i*6+2/+3] is node i's own coordinate), not the tessellated tail,
+   * so this needs no walk of the outline and no assumption about whether that tail wraps back to
+   * node 0.
+   * Off, kept for reuse: stroked DT_MASKS_NO_DASH, whose dark pass is denser than a dashed one's,
+   * the discs come out darker than the dots they end. */
+  /*
+  if(centreline)
   {
     const gboolean all_selected = group_selected
                                   && dt_masks_is_anything_selected(mask_gui)
@@ -3563,6 +3554,7 @@ void dt_masks_draw_path_seg_by_seg(cairo_t *cr, dt_masks_form_gui_t *mask_gui, c
     cairo_line_to(cr, end_x, end_y);
     dt_draw_stroke_line(DT_MASKS_NO_DASH, FALSE, cr, all_selected, zoom_scale, CAIRO_LINE_CAP_ROUND);
   }
+  */
 
   int show_segment_index = 1;
   int current_segment_index = 0;
@@ -3628,6 +3620,9 @@ void dt_masks_draw_path_seg_by_seg(cairo_t *cr, dt_masks_form_gui_t *mask_gui, c
 
       if(mask_gui->creation && current_segment_index == node_count - 2)
         dt_draw_stroke_line(DT_MASKS_DASH_ROUND, FALSE, cr, all_selected, zoom_scale, CAIRO_LINE_CAP_ROUND);
+      else if(centreline)
+        dt_draw_stroke_line(DT_MASKS_DASH_ROUND, FALSE, cr, (seg_is_selected || all_selected), zoom_scale,
+                            CAIRO_LINE_CAP_ROUND);
       else
         dt_draw_stroke_line(DT_MASKS_NO_DASH, FALSE, cr, (seg_is_selected || all_selected), zoom_scale,
                             CAIRO_LINE_CAP_BUTT);
