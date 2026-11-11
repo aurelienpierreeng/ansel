@@ -138,8 +138,8 @@ members in one per-shape table — that is the only reason every IOP that wants 
 sees cairo and GTK. The split is a parallel `dt_masks_gui_functions_t` registered per shape
 type. **The header split landed (T3b-1, `965e32ecbc`) but the vtable split did NOT**: `masks.h`
 keeps only the forward typedef at :128, and the body moved to
-`develop/masks/masks_functions.h:60` — where it still mixes `get_mask` (:91), `get_mask_roi`
-(:106), `mouse_moved` (:127), `mouse_scrolled` (:130) and `post_expose(cairo_t *cr, …)` (:142)
+`develop/masks/masks_functions.h:60` — where it still mixes `get_mask` (:96), `get_mask_roi`
+(:111), `mouse_moved` (:132), `mouse_scrolled` (:135) and `post_expose(cairo_t *cr, …)` (:147)
 in one table. **This is the one knot in this section still genuinely open.**
 `control/control.h` in masks.h supplied **zero symbols** — pure supply line, **deleted (T1c,
 `1127ce3d48`)**, and it had been feeding `control.h` to eight files that used none of it. Two traps: the spline sampler

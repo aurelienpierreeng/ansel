@@ -1,6 +1,7 @@
 /*
     This file is part of Ansel,
     Copyright (C) 2026 Aurélien PIERRE.
+    Copyright (C) 2026 Guillaume Stutin.
 
     Ansel is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -43,6 +44,7 @@
 #include "develop/masks_debug.h"
 #include "develop/masks/masks_functions.h"
 #include "develop/masks/masks_distort.h"
+#include "develop/masks/masks_solid.h"
 #include "widgets/widget_settings.h"
 #include "math/math.h"
 #include "system/mem_alloc.h"
@@ -552,6 +554,30 @@ static const float _brush_1352[7][11] = {
   { 0.36773169f, 0.193801045f, 0.375862241f, 0.187250778f, 0.35960114f, 0.200351343f, 0.0239629708f, 0.0239629708f, 1.0f, 0.660000026f, 1 },
 };
 
+/* A brush whose fading starts on the spine at its middle node, which is three times as wide as its
+ * ends: its size grows and shrinks steeply along both segments, so its spokes lean far along the
+ * spine and the solid part is much narrower than they are long. Decoded from the history of a test
+ * session, on a 3000x2253 JPEG. */
+static const float _brush_fading_pinch[3][11] = {
+  /* columns: node x y | ctrl1 x y | ctrl2 x y | border in out | density | fading | state */
+  {0.923715f, 0.860498f, 0.967045f, 0.858404f, 0.880385f, 0.862592f, 0.030283f, 0.030283f, 1.000000f, 0.437000f, 1 },
+  {0.793726f, 0.866780f, 0.831083f, 0.857148f, 0.756369f, 0.876412f, 0.091168f, 0.091168f, 1.000000f, 0.000010f, 1 },
+  {0.699574f, 0.918290f, 0.730958f, 0.901120f, 0.668190f, 0.935460f, 0.030283f, 0.030283f, 1.000000f, 0.437000f, 1 },
+};
+
+/* A brush whose middle node is six times as wide as its ends, its fading 0.3 there and 0.537 at
+ * the ends. Where the size climbs, the ends' spokes lie along the spine, and the edge of the solid
+ * part runs along their sides: a tenth of it lies more than 2 px from the line through the spoke
+ * ends, which no walk over the ends can trace. Its necks thinner than half a pixel come out as
+ * islands.
+ * Decoded from the history of a test session, on a 3000x2253 JPEG. */
+static const float _brush_fading_neck[3][11] = {
+  /* columns: node x y | ctrl1 x y | ctrl2 x y | border in out | density | fading | state */
+  {0.816248f, 0.890076f, 0.834685f, 0.892544f, 0.797810f, 0.887608f, 0.013986f, 0.013986f, 1.000000f, 0.537000f, 1 },
+  {0.760934f, 0.882672f, 0.770315f, 0.881703f, 0.751553f, 0.883641f, 0.082942f, 0.082942f, 1.000000f, 0.300010f, 2 },
+  {0.705371f, 0.903945f, 0.723892f, 0.896854f, 0.686849f, 0.911036f, 0.013986f, 0.013986f, 1.000000f, 0.537000f, 1 },
+};
+
 /* _MG_1074.CR2, brush #4 of its sidecar (2026-09-08): eight nodes, the second with a radius
  * 2.6 times its neighbours', so the stroke flares from node 0 into node 1 and back. Reported
  * as "some dashed border missing near node 0" once the envelope samples had fixed the long
@@ -902,7 +928,7 @@ static _band_t _outline_band_check(dt_develop_t *dev, dt_masks_form_t *form, con
   _outline_density_apply(dev, 1.0);
   const double t0 = dt_get_wtime();
   const dt_masks_raster_result_t st = dt_masks_get_points_border(dev, form, &points, &points_count, &border,
-                                                                 &border_count, &skips, &skip_count, 0, NULL);
+                                                                 &border_count, &skips, &skip_count, NULL, 0, NULL);
   band.seconds = dt_get_wtime() - t0;
   if(st != DT_MASKS_RASTER_OK || IS_NULL_PTR(border)) goto done;
 
@@ -1207,6 +1233,103 @@ static void _polygon_disc_union(const GList *const nodes, const int w, const int
   free(py);
 }
 
+/* Where the fading starts, against the mask. Every pixel on the edge of the part the rasteriser
+ * paints at full density must have a point of the drawn edge within FADING_REACH_PX: a gap or a
+ * cut in that line is a stretch of the full part's edge with none. The raster lays each spoke on
+ * whole pixels and paints its left and upper neighbours too, so its full part is up to a pixel
+ * wider than the union of the bands, and fills a one-pixel gap between two arms that the edge
+ * goes round: the reach owes that, and nothing is judged the other way. A pixel on the frame's
+ * rim is not judged, the stroke may run off it. The full part is where the fading starts only on
+ * a brush whose every node is at full density. */
+#define FADING_REACH_PX 4
+static void _judge_fading_edge(dt_develop_t *dev, dt_masks_form_t *form, const _brush_case_t *const c,
+                               const float *const mask)
+{
+  for(const GList *l = form->points; l; l = g_list_next(l))
+    if(((const dt_masks_node_brush_t *)l->data)->density != 1.0f)
+    {
+      printf("       %-22s fading edge: not judged, its density varies\n", c->name);
+      return;
+    }
+
+  dt_masks_form_gui_points_t gp = { 0 };
+  float *contour = NULL;
+  dt_masks_skip_range_t *skips = NULL;
+  int skip_count = 0;
+  if(dt_masks_get_points_border(dev, form, &gp.points, &gp.points_count, &gp.border, &gp.border_count, &skips,
+                                &skip_count, &contour, 0, NULL) == DT_MASKS_RASTER_OK
+     && !IS_NULL_PTR(contour))
+    dt_masks_solid_edge(&gp, contour, (int)g_list_length(form->points) * 3, 1.0f);
+
+  // The edge's points sorted into buckets of the reach, so a pixel reads the nine around its own.
+  const int bw = c->w / FADING_REACH_PX + 1;
+  const int bh = c->h / FADING_REACH_PX + 1;
+  int *start = g_new0(int, (size_t)bw * bh + 1);
+  int *bucket = g_new(int, MAX(gp.fading_count, 1));
+  int *order = g_new(int, MAX(gp.fading_count, 1));
+  for(int k = 0; k < gp.fading_count; k++)
+  {
+    const int bx = CLAMP((int)(gp.fading[2 * k] / FADING_REACH_PX), 0, bw - 1);
+    const int by = CLAMP((int)(gp.fading[2 * k + 1] / FADING_REACH_PX), 0, bh - 1);
+    bucket[k] = by * bw + bx;
+    start[bucket[k] + 1]++;
+  }
+  for(int b = 0; b < bw * bh; b++) start[b + 1] += start[b];
+  int *cursor = g_memdup2(start, sizeof(int) * ((size_t)bw * bh + 1));
+  for(int k = 0; k < gp.fading_count; k++) order[cursor[bucket[k]]++] = k;
+
+  int boundary = 0;
+  int missed = 0;
+  int mx = 0, my = 0;
+  float farthest = 0.0f;
+  for(int y = 1; y + 1 < c->h; y++)
+    for(int x = 1; x + 1 < c->w; x++)
+    {
+      const size_t i = (size_t)y * c->w + x;
+      if(mask[i] < 1.0f
+         || (mask[i - 1] >= 1.0f && mask[i + 1] >= 1.0f && mask[i - c->w] >= 1.0f && mask[i + c->w] >= 1.0f))
+        continue;
+      boundary++;
+      const float px = x + 0.5f;
+      const float py = y + 0.5f;
+      const int bx = (int)(px / FADING_REACH_PX);
+      const int by = (int)(py / FADING_REACH_PX);
+      float nearest = 2.0f * FADING_REACH_PX;
+      for(int j = MAX(by - 1, 0); j <= MIN(by + 1, bh - 1); j++)
+        for(int b = j * bw + MAX(bx - 1, 0); b <= j * bw + MIN(bx + 1, bw - 1); b++)
+          for(int q = start[b]; q < start[b + 1]; q++)
+          {
+            const float *const p = gp.fading + 2 * order[q];
+            nearest = fminf(nearest, hypotf(p[0] - px, p[1] - py));
+          }
+      if(nearest <= FADING_REACH_PX)
+        farthest = fmaxf(farthest, nearest);
+      else if(missed++ == 0)
+      {
+        mx = x;
+        my = y;
+      }
+    }
+
+  const int loops = gp.fading_break_count + (gp.fading_count > 0);
+  printf("[%s] %-22s fading edge: %d loops; of %d px on the edge of the full part, %d farther than %d px",
+         missed ? "FAIL" : "PASS", c->name, loops, boundary, missed, FADING_REACH_PX);
+  if(missed) printf(", the first at (%d,%d)", mx, my);
+  printf(", the others within %.2f px\n", farthest);
+  if(missed) failures++;
+
+  g_free(cursor);
+  g_free(order);
+  g_free(bucket);
+  g_free(start);
+  dt_pixelpipe_cache_free_align(gp.points);
+  dt_pixelpipe_cache_free_align(gp.border);
+  dt_pixelpipe_cache_free_align(contour);
+  dt_pixelpipe_cache_free_align(skips);
+  dt_pixelpipe_cache_free_align(gp.fading);
+  dt_pixelpipe_cache_free_align(gp.fading_breaks);
+}
+
 /** Run one polygon through both consumers and judge it. The form is the caller's. */
 static void _run_polygon_form_at(dt_develop_t *dev, dt_masks_form_t *form, const _brush_case_t *const c)
 {
@@ -1259,6 +1382,7 @@ static void _run_brush_nodes_at(dt_develop_t *dev, GList *nodes, const _brush_ca
     _brush_disc_union(form.points, c->w, c->h, DISC_PERMITTED, permitted);
   }
   _judge_raster(dev, &form, c, mask, owed, permitted);
+  _judge_fading_edge(dev, &form, c, mask);
   free(owed);
   free(permitted);
   dt_free_align(mask);
@@ -1857,6 +1981,8 @@ static void _time_overlay_all(dt_develop_t *dev, const char *dir, const int fram
   _time_overlay_brush(dev, _brush_from_table11(_brush_1352, 7), "brush-1352-radius-step", dir, IMG_W, IMG_H, frames);
   _time_overlay_brush(dev, _brush_from_table11(_brush_1074, 8), "brush-1074-flare", dir, 5184, 3456, frames);
   _time_overlay_brush(dev, _brush_from_table11(_brush_1074b, 8), "brush-1074-flare-b", dir, 5184, 3456, frames);
+  _time_overlay_brush(dev, _brush_from_table11(_brush_fading_pinch, 3), "brush-fading-pinch", dir, 3000, 2253, frames);
+  _time_overlay_brush(dev, _brush_from_table11(_brush_fading_neck, 3), "brush-fading-neck", dir, 3000, 2253, frames);
 
   {
     dt_masks_form_t form = { 0 };
@@ -2084,6 +2210,10 @@ int main(int argc, char *argv[])
     _run_brush_case11_at(&dev, _brush_1074, 8, &c1074);
     const _brush_case_t c1074b = { "brush-1074-flare-b", dir, 0, 5184, 3456 };
     _run_brush_case11_at(&dev, _brush_1074b, 8, &c1074b);
+    const _brush_case_t cpinch = { "brush-fading-pinch", dir, 0, 3000, 2253 };
+    _run_brush_case11_at(&dev, _brush_fading_pinch, 3, &cpinch);
+    const _brush_case_t cneck = { "brush-fading-neck", dir, 0, 3000, 2253 };
+    _run_brush_case11_at(&dev, _brush_fading_neck, 3, &cneck);
   }
 
   /* 3b. THE SECOND REPORTED SHAPE, polygon #2. Two defects were reported against it: the outer

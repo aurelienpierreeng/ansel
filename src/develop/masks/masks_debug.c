@@ -1,6 +1,7 @@
 /*
     This file is part of Ansel,
     Copyright (C) 2026 Aurélien PIERRE.
+    Copyright (C) 2026 Guillaume Stutin.
 
     Ansel is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -95,7 +96,7 @@ gboolean dt_masks_debug_write_outline_csv(dt_develop_t *dev, dt_masks_form_t *fo
 
   const dt_masks_raster_result_t st = dt_masks_get_points_border(dev, form, &points, &points_count,
                                                                  &border, &border_count,
-                                                                 &skips, &skip_count, 0, NULL);
+                                                                 &skips, &skip_count, NULL, 0, NULL);
   dt_print(DT_DEBUG_ALWAYS, "[masks debug] outline: status=%d points=%d border=%d\n", st, points_count, border_count);
   if(st == DT_MASKS_RASTER_ERROR) return FALSE;
 

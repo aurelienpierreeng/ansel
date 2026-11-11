@@ -1148,7 +1148,7 @@ static dt_masks_raster_result_t _gradient_get_points_border(dt_develop_t *dev, d
                                        float **points, int *points_count,
                                        float **border, int *border_count,
                                        dt_masks_skip_range_t **border_skips, int *border_skip_count,
-                                       int source,
+                                       float **fading __attribute__((unused)), int source,
                                        const dt_iop_module_t *module)
 {
   if(!IS_NULL_PTR(border_skips)) *border_skips = NULL;

@@ -162,7 +162,7 @@ Two things make the diagnosis quick, and both were got wrong on the first pass:
   like that at a glance. Look at the small ones at full resolution instead: each has a
   *perfectly straight* edge cutting across the stroke, which no smooth outline produces.
 - **They are not the sparse-sampling path.** `use_sparse` is now
-  `pipe->mask_rasterization_step > 1` (`develop/masks/brush.c:3269`); the six hand-rolled copies
+  `pipe->mask_rasterization_step > 1` (`develop/masks/brush.c:3304`); the six hand-rolled copies
   of `has_preview_output() || type == THUMBNAIL` were deliberately removed because one pipe could
   be classified two ways inside a single frame (`develop/pixelpipe_hb.h:491`). The conclusion is
   unchanged and now holds structurally: the step defaults to 1 and only `dev->gui_attached`
@@ -316,6 +316,20 @@ rules that were each paid for by a reported defect:
   stretched at every run boundary. `dt_stroke_raster_path()` now carries one `_dash_t` across
   all its sub-paths: a dash is a function of the pixels of border drawn before it. A dash cut by
   a hidden stretch shows as a stub, which that metric owes.
+- **Where a brush's fading starts is traced from a fill of its solid part, not walked over the
+  spoke ends** (on top of `a8997b8e28`, 2026-11-11). Where the spokes lie along the spine, the
+  edge of their union is their sides -- 94 of the 872 px of `brush-fading-neck`'s edge lie more
+  than 2 px from the line through the ends -- and no pass over the ends draws a side.
+  `dt_masks_solid_edge()` (`masks_solid.c`) fills the bands between neighbouring spokes, in runs
+  of one orientation, non-zero, and traces the half-coverage level. Two traps: the lobe of a
+  bow-tie band wound against its run cancels the band under it, so it is added back twice and
+  never dropped, however thin -- dropping those thinner than a tenth of a cell opened loops 86 px
+  inside the solid part, slivers along neighbouring spokes stacking; and a long spoke trembling
+  by a hundredth of a pixel turns a run at every band unless the turn waits for a tenth of a
+  cell of sweep (4621 runs to 1399 on `brush-1360-pressure-ramp`). It fills without cairo, for
+  the toolkit ratchet. The corpus's `fading edge` judge wants every pixel on the edge of the
+  raster's full part within 4 px of the traced edge. The full account is
+  [Where the fading starts](brush-boundary.md#where-the-fading-starts).
 - **`MASKS_DUMP_OVERLAY=<dir>` makes the darkroom write what each frame drew**: the canvas
   before it is composited and cleared, the frame and dirty rectangles, and every cached outline
   with its skip ranges (`outline-<n>.txt`, the harness's format). It exists because a darkroom
