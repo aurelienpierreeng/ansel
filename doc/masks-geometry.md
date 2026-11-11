@@ -43,11 +43,12 @@ helper.
 
 A click without a drag makes a brush: the press records the first point, the release pads it with
 a second node a hundredth of a pixel away (`_brush_events_button_released()`), and the mask is the
-full disc of the border. Its centreline has no length. Unselected, a brush draws its centreline
-only, which for a dot is two round end caps the width of the line, and its dashed border, like any
-brush's, only while it is selected. Its clone source was not drawn at all, arrow included —
-`_brush_get_source_center()` anchors the link at the centreline's midpoint, and a line with no
-length has none.
+full disc of the border. Its centreline has no length. A brush draws the edge where its fading
+starts in every state ([`brush-boundary.md`](brush-boundary.md#where-the-fading-starts)), and its
+dotted centreline, for a dot two round end caps the width of the line, and its dashed border only
+while it is selected (on top of `2924759cfb`, 2026-11-11). Its clone source was not drawn at all,
+arrow included — `_brush_get_source_center()` anchors the link at the centreline's midpoint, and a
+line with no length has none.
 
 `_brush_is_dot()` is a centreline shorter than one pixel of the output image. For such a brush the
 link's two ends fall back to the first nodes. The source outline built for the GUI carries no border, so
