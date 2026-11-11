@@ -26,7 +26,8 @@
  * The bands (c_k, f_k, f_k+1, c_k+1) between neighbouring spokes are grouped into runs of one
  * orientation, each run a polygon -- spine forward, contour back -- wound positively, so the
  * union is where the winding is not zero. It is filled a few sub-scanlines per cell row with exact
- * crossings, and its edge followed loop by loop by marching squares at half coverage. */
+ * crossings, the cells the spine crosses are set full, and its edge followed loop by loop by
+ * marching squares at half coverage. */
 
 #include "develop/masks/masks_solid.h"
 #include "develop/masks_gui.h"
@@ -443,6 +444,53 @@ static int _solid_fill(const _solid_edge_t *const edges, const int count, const 
   return 0;
 }
 
+/* The cells the spine of every kept band crosses, into the solid part. Its spokes start on it, so
+ * the solid part holds it; where they lie along it, that part is a thread round it, and a thread
+ * thinner than half a cell is under half coverage: traced from the fill alone, it breaks into
+ * islands that float rounding makes or unmakes. Each segment is walked from cell to cell across
+ * their sides, so the cells it marks are joined by a side and the trace keeps one loop round them. */
+static void _solid_spine(const _solid_bands_t *const b, const int8_t *const sign, const _solid_grid_t *const g,
+                         uint8_t *const cover, int *const range)
+{
+  for(int k = 0; k < b->count; k++)
+  {
+    if(sign[k] == 0) continue;
+    const int l = (k + 1 == b->n) ? 0 : k + 1;
+    const float xa = (b->spine[2 * k] - g->x0) / g->cell;
+    const float ya = (b->spine[2 * k + 1] - g->y0) / g->cell;
+    const float xb = (b->spine[2 * l] - g->x0) / g->cell;
+    const float yb = (b->spine[2 * l + 1] - g->y0) / g->cell;
+    int i = (int)xa;
+    int j = (int)ya;
+    const int i_end = (int)xb;
+    const int j_end = (int)yb;
+    const int si = (i_end > i) ? 1 : -1;
+    const int sj = (j_end > j) ? 1 : -1;
+    // How far along the segment, as a fraction of it, the next side across x and the next across y.
+    const float dtx = (i_end != i) ? 1.0f / fabsf(xb - xa) : 0.0f;
+    const float dty = (j_end != j) ? 1.0f / fabsf(yb - ya) : 0.0f;
+    float tx = ((si > 0) ? (float)(i + 1) - xa : xa - (float)i) * dtx;
+    float ty = ((sj > 0) ? (float)(j + 1) - ya : ya - (float)j) * dty;
+    for(;;)
+    {
+      cover[(size_t)j * g->w + i] = 255;
+      range[2 * j] = MIN(range[2 * j], i);
+      range[2 * j + 1] = MAX(range[2 * j + 1], i);
+      if(i == i_end && j == j_end) break;
+      if(i != i_end && (j == j_end || tx <= ty))
+      {
+        i += si;
+        tx += dtx;
+      }
+      else
+      {
+        j += sj;
+        ty += dty;
+      }
+    }
+  }
+}
+
 /* Square (i, j) has its corners at samples tl (i, j), tr, br and bl, numbered 0 to 3 clockwise,
  * and edge e runs from corner e to corner e + 1. Its visit is recorded on one sample: a horizontal
  * edge's on its left end (bit 1), a vertical edge's on its upper end (bit 2). */
@@ -596,8 +644,11 @@ int dt_masks_solid_edge(dt_masks_form_gui_points_t *gui_points, const float *con
   const size_t capacity = 2 * ((size_t)bands + runs) + 3 * (size_t)twisted;
   _solid_edge_t *edges = (runs > 0) ? dt_alloc_align(sizeof(_solid_edge_t) * capacity) : NULL;
   const int edge_count = IS_NULL_PTR(edges) ? 0 : _solid_edges(&b, sign, edges);
-  dt_free_align(sign);
-  if(IS_NULL_PTR(edges)) return runs > 0;
+  if(IS_NULL_PTR(edges))
+  {
+    dt_free_align(sign);
+    return runs > 0;
+  }
 
   _solid_grid_t g = { 0 };
   int *offset = NULL;
@@ -617,6 +668,8 @@ int dt_masks_solid_edge(dt_masks_form_gui_points_t *gui_points, const float *con
   int *range = dt_alloc_align(sizeof(int) * 2 * (size_t)g.h);
   int failed = IS_NULL_PTR(offset) || IS_NULL_PTR(crossing) || IS_NULL_PTR(cover) || IS_NULL_PTR(range);
   if(!failed) failed = _solid_fill(edges, edge_count, &g, offset, crossing, cover, range);
+  if(!failed) _solid_spine(&b, sign, &g, cover, range);
+  dt_free_align(sign);
   dt_free_align(edges);
   dt_free_align(offset);
   dt_free_align(crossing);
