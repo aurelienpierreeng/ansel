@@ -925,10 +925,12 @@ static _band_t _outline_band_check(dt_develop_t *dev, dt_masks_form_t *form, con
   int skip_count = 0;
   dt_masks_skip_range_t *skips = NULL;
 
+  const dt_masks_outline_out_t outline = { .points = &points, .points_count = &points_count,
+                                           .border = &border, .border_count = &border_count,
+                                           .border_skips = &skips, .border_skip_count = &skip_count };
   _outline_density_apply(dev, 1.0);
   const double t0 = dt_get_wtime();
-  const dt_masks_raster_result_t st = dt_masks_get_points_border(dev, form, &points, &points_count, &border,
-                                                                 &border_count, &skips, &skip_count, NULL, 0, NULL);
+  const dt_masks_raster_result_t st = dt_masks_get_points_border(dev, form, &outline, 0, NULL);
   band.seconds = dt_get_wtime() - t0;
   if(st != DT_MASKS_RASTER_OK || IS_NULL_PTR(border)) goto done;
 
@@ -1256,8 +1258,11 @@ static void _judge_fading_edge(dt_develop_t *dev, dt_masks_form_t *form, const _
   float *contour = NULL;
   dt_masks_skip_range_t *skips = NULL;
   int skip_count = 0;
-  if(dt_masks_get_points_border(dev, form, &gp.points, &gp.points_count, &gp.border, &gp.border_count, &skips,
-                                &skip_count, &contour, 0, NULL) == DT_MASKS_RASTER_OK
+  const dt_masks_outline_out_t outline = { .points = &gp.points, .points_count = &gp.points_count,
+                                           .border = &gp.border, .border_count = &gp.border_count,
+                                           .border_skips = &skips, .border_skip_count = &skip_count,
+                                           .fading = &contour };
+  if(dt_masks_get_points_border(dev, form, &outline, 0, NULL) == DT_MASKS_RASTER_OK
      && !IS_NULL_PTR(contour))
     dt_masks_solid_edge(&gp, contour, (int)g_list_length(form->points) * 3, 1.0f);
 

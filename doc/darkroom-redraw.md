@@ -79,7 +79,7 @@ last frame composited, in the view's coordinates (`_overlay_damage`), and the da
 a dragged shape moves with the pointer, a hovered one does not move -- when the masks handled
 the motion and nothing else did; a module's own overlay knows no rectangle and keeps the whole
 widget. The invalidation is an estimate made before the frame is drawn: when a frame outgrows
-it, `_overlay_damage_record()` (`masks_gui.c:4602-4610`) compares the composited rectangle with
+it, `_overlay_damage_record()` (`masks_gui.c:4608-4616`) compares the composited rectangle with
 the clip of the expose and, if the clip does not cover it, asks for the **whole damage
 rectangle** again — not "the rest" — which the next, small expose paints. At worst that is one extra small
 frame; it can never leave part of an overlay unpainted.

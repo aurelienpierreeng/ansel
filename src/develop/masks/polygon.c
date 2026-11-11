@@ -967,20 +967,16 @@ static void _polygon_translate_all_nodes(dt_masks_form_t *mask_form, const float
 }
 
 static dt_masks_raster_result_t _polygon_get_points_border(dt_develop_t *develop, dt_masks_form_t *mask_form,
-                                      float **point_buffer, int *point_count,
-                                      float **border_buffer, int *border_count,
-                                      dt_masks_skip_range_t **border_skips, int *border_skip_count,
-                                      float **fading __attribute__((unused)), int source,
-                                      const dt_iop_module_t *module)
+                                                           const dt_masks_outline_out_t *const out, int source,
+                                                           const dt_iop_module_t *module)
 {
   // Asking for the source outline without a module is a programming error, not an empty shape.
   if(source && IS_NULL_PTR(module)) return DT_MASKS_RASTER_ERROR;
   const double ioporder = (module) ? module->iop_order : 0.0f;
   const dt_masks_distort_t gui_dist = dt_masks_distort_for_gui(develop);
-  if(!IS_NULL_PTR(border_skips)) *border_skips = NULL;
-  if(!IS_NULL_PTR(border_skip_count)) *border_skip_count = 0;
   const int status = _polygon_get_pts_border(develop, mask_form, ioporder, DT_DEV_TRANSFORM_DIR_ALL, &gui_dist,
-                                             point_buffer, point_count, border_buffer, border_count, source);
+                                             out->points, out->points_count, out->border, out->border_count,
+                                             source);
 
   /* This outline feeds the GUI only -- the rasterisers build their own from the pixel path and
    * paint every spoke. What the outline shows is the BOUNDARY of what they paint, decided per
@@ -990,12 +986,12 @@ static dt_masks_raster_result_t _polygon_get_points_border(dt_develop_t *develop
    * as skip ranges, which is what every consumer of this outline already reads. The polygon's
    * own detector, which intersected the outline with itself and chose cuts, is gone with the
    * brush's. */
-  if(status == 0 && !IS_NULL_PTR(border_buffer) && !IS_NULL_PTR(*border_buffer)
-     && !IS_NULL_PTR(border_skips) && !IS_NULL_PTR(border_skip_count))
+  if(status == 0 && !IS_NULL_PTR(out->border) && !IS_NULL_PTR(*out->border)
+     && !IS_NULL_PTR(out->border_skips) && !IS_NULL_PTR(out->border_skip_count))
   {
     const int header = (int)g_list_length(mask_form->points) * 3;
-    *border_skip_count = dt_masks_outline_boundary_skips(*point_buffer, *border_buffer, *border_count, header,
-                                                         border_skips);
+    *out->border_skip_count = dt_masks_outline_boundary_skips(*out->points, *out->border, *out->border_count,
+                                                              header, out->border_skips);
   }
   return dt_masks_raster_from_status(status);
 }

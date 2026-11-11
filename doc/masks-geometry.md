@@ -162,7 +162,7 @@ Two things make the diagnosis quick, and both were got wrong on the first pass:
   like that at a glance. Look at the small ones at full resolution instead: each has a
   *perfectly straight* edge cutting across the stroke, which no smooth outline produces.
 - **They are not the sparse-sampling path.** `use_sparse` is now
-  `pipe->mask_rasterization_step > 1` (`develop/masks/brush.c:3304`); the six hand-rolled copies
+  `pipe->mask_rasterization_step > 1` (`develop/masks/brush.c:3337`); the six hand-rolled copies
   of `has_preview_output() || type == THUMBNAIL` were deliberately removed because one pipe could
   be classified two ways inside a single frame (`develop/pixelpipe_hb.h:491`). The conclusion is
   unchanged and now holds structurally: the step defaults to 1 and only `dev->gui_attached`
