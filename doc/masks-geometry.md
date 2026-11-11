@@ -327,8 +327,12 @@ rules that were each paid for by a reported defect:
   never dropped, however thin -- dropping those thinner than a tenth of a cell opened loops 86 px
   inside the solid part, slivers along neighbouring spokes stacking; and a long spoke trembling
   by a hundredth of a pixel turns a run at every band unless the turn waits for a tenth of a
-  cell of sweep (4621 runs to 1399 on `brush-1360-pressure-ramp`). It fills without cairo, for
-  the toolkit ratchet. The corpus's `fading edge` judge wants every pixel on the edge of the
+  cell of sweep (4621 runs to 1399 on `brush-1360-pressure-ramp`). A neck thinner than half a
+  cell is under half coverage and, traced from the fill alone, breaks into islands that float
+  rounding chooses -- on `brush-fading-neck`, 9 loops with `-ffast-math` and 7 without, where a
+  Debug build fails the judge below -- so the cells the spine crosses are set full before the
+  trace, and the neck is one loop round it (on top of `aff63448d6`, 2026-11-12). It fills
+  without cairo, for the toolkit ratchet. The corpus's `fading edge` judge wants every pixel on the edge of the
   raster's full part within 4 px of the traced edge. The full account is
   [Where the fading starts](brush-boundary.md#where-the-fading-starts).
 - **`MASKS_DUMP_OVERLAY=<dir>` makes the darkroom write what each frame drew**: the canvas

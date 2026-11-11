@@ -432,16 +432,29 @@ twenty-first fails it.
   at one cell per pixel on `brush-1360-pressure-ramp`, some 830 crossings a sub-scanline, the
   fill took 125.8 ms with `qsort()` and takes 57.7, its edge the same to the bit on every brush
   dumped.
+- **Spine.** Every cell the spine of a kept band crosses is then set full, the segment walked
+  from cell to cell across their sides, so the cells it marks share a side. The spokes start on
+  the spine, so the solid part holds it; where they lie along it, that part is a thread round
+  it, and a thread thinner than half a cell is under half coverage. Traced from the fill alone,
+  `brush-fading-neck`'s neck, some 0.5 px thick -- across it, cells of 50 to 175 out of 255,
+  read with a probe on the fill, the level at 128 -- breaks into islands that float rounding
+  chooses: 9 loops in the RelWithDebInfo build, with `-ffast-math`, and 7 in a Debug build,
+  without it, where 9 px of the neck have no edge point within 4 px and the judge below fails.
+  With the spine set full, the neck is one loop round the spine in both builds. The walk takes
+  0.57 ms in median over the corpus's 39 fills and 1.84 ms at most, on 178,887 bands, measured
+  with a probe in the RelWithDebInfo build (on top of `aff63448d6`, 2026-11-12).
 - **Trace.** Marching squares at half coverage with linear interpolation, a saddle resolved by
   the mean of its corners. Each loop is followed from a horizontal crossing among the cells the
   fill wrote and closed on its first point, and a zero-length break starts each loop but the
   first, which `dt_masks_draw_outline_runs()` strokes as one path.
 
-A neck of the solid part thinner than half a cell is under half coverage and comes out as
-islands: `brush-fading-neck` traces 9 loops, which the spine is drawn over. `brush-selfcross`
-traces 2, the stroke enclosing a hole where it crosses itself, and `brush-fading-pinch` 2, its
-solid part pinched to a point at the middle node, where the fading is zero. Every other brush of
-the corpus traces one.
+In the RelWithDebInfo build, `brush-selfcross` traces 2 loops, the stroke enclosing a hole where
+it crosses itself, and every other brush of the corpus traces one, `brush-fading-pinch` among
+them: its solid part narrows to a point at the middle node, where the fading is 0.00001, and the
+spine joins its two halves there, under the node's disc. In a Debug build, `brush-1074-flare`
+traces 4: one of the three more is a hole about a pixel wide inside its solid part, a few pixels
+from its edge at (3703, 3096), which the judge below does not see (on top of `aff63448d6`,
+2026-11-12).
 
 ### How close it is
 
@@ -457,7 +470,8 @@ starts:
 - 0 to 27 px a brush are inside the edge and outside the full part;
 - the corpus judges the other way, which a gap or a cut in the line breaks
   (`_judge_fading_edge()`): every pixel on the full part's edge within 4 px of an edge point. All
-  are within 3.12 px on `brush-fading-neck` and 2.65 px on the 18 other brushes and frames.
+  are within 2.47 px on `brush-fading-neck` and 2.65 px on the 18 other brushes and frames, in
+  the RelWithDebInfo build and the Debug one alike (on top of `aff63448d6`, 2026-11-12).
 
 ### What it costs
 

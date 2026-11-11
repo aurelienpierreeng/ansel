@@ -568,8 +568,8 @@ static const float _brush_fading_pinch[3][11] = {
 /* A brush whose middle node is six times as wide as its ends, its fading 0.3 there and 0.537 at
  * the ends. Where the size climbs, the ends' spokes lie along the spine, and the edge of the solid
  * part runs along their sides: a tenth of it lies more than 2 px from the line through the spoke
- * ends, which no walk over the ends can trace. Its necks thinner than half a pixel come out as
- * islands.
+ * ends, which no walk over the ends can trace. Its necks are thinner than half a pixel: traced from
+ * the fill alone, they break into islands, and float rounding decides which.
  * Decoded from the history of a test session, on a 3000x2253 JPEG. */
 static const float _brush_fading_neck[3][11] = {
   /* columns: node x y | ctrl1 x y | ctrl2 x y | border in out | density | fading | state */
