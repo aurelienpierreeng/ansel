@@ -1369,9 +1369,9 @@ static inline int _brush_centerline_end(const int points_count, const int node_c
 }
 
 /* A brush whose centreline is shorter than a pixel -- a click without a drag, whose second node
- * sits a hundredth of a pixel from the first -- is a dot. Its centreline stroked is a speck the
- * width of the line, while what it paints is the disc of its border: a dot is drawn by its
- * border instead, and so is its source. */
+ * sits a hundredth of a pixel from the first -- is a dot. Its centreline carried onto the source
+ * is a speck the width of the line, while what it paints there is the disc of its border: a
+ * dot's source is drawn by its border instead. */
 static gboolean _brush_is_dot(const dt_masks_form_gui_points_t *gui_points, const int node_count)
 {
   const float *const line = gui_points->points;
@@ -2826,11 +2826,9 @@ static void _brush_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_fo
                                   node_count, zoom_scale, TRUE);
   }
 
-  // The dashed border: the selected brush's, and a dot's in every state, its centreline being a
-  // speck selected or not.
-  const gboolean dot = _brush_is_dot(gui_points, node_count);
+  // The dashed border, on the selected brush only.
   const gboolean has_border = !IS_NULL_PTR(gui_points->border) && gui_points->border_count > node_count * 3 + 2;
-  if((dot || mask_gui->group_selected == index) && has_border)
+  if(mask_gui->group_selected == index && has_border)
   {
     const gboolean selected = (mask_gui->group_selected == index) && mask_gui->border_selected;
     dt_draw_shape_lines(mask_gui->dev, DT_MASKS_DASH_STICK, FALSE, cr, node_count, selected, zoom_scale,
@@ -2939,7 +2937,7 @@ static void _brush_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_fo
 
     // The source outline carries no border: a dot's source is its border carried onto the
     // source, the shift the hit test already uses for it (_brush_get_distance()).
-    if(dot && has_border)
+    if(has_border && _brush_is_dot(gui_points, node_count))
     {
       const gboolean selected = (mask_gui->group_selected == index)
                                 && (mask_gui->form_selected || mask_gui->form_dragging);
