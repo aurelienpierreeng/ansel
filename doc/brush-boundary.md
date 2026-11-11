@@ -46,7 +46,7 @@ sample). They differ in what they hand it and in what they do with the result.
 |---|---|---|
 | coordinate frame | module input space: `dt_masks_distort_for_pipe()`, `DT_DEV_TRANSFORM_DIR_BACK_INCL` | display space: `dt_masks_distort_for_gui()`, `DT_DEV_TRANSFORM_DIR_ALL` |
 | sample pitch | the pipe's `mask_rasterization_step` | the published view density — `dt_masks_gui_outline_step(dev)`, one sample per device pixel (`masks_distort.h:117`, fed by `dt_masks_gui_set_outline_density()` from the expose), **not** a fixed 1 px |
-| what it does with the arrays | stamps every spoke | draws `points` as the centreline, the edge where the fading starts solid and `border` dashed, hit-tests against `points` and `border` |
+| what it does with the arrays | stamps every spoke | draws the edge where the fading starts solid and, on the selected brush, `points` as the dotted centreline and `border` dashed, hit-tests against `points` and `border` |
 
 The first two differences are legitimate: a mask is rendered in the module's input frame
 at the pipe's resolution and drawn in the viewer's frame at the screen's. The third is

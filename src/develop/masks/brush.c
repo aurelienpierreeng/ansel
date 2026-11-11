@@ -2866,9 +2866,9 @@ static void _brush_events_post_expose(cairo_t *cr, float zoom_scale, const dt_ma
   // minimum points
   if(gui_points->points_count <= node_count * 3 + 2) return;
 
-  // Where the fading starts, solid and always shown, as a circle's own outline is: the centreline
-  // below carries the nodes, but the mask keeps its full density all the way out to here. Its
-  // path is built here: dt_draw_shape_lines() takes every solid line for a centreline.
+  // Where the fading starts, solid and always shown, as a circle's own outline is: the mask keeps
+  // its full density all the way out to here. Its path is built here: dt_draw_shape_lines() takes
+  // every solid line for a centreline.
   if(!IS_NULL_PTR(gui_points->fading))
   {
     const gboolean selected = (mask_gui->group_selected == index) && (mask_gui->form_selected || mask_gui->form_dragging);
@@ -2877,11 +2877,11 @@ static void _brush_events_post_expose(cairo_t *cr, float zoom_scale, const dt_ma
     dt_draw_stroke_line(DT_MASKS_NO_DASH, FALSE, cr, selected, zoom_scale, CAIRO_LINE_CAP_ROUND);
   }
 
-  // draw path
-  if(node_count > 0 && gui_points->points_count > node_count * 3 + 6) // there must be something to draw
+  // The centreline, dotted and on the selected brush only, as the dashed border below: it carries
+  // the nodes but is no edge of the mask, which the solid line above draws.
+  if(mask_gui->group_selected == index && node_count > 0 && gui_points->points_count > node_count * 3 + 6)
   {
-    // Dotted: the centreline carries the nodes but is no edge of the mask, which the solid line
-    // above draws. The whole array, not the forward half: the walk stops itself on the last node
+    // The whole array, not the forward half: the walk stops itself on the last node
     // (an open path has node_count - 1 segments), and it must be able to REACH that node. Handing it a count
     // derived from the array length instead left it short of the last node on every brush, so the
     // last segment was never stroked -- it stayed a pending path in the cairo context.
