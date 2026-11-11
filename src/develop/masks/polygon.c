@@ -311,7 +311,7 @@ static void _polygon_init_ctrl_points(dt_masks_form_t *mask_form)
  *
  * Returns TRUE when points are clockwise in normalized space.
  */
-static gboolean _polygon_is_clockwise(dt_masks_form_t *mask_form)
+static gboolean _polygon_is_clockwise(const dt_masks_form_t *const mask_form)
 {
   if(IS_NULL_PTR(mask_form) || IS_NULL_PTR(mask_form->points)) return 0;
   if(!g_list_shorter_than(mask_form->points, 3)) // if we have at least three points...
@@ -2037,8 +2037,7 @@ static void _polygon_draw_shape(struct dt_develop_t *dev, cairo_t *cr, const flo
 /**
  * @brief Draw polygon overlays (nodes, handles, borders, source) after exposure.
  */
-static void _polygon_events_post_expose(cairo_t *cr, float zoom_scale,
-                                        __attribute__((unused)) const dt_masks_form_t *form,
+static void _polygon_events_post_expose(cairo_t *cr, float zoom_scale, const dt_masks_form_t *form,
                                         dt_masks_form_gui_t *mask_gui, int form_index, int node_count)
 {
   dt_masks_form_gui_points_t *gui_points
@@ -2066,15 +2065,7 @@ static void _polygon_events_post_expose(cairo_t *cr, float zoom_scale,
   else if((mask_gui->type & DT_MASKS_IS_RETOUCHE) != 0 || mask_gui->node_selected || mask_gui->node_dragging >= 0
           || mask_gui->handle_selected)
   {
-    dt_masks_form_t *group_form = dt_masks_get_visible_form(mask_gui->dev);
-    if(!IS_NULL_PTR(group_form) && (group_form->type & DT_MASKS_GROUP))
-    {
-      dt_masks_form_group_t *group_entry = g_list_nth_data(group_form->points, form_index);
-      dt_masks_form_t *polygon_form = group_entry
-                                          ? dt_masks_get_from_id(mask_gui->dev, group_entry->formid)
-                                          : NULL;
-      if(!IS_NULL_PTR(polygon_form)) gui_points->clockwise = _polygon_is_clockwise(polygon_form);
-    }
+    gui_points->clockwise = _polygon_is_clockwise(form);
   }
 
   // draw polygon
