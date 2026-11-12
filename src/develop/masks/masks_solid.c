@@ -18,10 +18,11 @@
 
 /* The edge of a stroke's solid part.
  *
- * A brush is painted as spokes, each solid from its spine sample over the first `fading' of its
- * length. Where the spokes lie along the spine -- a size that changes steeply, a small fading on a
- * wide node -- the edge of their union is made of the spokes' sides, not of the line through their
- * ends, so no walk over the ends can trace it. The union is filled instead and its edge traced.
+ * A brush is painted as spokes, each solid from its spine sample to its edge sample, on the envelope
+ * of the stroke's solid discs. That envelope folds back where the stroke turns, and where the solid
+ * radius changes faster than the spine runs the discs nest and the spokes lie along the spine, so
+ * the line through the edge samples is not the union's edge. The union is filled instead and its
+ * edge traced: a boundary pass over the edge samples costs as much and keeps folds inside.
  *
  * The bands (c_k, f_k, f_k+1, c_k+1) between neighbouring spokes are grouped into runs of one
  * orientation, each run a polygon -- spine forward, contour back -- wound positively, so the
@@ -107,12 +108,14 @@ static inline gboolean _solid_spokes_cross(const _solid_bands_t *const b, const 
 }
 
 /* Each band's orientation, +1 or -1, or 0 for a band skipped -- one with a vertex that is not
- * finite, or too thin to tell before any run has begun -- which cuts the run. The sign is the area's,
- * taken about the band's own spine sample: about the origin, thousands of pixels out, float
- * cancellation decides it. A run turns over only once its bands have swept back SOLID_DRIFT of a
- * cell, as width, area over perimeter: a long spoke trembling by a hundredth of a pixel would turn
- * it at every band, and every turn adds that spoke to the fill. Extends @p bbox by every band kept
- * and counts the bow ties among them into @p twisted; returns how many runs. */
+ * finite, which cuts the run. The sign is the area's, taken about the band's own spine sample: about
+ * the origin, thousands of pixels out, float cancellation decides it. A run begins once its bands
+ * have swept SOLID_DRIFT of a cell one way, as width, area over perimeter, summed over them all:
+ * where the border moves fast the spine is sampled a fiftieth of a pixel apart, and no one band is
+ * wide enough to tell. It turns over only once its bands have swept back as far: a long spoke
+ * trembling by a hundredth of a pixel would turn it at every band, and every turn adds that spoke to
+ * the fill. Extends @p bbox by every band kept and counts the bow ties among them into @p twisted;
+ * returns how many runs. */
 static int _solid_band_signs(const _solid_bands_t *const b, int8_t *const sign, float bbox[4], int *const twisted)
 {
   const float *const spine = b->spine;
@@ -122,6 +125,8 @@ static int _solid_band_signs(const _solid_bands_t *const b, int8_t *const sign, 
   int runs = 0;
   int8_t current = 0;
   float drift = 0.0f;
+  float swept = 0.0f;  // before a run begins, how far its bands have swept
+  int pending = 0;     // and the first of them
   *twisted = 0;
   for(int k = 0; k < b->count; k++)
   {
@@ -140,26 +145,37 @@ static int _solid_band_signs(const _solid_bands_t *const b, int8_t *const sign, 
     const float width = area2 / fmaxf(perimeter, FLT_MIN);
     const int8_t was = current;
     drift = (current == 0) ? 0.0f : fmaxf(0.0f, drift - current * width);
+    swept = (current == 0) ? swept + width : 0.0f;
     if(!isfinite(width))
-      current = 0;
-    else if(current == 0 ? fabsf(width) > drift_max : drift > drift_max)
     {
-      current = (width > 0.0f) ? 1 : -1;
+      current = 0;
+      swept = 0.0f;
+      pending = k + 1;
+    }
+    else if(current == 0 ? fabsf(swept) > drift_max : drift > drift_max)
+    {
+      current = ((current == 0 ? swept : width) > 0.0f) ? 1 : -1;
       drift = 0.0f;
     }
     sign[k] = current;
     if(current == 0) continue;
     if(current != was) runs++;
-    float t = 0.0f;
-    *twisted += _solid_spokes_cross(b, k, l, &t);
-    const int ends[2] = { k, l };
-    for(int q = 0; q < 2; q++)
+    // a run that begins here takes the bands that swept it in
+    for(int j = (was == 0) ? pending : k; j <= k; j++)
     {
-      const int s = ends[q];
-      bbox[0] = fminf(bbox[0], fminf(spine[2 * s], contour[2 * s]));
-      bbox[1] = fmaxf(bbox[1], fmaxf(spine[2 * s], contour[2 * s]));
-      bbox[2] = fminf(bbox[2], fminf(spine[2 * s + 1], contour[2 * s + 1]));
-      bbox[3] = fmaxf(bbox[3], fmaxf(spine[2 * s + 1], contour[2 * s + 1]));
+      const int m = (j + 1 == n) ? 0 : j + 1;
+      sign[j] = current;
+      float t = 0.0f;
+      *twisted += _solid_spokes_cross(b, j, m, &t);
+      const int ends[2] = { j, m };
+      for(int q = 0; q < 2; q++)
+      {
+        const int s = ends[q];
+        bbox[0] = fminf(bbox[0], fminf(spine[2 * s], contour[2 * s]));
+        bbox[1] = fmaxf(bbox[1], fmaxf(spine[2 * s], contour[2 * s]));
+        bbox[2] = fminf(bbox[2], fminf(spine[2 * s + 1], contour[2 * s + 1]));
+        bbox[3] = fmaxf(bbox[3], fmaxf(spine[2 * s + 1], contour[2 * s + 1]));
+      }
     }
   }
   return runs;
@@ -445,10 +461,11 @@ static int _solid_fill(const _solid_edge_t *const edges, const int count, const 
 }
 
 /* The cells the spine of every kept band crosses, into the solid part. Its spokes start on it, so
- * the solid part holds it; where they lie along it, that part is a thread round it, and a thread
- * thinner than half a cell is under half coverage: traced from the fill alone, it breaks into
- * islands that float rounding makes or unmakes. Each segment is walked from cell to cell across
- * their sides, so the cells it marks are joined by a side and the trace keeps one loop round them. */
+ * the solid part holds it; where the solid radius falls near nothing or its spokes lie along it,
+ * that part is a thread round it, and a thread thinner than half a cell is under half coverage:
+ * traced from the fill alone, it breaks into islands that float rounding makes or unmakes. Each
+ * segment is walked from cell to cell across their sides, so the cells it marks are joined by a
+ * side and the trace keeps one loop round them. */
 static void _solid_spine(const _solid_bands_t *const b, const int8_t *const sign, const _solid_grid_t *const g,
                          uint8_t *const cover, int *const range)
 {
