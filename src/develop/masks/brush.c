@@ -3354,7 +3354,9 @@ static dt_masks_raster_result_t _brush_get_mask(const dt_iop_module_t *const mod
   memset(*buffer, 0, sizeof(float) * buffer_size);
 
   // now we fill the falloff: each spoke solid up to its edge, and the ramp from there out
-  int segment_start[2], segment_solid[2], segment_end[2];
+  int segment_start[2];
+  int segment_solid[2];
+  int segment_end[2];
   int prev_start[2] = { 0, 0 };
   int prev_solid[2] = { 0, 0 };
   int prev_end[2] = { 0, 0 };
