@@ -85,7 +85,7 @@ static gboolean _preview_backend_is_wayland(void)
 {
 #ifdef GDK_WINDOWING_WAYLAND
   GdkDisplay *display = gdk_display_get_default();
-  if(display && GDK_IS_WAYLAND_DISPLAY(display))
+  if(!IS_NULL_PTR(display) && GDK_IS_WAYLAND_DISPLAY(display))
     return TRUE;
 #endif
   return FALSE;
@@ -146,7 +146,7 @@ static void _preview_window_store_geometry(GtkWidget *dialog);
 static void _preview_window_store_geometry(GtkWidget *dialog)
 {
   GdkWindow *gdk_win = gtk_widget_get_window(dialog);
-  if(gdk_win)
+  if(!IS_NULL_PTR(gdk_win))
   {
     GdkDisplay *display = gtk_widget_get_display(dialog);
     _preview_geometry.session_monitor = gdk_display_get_monitor_at_window(display, gdk_win);
@@ -180,7 +180,7 @@ static gboolean _preview_window_state_changed(GtkWidget *dialog, GdkEventWindowS
 
   /* Update monitor identity on every state change — the window may have
    * been dragged to a different monitor before being maximized. */
-  if(gdk_win)
+  if(!IS_NULL_PTR(gdk_win))
   {
     GdkDisplay *display = gtk_widget_get_display(dialog);
     _preview_geometry.session_monitor = gdk_display_get_monitor_at_window(display, gdk_win);
@@ -190,13 +190,38 @@ static gboolean _preview_window_state_changed(GtkWidget *dialog, GdkEventWindowS
 }
 
 /*
- * Handles monitor hot-plug/unplug events.
- * When a monitor disappears, maximized windows must be re-maximized so the
- * compositor/WM re-assigns them to a surviving monitor.
+ * Handles a monitor hot-plug event.
+ * Re-maximizes any maximized window so the compositor/WM can re-place it if
+ * required (some Wayland compositors need this after a topology change).
  */
-static void _preview_window_monitor_changed(GdkDisplay *display, GdkMonitor *monitor, gpointer user_data)
+static void _preview_window_monitor_added(GdkDisplay *display, GdkMonitor *monitor, gpointer user_data)
 {
   dt_preview_window_t *preview = (dt_preview_window_t *)user_data;
+  if(preview->maximized)
+    gtk_window_maximize(GTK_WINDOW(preview->dialog));
+}
+
+/*
+ * Handles a monitor hot-unplug event.
+ *
+ * CRITICAL: GdkMonitor objects are owned by GdkDisplay and are invalidated
+ * (potentially freed) when a monitor is removed. The stored session_monitor
+ * pointer must be nullified if it refers to the removed monitor, otherwise
+ * _resolve_target_monitor() would later dereference a dangling pointer.
+ *
+ * Also re-maximizes affected windows so the WM/compositor re-assigns them to
+ * a surviving output.
+ */
+static void _preview_window_monitor_removed(GdkDisplay *display, GdkMonitor *monitor, gpointer user_data)
+{
+  dt_preview_window_t *preview = (dt_preview_window_t *)user_data;
+
+  /* Invalidate the stored monitor if it is the one being removed. After this
+   * point, _resolve_target_monitor() falls through to the next available
+   * monitor instead of dereferencing freed memory. */
+  if(_preview_geometry.session_monitor == monitor)
+    _preview_geometry.session_monitor = NULL;
+
   if(preview->maximized)
     gtk_window_maximize(GTK_WINDOW(preview->dialog));
 }
@@ -212,7 +237,7 @@ static gboolean _preview_window_configure(GtkWidget *dialog, GdkEventConfigure *
   if(preview != _last_opened_preview) return FALSE;
 
   GdkWindow *gdk_win = gtk_widget_get_window(dialog);
-  if(gdk_win)
+  if(!IS_NULL_PTR(gdk_win))
   {
     GdkDisplay *display = gtk_widget_get_display(dialog);
     _preview_geometry.session_monitor = gdk_display_get_monitor_at_window(display, gdk_win);
@@ -239,24 +264,24 @@ static void _preview_window_prepare_close(GtkWidget *dialog, dt_preview_window_t
   {
     _preview_window_store_geometry(dialog);
     _last_opened_preview = preview->prev_preview;
-    if(_last_opened_preview && _last_opened_preview->dialog)
+    if(!IS_NULL_PTR(_last_opened_preview) && !IS_NULL_PTR(_last_opened_preview->dialog))
       gtk_window_present_with_time(GTK_WINDOW(_last_opened_preview->dialog), gtk_get_current_event_time());
   }
   else
   {
     dt_preview_window_t *current = _last_opened_preview;
-    while(current && current->prev_preview != preview)
+    while(!IS_NULL_PTR(current) && current->prev_preview != preview)
       current = current->prev_preview;
-    if(current)
+    if(!IS_NULL_PTR(current))
       current->prev_preview = preview->prev_preview;
-    if(_last_opened_preview && _last_opened_preview->dialog)
+    if(!IS_NULL_PTR(_last_opened_preview) && !IS_NULL_PTR(_last_opened_preview->dialog))
       gtk_window_present_with_time(GTK_WINDOW(_last_opened_preview->dialog), gtk_get_current_event_time());
   }
 
   if(_preview_count == 1)
   {
     GtkWidget *main_window = dt_gui_main_window();
-    if(main_window)
+    if(!IS_NULL_PTR(main_window))
       gtk_window_present_with_time(GTK_WINDOW(main_window), gtk_get_current_event_time());
   }
 
@@ -270,11 +295,17 @@ static void _preview_window_destroy(GtkWidget *dialog, gpointer user_data)
 
   DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(dt_control_signal_get_global(), G_CALLBACK(_preview_redraw), preview);
 
+  /* Disconnect both monitor handlers separately (they were split to handle
+   * the stale-pointer risk on hot-unplug). */
   GdkDisplay *display = gtk_widget_get_display(dialog);
-  g_signal_handlers_disconnect_by_func(display, G_CALLBACK(_preview_window_monitor_changed), preview);
+  g_signal_handlers_disconnect_by_func(display, G_CALLBACK(_preview_window_monitor_added), preview);
+  g_signal_handlers_disconnect_by_func(display, G_CALLBACK(_preview_window_monitor_removed), preview);
   dt_view_image_surface_fetcher_cleanup(&preview->fetcher);
 
-  free(preview);
+  /* Repository convention: this dt_free() releases the GLib-allocated block
+   * created by g_malloc0() in dt_preview_window_spawn(). dt_free() routes
+   * through the project's tracking layer and is safe on GLib-allocated memory. */
+  dt_free(preview);
 
   _preview_count--;
   if(_preview_count == 0)
@@ -359,7 +390,7 @@ _thumb_draw_image(GtkWidget *widget, cairo_t *cr, gpointer user_data)
   const dt_view_surface_value_t res =
       dt_view_image_get_surface_async(&preview->fetcher, preview->imgid, w, h, &preview->surface, widget, 0);
 
-  if(preview->surface && res == DT_VIEW_SURFACE_OK)
+  if(!IS_NULL_PTR(preview->surface) && res == DT_VIEW_SURFACE_OK)
   {
     int width = cairo_image_surface_get_width(preview->surface);
     int height = cairo_image_surface_get_height(preview->surface);
@@ -395,7 +426,7 @@ _thumb_draw_image(GtkWidget *widget, cairo_t *cr, gpointer user_data)
 void _preview_redraw(gpointer instance, int signal, gpointer user_data)
 {
   dt_preview_window_t *preview = (dt_preview_window_t *)user_data;
-  if(preview && preview->area)
+  if(!IS_NULL_PTR(preview) && !IS_NULL_PTR(preview->area))
     gtk_widget_queue_draw(preview->area);
 }
 
@@ -408,8 +439,11 @@ void _preview_redraw(gpointer instance, int signal, gpointer user_data)
 
 /*
  * Resolves the best target monitor from stored geometry.
- * Falls back through: stored monitor → point-based lookup → main window → primary.
+ * Falls back through: stored monitor -> point-based lookup -> main window -> primary.
  * This logic is fully portable (gdk_display_get_monitor_at_* works on all backends).
+ *
+ * NOTE: session_monitor is only trusted here because _preview_window_monitor_removed
+ * nullifies it the moment the underlying GdkMonitor is invalidated by GDK.
  */
 static GdkMonitor *_resolve_target_monitor(GtkWidget *window, const dt_preview_window_geometry_t *geo)
 {
@@ -417,22 +451,22 @@ static GdkMonitor *_resolve_target_monitor(GtkWidget *window, const dt_preview_w
 
   /* Priority 1: The explicitly stored monitor handle from the last session.
    * This is the most reliable identifier across all platforms. */
-  if(geo->session_monitor)
+  if(!IS_NULL_PTR(geo->session_monitor))
     return geo->session_monitor;
 
   /* Priority 2: Derive monitor from stored position (only meaningful on X11/Win32). */
   if(geo->valid && !_preview_backend_is_wayland())
   {
     GdkMonitor *m = gdk_display_get_monitor_at_point(display, geo->x, geo->y);
-    if(m) return m;
+    if(!IS_NULL_PTR(m)) return m;
   }
 
   /* Priority 3: Use the monitor hosting the main application window. */
   GtkWidget *main_win = dt_gui_main_window();
-  if(main_win && gtk_widget_get_window(main_win))
+  if(!IS_NULL_PTR(main_win) && !IS_NULL_PTR(gtk_widget_get_window(main_win)))
   {
     GdkMonitor *m = gdk_display_get_monitor_at_window(display, gtk_widget_get_window(main_win));
-    if(m) return m;
+    if(!IS_NULL_PTR(m)) return m;
   }
 
   /* Priority 4: Primary monitor. */
@@ -456,14 +490,14 @@ static GdkMonitor *_resolve_target_monitor(GtkWidget *window, const dt_preview_w
  *     - Normal windows: we cannot control position. We set default_size only.
  *       The compositor chooses placement. We accept this limitation.
  *     - Maximized: we move the window center to the target monitor's center.
- *       Most Wayland compositors (GNOME Shell ≥42, KWin ≥5.27) use the
+ *       Most Wayland compositors (GNOME Shell >=42, KWin >=5.27) use the
  *       window's current position as a hint for which output to maximize on.
  *       This is not guaranteed by the protocol but is de facto behavior.
  */
 static void _apply_window_placement(GtkWindow *window, const dt_preview_window_geometry_t *geo)
 {
   GdkMonitor *target_monitor = _resolve_target_monitor(GTK_WIDGET(window), geo);
-  if(!target_monitor) return;
+  if(IS_NULL_PTR(target_monitor)) return;
 
   GdkRectangle geometry;
   gdk_monitor_get_geometry(target_monitor, &geometry);
@@ -474,28 +508,13 @@ static void _apply_window_placement(GtkWindow *window, const dt_preview_window_g
   {
     /* --- MAXIMIZED RESTORATION --- */
 
-    if(is_wayland)
-    {
-      /* Wayland: position is advisory. We nudge the window toward the target
-       * monitor's center. The compositor uses this as a placement hint when
-       * the subsequent maximize request arrives. */
-      const int cx = geometry.x + geometry.width / 2;
-      const int cy = geometry.y + geometry.height / 2;
-      gtk_window_move(window, cx, cy);
-      /* Set default size to monitor dimensions so the window "pre-fills"
-       * the target area even before maximize takes effect. */
-      gtk_window_set_default_size(window, geometry.width, geometry.height);
-    }
-    else
-    {
-      /* X11 / Win32 / Quartz: absolute positioning is honored.
-       * Move to the monitor's center to ensure the WM assigns the maximize
-       * to the correct output, then set size as a fallback. */
-      const int cx = geometry.x + geometry.width / 2;
-      const int cy = geometry.y + geometry.height / 2;
-      gtk_window_move(window, cx, cy);
-      gtk_window_set_default_size(window, geometry.width, geometry.height);
-    }
+    /* Both backends nudge the center onto the target monitor: on X11/Win32/
+     * Quartz this guarantees the WM maximizes on the right output; on Wayland
+     * it is the only available placement hint before the maximize request. */
+    const int cx = geometry.x + geometry.width / 2;
+    const int cy = geometry.y + geometry.height / 2;
+    gtk_window_move(window, cx, cy);
+    gtk_window_set_default_size(window, geometry.width, geometry.height);
     /* NOTE: gtk_window_maximize() is called by the caller AFTER show_all(),
      * because maximizing before mapping can cause the WM to ignore the
      * monitor assignment on some backends (particularly X11 WMs). */
@@ -507,8 +526,7 @@ static void _apply_window_placement(GtkWindow *window, const dt_preview_window_g
     if(is_wayland)
     {
       /* Wayland: gtk_window_move() is a no-op for top-level surfaces.
-       * We can only control the size. The compositor decides placement.
-       * We set the default size to match the last session's dimensions. */
+       * We can only control the size. The compositor decides placement. */
       gtk_window_set_default_size(window, geo->width, geo->height);
     }
     else
@@ -557,7 +575,9 @@ void dt_preview_window_spawn(const int32_t imgid)
   gchar *name = g_strdup_printf(("Ansel - Preview : %s [%d]"), img->filename, img->version);
   dt_image_cache_read_release(img);
 
-  dt_preview_window_t *preview = calloc(1, sizeof(dt_preview_window_t));
+  /* Repository convention: g_malloc0() returns zero-initialized memory and is
+   * paired with dt_free() in _preview_window_destroy(). */
+  dt_preview_window_t *preview = g_malloc0(sizeof(dt_preview_window_t));
   preview->imgid = imgid;
   preview->prev_preview = _last_opened_preview;
   dt_view_image_surface_fetcher_init(&preview->fetcher);
@@ -597,8 +617,9 @@ void dt_preview_window_spawn(const int32_t imgid)
   g_signal_connect(G_OBJECT(dialog), "key-press-event", G_CALLBACK(_preview_key_press_handler), preview);
 
   GdkDisplay *display = gtk_widget_get_display(dialog);
-  g_signal_connect(display, "monitor-added", G_CALLBACK(_preview_window_monitor_changed), preview);
-  g_signal_connect(display, "monitor-removed", G_CALLBACK(_preview_window_monitor_changed), preview);
+  /* Split handlers: added re-maximizes, removed nullifies the stale monitor pointer. */
+  g_signal_connect(display, "monitor-added", G_CALLBACK(_preview_window_monitor_added), preview);
+  g_signal_connect(display, "monitor-removed", G_CALLBACK(_preview_window_monitor_removed), preview);
 
   /* --- WIDGET CONSTRUCTION --- */
   GtkWidget *main_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
@@ -626,14 +647,14 @@ void dt_preview_window_spawn(const int32_t imgid)
    * This is critical because the WM/compositor may have overridden our
    * placement request (common on Wayland and some X11 WMs). */
   GdkWindow *gdk_win = gtk_widget_get_window(dialog);
-  if(gdk_win)
+  if(!IS_NULL_PTR(gdk_win))
   {
     /* Record decorations (portable across all backends via GDK). */
     gdk_window_set_decorations(gdk_win,
         GDK_DECOR_BORDER | GDK_DECOR_TITLE | GDK_DECOR_RESIZEH | GDK_DECOR_MENU | GDK_DECOR_MAXIMIZE);
 
     /* If we had no prior monitor info, derive it from the realized window. */
-    if(!_preview_geometry.session_monitor)
+    if(IS_NULL_PTR(_preview_geometry.session_monitor))
       _preview_geometry.session_monitor = gdk_display_get_monitor_at_window(display, gdk_win);
   }
   gdk_display_flush(display);
