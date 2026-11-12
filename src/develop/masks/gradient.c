@@ -346,7 +346,8 @@ static void _gradient_distance_cb(float pointer_x, float pointer_y, float cursor
 }
 
 static void _gradient_post_select_cb(dt_masks_form_gui_t *mask_gui, int inside, int inside_border,
-                                     int inside_source, __attribute__((unused)) const void *user_data)
+                                     __attribute__((unused)) int inside_source,
+                                     __attribute__((unused)) const void *user_data)
 {
   if(inside)
   {
