@@ -157,8 +157,12 @@ static GList *_brush_from_table(const float table[][9], const int count)
  * never covered -- in that report, a circle spanning the whole frame. The owed map cannot see
  * it: every owed pixel is painted, and then some. So two maps are built from the same discs:
  * OWED, the smaller radius shrunk by two pixels, which the mask must cover entirely; and
- * PERMITTED, the larger radius grown by a margin, outside which the mask must be empty. */
-typedef enum _disc_pick_t { DISC_OWED, DISC_PERMITTED } _disc_pick_t;
+ * PERMITTED, the larger radius grown by a margin, outside which the mask must be empty.
+ *
+ * The SOLID pair takes the solid radius instead, a node's radius times its fading, eased along
+ * the segment as the builder eases it, r1 + (r2 - r1) t^2 (3 - 2t): the brush's solid part is
+ * that disc union, so its edge is on their envelope and both maps can take the radius at t. */
+typedef enum _disc_pick_t { DISC_OWED, DISC_PERMITTED, DISC_SOLID_OWED, DISC_SOLID_PERMITTED } _disc_pick_t;
 
 /* One disc of integer radius @p r_i at (cx, cy) into the row difference array: a row of it
  * reaches |dx| <= floor(sqrt(r_i^2 - dy^2)), the discretisation the per-pixel form used. */
@@ -241,6 +245,8 @@ static void _brush_disc_union(const GList *const nodes, const int w, const int h
      * correct stroke paints can lie outside it. */
     const float r = (pick == DISC_OWED) ? MIN(r_out, r_in) : MAX(r_out, r_in);
     const int r_i = (pick == DISC_OWED) ? MAX((int)floorf(r) - 2, 0) : (int)ceilf(r) + 3;
+    const float s_out = r_out * n0->fading;
+    const float s_in = r_in * n1->fading;
 
     for(int k = 0; k <= 2000; k++)
     {
@@ -248,7 +254,13 @@ static void _brush_disc_union(const GList *const nodes, const int w, const int h
       const float u = 1.0f - t;
       const float bx = u*u*u*p0x + 3*u*u*t*p1x + 3*u*t*t*p2x + t*t*t*p3x;
       const float by = u*u*u*p0y + 3*u*u*t*p1y + 3*u*t*t*p2y + t*t*t*p3y;
-      _stamp_disc_rows(diff, stride, w, h, (int)lrintf(bx), (int)lrintf(by), r_i);
+      const float s = s_out + (s_in - s_out) * t * t * (3.0f - 2.0f * t);
+      int r_k = r_i;
+      if(pick == DISC_SOLID_OWED)
+        r_k = (int)floorf(s) - 2;
+      else if(pick == DISC_SOLID_PERMITTED)
+        r_k = (int)ceilf(s) + 3;
+      if(r_k >= 0) _stamp_disc_rows(diff, stride, w, h, (int)lrintf(bx), (int)lrintf(by), r_k);
     }
   }
 
@@ -576,6 +588,25 @@ static const float _brush_fading_neck[3][11] = {
   {0.816248f, 0.890076f, 0.834685f, 0.892544f, 0.797810f, 0.887608f, 0.013986f, 0.013986f, 1.000000f, 0.537000f, 1 },
   {0.760934f, 0.882672f, 0.770315f, 0.881703f, 0.751553f, 0.883641f, 0.082942f, 0.082942f, 1.000000f, 0.300010f, 2 },
   {0.705371f, 0.903945f, 0.723892f, 0.896854f, 0.686849f, 0.911036f, 0.013986f, 0.013986f, 1.000000f, 0.537000f, 1 },
+};
+
+/* Two nodes of one solid radius, 20 px on a 3000x2253 frame, and radii of 100 and 22 px, 300 px
+ * apart: only the ramp differs between them, so the solid part is a straight band. Modelled on a
+ * test session's screenshot, where it bulged to 35 px toward the wider node. */
+static const float _brush_ramp_taper[2][11] = {
+  /* columns: node x y | ctrl1 x y | ctrl2 x y | border in out | density | fading | state */
+  {0.300000f, 0.500000f, 0.266667f, 0.500000f, 0.333333f, 0.500000f, 0.044385f, 0.044385f, 1.000000f, 0.200000f, 1 },
+  {0.400000f, 0.500000f, 0.366667f, 0.500000f, 0.433333f, 0.500000f, 0.009765f, 0.009765f, 1.000000f, 0.909091f, 1 },
+};
+
+/* The same with radii of 190 and 18 px, 170 px apart, and a solid radius of 15 px: the smaller
+ * disc nearly inside the larger, so the border's radius falls faster than the spine runs and its
+ * spokes lie along the spine. Modelled on a test session's screenshot, where the solid part
+ * thinned to a thread between the nodes. */
+static const float _brush_ramp_nested[2][11] = {
+  /* columns: node x y | ctrl1 x y | ctrl2 x y | border in out | density | fading | state */
+  {0.300000f, 0.500000f, 0.281111f, 0.500000f, 0.318889f, 0.500000f, 0.084332f, 0.084332f, 1.000000f, 0.078947f, 1 },
+  {0.356667f, 0.500000f, 0.337778f, 0.500000f, 0.375556f, 0.500000f, 0.007989f, 0.007989f, 1.000000f, 0.833333f, 1 },
 };
 
 /* _MG_1074.CR2, brush #4 of its sidecar (2026-09-08): eight nodes, the second with a radius
@@ -1336,6 +1367,53 @@ static void _judge_fading_edge(dt_develop_t *dev, dt_masks_form_t *form, const _
   dt_pixelpipe_cache_free_align(gp.fading_breaks);
 }
 
+/** The full part of the raster against the solid disc union.
+ *
+ * Where a brush paints at full density is a disc union of its own, of the solid radius (see
+ * DISC_SOLID_OWED): the full part must cover it shrunk by two pixels, and stay inside it grown by
+ * three. Two nodes of one solid size then hold a band of that width between them whatever their
+ * ramps, which the eye reads off the edge the GUI draws. */
+static void _judge_solid_part(const dt_masks_form_t *const form, const _brush_case_t *const c,
+                              const float *const mask)
+{
+  for(const GList *l = form->points; l; l = g_list_next(l))
+    if(((const dt_masks_node_brush_t *)l->data)->density != 1.0f)
+    {
+      printf("       %-22s solid part: not judged, its density varies\n", c->name);
+      return;
+    }
+
+  const size_t npix = (size_t)c->w * c->h;
+  float *full = (float *)malloc(sizeof(float) * npix);
+  uint8_t *owed = (uint8_t *)malloc(npix);
+  uint8_t *permitted = (uint8_t *)malloc(npix);
+  _runs_t missing = { 0, 0, -1, -1 };
+  _runs_t excess = { 0, 0, -1, -1 };
+  if(!IS_NULL_PTR(full) && !IS_NULL_PTR(owed) && !IS_NULL_PTR(permitted))
+  {
+    for(size_t i = 0; i < npix; i++) full[i] = (mask[i] >= 1.0f) ? 1.0f : 0.0f;
+    _brush_disc_union(form->points, c->w, c->h, DISC_SOLID_OWED, owed);
+    _brush_disc_union(form->points, c->w, c->h, DISC_SOLID_PERMITTED, permitted);
+    _coverage_runs(full, owed, c->w, c->h, RUNS_MISSING, &missing);
+    _coverage_runs(full, permitted, c->w, c->h, RUNS_EXCESS, &excess);
+  }
+  else
+    missing.largest = 1;
+
+  const gboolean ok = (missing.largest <= c->budget_px) && (excess.largest <= c->budget_px);
+  printf("[%s] %-22s solid part: missing %d px (largest run %d px", ok ? "PASS" : "FAIL", c->name, missing.total,
+         missing.largest);
+  if(missing.largest > 0) printf(" around (%d,%d)", missing.cx, missing.cy);
+  printf("), excess %d px (largest run %d px", excess.total, excess.largest);
+  if(excess.largest > 0) printf(" around (%d,%d)", excess.cx, excess.cy);
+  printf(")\n");
+  if(!ok) failures++;
+
+  free(full);
+  free(owed);
+  free(permitted);
+}
+
 /** Run one polygon through both consumers and judge it. The form is the caller's. */
 static void _run_polygon_form_at(dt_develop_t *dev, dt_masks_form_t *form, const _brush_case_t *const c)
 {
@@ -1389,6 +1467,7 @@ static void _run_brush_nodes_at(dt_develop_t *dev, GList *nodes, const _brush_ca
   }
   _judge_raster(dev, &form, c, mask, owed, permitted);
   _judge_fading_edge(dev, &form, c, mask);
+  _judge_solid_part(&form, c, mask);
   free(owed);
   free(permitted);
   dt_free_align(mask);
@@ -2220,6 +2299,10 @@ int main(int argc, char *argv[])
     _run_brush_case11_at(&dev, _brush_fading_pinch, 3, &cpinch);
     const _brush_case_t cneck = { "brush-fading-neck", dir, 0, 3000, 2253 };
     _run_brush_case11_at(&dev, _brush_fading_neck, 3, &cneck);
+    const _brush_case_t ctaper = { "brush-ramp-taper", dir, 0, 3000, 2253 };
+    _run_brush_case11_at(&dev, _brush_ramp_taper, 2, &ctaper);
+    const _brush_case_t cnested = { "brush-ramp-nested", dir, 0, 3000, 2253 };
+    _run_brush_case11_at(&dev, _brush_ramp_nested, 2, &cnested);
   }
 
   /* 3b. THE SECOND REPORTED SHAPE, polygon #2. Two defects were reported against it: the outer

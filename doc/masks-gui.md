@@ -83,7 +83,10 @@ with.
 - An edit applies the same change to the `border`/`fading` conf keys the next brush is created
   with; during creation the wheel edits those keys alone, so size grows the preview's filled disc
   and fading its ring.
-- Nothing stored is converted: a brush keeps exactly its mask until one of its nodes is edited.
+- Nothing stored is converted: a node keeps its `border` and `fading`. Between two nodes whose
+  radius or fading differ, the solid part is a disc union of its own
+  ([brush-boundary.md](brush-boundary.md#the-solid-part-is-a-disc-union)), so a brush saved
+  before that paints another solid part there (on top of `0d108992d6`, 2026-11-12).
 
 A selected node has two handles on one ray from the node. The outer one, on the whole radius,
 moves the ramp's outer edge; the inner one, `_brush_get_solid_handle()`, sits where the node's own

@@ -217,30 +217,53 @@ static void _brush_get_XY(float p0_x, float p0_y, float p1_x, float p1_y, float 
   *out_y = p0_y * a + p1_y * b + p2_y * c + p3_y * d;
 }
 
-/**
- * @brief Evaluate a cubic Bezier and compute its offset border point.
- */
-/** Evaluate the curve at @p t and offset it by @p radius along the normal.
+/* The radius along a segment eases from one node's to the other's, r1 + (r2 - r1) * t^2 (3 - 2t),
+ * and its rate by t is what the envelope needs: (r2 - r1) * 6 t (1 - t), zero at both ends, so a
+ * segment's end samples stay on the normal and the caps and joint arcs built from them are
+ * unchanged. */
+static inline float _brush_radius_at(const float r1, const float r2, const double t)
+{
+  return r1 + (r2 - r1) * t * t * (3.0 - 2.0 * t);
+}
+
+static inline float _brush_radius_rate_at(const float r1, const float r2, const double t)
+{
+  return (r2 - r1) * 6.0 * t * (1.0 - t);
+}
+
+/** Evaluate segment (@p from, @p to) -- as _brush_segment_load() writes them -- at @p t into
+ * @p point, and offset it onto the envelope of its discs into @p border; with @p solid, onto the
+ * envelope of its solid discs too, whose radius is a node's radius times its fading, eased the
+ * same way. One evaluation serves both: they share the point and the tangent.
  *
  * The point is always produced. The BORDER is not: a curve collapsed to a single point has no
  * direction, so there is nothing to offset along and the honest answer is "none". That used to
  * be signalled by writing NaN into the border coordinates, which then had to be recognised --
  * and repaired -- by everyone downstream, and which is how a sentinel gets into a buffer that
- * is supposed to hold geometry. It is a return value now, so the border is either written or
- * left exactly as the caller had it. Returns TRUE when a border point was produced. */
-static gboolean _brush_border_get_XY(float p0_x, float p0_y, float p1_x, float p1_y, float p2_x, float p2_y,
-                                     float p3_x, float p3_y, float t, float radius, float radius_rate,
-                                     float *point_x, float *point_y, float *border_x, float *border_y)
+ * is supposed to hold geometry. It is a return value now, so the border and the solid edge are
+ * either written or left exactly as the caller had them. Returns TRUE when they were produced. */
+static gboolean _brush_border_get_XY(const float *const from, const float *const to, const double t,
+                                     float *const point, float *const border, float *const solid)
 {
+  const float p0_x = from[0];
+  const float p0_y = from[1];
+  const float p1_x = from[2];
+  const float p1_y = from[3];
+  const float p2_x = to[2];
+  const float p2_y = to[3];
+  const float p3_x = to[0];
+  const float p3_y = to[1];
+
   // we get the point
-  _brush_get_XY(p0_x, p0_y, p1_x, p1_y, p2_x, p2_y, p3_x, p3_y, t, point_x, point_y);
+  _brush_get_XY(p0_x, p0_y, p1_x, p1_y, p2_x, p2_y, p3_x, p3_y, (float)t, point, point + 1);
 
   // now we get derivative points
-  const float ti = 1.0f - t;
+  const float tf = (float)t;
+  const float ti = 1.0f - tf;
   const float a = 3.0f * ti * ti;
-  const float b = 3.0f * (ti * ti - 2.0f * t * ti);
-  const float c = 3.0f * (2.0f * t * ti - t * t);
-  const float d = 3.0f * sqf(t);
+  const float b = 3.0f * (ti * ti - 2.0f * tf * ti);
+  const float c = 3.0f * (2.0f * tf * ti - tf * tf);
+  const float d = 3.0f * sqf(tf);
 
   /* not const: a degenerate first-order term is replaced by the limit direction below */
   float dx = -p0_x * a + p1_x * b + p2_x * c + p3_x * d;
@@ -281,40 +304,29 @@ static gboolean _brush_border_get_XY(float p0_x, float p0_y, float p1_x, float p
                            fmaxf(fabsf(p2_x - p1_x), fabsf(p2_y - p1_y)));
   const float degenerate = fmaxf(span, 1.0f) * 1e-3f;
 
+  /* a limit direction has a direction and no speed, so no rate can be taken against it */
+  float rate = 1.0f;
   if(fabsf(dx) < degenerate && fabsf(dy) < degenerate)
   {
-    if(t < 0.5f) { dx = p2_x - p0_x; dy = p2_y - p0_y; }
-    else         { dx = p3_x - p1_x; dy = p3_y - p1_y; }
+    if(tf < 0.5f) { dx = p2_x - p0_x; dy = p2_y - p0_y; }
+    else          { dx = p3_x - p1_x; dy = p3_y - p1_y; }
 
     if(fabsf(dx) < degenerate && fabsf(dy) < degenerate) { dx = p3_x - p0_x; dy = p3_y - p0_y; }
 
     if(dx == 0.0f && dy == 0.0f) return FALSE;   // a single point: no direction to offset along
 
-    /* a limit direction has a direction and no speed, so no rate can be taken against it */
-    radius_rate = 0.0f;
+    rate = 0.0f;
   }
 
   /* on the envelope of the discs, not on the normal: see dt_masks_outline_envelope_offset() */
-  const float centre[2] = { *point_x, *point_y };
-  float border[2];
-  dt_masks_outline_envelope_offset(centre, dx, dy, radius, radius_rate, border);
-  *border_x = border[0];
-  *border_y = border[1];
+  dt_masks_outline_envelope_offset(point, dx, dy, _brush_radius_at(from[4], to[4], t),
+                                   rate * _brush_radius_rate_at(from[4], to[4], t), border);
+  if(IS_NULL_PTR(solid)) return TRUE;
+  const float s1 = from[4] * from[5];
+  const float s2 = to[4] * to[5];
+  dt_masks_outline_envelope_offset(point, dx, dy, _brush_radius_at(s1, s2, t),
+                                   rate * _brush_radius_rate_at(s1, s2, t), solid);
   return TRUE;
-}
-
-/* The radius along a segment eases from one node's to the other's, r1 + (r2 - r1) * t^2 (3 - 2t),
- * and its rate by t is what the envelope needs: (r2 - r1) * 6 t (1 - t), zero at both ends, so a
- * segment's end samples stay on the normal and the caps and joint arcs built from them are
- * unchanged. */
-static inline float _brush_radius_at(const float r1, const float r2, const double t)
-{
-  return r1 + (r2 - r1) * t * t * (3.0 - 2.0 * t);
-}
-
-static inline float _brush_radius_rate_at(const float r1, const float r2, const double t)
-{
-  return (r2 - r1) * 6.0 * t * (1.0 - t);
 }
 
 /**
@@ -699,15 +711,43 @@ static inline gboolean _is_within_pxl_threshold(const float *const min, const fl
          abs((int)min[1] - (int)max[1]) < pixel_threshold;
 }
 
+/* The payload holds three values per sample: where its spoke turns from solid to ramp, in the
+ * spoke's own frame -- a spoke lengths along it, b across it, a quarter turn from it as
+ * (-q_y, q_x) is from q -- and the density. A frame and not a position, because the pipe's
+ * distortions move the spoke and the edge has to move with it. The samples written here lie on
+ * arcs about a node or a leaf's centre, radial: their edge is the fading along the spoke and
+ * nothing across it. */
 static inline void _brush_payload_sync(dt_masks_dynbuf_t *dpayload, dt_masks_dynbuf_t *dpoints,
-                                       const float v0, const float v1)
+                                       const float fading, const float density)
 {
-  size_t payload_pos = dt_masks_dynbuf_position(dpayload);
-  const size_t target_pos = dt_masks_dynbuf_position(dpoints);
-  while(payload_pos < target_pos)
+  const size_t target = dt_masks_dynbuf_position(dpoints) / 2 * 3;
+  const size_t pos = dt_masks_dynbuf_position(dpayload);
+  if(pos >= target) return;
+  float *const out = dt_masks_dynbuf_reserve_n(dpayload, (int)(target - pos));
+  if(IS_NULL_PTR(out)) return;
+  for(size_t k = 0; k < target - pos; k += 3)
   {
-    dt_masks_dynbuf_add_2(dpayload, v0, v1);
-    payload_pos += 2;
+    out[k] = fading;
+    out[k + 1] = 0.0f;
+    out[k + 2] = density;
+  }
+}
+
+/* The payload's solid edges, from their spokes' frames back to positions -- c + a q + b (-q_y, q_x),
+ * with q the spoke from the centreline sample c to its border sample -- written in place @p stride
+ * floats apart: 3 keeps each density after its edge, 2 leaves the edges alone, two per sample as
+ * the outline holds them. A sample is read before it is written, and never over one still to read. */
+static void _brush_payload_to_edges(const float *const points, const float *const border, float *const payload,
+                                    const int first, const int count, const int stride)
+{
+  for(int i = first; i < count; i++)
+  {
+    const float a = payload[3 * i];
+    const float b = payload[3 * i + 1];
+    const float qx = border[2 * i] - points[2 * i];
+    const float qy = border[2 * i + 1] - points[2 * i + 1];
+    payload[stride * i] = points[2 * i] + a * qx - b * qy;
+    payload[stride * i + 1] = points[2 * i + 1] + a * qy + b * qx;
   }
 }
 
@@ -810,7 +850,9 @@ typedef struct _brush_walk_t
  * Those flags used to be read out of the arrays as NaN -- "not computed" and "no border"
  * sharing one representation with each other and with real geometry. Which of the three a NaN
  * meant depended on where you were standing, and the arrays are the same ones that end up in
- * the outline. A leaf always writes a border now (see _brush_leaf_borrow_border()). */
+ * the outline. A leaf always writes a border now (see _brush_leaf_borrow_border()). The solid
+ * edge at tmax comes with the border there, when a payload is built: the leaf at tmax is the only
+ * reader. NULL otherwise. */
 typedef struct _brush_span_t
 {
   double tmin;
@@ -819,6 +861,7 @@ typedef struct _brush_span_t
   float *points_max;
   float *border_min;
   float *border_max;
+  float *solid_max;
   gboolean have_min;
   gboolean have_max;
   gboolean have_border_min;
@@ -853,15 +896,9 @@ static void _brush_points_recurs(const float *const p1, const float *const p2, c
 
   // we calculate points if needed
   if(!span->have_min)
-    have_border_min = _brush_border_get_XY(p1[0], p1[1], p1[2], p1[3], p2[2], p2[3], p2[0], p2[1], span->tmin,
-                                           _brush_radius_at(p1[4], p2[4], span->tmin),
-                                           _brush_radius_rate_at(p1[4], p2[4], span->tmin), points_min,
-                                           points_min + 1, border_min, border_min + 1);
+    have_border_min = _brush_border_get_XY(p1, p2, span->tmin, points_min, border_min, NULL);
   if(!span->have_max)
-    have_border_max = _brush_border_get_XY(p1[0], p1[1], p1[2], p1[3], p2[2], p2[3], p2[0], p2[1], span->tmax,
-                                           _brush_radius_at(p1[4], p2[4], span->tmax),
-                                           _brush_radius_rate_at(p1[4], p2[4], span->tmax), points_max,
-                                           points_max + 1, border_max, border_max + 1);
+    have_border_max = _brush_border_get_XY(p1, p2, span->tmax, points_max, border_max, span->solid_max);
 
   if(!_brush_span_is_leaf(span->tmin, span->tmax, points_min, points_max, withborder ? border_min : NULL,
                           border_max, w->pixel_threshold))
@@ -870,13 +907,17 @@ static void _brush_points_recurs(const float *const p1, const float *const p2, c
     const double tx = (span->tmin + span->tmax) / 2.0;
     float c[2] = { 0.0f, 0.0f };
     float b[2] = { 0.0f, 0.0f };
+    float s[2] = { 0.0f, 0.0f };
     _brush_sample_t mid = { 0 };
+    float *const mid_solid = IS_NULL_PTR(span->solid_max) ? NULL : s;
     /* the left half inherits our min end, now evaluated, and computes the midpoint; the right
      * half is then handed that midpoint already evaluated, and inherits our max end */
-    const _brush_span_t left = { span->tmin, tx, points_min, c, border_min, b, TRUE, FALSE, have_border_min, FALSE };
+    const _brush_span_t left
+        = { span->tmin, tx, points_min, c, border_min, b, mid_solid, TRUE, FALSE, have_border_min, FALSE };
     _brush_points_recurs(p1, p2, &left, w, &mid);
     const _brush_span_t right
-        = { tx, span->tmax, mid.point, points_max, mid.border, border_max, TRUE, TRUE, TRUE, have_border_max };
+        = { tx, span->tmax, mid.point, points_max, mid.border, border_max, span->solid_max,
+            TRUE, TRUE, TRUE, have_border_max };
     _brush_points_recurs(p1, p2, &right, w, out);
     return;
   }
@@ -906,9 +947,38 @@ static void _brush_points_recurs(const float *const p1, const float *const p2, c
 
   if(!IS_NULL_PTR(dpayload))
   {
-    out->payload[0] = p1[5] + span->tmax * (p2[5] - p1[5]);
+    /* The solid part is a disc union of its own: its radius, a node's radius times its fading,
+     * eases between the nodes' as the whole radius does, and its edge lies on the envelope of its
+     * discs, leaning by its own rate. A solid part of one size at both nodes then keeps that size
+     * between them, whatever the ramp around it does. */
+    const float s1 = p1[4] * p1[5];
+    const float s2 = p2[4] * p2[5];
+    const float solid = _brush_radius_at(s1, s2, span->tmax);
+    const float radius = _brush_radius_at(p1[4], p2[4], span->tmax);
+    out->payload[0] = (radius > 0.0f) ? solid / radius : p2[5];
     out->payload[1] = p1[6] + span->tmax * (p2[6] - p1[6]);
+    const size_t first = dt_masks_dynbuf_position(dpayload);
     _brush_payload_sync(dpayload, dpoints, out->payload[0], out->payload[1]);
+
+    /* The leaf's spokes -- its own and the arc's before it, all from its centre -- take their edge
+     * off the envelope, found with the border at tmax. The arc closes a gap in the border, not in
+     * the solid part, whose edge moves by its own rate: along the arc's spokes, it would fold back
+     * into the band. A border borrowed for want of a direction came without one. */
+    if(!have_border_max || IS_NULL_PTR(span->solid_max)) return;
+    const float *const c = points_max;
+    const float ex = span->solid_max[0] - c[0];
+    const float ey = span->solid_max[1] - c[1];
+    float *const payload = dt_masks_dynbuf_buffer(dpayload);
+    const float *const border = dt_masks_dynbuf_buffer(dborder);
+    for(size_t p = first; p < dt_masks_dynbuf_position(dpayload); p += 3)
+    {
+      const float qx = border[p / 3 * 2] - c[0];
+      const float qy = border[p / 3 * 2 + 1] - c[1];
+      const float q2 = qx * qx + qy * qy;
+      if(q2 == 0.0f) continue;
+      payload[p] = (ex * qx + ey * qy) / q2;
+      payload[p + 1] = (ey * qx - ex * qy) / q2;
+    }
   }
 }
 
@@ -1021,13 +1091,18 @@ static gboolean _brush_walk_segment(const _brush_walk_t *const w, _brush_walk_st
   float b0[2];
   float c1[2];
   float b1[2];
-  const gboolean have_b0 = _brush_border_get_XY(p1[0], p1[1], p1[2], p1[3], p2[2], p2[3], p2[0], p2[1], 0.0f,
-                                                p1[4], 0.0f, c0, c0 + 1, b0, b0 + 1);
-  const gboolean have_b1 = _brush_border_get_XY(p1[0], p1[1], p1[2], p1[3], p2[2], p2[3], p2[0], p2[1], 1.0f,
-                                                p2[4], 0.0f, c1, c1 + 1, b1, b1 + 1);
+  float e1[2];
+  const gboolean have_b0 = _brush_border_get_XY(p1, p2, 0.0, c0, b0, NULL);
+  const gboolean have_b1 = _brush_border_get_XY(p1, p2, 1.0, c1, b1, e1);
   if(!have_b0 && !have_b1) return FALSE;
   if(!have_b0) dt_masks_outline_offset_along(c0, b1[0] - c1[0], b1[1] - c1[1], p1[4], b0);
-  if(!have_b1) dt_masks_outline_offset_along(c1, b0[0] - c0[0], b0[1] - c0[1], p2[4], b1);
+  if(!have_b1)
+  {
+    dt_masks_outline_offset_along(c1, b0[0] - c0[0], b0[1] - c0[1], p2[4], b1);
+    // the solid edge of a borrowed spoke lies along it, as its fading
+    e1[0] = c1[0] + p2[5] * (b1[0] - c1[0]);
+    e1[1] = c1[1] + p2[5] * (b1[1] - c1[1]);
+  }
 
   if(s->have_prev) _brush_walk_node(w, s, p1, p2, c0, b0, forward);
 
@@ -1035,12 +1110,13 @@ static gboolean _brush_walk_segment(const _brush_walk_t *const w, _brush_walk_st
   float bmax[2] = { b1[0], b1[1] };
   float cmin[2] = { c0[0], c0[1] };
   float cmax[2] = { c1[0], c1[1] };
-  const _brush_span_t span = { 0.0, 1.0, cmin, cmax, bmin, bmax, TRUE, TRUE, TRUE, TRUE };
+  float *const smax = IS_NULL_PTR(w->dpayload) ? NULL : e1;
+  const _brush_span_t span = { 0.0, 1.0, cmin, cmax, bmin, bmax, smax, TRUE, TRUE, TRUE, TRUE };
   _brush_sample_t end = { 0 };
   _brush_points_recurs(p1, p2, &span, w, &end);
 
   dt_masks_dynbuf_add_2(w->dpoints, end.point[0], end.point[1]);
-  if(!IS_NULL_PTR(w->dpayload)) dt_masks_dynbuf_add_2(w->dpayload, end.payload[0], end.payload[1]);
+  _brush_walk_sync_payload(w, end.payload);
   if(!IS_NULL_PTR(w->dborder))
   {
     if(!end.have_border)
@@ -1265,7 +1341,7 @@ static int _brush_get_pts_border(dt_develop_t *develop, dt_masks_form_t *mask_fo
   // for the payload, we reserve an equivalent number of cells to keep it in sync
   if(!IS_NULL_PTR(dpayload))
   {
-    dt_masks_dynbuf_add_zeros(dpayload, 6 * node_count); // we need six zeros for each border point
+    dt_masks_dynbuf_add_zeros(dpayload, 9 * node_count); // three for each of the header's three samples
   }
 
   if(dt_get_debug_flags() & DT_DEBUG_PERF)
@@ -1303,7 +1379,7 @@ static int _brush_get_pts_border(dt_develop_t *develop, dt_masks_form_t *mask_fo
 
   if(!IS_NULL_PTR(dpayload))
   {
-    *payload_count = dt_masks_dynbuf_position(dpayload) / 2;
+    *payload_count = dt_masks_dynbuf_position(dpayload) / 3;
     *payload_buffer = dt_masks_dynbuf_harvest(dpayload);
     dt_masks_dynbuf_free(dpayload);
   }
@@ -1564,7 +1640,7 @@ static dt_masks_raster_result_t _brush_get_points_border(dt_develop_t *develop, 
   if(use_source && IS_NULL_PTR(module)) return DT_MASKS_RASTER_ERROR;
   const double ioporder = (module) ? module->iop_order : 0.0f;
   const dt_masks_distort_t gui_dist = dt_masks_distort_for_gui(develop);
-  // The payload holds each sample's fading, what the contour the fading starts on is made of.
+  // The payload holds each sample's solid edge, what the contour the fading starts on is made of.
   float *payload = NULL;
   int payload_count = 0;
   const gboolean want_fading = !IS_NULL_PTR(out->fading) && !IS_NULL_PTR(out->border);
@@ -1588,22 +1664,14 @@ static dt_masks_raster_result_t _brush_get_points_border(dt_develop_t *develop, 
                                                               header, out->border_skips);
   }
 
-  /* _brush_falloff() paints each spoke solid over the first `fading' of its length, from the
-   * outline sample to the border sample: that point of every spoke is where the fading starts.
-   * The payload holds two values per sample as the outline holds two coordinates, so it becomes
-   * that contour in place, each sample's fading read before its two cells are written. The
-   * payload is only ever built along with the border, and dropped with it on failure. */
+  /* The rasterisers paint each spoke solid up to its edge in the payload and ramp from there to
+   * its border sample: those edges are where the fading starts. Back to positions, two per sample
+   * as the outline holds them, they become that contour in place. The payload is only ever built
+   * along with the border, and dropped with it on failure. */
   if(!IS_NULL_PTR(payload))
   {
-    const float *const points = *out->points;
-    const float *const border = *out->border;
-    memcpy(payload, points, sizeof(float) * 2 * header);
-    for(int i = header; i < *out->border_count; i++)
-    {
-      const float f = payload[2 * i];
-      payload[2 * i] = points[2 * i] + f * (border[2 * i] - points[2 * i]);
-      payload[2 * i + 1] = points[2 * i + 1] + f * (border[2 * i + 1] - points[2 * i + 1]);
-    }
+    _brush_payload_to_edges(*out->points, *out->border, payload, header, *out->border_count, 2);
+    memcpy(payload, *out->points, sizeof(float) * 2 * header);
     *out->fading = payload;
   }
 
@@ -3041,11 +3109,13 @@ static void _brush_events_post_expose(cairo_t *cr, float zoom_scale, const dt_ma
  * @brief Compute the bounding box (min/max) for both brush centerline and border points.
  *
  * Assumes point arrays contain interleaved x/y coordinates and that indices before
- * `node_count * 3` are control points which should be ignored for bounds.
+ * `node_count * 3` are control points which should be ignored for bounds. @p solid, when not
+ * NULL, is the payload turned into edges three floats apart (see _brush_payload_to_edges()): an
+ * edge leans by the solid part's rate and its spoke by the border's, so neither bounds the other.
  */
 static void _brush_bounding_box_raw(const float *const restrict points, const float *const restrict border,
-                                    const int node_count, const int total_points, float *x_min, float *x_max,
-                                    float *y_min, float *y_max)
+                                    const float *const restrict solid, const int node_count,
+                                    const int total_points, float *x_min, float *x_max, float *y_min, float *y_max)
 {
   // now we want to find the area, so we search min/max points
   float min_x = FLT_MAX, max_x = FLT_MIN, min_y = FLT_MAX, max_y = FLT_MIN;
@@ -3067,6 +3137,13 @@ static void _brush_bounding_box_raw(const float *const restrict points, const fl
     max_x = MAX(brush_x, max_x);
     min_y = MIN(brush_y, min_y);
     max_y = MAX(brush_y, max_y);
+    if(IS_NULL_PTR(solid)) continue;
+    const float solid_x = solid[point_index * 3];
+    const float solid_y = solid[point_index * 3 + 1];
+    min_x = MIN(solid_x, min_x);
+    max_x = MAX(solid_x, max_x);
+    min_y = MIN(solid_y, min_y);
+    max_y = MAX(solid_y, max_y);
   }
   *x_min = min_x;
   *x_max = max_x;
@@ -3079,11 +3156,12 @@ static void _brush_bounding_box_raw(const float *const restrict points, const fl
  *
  * Adds a 2-pixel padding on each side to avoid rounding gaps.
  */
-static void _brush_bounding_box(const float *const points, const float *const border, const int node_count,
-                                const int total_points, int *width, int *height, int *offset_x, int *offset_y)
+static void _brush_bounding_box(const float *const points, const float *const border, const float *const solid,
+                                const int node_count, const int total_points, int *width, int *height,
+                                int *offset_x, int *offset_y)
 {
   float min_x = FLT_MAX, max_x = FLT_MIN, min_y = FLT_MAX, max_y = FLT_MIN;
-  _brush_bounding_box_raw(points, border, node_count, total_points, &min_x, &max_x, &min_y, &max_y);
+  _brush_bounding_box_raw(points, border, solid, node_count, total_points, &min_x, &max_x, &min_y, &max_y);
   *height = max_y - min_y + 4;
   *width = max_x - min_x + 4;
   *offset_x = min_x - 2;
@@ -3124,7 +3202,7 @@ static int _get_area(const dt_iop_module_t *const module, const dt_dev_pixelpipe
   *offset_y = 0;
     return 0;
   }
-  _brush_bounding_box(points, border, node_count, points_count, width, height, offset_x, offset_y);
+  _brush_bounding_box(points, border, NULL, node_count, points_count, width, height, offset_x, offset_y);
 
   dt_pixelpipe_cache_free_align(points);
   dt_pixelpipe_cache_free_align(border);
@@ -3154,6 +3232,17 @@ static dt_masks_raster_result_t _brush_get_area(const dt_iop_module_t *const mod
   *offset_y = 0;
   return dt_masks_raster_from_status(
       _get_area(module, pipe, piece, mask_form, width, height, offset_x, offset_y, 0));
+}
+
+/* Whether sample i paints the solid piece sample i - 1 painted, to the pixel and the density. The
+ * spokes of an arc closing a gap in the border all start on their leaf's centre and end on its
+ * edge, so the first of them paints the piece and the others only their ramps. Painting is a
+ * maximum, so skipping a repeat changes no pixel. */
+static inline gboolean _brush_solid_repeats(const float *const points, const float *const payload, const int i)
+{
+  return (int)points[2 * i] == (int)points[2 * i - 2] && (int)points[2 * i + 1] == (int)points[2 * i - 1]
+         && (int)payload[3 * i] == (int)payload[3 * i - 3] && (int)payload[3 * i + 1] == (int)payload[3 * i - 2]
+         && payload[3 * i + 2] == payload[3 * i - 1];
 }
 
 /** we write a falloff segment */
@@ -3244,7 +3333,8 @@ static dt_masks_raster_result_t _brush_get_mask(const dt_iop_module_t *const mod
   }
   const gboolean use_sparse = (pipe->mask_rasterization_step > 1);
   const int sparse_step = pipe->mask_rasterization_step;
-  _brush_bounding_box(points, border, node_count, points_count, width, height, offset_x, offset_y);
+  _brush_payload_to_edges(points, border, payload, node_count * 3, border_count, 3);
+  _brush_bounding_box(points, border, payload, node_count, points_count, width, height, offset_x, offset_y);
 
   if(dt_get_debug_flags() & DT_DEBUG_PERF)
     dt_print(DT_DEBUG_MASKS, "[masks %s] brush_fill min max took %0.04f sec\n", mask_form->name,
@@ -3263,11 +3353,12 @@ static dt_masks_raster_result_t _brush_get_mask(const dt_iop_module_t *const mod
   }
   memset(*buffer, 0, sizeof(float) * buffer_size);
 
-  // now we fill the falloff
-  int segment_start[2], segment_end[2];
+  // now we fill the falloff: each spoke solid up to its edge, and the ramp from there out
+  int segment_start[2], segment_solid[2], segment_end[2];
   int prev_start[2] = { 0, 0 };
+  int prev_solid[2] = { 0, 0 };
   int prev_end[2] = { 0, 0 };
-  float prev_payload[2] = { 0.0f, 0.0f };
+  float prev_density = 0.0f;
   gboolean have_prev = FALSE;
 
   // Walk all border samples and stamp a falloff segment for each.
@@ -3275,8 +3366,11 @@ static dt_masks_raster_result_t _brush_get_mask(const dt_iop_module_t *const mod
   {
     segment_start[0] = points[border_index * 2];
     segment_start[1] = points[border_index * 2 + 1];
+    segment_solid[0] = payload[border_index * 3];
+    segment_solid[1] = payload[border_index * 3 + 1];
     segment_end[0] = border[border_index * 2];
     segment_end[1] = border[border_index * 2 + 1];
+    const float density = payload[border_index * 3 + 2];
 
     if(use_sparse && have_prev
        && (prev_start[0] != segment_start[0] || prev_start[1] != segment_start[1]
@@ -3288,23 +3382,27 @@ static dt_masks_raster_result_t _brush_get_mask(const dt_iop_module_t *const mod
         const float t = (float)step / (float)sparse_step;
         int interp_start[2] = { (int)floorf(prev_start[0] + t * (segment_start[0] - prev_start[0]) + 0.5f),
                                 (int)floorf(prev_start[1] + t * (segment_start[1] - prev_start[1]) + 0.5f) };
+        int interp_solid[2] = { (int)floorf(prev_solid[0] + t * (segment_solid[0] - prev_solid[0]) + 0.5f),
+                                (int)floorf(prev_solid[1] + t * (segment_solid[1] - prev_solid[1]) + 0.5f) };
         int interp_end[2] = { (int)floorf(prev_end[0] + t * (segment_end[0] - prev_end[0]) + 0.5f),
                               (int)floorf(prev_end[1] + t * (segment_end[1] - prev_end[1]) + 0.5f) };
-        const float hard = prev_payload[0] + t * (payload[border_index * 2] - prev_payload[0]);
-        const float dens = prev_payload[1] + t * (payload[border_index * 2 + 1] - prev_payload[1]);
-        _brush_falloff(*buffer, interp_start, interp_end, *offset_x, *offset_y, *width, hard, dens);
+        const float dens = prev_density + t * (density - prev_density);
+        _brush_falloff(*buffer, interp_start, interp_solid, *offset_x, *offset_y, *width, 1.0f, dens);
+        _brush_falloff(*buffer, interp_solid, interp_end, *offset_x, *offset_y, *width, 0.0f, dens);
       }
     }
 
-    _brush_falloff(*buffer, segment_start, segment_end, *offset_x, *offset_y, *width,
-                   payload[border_index * 2], payload[border_index * 2 + 1]);
+    if(border_index == node_count * 3 || !_brush_solid_repeats(points, payload, border_index))
+      _brush_falloff(*buffer, segment_start, segment_solid, *offset_x, *offset_y, *width, 1.0f, density);
+    _brush_falloff(*buffer, segment_solid, segment_end, *offset_x, *offset_y, *width, 0.0f, density);
 
     prev_start[0] = segment_start[0];
     prev_start[1] = segment_start[1];
+    prev_solid[0] = segment_solid[0];
+    prev_solid[1] = segment_solid[1];
     prev_end[0] = segment_end[0];
     prev_end[1] = segment_end[1];
-    prev_payload[0] = payload[border_index * 2];
-    prev_payload[1] = payload[border_index * 2 + 1];
+    prev_density = density;
     have_prev = TRUE;
   }
 
@@ -3341,7 +3439,8 @@ static inline void _brush_falloff_roi(float *buffer, const int *segment_start, c
   float cursor_y = segment_start[1];
 
   float opacity = density;
-  const float opacity_step = density / (float)(segment_length - solid_length);
+  const int soft_length = segment_length - solid_length;
+  const float opacity_step = (soft_length > 0) ? density / (float)soft_length : 0.0f;
 
   const int start_x = segment_start[0], start_y = segment_start[1];
   const int end_x = segment_end[0], end_y = segment_end[1];
@@ -3451,8 +3550,10 @@ static dt_masks_raster_result_t _brush_get_mask_roi(const dt_iop_module_t *const
   }
 
 
+  _brush_payload_to_edges(points, border, payload, node_count * 3, border_count, 3);
+
   float min_x = 0.0f, max_x = 0.0f, min_y = 0.0f, max_y = 0.0f;
-  _brush_bounding_box_raw(points, border, node_count, points_count, &min_x, &max_x, &min_y, &max_y);
+  _brush_bounding_box_raw(points, border, payload, node_count, points_count, &min_x, &max_x, &min_y, &max_y);
 
   if(dt_get_debug_flags() & DT_DEBUG_PERF)
   {
@@ -3470,7 +3571,8 @@ static dt_masks_raster_result_t _brush_get_mask_roi(const dt_iop_module_t *const
     return DT_MASKS_RASTER_EMPTY;
   }
 
-  // now we fill the falloff
+  /* now we fill the falloff: each spoke solid up to its edge, and the ramp from there out.
+   * _brush_falloff_roi() skips a piece that lies wholly outside the ROI. */
   if(!use_sparse)
   {
     __OMP_PARALLEL_FOR__(if(border_count - node_count * 3 > 1000))
@@ -3478,29 +3580,29 @@ static dt_masks_raster_result_t _brush_get_mask_roi(const dt_iop_module_t *const
     for(int border_index = node_count * 3; border_index < border_count; border_index++)
     {
       const int segment_start[] = { points[border_index * 2], points[border_index * 2 + 1] };
+      const int segment_solid[] = { payload[border_index * 3], payload[border_index * 3 + 1] };
       const int segment_end[] = { border[border_index * 2], border[border_index * 2 + 1] };
-
-      if(MAX(segment_start[0], segment_end[0]) < 0 || MIN(segment_start[0], segment_end[0]) >= roi_width
-         || MAX(segment_start[1], segment_end[1]) < 0
-         || MIN(segment_start[1], segment_end[1]) >= roi_height)
-        continue;
-
-      _brush_falloff_roi(buffer, segment_start, segment_end, roi_width, roi_height, payload[border_index * 2],
-                         payload[border_index * 2 + 1]);
+      const float density = payload[border_index * 3 + 2];
+      if(border_index == node_count * 3 || !_brush_solid_repeats(points, payload, border_index))
+        _brush_falloff_roi(buffer, segment_start, segment_solid, roi_width, roi_height, 1.0f, density);
+      _brush_falloff_roi(buffer, segment_solid, segment_end, roi_width, roi_height, 0.0f, density);
     }
   }
   else
   {
     int prev_start[2] = { 0, 0 };
+    int prev_solid[2] = { 0, 0 };
     int prev_end[2] = { 0, 0 };
-    float prev_payload[2] = { 0.0f, 0.0f };
+    float prev_density = 0.0f;
     gboolean have_prev = FALSE;
 
     // Sparse mode: interpolate between consecutive segments to reduce artifacts.
     for(int border_index = node_count * 3; border_index < border_count; border_index++)
     {
       int segment_start[2] = { points[border_index * 2], points[border_index * 2 + 1] };
+      int segment_solid[2] = { payload[border_index * 3], payload[border_index * 3 + 1] };
       int segment_end[2] = { border[border_index * 2], border[border_index * 2 + 1] };
+      const float density = payload[border_index * 3 + 2];
 
       if(use_sparse && have_prev
          && (prev_start[0] != segment_start[0] || prev_start[1] != segment_start[1]
@@ -3511,30 +3613,27 @@ static dt_masks_raster_result_t _brush_get_mask_roi(const dt_iop_module_t *const
           const float t = (float)step / (float)sparse_step;
           int interp_start[2] = { (int)floorf(prev_start[0] + t * (segment_start[0] - prev_start[0]) + 0.5f),
                                   (int)floorf(prev_start[1] + t * (segment_start[1] - prev_start[1]) + 0.5f) };
+          int interp_solid[2] = { (int)floorf(prev_solid[0] + t * (segment_solid[0] - prev_solid[0]) + 0.5f),
+                                  (int)floorf(prev_solid[1] + t * (segment_solid[1] - prev_solid[1]) + 0.5f) };
           int interp_end[2] = { (int)floorf(prev_end[0] + t * (segment_end[0] - prev_end[0]) + 0.5f),
                                 (int)floorf(prev_end[1] + t * (segment_end[1] - prev_end[1]) + 0.5f) };
-          if(!(MAX(interp_start[0], interp_end[0]) < 0 || MIN(interp_start[0], interp_end[0]) >= roi_width
-               || MAX(interp_start[1], interp_end[1]) < 0 || MIN(interp_start[1], interp_end[1]) >= roi_height))
-          {
-            const float hard = prev_payload[0] + t * (payload[border_index * 2] - prev_payload[0]);
-            const float dens = prev_payload[1] + t * (payload[border_index * 2 + 1] - prev_payload[1]);
-            _brush_falloff_roi(buffer, interp_start, interp_end, roi_width, roi_height, hard, dens);
-          }
+          const float dens = prev_density + t * (density - prev_density);
+          _brush_falloff_roi(buffer, interp_start, interp_solid, roi_width, roi_height, 1.0f, dens);
+          _brush_falloff_roi(buffer, interp_solid, interp_end, roi_width, roi_height, 0.0f, dens);
         }
       }
 
-      if(!(MAX(segment_start[0], segment_end[0]) < 0 || MIN(segment_start[0], segment_end[0]) >= roi_width
-           || MAX(segment_start[1], segment_end[1]) < 0
-           || MIN(segment_start[1], segment_end[1]) >= roi_height))
-        _brush_falloff_roi(buffer, segment_start, segment_end, roi_width, roi_height,
-                           payload[border_index * 2], payload[border_index * 2 + 1]);
+      if(border_index == node_count * 3 || !_brush_solid_repeats(points, payload, border_index))
+        _brush_falloff_roi(buffer, segment_start, segment_solid, roi_width, roi_height, 1.0f, density);
+      _brush_falloff_roi(buffer, segment_solid, segment_end, roi_width, roi_height, 0.0f, density);
 
       prev_start[0] = segment_start[0];
       prev_start[1] = segment_start[1];
+      prev_solid[0] = segment_solid[0];
+      prev_solid[1] = segment_solid[1];
       prev_end[0] = segment_end[0];
       prev_end[1] = segment_end[1];
-      prev_payload[0] = payload[border_index * 2];
-      prev_payload[1] = payload[border_index * 2 + 1];
+      prev_density = density;
       have_prev = TRUE;
     }
   }

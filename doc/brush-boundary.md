@@ -23,12 +23,17 @@ point of the Bézier spine, of a disc of the local radius. The spine is a chain 
 each carrying a radius (`border[0]`/`border[1]`, always written together), a density and a
 fading; the radius is interpolated along a segment with a smoothstep.
 
-The pixel pipeline paints that union as **spokes**: for every sample of the spine, one
-segment from the sample out to its border sample, on each side, with the fading profile
-along the spoke. The spine is walked twice, forward with the border on the right and
-backward with the border on the right again, which is the other side. A cap closes each
-end, and where two segments meet at a node with a different direction, radius or payload,
-the wedge the spokes leave open is filled by an arc or a disc centred on that node.
+The part it paints at full density is a disc union of its own, round the same spine: a node's
+solid radius is its radius times its fading, eased between the nodes by the same smoothstep.
+Two nodes of one solid radius keep that radius between them, whatever the ramp outside it does.
+
+The pixel pipeline paints that union as **spokes**: for every sample of the spine, one segment
+from the sample out to its border sample, on each side, at full density out to the spoke's
+edge sample, on the envelope of the solid discs, and ramping to zero from there. The spine is
+walked twice, forward with the border on the right and backward with the border on the right
+again, which is the other side. A cap closes each end, and where two segments meet at a node
+with a different direction, radius or payload, the wedge the spokes leave open is filled by an
+arc or a disc centred on that node.
 
 Coverage never needed an envelope. The union of spokes is the union of discs wherever the
 spine is sampled densely enough, whatever the spokes do to each other: a spoke inside
@@ -39,8 +44,9 @@ self-crossing outlines, and why it must paint every spoke it is given.
 
 Both consumers share one producer, `_brush_get_pts_border()` in `develop/masks/brush.c`.
 It returns index-aligned arrays: `points` (the spine samples, header of three entries per
-node first), `border` (one border sample per point), `payload` (fading, density per
-sample). They differ in what they hand it and in what they do with the result.
+node first), `border` (one border sample per point), `payload` (three values per sample: its
+edge sample in the frame of its spoke, then its density). They differ in what they hand it and
+in what they do with the result.
 
 | | pipeline (`_brush_get_mask_roi`, `_brush_get_mask`) | GUI (`_brush_get_points_border`) |
 |---|---|---|
@@ -341,8 +347,8 @@ The API did not change shape for this: `dt_masks_functions_t.get_points_border`
 (`masks_functions.h:103-105`) still fills `points`/`points_count`, `border`/`border_count` and
 `border_skips`/`border_skip_count`, members of the `dt_masks_outline_out_t` it is handed,
 returns a `dt_masks_raster_result_t`, and no consumer was touched. (There is no `payload`
-out-parameter; an earlier draft listed one. The `fading` one it has since grown carries a
-contour made from the payload, not the payload: see
+out-parameter; an earlier draft listed one. The `fading` one it has since grown carries the
+edge samples made from the payload, not the payload: see
 [Where the fading starts](#where-the-fading-starts).) What
 changed is *where the truth comes from*. The skip ranges are now derived from the raster
 arrays by a definition, so the outline the GUI draws is the boundary of the mask the pipe
@@ -360,45 +366,101 @@ What still differs, and why it should:
 
 ## Where the fading starts
 
-*Measured on top of `a8997b8e28`, 2026-11-11, on a RelWithDebInfo build: the costs with
-`tests/masks/masks_geometry.c --time-overlay 30`, twice each way, the lower kept, and the
-module's own with `MASKS_DEBUG=1`; the edge against the mask by the corpus's `fading edge` judge
-and, at one cell per pixel, by dumps of each corpus brush's spokes, edge and mask from a
-temporary probe in the harness.*
+*Measured on top of `0d108992d6`, 2026-11-12, on a RelWithDebInfo build, with
+`tests/masks/masks_geometry.c`: the solid part and its edge against the raster by the corpus's
+`solid part` and `fading edge` judges, the raster's cost with `MASKS_DEBUG=1`, three runs each
+way, the overlay's with `--time-overlay 30`, two runs each way, the lower kept per case; the old
+code's figures by running the same harness against the library built from `1b124f5651`. A figure
+measured on an earlier commit says which.*
 
-`_brush_falloff()` and `_brush_falloff_roi()` paint each spoke at its sample's full density over
-the first `fading` of its length, from the spine sample to the border sample, and ramp to zero
-over the rest. The mask is at full density out to `points[i] + fading_i × (border[i] − points[i])`
-on every spoke, and fades past it. A circle draws that contour solid and its border dashed. A
-brush drew its spine solid, a line that carries the nodes but marks no change in the mask, so
-nothing showed where its fading started, or that a scroll on the fading had changed it.
+A circle draws the edge of its solid part solid and its border dashed. A brush drew its spine
+solid, a line that carries the nodes but marks no change in the mask, so nothing showed where its
+fading started, or that a scroll on the fading had changed it. It draws that edge now, traced from
+what the pipe paints.
 
-`_brush_get_points_border()` asks the producer for the payload as well and turns it into that
-contour in place: a payload holds two values per sample as an outline holds two coordinates, so
-each sample's fading is read, then its two cells are overwritten with the point. The header
-repeats the outline's. `get_points_border` hands the contour out through `fading`,
-index-aligned with the border and as long; every other shape leaves it NULL, its outline being
-that contour already. Over 18 builds of the corpus, counted with a temporary probe, the payload
-was always as long as the border. The point is taken on the spoke between two display-space
-samples, as the pipe takes it between two module-space ones: a distortion downstream of the
-module that bends a spoke moves the painted point off the straight one the overlay draws.
+### The solid part is a disc union
 
-That contour is not what the overlay draws. `dt_masks_gui_form_create()` traces from it the edge
+A node's solid radius is `S = fading · border`. Between two nodes it eases from one to the other
+by the smoothstep that eases the whole radius, and the solid part's edge lies on the envelope of
+its discs: `_brush_border_get_XY()` places a spoke's edge sample with
+`dt_masks_outline_envelope_offset()` at the solid radius and that radius's own rate, in the same
+evaluation of the Bézier that places its border sample. The point at the first `fading` of each
+spoke, with the fading eased linearly, is on the envelope of nothing: it leans with the border's
+rate, not the solid part's. Two nodes of one solid radius and different whole radii then get a
+solid part that bulges toward the wider node, and where the smaller disc lies nearly inside the
+larger, the spokes lie along the spine and the solid part thins to a thread. The corpus models
+both on screenshots from a test session: `brush-ramp-taper`, radii of 100 and 22 px and a solid
+radius of 20, and `brush-ramp-nested`, 190 and 18 px and 15.
+
+The corpus's `solid part` judge, `_judge_solid_part()`, holds the raster's full part
+(`mask >= 1`) to that union: every pixel within the discs shrunk to `floor(S) − 2` is full, and
+every full pixel lies within them grown to `ceil(S) + 3`. The fraction of each spoke fails it on 11
+of the 21 brushes and frames it judges -- `brush-ramp-taper` 2744 px in excess, `brush-ramp-nested`
+1718 missing and 499 in excess, `brush-fading-neck` 6639 missing, `brush-fading-pinch` 5421 in
+excess, `brush-1074-flare-b` 861 missing, six of the eight `brush-1313-cusp` frames 1 to 45
+missing -- and the union passes it with 0 px either way on all 21. `brush-1360-pressure-ramp`,
+whose density varies, is not judged.
+
+- **The payload.** A sample's edge is stored in the frame of its spoke, `(a, b)` with
+  `e = c + a·q + b·(−q_y, q_x)`, `q` the spoke from the spine sample `c` to its border sample, then
+  its density. A distortion moves `c` and the border sample, and the edge rides them; the pipe
+  and the GUI each turn the payload into points after their own distortion,
+  `_brush_payload_to_edges()`. A spoke with no direction of its own -- a node's joint arc, a cap,
+  a border borrowed from a neighbour -- is radial, `(fading, 0)`: at a node, the solid disc is the
+  node's.
+- **Gap arcs.** The spokes of an arc closing a gap in the border inside a segment all start on
+  their leaf's centre and take the leaf's edge. The gap is in the border, whose envelope moves by
+  its own rate, not in the solid part, and along the arc's spokes the edge would fold back into
+  the band.
+- **Painting.** `_brush_falloff()` and `_brush_falloff_roi()` paint a spoke in two pieces: from its
+  spine sample to its edge sample at full density, from there to its border sample ramping to
+  zero. A spoke whose solid piece is the one the spoke before it painted, to the pixel and the
+  density -- the gap arc's spokes, which all end on their leaf's edge -- paints only its ramp
+  (`_brush_solid_repeats()`). Painting is a maximum, so the corpus's 29 masks are the same to the
+  bit with and without that skip.
+
+What it changes in a mask, against `1b124f5651`, on the corpus: where a brush's nodes share a
+radius and a fading -- its five synthetic brushes -- 12 to 26 % of the painted pixels move, by at most 9 to 17 out of 255, where a
+spoke's ramp starts on another pixel; where they differ, the solid part changes shape, full pixels
+going from 18479 to 14342 on `brush-ramp-taper`, 4784 to 6353 on `brush-ramp-nested`, 33341 to
+26171 on `brush-fading-pinch` and 18122 to 26198 on `brush-fading-neck`.
+
+### What the GUI draws
+
+`_brush_get_points_border()` asks the producer for the payload as well and turns it into the edge
+samples in place, two cells a sample where the payload has three; the header repeats the
+outline's. `get_points_border` hands them out through `fading`, index-aligned with the border and
+as long; every other shape leaves it NULL, its outline being that edge already. Over 18 builds of
+the corpus, counted with a temporary probe on top of `a8997b8e28`, the payload was always as long
+as the border. The edge rides its spoke between two display-space samples, as the pipe's does
+between two module-space ones: a distortion downstream of the module that bends a spoke moves the
+painted edge off the one the overlay draws.
+
+Those samples are not what the overlay draws. `dt_masks_gui_form_create()` traces from them the edge
 of the part the brush paints at full density, `dt_masks_solid_edge()` (`masks_solid.c`), into
-`gui_points->fading` as closed loops, and frees it. `_brush_events_post_expose()` strokes those
+`gui_points->fading` as closed loops, and frees them. `_brush_events_post_expose()` strokes those
 loops solid on every brush, selected or not, before the spine; the dashed border stays on the
 selected shape.
 
 ### The edge is traced, not walked
 
-The solid part is the union of the bands (c_k, f_k, f_k+1, c_k+1) between neighbouring spokes,
-c a spine sample and f its contour sample. Where the spokes lie along the spine -- a size that
-climbs steeply, a small fading on a wide node -- the edge of that union is made of the spokes'
-sides, not of the line through their ends: on `brush-fading-neck`, 94 px of its 872 px of edge
-lie more than 2 px from that line, on `brush-1074-flare-b` 9 of 4375, on the other brushes of the
-corpus none. A pass over the contour samples can keep or hide them; it cannot draw a spoke's
-side. A boundary pass run on the spine and the contour, each sample tested against the bands,
-was the first approach, and left the ends' contour short of the middle node's on that brush.
+The solid part is the union of the bands (c_k, e_k, e_k+1, c_k+1) between neighbouring spokes, c a
+spine sample and e its edge sample. Its edge is not the line through the edge samples: the
+envelope folds back into the part where the stroke turns, and where the spokes lie along the spine
+-- a size that climbs steeply, a small fading on a wide node -- it is made of the spokes' sides. On
+top of `a8997b8e28`, with the edge then a fraction of each spoke, 94 px of `brush-fading-neck`'s
+872 px of edge lay more than 2 px from that line, 9 of `brush-1074-flare-b`'s 4375, and none on
+the other brushes of the corpus. A pass over the edge samples can keep or hide them; it cannot draw
+a spoke's side.
+
+Measured again on the disc union, with a temporary probe: `dt_masks_outline_boundary_skips()` over
+the edge samples, each tested against the other samples' solid discs, at one cell per pixel. It was
+faster than the fill and trace on 3 of the 21 brushes and frames (`brush-zigzag` 25.7 ms against
+27.6, `brush-1352-radius-step` 4.6 against 8.2) and slower on the others (`brush-concave` 23.5
+against 10.9); it left 1 to 19 open runs where the trace closes one loop; every pixel on the full
+part's edge came within 1.48 to 2.98 px of it, against 1.53 to 1.70 for the trace; and on 16 of the
+21 it kept points more than 2 px off that edge, 1281 on `brush-1074-flare-b`, where the envelope
+folds inside the solid part, and 91 on `brush-hairpin`.
 
 So `masks_solid.c` fills the union and traces its edge, without cairo:
 `tools/check_module_boundaries.sh` counts 20 files in `develop/` that name a toolkit type, and a
@@ -406,11 +468,16 @@ twenty-first fails it.
 
 - **Runs.** A band's orientation is its area's sign, taken about its own spine sample: about the
   origin, thousands of pixels out, float cancellation decides it. Consecutive bands of one
-  orientation make a run, one polygon -- spine forward, contour back, a spoke at each end --
+  orientation make a run, one polygon -- spine forward, edge back, a spoke at each end --
   wound positively, and the union is where the winding is not zero. Two runs that meet share a
   spoke, added once with both windings. A band with a vertex that is not finite is skipped and
   cuts the run. The band from the last sample back to the first is only there when the two are
   within a cell.
+- **Starts.** A run begins once its bands have swept a tenth of a cell one way, as width, area
+  over L1 perimeter, summed over them, and it takes them all. Where the border moves fast the
+  spine is sampled some fiftieth of a pixel apart, and no one band is that wide: on
+  `brush-ramp-nested`, a run that waited for one left a stretch of bands out of the fill, and 15 px
+  of the full part's edge farther than 4 px from the trace.
 - **Turns.** A run turns over only once its bands have swept back a tenth of a cell, as width,
   area over L1 perimeter. A long spoke trembling by a hundredth of a pixel turned it at every
   band, and every turn adds two spokes as long as the fading to the fill: on
@@ -454,32 +521,36 @@ In the RelWithDebInfo build, `brush-selfcross` traces 2 loops, the stroke enclos
 it crosses itself, and every other brush of the corpus traces one, `brush-fading-pinch` among
 them: its solid part narrows to a point at the middle node, where the fading is 0.00001, and the
 spine joins its two halves there, under the node's disc. In a Debug build, `brush-1074-flare`
-traces 4: one of the three more is a hole about a pixel wide inside its solid part, a few pixels
-from its edge at (3703, 3096), which the judge below does not see (on top of `aff63448d6`,
-2026-11-12).
+traces 4, the others as in RelWithDebInfo (on top of `0d108992d6`, 2026-11-12). On top of
+`aff63448d6`, one of its three more was a hole about a pixel wide inside its solid part, a few
+pixels from its edge at (3703, 3096), which the judge below does not see.
 
 ### How close it is
 
 The raster lays each spoke on whole pixels and paints its left and upper neighbours too, so its
-full part (`mask >= 1`) is wider than the union by 0.5 to 1.25 px on average, and fills a one-pixel
-gap between two arms. Against it, at one cell per pixel, on every brush of the corpus but
+full part (`mask >= 1`) is wider than the union, and fills a one-pixel gap between two arms. The
+corpus's `fading edge` judge, `_judge_fading_edge()`, is the one a gap or a cut in the line fails:
+every pixel on the full part's edge within 4 px of an edge point. It judges every brush but
 `brush-1360-pressure-ramp`, whose density varies so that its full part is not where the fading
-starts:
+starts. All are within 1.53 to 1.70 px on the 21 brushes and frames, in the RelWithDebInfo build and the Debug
+one alike (on top of `0d108992d6`, 2026-11-12); the edge of the fraction of each spoke, judged
+against its own raster, came within 2.02 to 2.65.
 
-- an edge point inside the frame lies 0.69 to 0.98 px from the centre of the nearest pixel on
+On top of `a8997b8e28`, with the edge then a fraction of each spoke, and not measured since, at one
+cell per pixel, with dumps of each brush's spokes, edge and mask from a temporary probe: the full
+part was wider than the union by 0.5 to 1.25 px on average, and
+
+- an edge point inside the frame lay 0.69 to 0.98 px from the centre of the nearest pixel on
   the full part's edge, in median, and at most 2.53 px, except where `brush-hairpin`'s edge goes
   round the gap the raster fills between its arms (7.25 px);
-- 0 to 27 px a brush are inside the edge and outside the full part;
-- the corpus judges the other way, which a gap or a cut in the line breaks
-  (`_judge_fading_edge()`): every pixel on the full part's edge within 4 px of an edge point. All
-  are within 2.47 px on `brush-fading-neck` and 2.65 px on the 18 other brushes and frames, in
-  the RelWithDebInfo build and the Debug one alike (on top of `aff63448d6`, 2026-11-12).
+- 0 to 27 px a brush were inside the edge and outside the full part.
 
 ### What it costs
 
-The lower of two runs, in ms, at a 2560×1440 view, fit zoom -- an outline step of 2 on the
-5 kpx frames, 1 on the 3 kpx ones -- without the fading edge and with it; the frame includes the
-harness's own background, about 1 ms, and the build is the first frame, which builds the outline:
+On top of `a8997b8e28`, 2026-11-11, the lower of two runs, in ms, at a 2560×1440 view, fit zoom --
+an outline step of 2 on the 5 kpx frames, 1 on the 3 kpx ones -- without the fading edge and with
+it; the frame includes the harness's own background, about 1 ms, and the build is the first frame,
+which builds the outline:
 
 | case | member frame | selected frame | build, member |
 |---|---:|---:|---:|
@@ -498,6 +569,15 @@ module fills and traces in 0.8 to 7 ms at fit zoom (`brush-1360-pressure-ramp` 6
 268 k crossings). At one cell per pixel it fills in up to 57.7 ms on that brush, 21.8 on
 `brush-1074-flare`, 16.2 on `brush-1074-flare-b` and 15.5 on `brush-zigzag`, the others under
 10, and traces in at most 8.8.
+
+On top of `0d108992d6`, 2026-11-12, against `1b124f5651`, the solid part as a disc union leaves
+the overlay where it was: over two runs each way, every brush's frames within 0.26 ms either way
+and its builds within 3.4 ms, `group-11`'s build 198.2 ms against 193.5. It makes the pipe's
+raster cheaper. Summed over the corpus's 22 brushes and frames, the lower of three runs each with
+`MASKS_DEBUG=1`, the walk takes 238.5 ms against 224.2, its edge placed in the evaluation of the
+Bézier that places the border; a second evaluation for it took some 337. Painting takes 1118.0 ms
+against 1522.0, and the whole buffer 1396.4 against 1772.5: a spoke is painted in two pieces, but
+a gap arc's solid piece once, not once a spoke -- painted once a spoke, it took 1578.0.
 
 ## The polygon
 

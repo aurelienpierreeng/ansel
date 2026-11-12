@@ -317,24 +317,35 @@ rules that were each paid for by a reported defect:
   stretched at every run boundary. `dt_stroke_raster_path()` now carries one `_dash_t` across
   all its sub-paths: a dash is a function of the pixels of border drawn before it. A dash cut by
   a hidden stretch shows as a stub, which that metric owes.
+- **A brush's solid part is a disc union of its own** (on top of `0d108992d6`, 2026-11-12): a
+  node's solid radius is `fading · border`, eased between nodes by the radius's smoothstep, and a
+  spoke is solid out to its edge sample on the envelope of those discs, then ramps. The payload
+  holds that edge in the frame of its spoke, so it rides any distortion. The first `fading` of
+  each spoke, with the fading eased linearly, leaned with the border's rate: between two nodes of
+  one solid radius it bulged toward the wider node, and where one disc nests in the other it
+  thinned to a thread. The corpus's `solid part` judge fails it on 11 of 21 brushes and frames and
+  passes the union on all 21.
 - **Where a brush's fading starts is traced from a fill of its solid part, not walked over the
-  spoke ends** (on top of `a8997b8e28`, 2026-11-11). Where the spokes lie along the spine, the
-  edge of their union is their sides -- 94 of the 872 px of `brush-fading-neck`'s edge lie more
-  than 2 px from the line through the ends -- and no pass over the ends draws a side.
+  edge samples** (on top of `a8997b8e28`, 2026-11-11). Where the spokes lie along the spine, the
+  edge of their union is their sides -- 94 of the 872 px of `brush-fading-neck`'s edge then lay
+  more than 2 px from the line through the ends -- and no pass over the ends draws a side; on the
+  disc union, `dt_masks_outline_boundary_skips()` over the edge samples kept up to 1281 points
+  inside the solid part where the envelope folds, for no saving (on top of `0d108992d6`).
   `dt_masks_solid_edge()` (`masks_solid.c`) fills the bands between neighbouring spokes, in runs
   of one orientation, non-zero, and traces the half-coverage level. Two traps: the lobe of a
   bow-tie band wound against its run cancels the band under it, so it is added back twice and
   never dropped, however thin -- dropping those thinner than a tenth of a cell opened loops 86 px
   inside the solid part, slivers along neighbouring spokes stacking; and a long spoke trembling
-  by a hundredth of a pixel turns a run at every band unless the turn waits for a tenth of a
-  cell of sweep (4621 runs to 1399 on `brush-1360-pressure-ramp`). A neck thinner than half a
-  cell is under half coverage and, traced from the fill alone, breaks into islands that float
-  rounding chooses -- on `brush-fading-neck`, 9 loops with `-ffast-math` and 7 without, where a
-  Debug build fails the judge below -- so the cells the spine crosses are set full before the
-  trace, and the neck is one loop round it (on top of `aff63448d6`, 2026-11-12). It fills
-  without cairo, for the toolkit ratchet. The corpus's `fading edge` judge wants every pixel on the edge of the
-  raster's full part within 4 px of the traced edge. The full account is
-  [Where the fading starts](brush-boundary.md#where-the-fading-starts).
+  by a hundredth of a pixel turns a run at every band unless the turn waits for a tenth of a cell
+  of sweep (4621 runs to 1399 on `brush-1360-pressure-ramp`), and a run begins once its bands
+  have swept that far, summed, since a fast border samples the spine a fiftieth of a pixel apart.
+  A neck thinner than half a cell is under half coverage and, traced from the fill alone, breaks
+  into islands that float rounding chooses -- on `brush-fading-neck`, 9 loops with `-ffast-math`
+  and 7 without, where a Debug build fails the judge below -- so the cells the spine crosses are
+  set full before the trace, and the neck is one loop round it (on top of `aff63448d6`,
+  2026-11-12). It fills without cairo, for the toolkit ratchet. The corpus's `fading edge` judge
+  wants every pixel on the edge of the raster's full part within 4 px of the traced edge. The
+  full account is [Where the fading starts](brush-boundary.md#where-the-fading-starts).
 - **`MASKS_DUMP_OVERLAY=<dir>` makes the darkroom write what each frame drew**: the canvas
   before it is composited and cleared, the frame and dirty rectangles, and every cached outline
   with its skip ranges (`outline-<n>.txt`, the harness's format). It exists because a darkroom
