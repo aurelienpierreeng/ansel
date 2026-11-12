@@ -456,7 +456,7 @@ static dt_masks_raster_result_t _ellipse_get_points_border(dt_develop_t *dev, st
  * transform logic used in the original hit testing.
  */
 static void _ellipse_node_position_cb(const dt_masks_form_gui_points_t *gui_points, int node_index,
-                                      float *node_x, float *node_y, const void *user_data)
+                                      float *node_x, float *node_y, __attribute__((unused)) const void *user_data)
 {
   const float *nodes = gui_points->points;
   const float rotation = atan2f(nodes[3] - nodes[1], nodes[2] - nodes[0]);
@@ -471,7 +471,8 @@ static void _ellipse_node_position_cb(const dt_masks_form_gui_points_t *gui_poin
  */
 static void _ellipse_distance_cb(float pointer_x, float pointer_y, float cursor_radius,
                                  dt_masks_form_gui_t *mask_gui, int form_index, int node_count, int *inside,
-                                 int *inside_border, int *near_handle, int *inside_source, float *dist, const void *user_data)
+                                 int *inside_border, int *near_handle, int *inside_source, float *dist,
+                                 __attribute__((unused)) const void *user_data)
 {
   _ellipse_get_distance(pointer_x, pointer_y, cursor_radius, mask_gui, form_index, 0, inside,
                         inside_border, near_handle, inside_source, dist);
@@ -482,8 +483,9 @@ static void _ellipse_distance_cb(float pointer_x, float pointer_y, float cursor_
  *
  * Ellipse uses the border hit to arm the pivot interaction.
  */
-static void _ellipse_post_select_cb(dt_masks_form_gui_t *mask_gui, int inside, int inside_border,
-                                    int inside_source, const void *user_data)
+static void _ellipse_post_select_cb(dt_masks_form_gui_t *mask_gui, __attribute__((unused)) int inside,
+                                    int inside_border, __attribute__((unused)) int inside_source,
+                                    __attribute__((unused)) const void *user_data)
 {
   mask_gui->pivot_selected = inside_border ? TRUE : FALSE; // cast to strict gboolean
 }

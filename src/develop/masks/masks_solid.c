@@ -464,29 +464,24 @@ static void _solid_spine(const _solid_bands_t *const b, const int8_t *const sign
     int j = (int)ya;
     const int i_end = (int)xb;
     const int j_end = (int)yb;
-    const int si = (i_end > i) ? 1 : -1;
-    const int sj = (j_end > j) ? 1 : -1;
-    // How far along the segment, as a fraction of it, the next side across x and the next across y.
-    const float dtx = (i_end != i) ? 1.0f / fabsf(xb - xa) : 0.0f;
-    const float dty = (j_end != j) ? 1.0f / fabsf(yb - ya) : 0.0f;
-    float tx = ((si > 0) ? (float)(i + 1) - xa : xa - (float)i) * dtx;
-    float ty = ((sj > 0) ? (float)(j + 1) - ya : ya - (float)j) * dty;
+    const float dx = xb - xa;
+    const float dy = yb - ya;
+    const int si = (dx > 0.0f) - (dx < 0.0f);
+    const int sj = (dy > 0.0f) - (dy < 0.0f);
     for(;;)
     {
       cover[(size_t)j * g->w + i] = 255;
       range[2 * j] = MIN(range[2 * j], i);
       range[2 * j + 1] = MAX(range[2 * j + 1], i);
       if(i == i_end && j == j_end) break;
-      if(i != i_end && (j == j_end || tx <= ty))
-      {
+      // The segment leaves the cell by the side it reaches first: its next side across x, at sx / dx
+      // of the segment, or its next side across y, at sy / dy.
+      const float sx = (float)(i + (si > 0)) - xa;
+      const float sy = (float)(j + (sj > 0)) - ya;
+      if(j == j_end || (i != i_end && fabsf(sx * dy) <= fabsf(sy * dx)))
         i += si;
-        tx += dtx;
-      }
       else
-      {
         j += sj;
-        ty += dty;
-      }
     }
   }
 }
