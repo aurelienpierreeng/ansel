@@ -432,17 +432,19 @@ twenty-first fails it.
   at one cell per pixel on `brush-1360-pressure-ramp`, some 830 crossings a sub-scanline, the
   fill took 125.8 ms with `qsort()` and takes 57.7, its edge the same to the bit on every brush
   dumped.
-- **Spine.** Every cell the spine of a kept band crosses is then set full, the segment walked
-  from cell to cell across their sides, so the cells it marks share a side. The spokes start on
-  the spine, so the solid part holds it; where they lie along it, that part is a thread round
-  it, and a thread thinner than half a cell is under half coverage. Traced from the fill alone,
-  `brush-fading-neck`'s neck, some 0.5 px thick -- across it, cells of 50 to 175 out of 255,
-  read with a probe on the fill, the level at 128 -- breaks into islands that float rounding
-  chooses: 9 loops in the RelWithDebInfo build, with `-ffast-math`, and 7 in a Debug build,
-  without it, where 9 px of the neck have no edge point within 4 px and the judge below fails.
-  With the spine set full, the neck is one loop round the spine in both builds. The walk takes
-  0.57 ms in median over the corpus's 39 fills and 1.84 ms at most, on 178,887 bands, measured
-  with a probe in the RelWithDebInfo build (on top of `aff63448d6`, 2026-11-12).
+- **Spine.** Every cell the spine of a kept band crosses is then set full, the segment walked from
+  cell to cell across their sides, so the cells it marks share a side: each step leaves the cell
+  by the side the segment reaches first, computed from the segment's start, so no error builds up
+  along it. The spokes start on the spine, so the solid part holds it; where they lie along it,
+  that part is a thread round it, and a thread thinner than half a cell is under half coverage.
+  Traced from the fill alone, `brush-fading-neck`'s neck, some 0.5 px thick -- across it, cells of
+  50 to 175 out of 255, read with a probe on the fill, the level at 128 -- breaks into islands
+  that float rounding chooses: 9 loops in the RelWithDebInfo build, with `-ffast-math`, and 7 in a
+  Debug build, without it, where 9 px of the neck have no edge point within 4 px and the judge
+  below fails. With the spine set full, the neck is one loop round the spine in both builds (on
+  top of `aff63448d6`, 2026-11-12). The walk takes 0.59 ms in median over the corpus's 39 fills
+  and 1.88 to 2.00 ms at most, on 178,887 bands, over two runs with a probe in the RelWithDebInfo
+  build (on top of `c34db68a44`, 2026-11-12).
 - **Trace.** Marching squares at half coverage with linear interpolation, a saddle resolved by
   the mean of its corners. Each loop is followed from a horizontal crossing among the cells the
   fill wrote and closed on its first point, and a zero-length break starts each loop but the

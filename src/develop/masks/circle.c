@@ -109,7 +109,8 @@ static void _circle_get_distance(float x, float y, float as, dt_masks_form_gui_t
  */
 static void _circle_distance_cb(float pointer_x, float pointer_y, float cursor_radius,
                                 dt_masks_form_gui_t *mask_gui, int form_index, int node_count, int *inside,
-                                int *inside_border, int *near_handle, int *inside_source, float *dist, const void *user_data)
+                                int *inside_border, int *near_handle, int *inside_source, float *dist,
+                                __attribute__((unused)) const void *user_data)
 {
   _circle_get_distance(pointer_x, pointer_y, cursor_radius, mask_gui, form_index, 0, inside,
                        inside_border, near_handle, inside_source, dist);
