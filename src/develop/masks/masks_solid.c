@@ -127,10 +127,9 @@ static int _solid_band_signs(const _solid_bands_t *const b, int8_t *const sign, 
   float drift = 0.0f;
   float swept = 0.0f;  // before a run begins, how far its bands have swept
   int pending = 0;     // and the first of them
-  *twisted = 0;
   for(int k = 0; k < b->count; k++)
   {
-    const int l = (k + 1 == n) ? 0 : k + 1;
+    const int l = (k + 1) % n;
     const float cx = spine[2 * k];
     const float cy = spine[2 * k + 1];
     const float f0x = contour[2 * k] - cx;
@@ -143,39 +142,53 @@ static int _solid_band_signs(const _solid_bands_t *const b, int8_t *const sign, 
     const float perimeter = fabsf(f0x) + fabsf(f0y) + fabsf(f1x - f0x) + fabsf(f1y - f0y) + fabsf(f1x - c1x)
                             + fabsf(f1y - c1y) + fabsf(c1x) + fabsf(c1y);
     const float width = area2 / fmaxf(perimeter, FLT_MIN);
-    const int8_t was = current;
-    drift = (current == 0) ? 0.0f : fmaxf(0.0f, drift - current * width);
-    swept = (current == 0) ? swept + width : 0.0f;
     if(!isfinite(width))
     {
       current = 0;
       swept = 0.0f;
       pending = k + 1;
     }
-    else if(current == 0 ? fabsf(swept) > drift_max : drift > drift_max)
+    else if(current == 0)
     {
-      current = ((current == 0 ? swept : width) > 0.0f) ? 1 : -1;
-      drift = 0.0f;
+      swept += width;
+      if(fabsf(swept) > drift_max)
+      {
+        // the run takes the bands that swept it in
+        current = (swept > 0.0f) ? 1 : -1;
+        drift = 0.0f;
+        runs++;
+        for(int j = pending; j < k; j++) sign[j] = current;
+      }
+    }
+    else
+    {
+      // only a band against the run sweeps it back, so it turns to that band's way
+      drift = fmaxf(0.0f, drift - current * width);
+      if(drift > drift_max)
+      {
+        current = -current;
+        drift = 0.0f;
+        runs++;
+      }
     }
     sign[k] = current;
-    if(current == 0) continue;
-    if(current != was) runs++;
-    // a run that begins here takes the bands that swept it in
-    for(int j = (was == 0) ? pending : k; j <= k; j++)
+  }
+
+  *twisted = 0;
+  for(int k = 0; k < b->count; k++)
+  {
+    if(sign[k] == 0) continue;
+    const int l = (k + 1) % n;
+    float t = 0.0f;
+    *twisted += _solid_spokes_cross(b, k, l, &t);
+    const int ends[2] = { k, l };
+    for(int q = 0; q < 2; q++)
     {
-      const int m = (j + 1 == n) ? 0 : j + 1;
-      sign[j] = current;
-      float t = 0.0f;
-      *twisted += _solid_spokes_cross(b, j, m, &t);
-      const int ends[2] = { j, m };
-      for(int q = 0; q < 2; q++)
-      {
-        const int s = ends[q];
-        bbox[0] = fminf(bbox[0], fminf(spine[2 * s], contour[2 * s]));
-        bbox[1] = fmaxf(bbox[1], fmaxf(spine[2 * s], contour[2 * s]));
-        bbox[2] = fminf(bbox[2], fminf(spine[2 * s + 1], contour[2 * s + 1]));
-        bbox[3] = fmaxf(bbox[3], fmaxf(spine[2 * s + 1], contour[2 * s + 1]));
-      }
+      const int s = ends[q];
+      bbox[0] = fminf(bbox[0], fminf(spine[2 * s], contour[2 * s]));
+      bbox[1] = fmaxf(bbox[1], fmaxf(spine[2 * s], contour[2 * s]));
+      bbox[2] = fminf(bbox[2], fminf(spine[2 * s + 1], contour[2 * s + 1]));
+      bbox[3] = fmaxf(bbox[3], fmaxf(spine[2 * s + 1], contour[2 * s + 1]));
     }
   }
   return runs;
