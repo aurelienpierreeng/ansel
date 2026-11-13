@@ -29,17 +29,20 @@ find_package(PkgConfig QUIET)
 set(_libsoup_map_version "")
 if(USE_MAP AND PKG_CONFIG_EXECUTABLE)
   execute_process(
-    COMMAND ${PKG_CONFIG_EXECUTABLE} --print-requires --print-requires-private osmgpsmap-1.0
+    COMMAND ${PKG_CONFIG_EXECUTABLE} --print-errors --print-requires --print-requires-private osmgpsmap-1.0
     OUTPUT_VARIABLE _libsoup_osm_requires
-    RESULT_VARIABLE _libsoup_osm_result
-    OUTPUT_STRIP_TRAILING_WHITESPACE
-    ERROR_QUIET)
-  if(_libsoup_osm_result EQUAL 0)
-    if(_libsoup_osm_requires MATCHES "libsoup-3")
-      set(_libsoup_map_version "3")
-    elseif(_libsoup_osm_requires MATCHES "libsoup-2")
-      set(_libsoup_map_version "2")
-    endif()
+    ERROR_VARIABLE _libsoup_osm_error
+    OUTPUT_STRIP_TRAILING_WHITESPACE)
+  # Read the error as well as the output. When the libsoup osm-gps-map requires is not
+  # installed, pkg-config fails without printing the requirement; with --print-errors it says
+  # "Package 'libsoup-3.0', required by 'osmgpsmap-1.0', not found" on stderr instead. Reading
+  # only a successful stdout took that for "no constraint" and fell back to libsoup2 (measured
+  # with pkgconf 1.8.1, 2026-11-13).
+  string(CONCAT _libsoup_osm_requires "${_libsoup_osm_requires}" "\n" "${_libsoup_osm_error}")
+  if(_libsoup_osm_requires MATCHES "libsoup-3")
+    set(_libsoup_map_version "3")
+  elseif(_libsoup_osm_requires MATCHES "libsoup-2")
+    set(_libsoup_map_version "2")
   endif()
 endif()
 
@@ -94,6 +97,18 @@ if(PC_LIBSOUP3_FOUND AND NOT LIBSOUP_FORCE_VERSION STREQUAL "2")
     set(LIBSOUP_VERSION_MAJOR 3 CACHE STRING "LibSoup major version")
     message(STATUS "Found libsoup3 ${PC_LIBSOUP3_VERSION}")
   endif()
+elseif(LIBSOUP_FORCE_VERSION STREQUAL "3")
+  # libsoup3 was required -- by osm-gps-map or by WITH_LIBSOUP3 -- and is not there. Falling
+  # back to libsoup2 here would put both in one process whenever the map is on, which is the
+  # abort described at the top of this file: the macOS CI of 2026-11-13 did exactly that,
+  # "Forcing libsoup3" followed by "Found libsoup2 2.74.3", once libsoup 3 was left unlinked.
+  if(_libsoup_map_version STREQUAL "3")
+    message(FATAL_ERROR
+            "osm-gps-map is built against libsoup3, but pkg-config cannot find libsoup-3.0. "
+            "Install libsoup3's development files (on Homebrew, `brew link libsoup`), or "
+            "configure with -DUSE_MAP=OFF to drop the map and geotagging panels.")
+  endif()
+  message(STATUS "libsoup3 was requested but not found; HTTP server disabled")
 else()
   # libsoup2 Fallback
   find_package(LibSoup2 QUIET)

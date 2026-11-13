@@ -288,6 +288,48 @@ Measured on 2026-09-15: the step died on the arm64 name and took a perfectly goo
 it. The rename is also the one place that knows this spelling, so the Matrix notification uses
 the names verbatim instead of converting them again.
 
+## Homebrew links one libsoup at a time, and it must be osm-gps-map's
+
+*Established 2026-11-13 against `6a9005ef9c`.*
+
+`libsoup@2` and `libsoup` (3) install into the same Homebrew prefix, so only one is linked at a
+time: installing or linking either one unlinks the other (`Unlinking
+/opt/homebrew/Cellar/libsoup@2/2.74.3_1... 79 symlinks removed.`). `install-deps-macos.sh` used to
+end with `brew link --force libomp libsoup@2`, unconditionally.
+
+On 2026-11-13 the arm64 CI pulled `osm-gps-map` 1.2.2, whose `.pc` requires `libsoup-3.0`. The
+final link put libsoup 2 back and left libsoup 3 unlinked, so `pkg-config` could no longer resolve
+`osmgpsmap-1.0` (`Package 'libsoup-3.0', required by 'osmgpsmap-1.0', not found`, four times). The
+map's include directories came back empty, and the build stopped in `generate_iop_static` on
+`view.h:63: fatal error: 'osm-gps-map.h' file not found` — on PR #1635, whose diff touches only
+`src/gui/dtgtk/preview_window.c`; the other two macOS jobs were then cancelled.
+
+The same configure printed `Forcing libsoup3`, then `Found libsoup2 2.74.3`:
+`FindLibSoup.cmake` fell back to libsoup 2 when the libsoup 3 it had just required was missing —
+the very mix (libsoup 2 and 3 in one process) its header explains aborts at the first plugin load.
+
+Fixed in three places:
+
+- `install-deps-macos.sh` reads `osmgpsmap-1.0.pc` and links the libsoup it names.
+- `FindLibSoup.cmake` no longer falls back to libsoup 2 when libsoup 3 is required; when
+  osm-gps-map is what requires it, configure stops with a message naming `brew link libsoup` and
+  `-DUSE_MAP=OFF`.
+- The probe of osm-gps-map's requirement now passes `--print-errors` and reads stderr. Measured with
+  pkgconf 1.8.1: when the required libsoup is missing, `--print-requires` prints nothing and exits
+  1, so the probe saw no constraint at all.
+
+Tested 2026-11-13 by configuring `FindLibSoup.cmake` alone against fake `.pc` trees, five layouts:
+
+| layout | result |
+|---|---|
+| map on libsoup 3, both installed | libsoup 3 |
+| map on libsoup 3, only libsoup 2 | configure error (was: libsoup 2, silently) |
+| map on libsoup 2, both installed | libsoup 2 |
+| map on libsoup 2, only libsoup 3 | not found, HTTP server off (unchanged) |
+| no map | libsoup 3 |
+
+The Homebrew side is untested outside CI: there is no Mac here.
+
 ## A commit already published is not built again
 
 *Measured 2026-09-22 and 2026-10-14; re-checked against `73ec46a31b` on 2026-10-14. The runs
