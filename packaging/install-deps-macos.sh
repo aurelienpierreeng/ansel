@@ -129,4 +129,20 @@ if (( brew_install_status != 0 )); then
 fi
 
 # Handle keg-only libs.
-brew link --force libomp libsoup@2
+brew link --force libomp
+
+# libsoup 2 and libsoup 3 both install into the same prefix, so only one of them is linked at a
+# time, and each install or link of one unlinks the other. The linked one must be the one
+# osm-gps-map is built against: cmake/modules/FindLibSoup.cmake asks osm-gps-map's .pc which
+# libsoup to use, and that .pc names libsoup-3.0 or libsoup-2.4 through pkg-config. This used to
+# link libsoup@2 unconditionally; since Homebrew's osm-gps-map 1.2.2 requires libsoup-3.0, that
+# unlinked libsoup 3, pkg-config could no longer resolve osmgpsmap-1.0, and the build stopped on
+# `'osm-gps-map.h' file not found` (CI of 2026-11-13).
+osm_pc="$(brew --prefix osm-gps-map)/lib/pkgconfig/osmgpsmap-1.0.pc"
+if grep -q 'libsoup-3' "${osm_pc}"; then
+  brew unlink libsoup@2 >/dev/null 2>&1 || true
+  brew link --overwrite libsoup
+else
+  brew unlink libsoup >/dev/null 2>&1 || true
+  brew link --force --overwrite libsoup@2
+fi
