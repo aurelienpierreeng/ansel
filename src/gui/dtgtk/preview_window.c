@@ -194,7 +194,7 @@ static gboolean _preview_window_state_changed(GtkWidget *dialog, GdkEventWindowS
  * Re-maximizes any maximized window so the compositor/WM can re-place it if
  * required (some Wayland compositors need this after a topology change).
  */
-static void _preview_window_monitor_added(GdkDisplay *display, GdkMonitor *monitor, gpointer user_data)
+static void _preview_window_monitor_added(G_GNUC_UNUSED GdkDisplay *display, G_GNUC_UNUSED GdkMonitor *monitor, gpointer user_data)
 {
   dt_preview_window_t *preview = (dt_preview_window_t *)user_data;
   if(preview->maximized)
@@ -212,7 +212,7 @@ static void _preview_window_monitor_added(GdkDisplay *display, GdkMonitor *monit
  * Also re-maximizes affected windows so the WM/compositor re-assigns them to
  * a surviving output.
  */
-static void _preview_window_monitor_removed(GdkDisplay *display, GdkMonitor *monitor, gpointer user_data)
+static void _preview_window_monitor_removed(G_GNUC_UNUSED GdkDisplay *display, GdkMonitor *monitor, gpointer user_data)
 {
   dt_preview_window_t *preview = (dt_preview_window_t *)user_data;
 
@@ -233,7 +233,7 @@ static void _preview_window_monitor_removed(GdkDisplay *display, GdkMonitor *mon
  */
 static gboolean _preview_window_configure(GtkWidget *dialog, GdkEventConfigure *event, gpointer user_data)
 {
-  dt_preview_window_t *preview = (dt_preview_window_t *)user_data;
+  const dt_preview_window_t *preview = (dt_preview_window_t *)user_data;
   if(preview != _last_opened_preview) return FALSE;
 
   GdkWindow *gdk_win = gtk_widget_get_window(dialog);
@@ -324,7 +324,7 @@ static void _close_preview_popup(GtkWidget *dialog, gpointer data)
   gtk_widget_destroy(dialog);
 }
 
-static gboolean _preview_window_delete(GtkWidget *dialog, GdkEvent *event, gpointer user_data)
+static gboolean _preview_window_delete(GtkWidget *dialog, G_GNUC_UNUSED GdkEvent *event, gpointer user_data)
 {
   _close_preview_popup(dialog, user_data);
   return TRUE;
@@ -422,8 +422,7 @@ _thumb_draw_image(GtkWidget *widget, cairo_t *cr, gpointer user_data)
 
   return TRUE;
 }
-
-void _preview_redraw(gpointer instance, int signal, gpointer user_data)
+void _preview_redraw(G_GNUC_UNUSED gpointer instance, G_GNUC_UNUSED int signal, gpointer user_data)
 {
   dt_preview_window_t *preview = (dt_preview_window_t *)user_data;
   if(!IS_NULL_PTR(preview) && !IS_NULL_PTR(preview->area))
@@ -568,11 +567,11 @@ void dt_preview_window_spawn(const int32_t imgid)
   const dt_image_t *img = dt_image_cache_get(imgid, 'r');
   if(IS_NULL_PTR(img))
   {
-    dt_control_log(("No image to open !"));
+    dt_control_log("No image to open !");
     return;
   }
 
-  gchar *name = g_strdup_printf(("Ansel - Preview : %s [%d]"), img->filename, img->version);
+  gchar *name = g_strdup_printf("Ansel - Preview : %s [%d]", img->filename, img->version);
   dt_image_cache_read_release(img);
 
   /* Repository convention: g_malloc0() returns zero-initialized memory and is
