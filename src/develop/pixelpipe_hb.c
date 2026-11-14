@@ -507,7 +507,6 @@ void dt_dev_pixelpipe_set_input(dt_dev_pixelpipe_t *pipe, int32_t imgid, int wid
   pipe->iheight = height;
   pipe->iscale = iscale;
   pipe->imgid = imgid;
-  pipe->dev->image_storage = pipe->dev->image_storage;
   pipe->size = size;
 
   // Nodes may already exist if this pipe was set up before its input size was known: export
