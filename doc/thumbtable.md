@@ -112,6 +112,7 @@ instance via `dt_thumbtable_grid_ops()` / `dt_thumbtable_filmstrip_ops()`; the e
 | `grab_focus` *(nullable)*    | Grab keyboard focus for the content widget | grabs focus | — |
 | `handle_key` *(nullable)*    | Consume a mode-specific navigation/selection key | Up/Down + space selection | — |
 | `pre_activate` *(nullable)*  | Select an image before a Return/activate | select single | — |
+| `on_keyboard_move` *(nullable)* | Update the selection after an arrow/Page/Home/End move | plain: select single; Shift: extend; any other modifier: none | — |
 
 Nullable ops are only meaningful in one mode; the engine null-checks before dispatching. All other
 ops must be provided by both frontends.
@@ -235,6 +236,69 @@ Left/Right/Page/Home/End navigation and Return/activate. The engine first offers
 `ops->handle_key` (the filemanager consumes Up/Down row navigation and space selection; the
 filmstrip has none), then handles the shared keys itself, delegating the pre-activate selection to
 `ops->pre_activate`.
+
+**A move updates the selection by its modifiers** (established 2026-11-02 on top of `73ec46a31b`;
+every row of the table exercised with `xdotool` under Xvfb on a 12-image film roll, reading
+`main.selected_images` after each step). Every arrow/Page/Home/End step lands in `dt_thumbtable_move_in_grid()`, which moves the
+keyboard cursor (`dt_thumbtable_dispatch_over`) and then hands the modifiers to
+`ops->on_keyboard_move`. The grid follows the usual file-manager convention:
+
+| Keys | Selection |
+|---|---|
+| Arrow / Page / Home / End | only the image moved to |
+| Shift + those keys | extended to the image moved to (`dt_thumbtable_select_range()`) |
+| any other modifier (Ctrl, Ctrl+Shift, Alt, …) + those keys | unchanged: the cursor moves alone, and Ctrl+Space then adds or removes the image |
+| Space / Ctrl+Space / Shift+Space | unchanged by this: select one / toggle / extend, at the cursor (`ops->handle_key`) |
+
+Ctrl moving the cursor alone is what keeps keyboard multi-selection possible: if a Ctrl+move
+changed anything, every image the cursor crossed would change state, and two images that are not
+next to each other could not be selected without the ones between. "Plain" is tested for
+(`dt_modifier_is(state, 0)`), not assumed: `dt_modifier_is()` matches the modifiers exactly, so a
+plain-move `else` branch also catches Ctrl+Shift and Alt, and threw a three-image selection away
+in the GUI test below.
+
+Page Up/Down without a modifier select the image a page away, like the arrows, rather than only
+scrolling the grid. That was a choice, made in review of #1551: it is what file managers do, and
+the grid keeps to them. Scrolling without moving the cursor is the mouse wheel's job.
+
+The filmstrip leaves `on_keyboard_move` NULL: it highlights the active image, not the selection
+(#954).
+
+**Shift+move only ever grows the selection.** `dt_thumbtable_select_range()` extends from the outer
+bounds of the current selection rather than from a fixed anchor image, so moving back the other way
+does not shrink it, and with nothing selected it does nothing. This is kept deliberately: the same
+function serves Shift+click (`thumbnail.c`) and Shift+Space, and an anchor would change all three
+together.
+
+**Every key combination the grid handles is declared as a locked shortcut** of the lighttable
+group (`dt_thumbtable_new()`): the plain move keys, Space with its modifiers, and since #1551 Shift
+and Ctrl with each move key. Declaring them lists them in the shortcuts dialog, and locking them
+keeps every other shortcut off them — including the global ones, which would otherwise win, because
+`_key_pressed()` tries the global group but never a virtual shortcut. How that is enforced is in
+[accelerators.md](accelerators.md).
+
+Ctrl+Up/Down do not collide with module-control focus: `modulegroups.c` binds them through
+`dt_accels_new_darkroom_locked_action()` and the module only loads in the darkroom
+(`views()` returns `darkroom`).
+
+**The cost of a plain move** (measured 2026-10-29 in review of #1551, on its head `173394a45c`, on
+top of `73ec46a31b`; RelWithDebInfo, X11, a 51-image collection in a 14,762-image library, the
+tagging module expanded). Each select-single is a `DELETE` plus an `INSERT` on
+`main.selected_images` and two `DT_SIGNAL_SELECTION_CHANGED` emissions (clear, then select), counted
+with `-d signal --d-signal-act raise --d-signal DT_SIGNAL_SELECTION_CHANGED`. Nine places connect to
+the signal (the thumbtable itself, the disk storage, and the export, geotagging, metadata,
+metadata_view, styles, tagging and map modules). Holding Right at a 30 ms key repeat, the grid kept
+up: 31 ms per step on average over 33 repeats. The selection signals were raised 7.5 ms after the
+key press (median of 37 presses, 17 ms at most). The key events were handled in bursts of 2 or 3
+every 45 to 65 ms; with no baseline taken without the selection change, whether the selection causes
+the bursts is **not known**. The timestamps are taken when the handler runs, not from the events.
+
+Signals per press in the same test: 2 for a plain arrow, Home or End; 1 for Shift+Right; 0 for
+Shift+Left after it (the selection does not shrink); 0 for a Ctrl+arrow, then 1 for Ctrl+Space; 0
+for Left/Right in the darkroom filmstrip. Ctrl+Shift+Right gave 2 and replaced the selection — the
+bug the `dt_modifier_is(state, 0)` test above fixes. Re-run on 2026-11-02 with the fix, under Xvfb:
+Ctrl+Shift+Right and Alt+Right gave 0 and left a two-image selection as it was; Right, Page Down,
+End and Home each gave 2 and selected one image.
 
 ## Extending
 

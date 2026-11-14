@@ -1,6 +1,7 @@
 /*
     This file is part of Ansel,
     Copyright (C) 2026 Aurélien PIERRE.
+    Copyright (C) 2026 Sergio Schvezov.
 
     Ansel is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -324,6 +325,20 @@ static void _grid_pre_activate(dt_thumbtable_t *table, int32_t imgid)
   dt_selection_select_single(dt_selection_get_global(), imgid);
 }
 
+static void _grid_on_keyboard_move(dt_thumbtable_t *table, const GdkEventKey *event, int rowid, int32_t imgid)
+{
+  // File-manager convention: a plain move selects the image it lands on, Shift extends the
+  // selection to it, and any other modifier -- Ctrl above all -- moves the cursor alone, so
+  // that Ctrl+Space can then toggle the image: that is how a selection of images that are not
+  // next to each other is built from the keyboard. dt_modifier_is() matches the modifiers
+  // exactly, so "plain" has to be tested for, not assumed: Ctrl+Shift or Alt falling through
+  // to select_single would throw the selection away.
+  if(dt_modifier_is(event->state, GDK_SHIFT_MASK))
+    dt_thumbtable_select_range(table, rowid);
+  else if(dt_modifier_is(event->state, 0))
+    dt_selection_select_single(dt_selection_get_global(), imgid);
+}
+
 
 // --- Vtable -----------------------------------------------------------------------------------
 
@@ -350,6 +365,7 @@ const dt_thumbtable_layout_ops_t *dt_thumbtable_grid_ops(void)
     .grab_focus = _grid_grab_focus,
     .handle_key = _grid_handle_key,
     .pre_activate = _grid_pre_activate,
+    .on_keyboard_move = _grid_on_keyboard_move,
   };
   return &ops;
 }
