@@ -637,6 +637,13 @@
     <longdescription/>
   </dtconfig>
   <dtconfig>
+    <name>ui_last/colorpicker_display_extremes</name>
+    <type>boolean</type>
+    <default>false</default>
+    <shortdescription>display the pixels holding the minimum and maximum a module picker reads</shortdescription>
+    <longdescription/>
+  </dtconfig>
+  <dtconfig>
     <name>ui_last/colorpicker_large</name>
     <type>boolean</type>
     <default>false</default>

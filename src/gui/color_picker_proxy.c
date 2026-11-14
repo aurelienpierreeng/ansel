@@ -15,6 +15,7 @@
     Copyright (C) 2022 Philipp Lutz.
     Copyright (C) 2023 Alynx Zhou.
     Copyright (C) 2023, 2025-2026 Aurélien PIERRE.
+    Copyright (C) 2026 Guillaume Stutin.
     
     darktable is free software: you can redistribute it and/or modify
     it under the terms of the GNU Lesser General Public License as published by
@@ -336,12 +337,62 @@ static int _picker_sample_box(const dt_iop_module_t *module, const dt_iop_roi_t 
   return 0;
 }
 
+// Inverse of _picker_sample_box() for one buffer pixel: its centre, back to the raw-norm space
+// the darkroom draws the picker geometry from.
+static void _picker_buffer_to_raw_norm(dt_develop_t *dev, const dt_iop_module_t *module,
+                                       const dt_iop_roi_t *roi, const dt_pixelpipe_picker_source_t picker_source,
+                                       const int pixel[2], float point[2])
+{
+  point[0] = ((float)pixel[0] + 0.5f + roi->x) / roi->scale;
+  point[1] = ((float)pixel[1] + 0.5f + roi->y) / roi->scale;
+  dt_dev_distort_transform_plus(dev->preview_pipe, module->iop_order,
+                                picker_source == PIXELPIPE_PICKER_INPUT ? DT_DEV_TRANSFORM_DIR_FORW_INCL
+                                                                        : DT_DEV_TRANSFORM_DIR_FORW_EXCL,
+                                point, 1);
+  dt_dev_coordinates_image_abs_to_image_norm(dev, point, 1);
+  dt_dev_coordinates_image_norm_to_raw_norm(dev, point, 1);
+}
+
+static void _picker_store_extremes(dt_develop_t *dev, const dt_iop_module_t *module, const dt_iop_roi_t *roi,
+                                   const dt_color_picker_extremes_t *extremes)
+{
+  const dt_iop_color_picker_t *const picker = dev->color_picker.picker;
+  dev->color_picker.extremes_valid = DT_COLOR_PICKER_EXTREMES_NONE;
+  dev->color_picker.extremes_channel = -1;
+  dev->color_picker.extremes_picker = picker;
+  if(!extremes->valid) return;
+
+  for(int c = 0; c < 3; c++)
+  {
+    for(int k = 0; k < 4; k++)
+    {
+      dev->color_picker.extreme_pixels[0][c][k] = extremes->min_pixel[c][k];
+      dev->color_picker.extreme_pixels[1][c][k] = extremes->max_pixel[c][k];
+    }
+    if(picker->extremes & DT_COLOR_PICKER_EXTREMES_MIN)
+      _picker_buffer_to_raw_norm(dev, module, roi, PIXELPIPE_PICKER_INPUT, extremes->min[c],
+                                 dev->color_picker.extreme_points[0][c]);
+    if(picker->extremes & DT_COLOR_PICKER_EXTREMES_MAX)
+      _picker_buffer_to_raw_norm(dev, module, roi, PIXELPIPE_PICKER_INPUT, extremes->max[c],
+                                 dev->color_picker.extreme_points[1][c]);
+  }
+  dev->color_picker.extremes_valid = picker->extremes;
+}
+
 static gboolean _sample_picker_buffer(dt_dev_pixelpipe_t *pipe, dt_iop_module_t *module,
                                       const dt_iop_buffer_dsc_t *dsc, const dt_iop_roi_t *roi,
                                       const float *pixel, dt_aligned_pixel_t avg_out,
                                       dt_aligned_pixel_t min_out, dt_aligned_pixel_t max_out,
                                       const dt_pixelpipe_picker_source_t picker_source)
 {
+  // Only the input sample feeds the module's picker callbacks, so only it is located. A sample
+  // that fails leaves no cross behind.
+  dt_develop_t *const dev = dt_dev_get_global();
+  const gboolean locate = picker_source == PIXELPIPE_PICKER_INPUT && dev && dev->color_picker.picker
+                          && dev->color_picker.picker->extremes != DT_COLOR_PICKER_EXTREMES_NONE;
+  if(picker_source == PIXELPIPE_PICKER_INPUT && dev) dev->color_picker.extremes_valid = DT_COLOR_PICKER_EXTREMES_NONE;
+  dt_color_picker_extremes_t extremes = { .valid = FALSE };
+
   int box[4];
   if(_picker_sample_box(module, roi, picker_source, box)) return FALSE;
 
@@ -351,7 +402,9 @@ static gboolean _sample_picker_buffer(dt_dev_pixelpipe_t *pipe, dt_iop_module_t 
 
   const dt_iop_colorspace_type_t picker_cst = dt_iop_color_picker_get_active_cst(module);
   const dt_iop_order_iccprofile_info_t *const profile = dt_ioppr_get_pipe_current_profile_info(module, pipe);
-  dt_color_picker_helper(dsc, pixel, roi, box, avg, min, max, dsc->cst, picker_cst, profile);
+  dt_color_picker_helper(dsc, pixel, roi, box, avg, min, max, dsc->cst, picker_cst, profile,
+                         locate ? &extremes : NULL);
+  if(locate) _picker_store_extremes(dev, module, roi, &extremes);
 
   for(int k = 0; k < 4; k++)
   {
@@ -691,6 +744,7 @@ static void _color_picker_widget_destroy(GtkWidget *widget, dt_iop_color_picker_
   dt_dev_pixelpipe_cache_wait_cleanup(&dev->color_picker.output_wait, "picker-widget-destroyed-output");
 
   dev->color_picker.picker = NULL;
+  dev->color_picker.extremes_valid = DT_COLOR_PICKER_EXTREMES_NONE;
   dev->color_picker.widget = NULL;
   dev->color_picker.module = NULL;
   dev->color_picker.kind = DT_COLOR_PICKER_POINT;
@@ -712,6 +766,7 @@ void dt_iop_color_picker_reset(dt_iop_module_t *module, gboolean keep)
       dt_dev_pixelpipe_cache_wait_cleanup(&dev->color_picker.output_wait, "picker-reset-output");
       _color_picker_reset(picker);
       dev->color_picker.picker = NULL;
+      dev->color_picker.extremes_valid = DT_COLOR_PICKER_EXTREMES_NONE;
       dev->color_picker.widget = NULL;
       dev->color_picker.module = NULL;
       dev->color_picker.kind = DT_COLOR_PICKER_POINT;
@@ -733,6 +788,7 @@ static void _init_picker(dt_iop_color_picker_t *picker, dt_iop_module_t *module,
   picker->colorpick  = button;
   picker->update_pending = FALSE;
   picker->geometry_is_raw = FALSE;
+  picker->extremes = DT_COLOR_PICKER_EXTREMES_NONE;
 
   // default values
   const float middle = 0.5f;
@@ -832,6 +888,7 @@ static gboolean _color_picker_callback_button_press(GtkWidget *button, GdkEventB
     dt_dev_pixelpipe_cache_wait_cleanup(&dev->color_picker.input_wait, "picker-deactivate-input");
     dt_dev_pixelpipe_cache_wait_cleanup(&dev->color_picker.output_wait, "picker-deactivate-output");
     dev->color_picker.picker = NULL;
+    dev->color_picker.extremes_valid = DT_COLOR_PICKER_EXTREMES_NONE;
     dev->color_picker.widget = NULL;
     dev->color_picker.module = NULL;
     dev->color_picker.kind = DT_COLOR_PICKER_POINT;
@@ -1035,6 +1092,7 @@ static GtkWidget *_color_picker_new(dt_iop_module_t *module, dt_iop_color_picker
     g_signal_connect_data(G_OBJECT(button), "button-press-event",
                           G_CALLBACK(_color_picker_callback_button_press), color_picker, (GClosureNotify)g_free, 0);
     g_signal_connect(G_OBJECT(button), "destroy", G_CALLBACK(_color_picker_widget_destroy), color_picker);
+    g_object_set_data(G_OBJECT(button), "dt-iop-color-picker", color_picker);
     if(w) gtk_box_pack_start(GTK_BOX(w), button, FALSE, FALSE, 0);
 
     dt_develop_t *const dev = dt_dev_get_global();
@@ -1063,6 +1121,7 @@ static GtkWidget *_color_picker_new(dt_iop_module_t *module, dt_iop_color_picker
     g_signal_connect_data(G_OBJECT(w), "quad-pressed",
                           G_CALLBACK(_color_picker_callback), color_picker, (GClosureNotify)g_free, 0);
     g_signal_connect(G_OBJECT(w), "destroy", G_CALLBACK(_color_picker_widget_destroy), color_picker);
+    g_object_set_data(G_OBJECT(w), "dt-iop-color-picker", color_picker);
 
     dt_develop_t *const dev = dt_dev_get_global();
     if(dev && dev->color_picker.enabled && dev->color_picker.module == module
@@ -1080,6 +1139,35 @@ static GtkWidget *_color_picker_new(dt_iop_module_t *module, dt_iop_color_picker
 
     return w;
   }
+}
+
+void dt_color_picker_set_extremes(GtkWidget *picker, const dt_iop_color_picker_extremes_t extremes)
+{
+  dt_iop_color_picker_t *const color_picker = picker ? g_object_get_data(G_OBJECT(picker), "dt-iop-color-picker") : NULL;
+  if(color_picker) color_picker->extremes = extremes;
+}
+
+int dt_iop_color_picker_get_extreme_pixel(const dt_iop_module_t *module, const dt_iop_color_picker_extremes_t which,
+                                          const int channel, dt_aligned_pixel_t pixel)
+{
+  const dt_develop_t *const dev = dt_dev_get_global();
+  if(IS_NULL_PTR(dev) || IS_NULL_PTR(module) || dev->color_picker.module != module || channel < 0 || channel > 2
+     || dev->color_picker.extremes_picker != dev->color_picker.picker
+     || (which != DT_COLOR_PICKER_EXTREMES_MIN && which != DT_COLOR_PICKER_EXTREMES_MAX)
+     || !(dev->color_picker.extremes_valid & which))
+    return 1;
+
+  const int side = (which == DT_COLOR_PICKER_EXTREMES_MAX) ? 1 : 0;
+  for(int k = 0; k < 4; k++) pixel[k] = dev->color_picker.extreme_pixels[side][channel][k];
+  return 0;
+}
+
+void dt_iop_color_picker_set_deciding_channel(const dt_iop_module_t *module, const int channel)
+{
+  dt_develop_t *const dev = dt_dev_get_global();
+  if(IS_NULL_PTR(dev) || IS_NULL_PTR(module) || dev->color_picker.module != module) return;
+  dev->color_picker.extremes_channel = (channel >= 0 && channel < 3) ? channel : -1;
+  dt_control_queue_redraw_center();
 }
 
 GtkWidget *dt_color_picker_new(dt_iop_module_t *module, dt_iop_color_picker_kind_t kind, GtkWidget *w)

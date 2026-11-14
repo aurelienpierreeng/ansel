@@ -331,6 +331,66 @@ static inline void _darkroom_sample_raw_box_to_image_norm(const dt_colorpicker_s
 }
 
 /**
+ * @brief Mark, with a cross in each RGB channel's colour, the module-input pixels holding the
+ * per-channel extremes the active module picker reads.
+ *
+ * The channel the module kept is a +, the others smaller, dimmed diagonal crosses whose arms shrink
+ * from red to blue so that crosses landing on the same pixel stay distinct.
+ */
+static void _darkroom_picker_extremes_draw(cairo_t *cri, const dt_develop_t *dev, const double wd,
+                                           const double ht, const double scale)
+{
+  if(!dev->color_picker.display_extremes || IS_NULL_PTR(dev->color_picker.picker)
+     || dev->color_picker.extremes_picker != dev->color_picker.picker
+     || dev->color_picker.extremes_valid == DT_COLOR_PICKER_EXTREMES_NONE)
+    return;
+
+  static const double channel_rgb[3][3] = { { 1.0, 0.25, 0.25 }, { 0.3, 1.0, 0.3 }, { 0.35, 0.6, 1.0 } };
+  const double lw = 1.0 / scale;
+
+  for(int extreme = 0; extreme < 2; extreme++)
+  {
+    const int flag = extreme ? DT_COLOR_PICKER_EXTREMES_MAX : DT_COLOR_PICKER_EXTREMES_MIN;
+    if(!(dev->color_picker.extremes_valid & flag)) continue;
+
+    for(int c = 0; c < 3; c++)
+    {
+      float point[2] = { dev->color_picker.extreme_points[extreme][c][0],
+                         dev->color_picker.extreme_points[extreme][c][1] };
+      dt_dev_coordinates_raw_norm_to_image_norm(dt_dev_get_global(), point, 1);
+      const double x = point[0] * wd;
+      const double y = point[1] * ht;
+      const gboolean kept = (c == dev->color_picker.extremes_channel);
+      const double alpha = (kept || dev->color_picker.extremes_channel < 0) ? 1.0 : 0.75;
+
+      if(kept)
+      {
+        const double arm = 10.0 / scale;
+        cairo_move_to(cri, x - arm, y);
+        cairo_line_to(cri, x + arm, y);
+        cairo_move_to(cri, x, y - arm);
+        cairo_line_to(cri, x, y + arm);
+      }
+      else
+      {
+        const double arm = (dev->color_picker.extremes_channel < 0 ? 8.0 - 2.0 * c : 7.0 - 1.0 * c) / scale;
+        cairo_move_to(cri, x - arm, y - arm);
+        cairo_line_to(cri, x + arm, y + arm);
+        cairo_move_to(cri, x - arm, y + arm);
+        cairo_line_to(cri, x + arm, y - arm);
+      }
+      cairo_set_dash(cri, NULL, 0, 0.0);
+      cairo_set_line_width(cri, lw * (kept ? 4.0 : 3.0));
+      cairo_set_source_rgba(cri, 0.0, 0.0, 0.0, 0.7);
+      cairo_stroke_preserve(cri);
+      cairo_set_line_width(cri, lw * (kept ? 2.0 : 1.5));
+      cairo_set_source_rgba(cri, channel_rgb[c][0], channel_rgb[c][1], channel_rgb[c][2], alpha);
+      cairo_stroke(cri);
+    }
+  }
+}
+
+/**
  * @brief Draw colorpicker samples overlays in darkroom view
  * 
  * @param self actual view
@@ -481,6 +541,8 @@ static void _darkroom_pickers_draw(dt_view_t *self, cairo_t *cri,
       cairo_fill(cri);
     }
   }
+
+  if(is_primary_sample) _darkroom_picker_extremes_draw(cri, dev, wd, ht, scale);
 
   cairo_restore(cri);
 }

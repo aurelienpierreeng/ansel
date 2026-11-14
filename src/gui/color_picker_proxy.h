@@ -9,6 +9,7 @@
     Copyright (C) 2022 Martin Bařinka.
     Copyright (C) 2022 Philipp Lutz.
     Copyright (C) 2026 Aurélien PIERRE.
+    Copyright (C) 2026 Guillaume Stutin.
     
     darktable is free software: you can redistribute it and/or modify
     it under the terms of the GNU Lesser General Public License as published by
@@ -47,6 +48,14 @@ typedef enum _iop_color_picker_kind_t
   DT_COLOR_PICKER_POINT_AREA // allow the user to select between point and area
 } dt_iop_color_picker_kind_t;
 
+/** Which per-channel extremes of an area a module reads, so the darkroom marks where they lie. */
+typedef enum dt_iop_color_picker_extremes_t
+{
+  DT_COLOR_PICKER_EXTREMES_NONE = 0,
+  DT_COLOR_PICKER_EXTREMES_MIN = 1 << 0,
+  DT_COLOR_PICKER_EXTREMES_MAX = 1 << 1,
+} dt_iop_color_picker_extremes_t;
+
 typedef struct dt_iop_color_picker_t
 {
   // iop which contains this picker, or NULL if primary colorpicker
@@ -66,6 +75,8 @@ typedef struct dt_iop_color_picker_t
   float pick_pos[2];
   dt_boundingbox_t pick_box;
   gboolean geometry_is_raw;
+  /** the extremes the module reads from this picker's input sample */
+  dt_iop_color_picker_extremes_t extremes;
   /** One-shot request for the next signal emission after activation or colorspace change. */
   gboolean update_pending;
 } dt_iop_color_picker_t;
@@ -135,6 +146,50 @@ GtkWidget *dt_color_picker_new(dt_iop_module_t *module, dt_iop_color_picker_kind
 /* link color picker to widget and initialize color picker color space with given value */
 GtkWidget *dt_color_picker_new_with_cst(dt_iop_module_t *module, dt_iop_color_picker_kind_t kind, GtkWidget *w,
                                         const dt_iop_colorspace_type_t cst);
+
+/**
+ * @brief Declare that a module reads the minimum or the maximum of each channel from this picker.
+ *
+ * @details
+ * The picker then locates, on each input sample, the module-input pixel holding each RGB channel's
+ * extreme over the picked area, in the buffer the statistics were taken from, so that pixel holds
+ * the value the module received. The darkroom marks it with a cross in the channel's colour while
+ * `dt_develop_t::color_picker.display_extremes` is set.
+ *
+ * @param picker Widget returned by dt_color_picker_new() or dt_color_picker_new_with_cst().
+ * @param extremes Extremes to mark.
+ */
+void dt_color_picker_set_extremes(GtkWidget *picker, dt_iop_color_picker_extremes_t extremes);
+
+/**
+ * @brief Read all the channels of the pixel holding one channel's extreme over the current sample.
+ *
+ * @details
+ * The pixel is the one the darkroom marks for that channel, in the module input the statistics were
+ * taken from, so its @p channel equals `picked_color_min` or `picked_color_max` there.
+ *
+ * @param module Module owning the active picker.
+ * @param which DT_COLOR_PICKER_EXTREMES_MIN or DT_COLOR_PICKER_EXTREMES_MAX, which the picker must declare.
+ * @param channel 0, 1 or 2.
+ * @param pixel Receives the pixel's four channels.
+ *
+ * @return 0 when the pixel was located on the current sample, 1 otherwise.
+ */
+int dt_iop_color_picker_get_extreme_pixel(const dt_iop_module_t *module, dt_iop_color_picker_extremes_t which,
+                                          int channel, dt_aligned_pixel_t pixel);
+
+/**
+ * @brief Name the channel whose extreme decided the value a module derived from the current sample.
+ *
+ * @details
+ * A module that reduces the three per-channel extremes to one value keeps one channel. The darkroom
+ * then draws that channel's mark as a +, and the other two as smaller, dimmed crosses. A new sample
+ * forgets the channel until the module names it again.
+ *
+ * @param module Module owning the active picker; ignored otherwise.
+ * @param channel 0, 1 or 2; -1 for none.
+ */
+void dt_iop_color_picker_set_deciding_channel(const dt_iop_module_t *module, int channel);
 
 #endif // DT_GUI_COLOR_PICKER_PROXY_H
 
