@@ -25,6 +25,7 @@
     Copyright (C) 2022-2023, 2025-2026 Aurélien PIERRE.
     Copyright (C) 2022 Martin Bařinka.
     Copyright (C) 2022 Miloš Komarčević.
+    Copyright (C) 2026 BlueBlock.
     
     darktable is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -376,22 +377,12 @@ gboolean dt_tag_attach_images(const guint tagid, const GList *img, const gboolea
 
 gboolean dt_tag_attach(const guint tagid, const int32_t imgid, const gboolean undo_on, const gboolean group_on)
 {
-  gboolean res = FALSE;
-  if(imgid == UNKNOWN_IMAGE)
-  {
-    GList *imgs = dt_act_on_get_images();
-    res = dt_tag_attach_images(tagid, imgs, undo_on);
-    g_list_free(imgs);
-    imgs = NULL;
-  }
-  else
-  {
-    if(dt_is_tag_attached(tagid, imgid)) return FALSE;
-    GList *imgs = g_list_append(NULL, GINT_TO_POINTER(imgid));
-    res = dt_tag_attach_images(tagid, imgs, undo_on);
-    g_list_free(imgs);
-    imgs = NULL;
-  }
+  if(imgid <= 0) return FALSE;
+  if(dt_is_tag_attached(tagid, imgid)) return FALSE;
+
+  GList *imgs = g_list_append(NULL, GINT_TO_POINTER(imgid));
+  const gboolean res = dt_tag_attach_images(tagid, imgs, undo_on);
+  g_list_free(imgs);
   return res;
 }
 
