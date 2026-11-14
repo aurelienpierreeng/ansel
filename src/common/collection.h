@@ -171,7 +171,8 @@ typedef enum dt_collection_change_t
   // value" in non-signal contexts (see gui/actions/file.c's one-time init call), and overloading
   // it with this second, signal-specific meaning would make every future listener re-derive which
   // sense of NONE it is looking at.
-  DT_COLLECTION_CHANGE_BACKGROUND_SYNC = 4
+  DT_COLLECTION_CHANGE_BACKGROUND_SYNC = 4,
+  DT_COLLECTION_CHANGE_GROUP_REPRESENTATIVE = 5, /**< Reload group identities/order without changing group membership. */
 } dt_collection_change_t;
 
 /** One rule of a collection: "images whose <property> <mode> matches <text>".

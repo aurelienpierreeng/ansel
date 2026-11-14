@@ -250,7 +250,7 @@ static gboolean _text_entry_changed_wait(gpointer user_data)
       if(g_strcmp0(dt_collection_get_text_filter(dt_collection_get_global()), text))
       {
         dt_collection_set_text_filter(dt_collection_get_global(), text);
-        _lib_filter_update_query(self, DT_COLLECTION_PROP_SORT);
+        _lib_filter_update_query(self, DT_COLLECTION_PROP_QUERY);
       }
       else dt_free(text);
       _set_widget_dimmed(d->text, FALSE);
@@ -287,7 +287,7 @@ static void _reset_text_filter(dt_lib_module_t *self)
 static void _reset_text_entry(GtkButton *button, dt_lib_module_t *self)
 {
   _reset_text_filter(self);
-  dt_collection_update_query(dt_collection_get_global(), DT_COLLECTION_CHANGE_RELOAD, DT_COLLECTION_PROP_SORT, NULL);
+  dt_collection_update_query(dt_collection_get_global(), DT_COLLECTION_CHANGE_RELOAD, DT_COLLECTION_PROP_QUERY, NULL);
 }
 
 gboolean _focus_search_action(GtkAccelGroup *accel_group, GObject *accelerable, guint keyval,

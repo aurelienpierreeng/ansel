@@ -67,6 +67,7 @@ add_subdirectory(widgets)
 FILE(GLOB SOURCE_FILES
   "gui/bauhaus_conf.c"
   "common/act_on.c"
+  "common/auto_group.c"
   "system/atomic.c"
   "system/display_profile.c"
   "gui/screen_metrics.c"
@@ -141,6 +142,7 @@ FILE(GLOB SOURCE_FILES
   "imageio/imageio_rgbe.c"
   "imageio/imageio_tiff.c"
   "gui/import.c"
+  "gui/auto_group.c"
   "pixel/interpolation.c"
   "pixel/locallaplacian.c"
   "pixel/locallaplaciancl.c"
