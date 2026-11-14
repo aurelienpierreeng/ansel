@@ -268,7 +268,14 @@ static void dt_focus_draw_clusters(cairo_t *cr, int width, int height, int32_t i
   {
     dt_develop_t dev;
     dt_dev_init(&dev, 0);
-    dt_dev_load_image(&dev, imgid);
+    // without its history, the clusters would land where the unedited image has them: none is drawn
+    if(dt_dev_load_image(&dev, imgid, NULL))
+    {
+      dt_dev_cleanup(&dev);
+      cairo_restore(cr);
+      dt_free(pos);
+      return;
+    }
     dt_dev_pixelpipe_t pipe;
     const int res = dt_dev_pixelpipe_init_dummy(&pipe, &dev);
     if(res)

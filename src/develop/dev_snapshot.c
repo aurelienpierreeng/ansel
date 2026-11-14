@@ -354,7 +354,7 @@ gboolean dt_dev_snapshot_capture(dt_dev_snapshot_t *snap, dt_develop_t *dev, int
   if(IS_NULL_PTR(frozen)) goto fail;
   dt_dev_init(frozen, 0);
 
-  if(dt_dev_load_image(frozen, imgid))
+  if(dt_dev_load_image(frozen, imgid, NULL))
   {
     dt_print(DT_DEBUG_DEV, "[dev_snapshot] capture failed: dt_dev_load_image failed for imgid=%d\n", imgid);
     dt_dev_cleanup(frozen);

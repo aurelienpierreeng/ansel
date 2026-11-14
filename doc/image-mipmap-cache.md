@@ -694,10 +694,28 @@ window listed the three files, and after OK a zoom change left the skulls and di
 back.* An alert raised without `once` under the same title and message
 still opens the window, and the `once` items that come while it is up are listed in it.
 
-In an export, the first get to fail is `_dt_dev_mipmap_prefetch_full()`, through
-`dt_dev_load_image()`, whose failure the export does not check. One failure and the run goes on
-to fail in the pipe, `basebuffer` reading a 0x0 input: `PROCESSING_FAILED` (measured, `error 10`
-on the thumbnail). Two in a row and the export's own get fails: `CACHE_FULL` (`error 3`).
+In an export, the first get is `_dt_dev_mipmap_prefetch_full()`, through `dt_dev_load_image()`.
+When it fails, `dt_dev_load_image()` returns before it reads anything else of the image,
+`dev->image_storage` and the history included, and the export stops there, before it builds its
+pipe, with the status of that get: `dt_dev_load_image()` and `dt_dev_ensure_image_storage()` hand
+it back through `read_status` (the export answers `LOAD_FAILED` when the image's record, not its
+pixels, could not be read). The status is that of the get that failed, not of the export's own get
+that follows: a failure that passes, a refused allocation for one, lets that second get succeed on
+an image whose history was never read. *Measured on top of `ec81fcffa6`, 2026-10-28, the shim
+refusing the full-size entry once (`FAIL_MAX=2000`, so that the thumbnail's own entry goes
+through): `ansel-generate-cache --min-mip 2 -m 2` ended the thumbnail in `error 10`
+(`PROCESSING_FAILED`) before, in `error 3` (`CACHE_FULL`, "Out of RAM") after, with no pipe run;
+the `ansel-cli` export fails with exit code 1 both ways, with no pipe run after.*
+`dt_focus_draw_clusters()` (`gui/dtgtk/focus.h`) draws no cluster when the load fails: without
+the history, they would sit where the unedited image has them (by reading).
+
+Found wrong the same day: this paragraph said that pipe failed on "`basebuffer` reading a 0x0
+input". Under gdb, its input was 256x256, the size the export's own get gives the pipe, and its
+output format the untouched `dev->image_storage.dsc`, `bpp` 0: an entry of 0 bytes, which the
+pixelpipe cache refuses (`invalid cache entry size 0`). The raw size the failed get publishes as 0
+plays no part. Nor could such a pipe run to the end, rendering the image without its edits:
+`_dt_dev_refresh_image_storage()` is the only writer of `image_storage`, so a load that failed
+always left the export without an input format. It failed by accident, where it now fails by rule.
 `basebuffer` fails its run on a NULL buffer as well, which takes the entry being evicted after the
 export's get and not re-allocated (by reading: the shim cannot order that eviction).
 
@@ -915,8 +933,8 @@ Nothing in the cache notices that the file changed.
 
 The failure stays cached until then rather than not being cached at all. A thumbnail's export
 loads the image through `dt_dev_load_image()`, which already asks for `DT_MIPMAP_FULL`
-(`_dt_dev_mipmap_prefetch_full()`), then asks for it again itself. Uncached, every thumbnail of a
-broken file would run the whole decoder cascade twice, and again for each thumbnail size.
+(`_dt_dev_mipmap_prefetch_full()`), and stops there when it fails. Uncached, every thumbnail of a
+broken file would run the whole decoder cascade again, for each thumbnail size.
 
 ### The label wraps onto half the skull at most
 

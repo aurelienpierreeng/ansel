@@ -243,7 +243,7 @@ static void _studio_dev_setup(dt_studio_capture_t *d, const int32_t imgid)
   // From here the develop holds per-image resources that teardown must release.
   d->dev_loaded = TRUE;
 
-  if(dt_dev_load_image(dev, imgid))
+  if(dt_dev_load_image(dev, imgid, NULL))
   {
     dt_control_log(_("Studio capture: could not load the image in the viewer."));
     return;
