@@ -12,6 +12,7 @@
     Copyright (C) 2022, 2025-2026 Aurélien PIERRE.
     Copyright (C) 2022 Martin Bařinka.
     Copyright (C) 2022 Philipp Lutz.
+    Copyright (C) 2026 Guillaume Stutin.
     
     darktable is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -760,13 +761,53 @@ static void color_picker_helper_xtrans(const dt_iop_buffer_dsc_t *dsc, const flo
     return color_picker_helper_xtrans_seq(dsc, pixel, roi, box, picked_color, picked_color_min, picked_color_max);
 }
 
+// A second pass, sequential: the statistics passes reduce per thread and do not carry positions.
+// Strict comparisons keep the first pixel in raster order, the same value fminf()/fmaxf() return.
+static void _color_picker_locate_extremes(const float *const pixel, const dt_iop_roi_t *const roi,
+                                          const int *const box, dt_color_picker_extremes_t *const extremes)
+{
+  dt_aligned_pixel_t min = { INFINITY, INFINITY, INFINITY, INFINITY };
+  dt_aligned_pixel_t max = { -INFINITY, -INFINITY, -INFINITY, -INFINITY };
+  for(int c = 0; c < 4; c++)
+  {
+    extremes->min[c][0] = extremes->max[c][0] = box[0];
+    extremes->min[c][1] = extremes->max[c][1] = box[1];
+  }
+
+  for(int j = box[1]; j < box[3]; j++)
+    for(int i = box[0]; i < box[2]; i++)
+    {
+      const float *const px = pixel + 4 * ((size_t)j * roi->width + i);
+      for(int c = 0; c < 4; c++)
+      {
+        if(px[c] < min[c])
+        {
+          min[c] = px[c];
+          extremes->min[c][0] = i;
+          extremes->min[c][1] = j;
+          for(int k = 0; k < 4; k++) extremes->min_pixel[c][k] = px[k];
+        }
+        if(px[c] > max[c])
+        {
+          max[c] = px[c];
+          extremes->max[c][0] = i;
+          extremes->max[c][1] = j;
+          for(int k = 0; k < 4; k++) extremes->max_pixel[c][k] = px[k];
+        }
+      }
+    }
+  extremes->valid = TRUE;
+}
+
 // picked_color, picked_color_min and picked_color_max should be aligned
 void dt_color_picker_helper(const dt_iop_buffer_dsc_t *dsc, const float *const pixel, const dt_iop_roi_t *roi,
                             const int *const box, dt_aligned_pixel_t picked_color, dt_aligned_pixel_t picked_color_min,
                             dt_aligned_pixel_t picked_color_max, const dt_iop_colorspace_type_t image_cst,
                             const dt_iop_colorspace_type_t picker_cst,
-                            const dt_iop_order_iccprofile_info_t *const profile)
+                            const dt_iop_order_iccprofile_info_t *const profile,
+                            dt_color_picker_extremes_t *extremes)
 {
+  if(extremes) extremes->valid = FALSE;
   dt_times_t start_time = { 0 }, end_time = { 0 };
   if(dt_get_debug_flags() & DT_DEBUG_PERF) dt_get_times(&start_time);
 
@@ -793,7 +834,10 @@ void dt_color_picker_helper(const dt_iop_buffer_dsc_t *dsc, const float *const p
         = image_convertible && picker_convertible && (!crosses_family || !IS_NULL_PTR(profile));
 
     if(((image_cst == picker_cst) || (picker_cst == IOP_CS_NONE)))
+    {
       color_picker_helper_4ch(dsc, denoised, roi, box, picked_color, picked_color_min, picked_color_max, picker_cst, profile);
+      if(extremes) _color_picker_locate_extremes(denoised, roi, box, extremes);
+    }
     else if(convertible)
     {
       /* The picker samples module input/output buffers after the previous piece has written them.
@@ -806,9 +850,13 @@ void dt_color_picker_helper(const dt_iop_buffer_dsc_t *dsc, const float *const p
 
       _color_picker_convert_buffer(denoised, converted, (size_t)roi->width * roi->height, image_cst, picker_cst, profile);
       color_picker_helper_4ch_converted(converted, roi, box, picked_color, picked_color_min, picked_color_max, picker_cst);
+      if(extremes) _color_picker_locate_extremes(converted, roi, box, extremes);
     }
     else // This is a fallback, better than crashing as happens with monochromes
+    {
       color_picker_helper_4ch(dsc, denoised, roi, box, picked_color, picked_color_min, picked_color_max, picker_cst, profile);
+      if(extremes) _color_picker_locate_extremes(denoised, roi, box, extremes);
+    }
 
   error:;
     dt_pixelpipe_cache_free_align(converted);

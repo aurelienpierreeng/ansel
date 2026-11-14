@@ -11,6 +11,7 @@
     Copyright (C) 2020 Pascal Obry.
     Copyright (C) 2021 Ralf Brown.
     Copyright (C) 2022 Martin Bařinka.
+    Copyright (C) 2026 Guillaume Stutin.
     
     darktable is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -35,12 +36,36 @@ struct dt_iop_buffer_dsc_t;
 struct dt_iop_roi_t;
 enum dt_iop_colorspace_type_t;
 
+/**
+ * @brief Where the picker found each channel's extremes.
+ *
+ * Buffer coordinates of the first pixel, in raster order, holding `picked_color_min[c]` (`min[c]`)
+ * and `picked_color_max[c]` (`max[c]`) in the buffer the statistics were taken from: the input after
+ * the picker's denoising, converted to the picker colorspace when it differs. `min_pixel[c]` and
+ * `max_pixel[c]` hold all the channels of those pixels. `valid` is FALSE when the input was mosaiced,
+ * which the helper does not locate.
+ */
+typedef struct dt_color_picker_extremes_t
+{
+  int min[4][2];
+  int max[4][2];
+  dt_aligned_pixel_t min_pixel[4];
+  dt_aligned_pixel_t max_pixel[4];
+  int valid;
+} dt_color_picker_extremes_t;
+
+/**
+ * @brief Compute the mean, minimum and maximum of each channel over `box`.
+ *
+ * @param extremes Optional, NULL to skip: receives where each channel's minimum and maximum lie.
+ */
 void dt_color_picker_helper(const struct dt_iop_buffer_dsc_t *dsc, const float *const pixel,
                             const struct dt_iop_roi_t *roi, const int *const box, dt_aligned_pixel_t picked_color,
                             dt_aligned_pixel_t picked_color_min, dt_aligned_pixel_t picked_color_max,
                             const enum dt_iop_colorspace_type_t image_cst,
                             const enum dt_iop_colorspace_type_t picker_cst,
-                            const dt_iop_order_iccprofile_info_t *const profile);
+                            const dt_iop_order_iccprofile_info_t *const profile,
+                            dt_color_picker_extremes_t *extremes);
 
 #endif // DT_COMMON_COLOR_PICKER_H
 
