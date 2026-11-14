@@ -2959,7 +2959,7 @@ static void _display_samples_changed(GtkToggleButton *button, dt_lib_module_t *s
   dt_control_queue_redraw_center();
 }
 
-static void _display_extremes_changed(GtkToggleButton *button, dt_lib_module_t *self)
+static void _display_extremes_changed(GtkToggleButton *button, dt_lib_module_t *self __attribute__((unused)))
 {
   dt_conf_set_bool("ui_last/colorpicker_display_extremes", gtk_toggle_button_get_active(button));
   dt_dev_get_global()->color_picker.display_extremes = gtk_toggle_button_get_active(button);

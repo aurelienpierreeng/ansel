@@ -347,6 +347,11 @@ static void _darkroom_picker_extremes_draw(cairo_t *cri, const dt_develop_t *dev
 
   static const double channel_rgb[3][3] = { { 1.0, 0.25, 0.25 }, { 0.3, 1.0, 0.3 }, { 0.35, 0.6, 1.0 } };
   const double lw = 1.0 / scale;
+  // Once the module named the channel it kept, the other crosses are dimmed and closer in size.
+  const gboolean decided = dev->color_picker.extremes_channel >= 0;
+  const double other_alpha = decided ? 0.75 : 1.0;
+  const double other_arm = decided ? 7.0 : 8.0;
+  const double other_arm_step = decided ? 1.0 : 2.0;
 
   for(int extreme = 0; extreme < 2; extreme++)
   {
@@ -361,7 +366,7 @@ static void _darkroom_picker_extremes_draw(cairo_t *cri, const dt_develop_t *dev
       const double x = point[0] * wd;
       const double y = point[1] * ht;
       const gboolean kept = (c == dev->color_picker.extremes_channel);
-      const double alpha = (kept || dev->color_picker.extremes_channel < 0) ? 1.0 : 0.75;
+      const double alpha = kept ? 1.0 : other_alpha;
 
       if(kept)
       {
@@ -373,7 +378,7 @@ static void _darkroom_picker_extremes_draw(cairo_t *cri, const dt_develop_t *dev
       }
       else
       {
-        const double arm = (dev->color_picker.extremes_channel < 0 ? 8.0 - 2.0 * c : 7.0 - 1.0 * c) / scale;
+        const double arm = (other_arm - other_arm_step * c) / scale;
         cairo_move_to(cri, x - arm, y - arm);
         cairo_line_to(cri, x + arm, y + arm);
         cairo_move_to(cri, x - arm, y + arm);
