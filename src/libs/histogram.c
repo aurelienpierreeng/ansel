@@ -36,6 +36,7 @@
     Copyright (C) 2022 Victor Forsiuk.
     Copyright (C) 2024 Alynx Zhou.
     Copyright (C) 2024 Marrony Neris.
+    Copyright (C) 2026 Guillaume Stutin.
     
     darktable is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -173,6 +174,7 @@ typedef struct dt_lib_histogram_t
   GtkWidget *add_sample_button;
   GtkWidget *display_samples_check_box;
   GtkWidget *restrict_button;
+  GtkWidget *display_extremes_check_box;
   GArray *pending_hashes;
   guint refresh_idle_source;
   dt_dev_pixelpipe_cache_wait_t scope_wait;
@@ -2031,6 +2033,20 @@ void _get_allocation_size(dt_lib_histogram_t *d, int *width, int *height)
  */
 
 /**
+ * @userdoc
+ * @id: picker-extremes
+ * @page: views/toolboxes/scopes.md
+ * @type: feature
+ * @section: Color picker
+ * @screenshot: optional
+ * @controls: Display min/max pixel
+ *
+ * When "Display min/max pixel" is checked and a module's color picker reads the minimum or the
+ * maximum of an area, a cross in each channel's color marks the pixel holding that channel's
+ * extreme. The channel that decided the module's value is drawn as a +.
+ */
+
+/**
  * @brief Draw the restricted-scope label over the current Cairo surface.
  *
  * The scope content is rendered first because the label describes the final
@@ -2329,7 +2345,7 @@ static void _pixelpipe_pick_from_image(const dt_backbuf_t *const backbuf,
   dt_aligned_pixel_t min = { INFINITY, INFINITY, INFINITY, INFINITY };
   dt_aligned_pixel_t max = { -INFINITY, -INFINITY, -INFINITY, -INFINITY };
 
-  dt_color_picker_helper(&dsc, pixel, &roi, box, mean, min, max, dsc.cst, IOP_CS_RGB, NULL);
+  dt_color_picker_helper(&dsc, pixel, &roi, box, mean, min, max, dsc.cst, IOP_CS_RGB, NULL, NULL);
 
   for_four_channels(k)
   {
@@ -2943,6 +2959,13 @@ static void _display_samples_changed(GtkToggleButton *button, dt_lib_module_t *s
   dt_control_queue_redraw_center();
 }
 
+static void _display_extremes_changed(GtkToggleButton *button, dt_lib_module_t *self)
+{
+  dt_conf_set_bool("ui_last/colorpicker_display_extremes", gtk_toggle_button_get_active(button));
+  dt_dev_get_global()->color_picker.display_extremes = gtk_toggle_button_get_active(button);
+  dt_control_queue_redraw_center();
+}
+
 static void _restrict_histogram_changed(GtkToggleButton *button, dt_lib_module_t *self)
 {
   dt_lib_histogram_t *d = self->data;
@@ -3130,6 +3153,7 @@ void gui_init(dt_lib_module_t *self)
   dev->color_picker.refresh_global_picker = _refresh_global_picker;
   dev->color_picker.display_samples = dt_conf_get_bool("ui_last/colorpicker_display_samples");
   dev->color_picker.restrict_histogram = dt_conf_get_bool("ui_last/colorpicker_restrict_histogram");
+  dev->color_picker.display_extremes = dt_conf_get_bool("ui_last/colorpicker_display_extremes");
   dev->color_picker.primary_sample->swatch.alpha = 1.0;
 
   const char *str = dt_conf_get_string_const("ui_last/colorpicker_model");
@@ -3235,6 +3259,20 @@ void gui_init(dt_lib_module_t *self)
   gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(d->restrict_button), restrict_histogram);
   g_signal_connect(G_OBJECT(d->restrict_button), "toggled", G_CALLBACK(_restrict_histogram_changed), self);
   gtk_box_pack_start(GTK_BOX(d->cs.container), d->restrict_button, TRUE, TRUE, 0);
+
+  d->display_extremes_check_box = gtk_check_button_new_with_label(_("Display min/max pixel"));
+  gtk_label_set_ellipsize(GTK_LABEL(gtk_bin_get_child(GTK_BIN(d->display_extremes_check_box))),
+                          PANGO_ELLIPSIZE_MIDDLE);
+  gtk_widget_set_tooltip_text(d->display_extremes_check_box,
+                              _("mark on the image the pixel holding the minimum or the maximum\n"
+                                "of each channel that a module's color picker reads:\n"
+                                "+ marks the pixel the module takes into account,\n"
+                                "× the pixels of the channels it does not take into account"));
+  gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(d->display_extremes_check_box),
+                               dev->color_picker.display_extremes);
+  g_signal_connect(G_OBJECT(d->display_extremes_check_box), "toggled",
+                   G_CALLBACK(_display_extremes_changed), self);
+  gtk_box_pack_start(GTK_BOX(d->cs.container), d->display_extremes_check_box, TRUE, TRUE, 0);
 
   _reset_cache(d);
   _set_params(d);
