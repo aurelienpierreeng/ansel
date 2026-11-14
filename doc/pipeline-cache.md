@@ -911,11 +911,56 @@ Windows that day had this shape, but a minidump holds no heap, so what freed the
 defect itself was found by reading every way an entry leaves the table: this was the only one that
 ignored the refcount.
 
-A consequence of the guard, read rather than measured: a held line now survives the flush. When
-the darkroom reruns at an unchanged hash, `ref_host_entry_by_hash()` finds the frame on screen, so
-the flush does not recompute it. Recomputing it would mean unpublishing a held entry while keeping
-it alive, and nothing can do that today. Its holder would release it by pointer, but removal goes
-through the table by hash, where by then a new entry may answer to the same hash.
+A consequence of the guard: a held line survives the flush, and a run at an unchanged key finds it.
+*Read against `7230d1b355`, measured on `6a9005ef9c` (2026-11-14):* the next section has the
+numbers, and how the darkroom still gets its recompute.
+
+### Clearing the darkroom caches moves every key to a new generation
+
+*Measured on top of `6a9005ef9c`, 2026-11-14.*
+
+"Clear darkroom pipeline caches" (`dt_dev_pixelpipe_reset_all()`) flushes the cache, then rebuilds
+both darkroom pipes. On `6a9005ef9c` it recomputed nothing. Measured with the GUI under Xephyr at
+1600×1000, a NEF with its XMP, the menu item activated by an `LD_PRELOAD` shim
+(`gtk_menu_item_activate()` on the item found by its label) and `-d dev -d perf -d pipecache`: the
+flush freed 13 lines (1853 → 864 MiB) and spared the six somebody held — the full pipe's `gamma`
+(three references), the preview's `dither`, `colorout` and `initialscale` (one each), two drawlayer
+sidecars. Both pipes resynced to the same keys, and the exact hit before a run
+(`dt_dev_pixelpipe_cache_ref_host_entry_by_hash()`, `pixelpipe_hb.c`) found `dither`, then `gamma`:
+7 ms and 1 ms, no module run.
+
+Recomputing a key whose line is held would mean unpublishing that line while keeping it alive, and
+the cache cannot. The table holds one line per key, and references travel by key: `raster_mask_hashes`,
+`rawdetail_mask_hash` and the final output of a run are released by hash, and each node reopens its
+input through the table. A second line under the same key would take their release or their lookup.
+`auto_destroy` does not get there either: the lookups refuse a flagged line, but
+`dt_dev_pixelpipe_cache_get()` and `dt_dev_pixelpipe_cache_get_writable()` serve it as an exact hit
+for as long as it is held.
+
+So the keys move instead. `dt_dev_pixelpipe_t.cache_generation` is folded into the seed every key of
+the pipe derives from (`_default_pipe_hash()`: the base buffer's, the global and mask hashes,
+`upstream_hash`), and `dt_dev_pixelpipe_reset_all()` bumps it before the rebuild, on both darkroom
+pipes and to the same value, so the full pipe still reuses what the preview computes. Generation 0
+leaves the seed as it was. What the flush spared stays valid for its holders, under its own key: the
+screen keeps the old frame until the new one is published, and nothing looks it up again.
+
+Measured the same way: the preview reran its 15 modules from `basebuffer`, the full pipe ran `gamma`
+on the preview's new lines, and the old frame was drawn through 7 exposes until the new one replaced
+it. A second click 300 ms into that recompute abandoned it in `highlights` and restarted it; a third,
+at rest, freed the lines the first had spared, released since (1922 → 864 MiB), and recomputed
+everything again. No reference count went below zero.
+
+What moving keys rather than lines leaves:
+
+- A spared line, once released, waits for the LRU or the next flush. The age-based collection keeps
+  it, since it was hit. Here that was the old frames and the scopes' inputs, 22 MiB.
+- After a clear, the darkroom shares no key with an export, a snapshot or a thumbnail of the same
+  image for the rest of the session, the retouch memo included. A miss costs the work being done
+  anyway.
+- A generation never comes back within a session: the darkroom's two pipes are created once, with
+  its view (`views/darkroom.c`), and nothing reinitialises them. A line from before a clear is not
+  found again by leaving and re-entering the darkroom.
+- The drawlayer sidecar is keyed on the module's parameters, not on the pipe: a clear leaves it alone.
 
 ### A peek retains nothing: keep or release only what a retained lookup handed you
 
