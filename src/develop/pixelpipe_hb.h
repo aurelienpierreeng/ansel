@@ -406,6 +406,12 @@ typedef struct dt_dev_pixelpipe_t
   // ahead of processing image.
   dt_atomic_uint64 hash;
 
+  /* Folded into the seed of every cache key this pipe computes (_default_pipe_hash()), 0 leaving
+   * it as it is. dt_dev_pixelpipe_reset_all() bumps it: its flush spares the lines somebody
+   * holds, the frame on screen first, and a rerun at unchanged keys would find them and
+   * recompute nothing. See doc/pipeline-cache.md, "Clearing the darkroom caches". */
+  dt_atomic_uint64 cache_generation;
+
   // Lock this while a pipeline is working.
   // This is meant to prevent pipeline destruction/cleanup while it is working.
   // It should __NEVER__ be used from the GUI thread, the GUI thread interacts

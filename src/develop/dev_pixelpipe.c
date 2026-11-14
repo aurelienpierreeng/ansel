@@ -519,6 +519,13 @@ void dt_dev_pixelpipe_reset_all(dt_develop_t *dev)
 {
   dt_dev_pixelpipe_cache_flush(-1);
   if(dt_gui_widgets_suppressed() || IS_NULL_PTR(dev) || !dev->gui_attached) return;
+
+  /* The lines the flush spared stay valid for their holders, under their own keys, and nothing
+   * looks them up again. One generation for both pipes, so the full pipe still reuses what the
+   * preview computes. */
+  const uint64_t generation = dt_atomic_get_uint64(&dev->pipe->cache_generation) + 1;
+  dt_atomic_set_uint64(&dev->pipe->cache_generation, generation);
+  dt_atomic_set_uint64(&dev->preview_pipe->cache_generation, generation);
   dt_dev_pixelpipe_rebuild_all(dev);
 }
 
@@ -607,7 +614,10 @@ void dt_dev_pixelpipe_get_roi_out(dt_dev_pixelpipe_t *pipe,
 static uint64_t _default_pipe_hash(dt_dev_pixelpipe_t *pipe)
 {
   // Start with a hash that is unique, image-wise.
-  return dt_hash(5381, (const char *)&pipe->dev->image_storage.filename, DT_MAX_FILENAME_LEN);
+  const uint64_t hash = dt_hash(5381, (const char *)&pipe->dev->image_storage.filename, DT_MAX_FILENAME_LEN);
+  // see dt_dev_pixelpipe_t.cache_generation
+  const uint64_t generation = dt_atomic_get_uint64(&pipe->cache_generation);
+  return generation ? dt_hash(hash, (const char *)&generation, sizeof(generation)) : hash;
 }
 
 /* Publish, on every enabled node, the cumulative hash of the PARAMETERS of the enabled modules
