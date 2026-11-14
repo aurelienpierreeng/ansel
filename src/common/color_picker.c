@@ -763,39 +763,48 @@ static void color_picker_helper_xtrans(const dt_iop_buffer_dsc_t *dsc, const flo
 
 // A second pass, sequential: the statistics passes reduce per thread and do not carry positions.
 // Strict comparisons keep the first pixel in raster order, the same value fminf()/fmaxf() return.
+// `extremes` NULL skips it.
 static void _color_picker_locate_extremes(const float *const pixel, const dt_iop_roi_t *const roi,
                                           const int *const box, dt_color_picker_extremes_t *const extremes)
 {
+  if(IS_NULL_PTR(extremes)) return;
+
   dt_aligned_pixel_t min = { INFINITY, INFINITY, INFINITY, INFINITY };
   dt_aligned_pixel_t max = { -INFINITY, -INFINITY, -INFINITY, -INFINITY };
   for(int c = 0; c < 4; c++)
   {
-    extremes->min[c][0] = extremes->max[c][0] = box[0];
-    extremes->min[c][1] = extremes->max[c][1] = box[1];
+    extremes->min[c][0] = box[0];
+    extremes->min[c][1] = box[1];
+    extremes->max[c][0] = box[0];
+    extremes->max[c][1] = box[1];
   }
 
-  for(int j = box[1]; j < box[3]; j++)
-    for(int i = box[0]; i < box[2]; i++)
+  // One index over the box, row by row, so that raster order is kept.
+  const size_t box_width = (size_t)(box[2] - box[0]);
+  const size_t box_size = _box_size(box);
+  for(size_t k = 0; k < box_size; k++)
+  {
+    const int i = box[0] + (int)(k % box_width);
+    const int j = box[1] + (int)(k / box_width);
+    const float *const px = pixel + 4 * ((size_t)j * roi->width + i);
+    for(int c = 0; c < 4; c++)
     {
-      const float *const px = pixel + 4 * ((size_t)j * roi->width + i);
-      for(int c = 0; c < 4; c++)
+      if(px[c] < min[c])
       {
-        if(px[c] < min[c])
-        {
-          min[c] = px[c];
-          extremes->min[c][0] = i;
-          extremes->min[c][1] = j;
-          for(int k = 0; k < 4; k++) extremes->min_pixel[c][k] = px[k];
-        }
-        if(px[c] > max[c])
-        {
-          max[c] = px[c];
-          extremes->max[c][0] = i;
-          extremes->max[c][1] = j;
-          for(int k = 0; k < 4; k++) extremes->max_pixel[c][k] = px[k];
-        }
+        min[c] = px[c];
+        extremes->min[c][0] = i;
+        extremes->min[c][1] = j;
+        memcpy(extremes->min_pixel[c], px, sizeof(dt_aligned_pixel_t));
+      }
+      if(px[c] > max[c])
+      {
+        max[c] = px[c];
+        extremes->max[c][0] = i;
+        extremes->max[c][1] = j;
+        memcpy(extremes->max_pixel[c], px, sizeof(dt_aligned_pixel_t));
       }
     }
+  }
   extremes->valid = TRUE;
 }
 
@@ -833,12 +842,7 @@ void dt_color_picker_helper(const dt_iop_buffer_dsc_t *dsc, const float *const p
     const gboolean convertible
         = image_convertible && picker_convertible && (!crosses_family || !IS_NULL_PTR(profile));
 
-    if(((image_cst == picker_cst) || (picker_cst == IOP_CS_NONE)))
-    {
-      color_picker_helper_4ch(dsc, denoised, roi, box, picked_color, picked_color_min, picked_color_max, picker_cst, profile);
-      if(extremes) _color_picker_locate_extremes(denoised, roi, box, extremes);
-    }
-    else if(convertible)
+    if((image_cst != picker_cst) && (picker_cst != IOP_CS_NONE) && convertible)
     {
       /* The picker samples module input/output buffers after the previous piece has written them.
          When the requested picker colorspace differs from that buffer colorspace, we need a real
@@ -850,12 +854,14 @@ void dt_color_picker_helper(const dt_iop_buffer_dsc_t *dsc, const float *const p
 
       _color_picker_convert_buffer(denoised, converted, (size_t)roi->width * roi->height, image_cst, picker_cst, profile);
       color_picker_helper_4ch_converted(converted, roi, box, picked_color, picked_color_min, picked_color_max, picker_cst);
-      if(extremes) _color_picker_locate_extremes(converted, roi, box, extremes);
+      _color_picker_locate_extremes(converted, roi, box, extremes);
     }
-    else // This is a fallback, better than crashing as happens with monochromes
+    else
     {
+      // The buffer is already in the picker space, or no space was asked. Otherwise this is a
+      // fallback, better than crashing as happens with monochromes.
       color_picker_helper_4ch(dsc, denoised, roi, box, picked_color, picked_color_min, picked_color_max, picker_cst, profile);
-      if(extremes) _color_picker_locate_extremes(denoised, roi, box, extremes);
+      _color_picker_locate_extremes(denoised, roi, box, extremes);
     }
 
   error:;
