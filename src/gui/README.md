@@ -25,7 +25,7 @@ when a submodule genuinely has both halves.
 | `common/film.c` | `gui/common/film_gui.c` |
 | `common/folder_survey.c` | `gui/common/folder_survey_gui.c` |
 | `common/history_actions.c` | `gui/common/history_actions_gui.c` |
-| `common/styles.c` | `gui/common/styles_gui.c` |
+| `develop/styles.c` | `gui/common/styles_gui.c` |
 | `develop/history_merge.c` | `gui/develop/history_merge_gui.c` |
 
 **Widgets that carry application state → `gui/dtgtk/`**: the thumbnail/thumbtable family,

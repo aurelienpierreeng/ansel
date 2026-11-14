@@ -638,11 +638,7 @@ gboolean _apply_style_before_export(dt_develop_t *dev, const dt_imageio_module_d
   dt_dev_pop_history_items(dev);
   dt_ioppr_update_for_style_items(dev, style_items, TRUE);
 
-  for(GList *st_items = style_items; st_items; st_items = g_list_next(st_items))
-  {
-    dt_style_item_t *st_item = (dt_style_item_t *)st_items->data;
-    dt_styles_apply_style_item(dev, st_item);
-  }
+  dt_styles_apply_style_items(dev, format_params->style, style_items);
 
   g_list_free_full(style_items, dt_style_item_free);
   style_items = NULL;
