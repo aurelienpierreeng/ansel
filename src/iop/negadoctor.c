@@ -78,7 +78,7 @@
  #define THRESHOLD 2.3283064365386963e-10f // -32 EV
 
 
-DT_MODULE_INTROSPECTION(2, dt_iop_negadoctor_params_t)
+DT_MODULE_INTROSPECTION(3, dt_iop_negadoctor_params_t)
 
 
 typedef enum dt_iop_negadoctor_filmstock_t
@@ -87,6 +87,13 @@ typedef enum dt_iop_negadoctor_filmstock_t
   DT_FILMSTOCK_NB = 0,   // $DESCRIPTION: "black and white film"
   DT_FILMSTOCK_COLOR = 1 // $DESCRIPTION: "color film"
 } dt_iop_negadoctor_filmstock_t;
+
+// How the shadows color cast moves the black point of each channel
+typedef enum dt_iop_negadoctor_version_t
+{
+  DT_NEGADOCTOR_V1 = 0, // $DESCRIPTION: "v1 (shadows scale the bias)"
+  DT_NEGADOCTOR_V2 = 1  // $DESCRIPTION: "v2 (a black point per channel)"
+} dt_iop_negadoctor_version_t;
 
 
 typedef struct dt_iop_negadoctor_params_t
@@ -110,6 +117,10 @@ typedef struct dt_iop_negadoctor_params_t
                                                $MIN: 0.0001 $MAX: 1.0 $DEFAULT: 0.75 $DESCRIPTION: "paper gloss (specular highlights)" */
   float exposure;                           /* extra exposure
                                                $MIN: -2.0 $MAX: 2.0 $DEFAULT: 0.9245 $DESCRIPTION: "print exposure adjustment" */
+  dt_iop_negadoctor_version_t version;      /* $DEFAULT: DT_NEGADOCTOR_V2 $DESCRIPTION: "version" */
+  float black_point[4];                     /* v2 density of the blacks above the film base in each channel, as a fraction
+                                               of D max: the bias and the shadows color cast in one
+                                               $MIN: -1.0 $MAX: 1.0 $DEFAULT: 0.0 */
 } dt_iop_negadoctor_params_t;
 
 
@@ -133,12 +144,14 @@ typedef struct dt_iop_negadoctor_gui_data_t
   GtkWidget *Dmin_R, *Dmin_G, *Dmin_B;
   GtkWidget *wb_high_R, *wb_high_G, *wb_high_B;
   GtkWidget *wb_low_R, *wb_low_G, *wb_low_B;
+  GtkWidget *black_point_R, *black_point_G, *black_point_B, *black_point_row, *black_point_sampler;
+  GtkWidget *version;
   GtkWidget *D_max;
   GtkWidget *offset;
   GtkWidget *black, *gamma, *soft_clip, *exposure;
   GtkWidget *Dmin_picker, *Dmin_sampler;
   GtkWidget *WB_high_picker, *WB_high_norm, *WB_high_sampler;
-  GtkWidget *WB_low_picker, *WB_low_norm, *WB_low_sampler;
+  GtkWidget *WB_low_picker, *WB_low_norm, *WB_low_sampler, *WB_low_row, *WB_low_section;
 } dt_iop_negadoctor_gui_data_t;
 
 
@@ -187,7 +200,30 @@ int default_colorspace(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, const dt
 int legacy_params(dt_iop_module_t *self, const void *const old_params, const int old_version,
                   void *new_params, const int new_version)
 {
-  if(old_version == 1 && new_version == 2)
+  typedef struct dt_iop_negadoctor_params_v2_t
+  {
+    dt_iop_negadoctor_filmstock_t film_stock;
+    float Dmin[4];
+    float wb_high[4];
+    float wb_low[4];
+    float D_max;
+    float offset;
+    float black;
+    float gamma;
+    float soft_clip;
+    float exposure;
+  } dt_iop_negadoctor_params_v2_t;
+
+  if(new_version != 3 || (old_version != 1 && old_version != 2)) return 1;
+
+  dt_iop_negadoctor_params_t *n = (dt_iop_negadoctor_params_t *)new_params;
+  const dt_iop_negadoctor_params_t *d = (dt_iop_negadoctor_params_t *)self->default_params;
+  *n = *d; // start with a fresh copy of default parameters
+
+  // version 3 appends to version 2
+  if(old_version == 2) memcpy(n, old_params, sizeof(dt_iop_negadoctor_params_v2_t));
+
+  if(old_version == 1)
   {
     typedef struct dt_iop_negadoctor_params_v1_t
     {
@@ -203,11 +239,7 @@ int legacy_params(dt_iop_module_t *self, const void *const old_params, const int
       float exposure;                         // extra exposure
     } dt_iop_negadoctor_params_v1_t;
 
-    dt_iop_negadoctor_params_v1_t *o = (dt_iop_negadoctor_params_v1_t *)old_params;
-    dt_iop_negadoctor_params_t *n = (dt_iop_negadoctor_params_t *)new_params;
-    dt_iop_negadoctor_params_t *d = (dt_iop_negadoctor_params_t *)self->default_params;
-
-    *n = *d; // start with a fresh copy of default parameters
+    const dt_iop_negadoctor_params_v1_t *o = (dt_iop_negadoctor_params_v1_t *)old_params;
 
     // WARNING: when copying the arrays in a for loop, gcc wrongly assumed
     //          that n and o were aligned and used AVX instructions for me,
@@ -231,10 +263,19 @@ int legacy_params(dt_iop_module_t *self, const void *const old_params, const int
     n->gamma = o->gamma;
     n->soft_clip = o->soft_clip;
     n->exposure = o->exposure;
-
-    return 0;
   }
-  return 1;
+
+  // older edits keep the shadows color cast that scales the bias, whose black points v2 would start from
+  n->version = DT_NEGADOCTOR_V1;
+  for(int c = 0; c < 4; c++) n->black_point[c] = n->offset * n->wb_low[c];
+  return 0;
+}
+
+// The density each channel prints at the paper black, as a fraction of D max: in v1 the bias, which the
+// shadows color cast scales; in v2 one black point per channel, which holds both.
+static inline float _black_point(const dt_iop_negadoctor_params_t *const p, const int c)
+{
+  return (p->version == DT_NEGADOCTOR_V1) ? p->offset * p->wb_low[c] : p->black_point[c];
 }
 
 // The coefficients process() applies. The pickers solve against these same ones, so what they set is what
@@ -245,7 +286,7 @@ static void _data_from_params(const dt_iop_negadoctor_params_t *const p, dt_iop_
   // but premultiply it aheard with Dmax to spare one div per pixel
   for(size_t c = 0; c < 4; c++) d->wb_high[c] = p->wb_high[c] / p->D_max;
 
-  for(size_t c = 0; c < 4; c++) d->offset[c] = p->wb_high[c] * p->offset * p->wb_low[c];
+  for(size_t c = 0; c < 4; c++) d->offset[c] = p->wb_high[c] * _black_point(p, c);
 
   // ensure we use a monochrome Dmin for B&W film
   for(size_t c = 0; c < 4; c++)
@@ -384,7 +425,8 @@ void init_presets(dt_iop_module_so_t *self)
                                                                  .gamma = 4.0f,
                                                                  .soft_clip = 0.75f,
                                                                  .exposure = 0.9245f,
-                                                                 .black = 0.0755f };
+                                                                 .black = 0.0755f,
+                                                                 .version = DT_NEGADOCTOR_V2 };
 
 
   dt_gui_presets_add_generic(_("color film"), self->op,
@@ -399,7 +441,8 @@ void init_presets(dt_iop_module_so_t *self)
                                                                  .gamma = 5.0f,
                                                                  .soft_clip = 0.75f,
                                                                  .exposure = 1.f,
-                                                                 .black = 0.0755f };
+                                                                 .black = 0.0755f,
+                                                                 .version = DT_NEGADOCTOR_V2 };
 
 
   dt_gui_presets_add_generic(_("black and white film"), self->op,
@@ -518,11 +561,29 @@ static void Dmin_picker_callback(GtkColorButton *widget, dt_iop_module_t *self)
   dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
 }
 
-// The bias is stored as a fraction of D max, and its slider shows a density
+// Show the black points of both versions in their sliders, without going through their callbacks
+static void _black_point_sliders_set(dt_iop_negadoctor_gui_data_t *const g, const dt_iop_negadoctor_params_t *const p)
+{
+  dt_gui_freeze_begin();
+  dt_bauhaus_slider_set(g->offset, p->offset);
+  dt_bauhaus_slider_set(g->wb_low_R, p->wb_low[0]);
+  dt_bauhaus_slider_set(g->wb_low_G, p->wb_low[1]);
+  dt_bauhaus_slider_set(g->wb_low_B, p->wb_low[2]);
+  dt_bauhaus_slider_set(g->black_point_R, p->black_point[0]);
+  dt_bauhaus_slider_set(g->black_point_G, p->black_point[1]);
+  dt_bauhaus_slider_set(g->black_point_B, p->black_point[2]);
+  dt_gui_freeze_end();
+}
+
+// The bias and the v2 black points are stored as fractions of D max, and their sliders show densities
 static void _density_sliders_update(dt_iop_negadoctor_gui_data_t *const g, const dt_iop_negadoctor_params_t *const p)
 {
-  dt_bauhaus_slider_set_factor(g->offset, p->D_max);
-  gtk_widget_queue_draw(g->offset);
+  GtkWidget *const sliders[4] = { g->offset, g->black_point_R, g->black_point_G, g->black_point_B };
+  for(int k = 0; k < 4; k++)
+  {
+    dt_bauhaus_slider_set_factor(sliders[k], p->D_max);
+    gtk_widget_queue_draw(sliders[k]);
+  }
 }
 
 static void WB_low_picker_update(dt_iop_module_t *self)
@@ -557,15 +618,10 @@ static void WB_low_picker_callback(GtkColorButton *widget, dt_iop_module_t *self
   gtk_color_chooser_get_rgba(GTK_COLOR_CHOOSER(widget), &c);
 
   dt_aligned_pixel_t RGB = { 2.0f - c.red, 2.0f - c.green, 2.0f - c.blue };
-
   float RGB_min = v_minf(RGB);
   for(size_t k = 0; k < 3; k++) p->wb_low[k] = RGB[k] / RGB_min;
 
-  dt_gui_freeze_begin();
-  dt_bauhaus_slider_set(g->wb_low_R, p->wb_low[0]);
-  dt_bauhaus_slider_set(g->wb_low_G, p->wb_low[1]);
-  dt_bauhaus_slider_set(g->wb_low_B, p->wb_low[2]);
-  dt_gui_freeze_end();
+  _black_point_sliders_set(g, p);
 
   WB_low_picker_update(self);
   dt_iop_color_picker_reset(self, TRUE);
@@ -631,12 +687,7 @@ static void Wb_low_norm_callback(GtkColorButton *widget, dt_iop_module_t *self)
   for(size_t c = 0; c < 3; ++c)
     p->wb_low[c] /= WB_low_max;
 
-
-  dt_gui_freeze_begin();
-  dt_bauhaus_slider_set(g->wb_low_R, p->wb_low[0]);
-  dt_bauhaus_slider_set(g->wb_low_G, p->wb_low[1]);
-  dt_bauhaus_slider_set(g->wb_low_B, p->wb_low[2]);
-  dt_gui_freeze_end();
+  _black_point_sliders_set(g, p);
 
   WB_low_picker_update(self);
   dt_control_queue_redraw_widget(self->gui->widget);
@@ -686,6 +737,24 @@ static void apply_auto_Dmin(dt_iop_module_t *self)
   Dmin_picker_update(self);
   dt_control_queue_redraw_widget(self->gui->widget);
   dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
+}
+
+// The scale on which the black point picker looks for the pixel high in all three channels, a channel's score
+// being gain · log10(pixel) + bias: the densities above the film base, negated, so the winner is the pixel
+// clear on the film in all channels.
+static void _picker_channel_scale(const dt_iop_module_t *self, GtkWidget *picker, dt_aligned_pixel_t gain,
+                                  dt_aligned_pixel_t bias)
+{
+  (void)picker;
+  dt_iop_negadoctor_data_t d;
+  _data_from_params((const dt_iop_negadoctor_params_t *)self->params, &d);
+
+  // -log10(Dmin / pixel) = log10(pixel) - log10(Dmin)
+  for(int c = 0; c < 3; c++)
+  {
+    gain[c] = 1.0f;
+    bias[c] = -log10f(d.Dmin[c]);
+  }
 }
 
 // The channel v_maxf() / v_minf() return, which the darkroom marks as the one that decided.
@@ -753,6 +822,38 @@ static void apply_auto_offset(dt_iop_module_t *self)
   dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
 }
 
+// v2: the pixel of the area whose densest channel is the least dense above the film base, that is the
+// pixel clear in all three channels, gives the black point of all three channels, so that it prints
+// neutral at the paper black. The clearest pixel of one channel can be a saturated colour instead: a red
+// object is clear in blue and green on the film but dense in red.
+static void apply_auto_black_point(dt_iop_module_t *self)
+{
+  if(dt_gui_widgets_suppressed()) return;
+  dt_iop_negadoctor_gui_data_t *g = (dt_iop_negadoctor_gui_data_t *)dt_iop_gui_data(self);
+  dt_iop_negadoctor_params_t *p = (dt_iop_negadoctor_params_t *)self->params;
+  dt_iop_negadoctor_data_t d;
+  _data_from_params(p, &d);
+
+  // without the pixel itself, keep the blacks neutral at the clearest channel's density, as the bias picker
+  dt_aligned_pixel_t RGB;
+  for(int c = 0; c < 3; c++)
+    RGB[c] = log10f(d.Dmin[c] / fmaxf(self->picked_color_max[c], THRESHOLD)) / p->D_max;
+  dt_aligned_pixel_t pixel;
+  const gboolean located
+      = !dt_iop_color_picker_get_extreme_pixel(self, DT_COLOR_PICKER_EXTREMES_MAX_OF_MIN, 0, pixel);
+  for(int c = 0; c < 3; c++)
+  {
+    const float density = located ? log10f(d.Dmin[c] / fmaxf(pixel[c], THRESHOLD)) / p->D_max : v_minf(RGB);
+    p->black_point[c] = CLAMP(density, dt_bauhaus_slider_get_hard_min(g->black_point_R),
+                              dt_bauhaus_slider_get_hard_max(g->black_point_R));
+  }
+
+  _black_point_sliders_set(g, p);
+
+  dt_control_queue_redraw_widget(self->gui->widget);
+  dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
+}
+
 // from Dmax and offset, compute the white balance correction as multipliers of the offset
 // such that offset x wb[c] make black monochrome
 static void apply_auto_WB_low(dt_iop_module_t *self)
@@ -770,11 +871,7 @@ static void apply_auto_WB_low(dt_iop_module_t *self)
   const float RGB_v_min = v_minf(RGB_min); // warning: can be negative
   for(int c = 0; c < 3; c++) p->wb_low[c] =  RGB_v_min / RGB_min[c];
 
-  dt_gui_freeze_begin();
-  dt_bauhaus_slider_set(g->wb_low_R, p->wb_low[0]);
-  dt_bauhaus_slider_set(g->wb_low_G, p->wb_low[1]);
-  dt_bauhaus_slider_set(g->wb_low_B, p->wb_low[2]);
-  dt_gui_freeze_end();
+  _black_point_sliders_set(g, p);
 
   WB_low_picker_update(self);
   dt_control_queue_redraw_widget(self->gui->widget);
@@ -793,7 +890,7 @@ static void apply_auto_WB_high(dt_iop_module_t *self)
 
   dt_aligned_pixel_t RGB_min;
   for(int c = 0; c < 3; c++)
-    RGB_min[c] = fabsf(-1.0f / (p->offset * p->wb_low[c] - log10f(d.Dmin[c] / fmaxf(self->picked_color[c], THRESHOLD)) / p->D_max));
+    RGB_min[c] = fabsf(-1.0f / (_black_point(p, c) - log10f(d.Dmin[c] / fmaxf(self->picked_color[c], THRESHOLD)) / p->D_max));
 
   const float RGB_v_min = v_minf(RGB_min); // warning : must be positive
   for(int c = 0; c < 3; c++) p->wb_high[c] = RGB_min[c] / RGB_v_min;
@@ -876,6 +973,8 @@ void color_picker_apply(dt_iop_module_t *self, GtkWidget *picker, dt_dev_pixelpi
     apply_auto_WB_high(self);
   else if(picker == g->offset)
     apply_auto_offset(self);
+  else if(picker == g->black_point_sampler)
+    apply_auto_black_point(self);
   else if(picker == g->D_max)
     apply_auto_Dmax(self);
   else if(picker == g->WB_low_sampler)
@@ -965,6 +1064,8 @@ void gui_init(dt_iop_module_t *self)
   // the black point, which the shadows color cast then corrects
   gtk_box_pack_start(GTK_BOX(page2), dt_ui_section_label_new(_("exposure of the film")), FALSE, FALSE, 0);
 
+  // v1: the bias
+
   g->offset = dt_color_picker_new(self, DT_COLOR_PICKER_AREA, dt_bauhaus_slider_from_params(self, "offset"));
   dt_color_picker_set_extremes(g->offset, DT_COLOR_PICKER_EXTREMES_MAX);
   dt_bauhaus_slider_set_format(g->offset, " D");
@@ -975,10 +1076,49 @@ void gui_init(dt_iop_module_t *self)
                                            "The exposure of the scanner is cancelled by the film base color,\n"
                                            "once it is picked on the same scan."));
 
-  // WB shadows
-  gtk_box_pack_start(GTK_BOX(page2), dt_ui_section_label_new(_("shadows color cast")), FALSE, FALSE, 0);
+  // v2: one black point per channel, which holds both the bias and the shadows color cast
+  g->black_point_row = GTK_WIDGET(gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING));
+  gtk_box_pack_start(GTK_BOX(g->black_point_row), dt_ui_label_new(_("black point")), TRUE, TRUE, 0);
+  g->black_point_sampler = dt_color_picker_new(self, DT_COLOR_PICKER_AREA, g->black_point_row);
+  dt_color_picker_set_extremes(g->black_point_sampler, DT_COLOR_PICKER_EXTREMES_MAX_OF_MIN);
+  dt_color_picker_set_channel_scale(g->black_point_sampler, _picker_channel_scale);
+  gtk_widget_set_tooltip_text(g->black_point_sampler,
+                              _("Pick the blacks from the image: the pixel of the area that is clear\n"
+                                "on the film in all three channels gives the black point of all three\n"
+                                "channels, so that it prints neutral at the paper black."));
+  gtk_box_pack_start(GTK_BOX(page2), g->black_point_row, FALSE, FALSE, 0);
 
-  GtkWidget *row3 = GTK_WIDGET(gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING));
+  g->black_point_R = dt_bauhaus_slider_from_params(self, "black_point[0]");
+  dt_bauhaus_widget_set_label(g->black_point_R, N_("black point red"));
+  g->black_point_G = dt_bauhaus_slider_from_params(self, "black_point[1]");
+  dt_bauhaus_widget_set_label(g->black_point_G, N_("black point green"));
+  g->black_point_B = dt_bauhaus_slider_from_params(self, "black_point[2]");
+  dt_bauhaus_widget_set_label(g->black_point_B, N_("black point blue"));
+
+  GtkWidget *const black_points[3] = { g->black_point_R, g->black_point_G, g->black_point_B };
+  const char *const black_point_tooltips[3] = {
+    _("Density of the blacks above the film base in the red channel,\n"
+      "which is printed at the paper black. Raising it darkens\n"
+      "the red of the print, so the blacks get more cyan."),
+    _("Density of the blacks above the film base in the green channel,\n"
+      "which is printed at the paper black. Raising it darkens\n"
+      "the green of the print, so the blacks get more magenta."),
+    _("Density of the blacks above the film base in the blue channel,\n"
+      "which is printed at the paper black. Raising it darkens\n"
+      "the blue of the print, so the blacks get more yellow.")
+  };
+  for(int c = 0; c < 3; c++)
+  {
+    dt_bauhaus_slider_set_digits(black_points[c], 3);
+    dt_bauhaus_slider_set_format(black_points[c], " D");
+    gtk_widget_set_tooltip_text(black_points[c], black_point_tooltips[c]);
+  }
+
+  // v1: the shadows color cast, which scales the bias
+  g->WB_low_section = dt_ui_section_label_new(_("shadows color cast"));
+  gtk_box_pack_start(GTK_BOX(page2), g->WB_low_section, FALSE, FALSE, 0);
+
+  GtkWidget *row3 = g->WB_low_row = GTK_WIDGET(gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING));
 
   g->WB_low_picker = gtk_color_button_new();
   gtk_color_chooser_set_use_alpha(GTK_COLOR_CHOOSER(g->WB_low_picker), FALSE);
@@ -1100,6 +1240,12 @@ void gui_init(dt_iop_module_t *self)
   g->film_stock = dt_bauhaus_combobox_from_params(self, "film_stock");
   gtk_widget_set_tooltip_text(g->film_stock, _("Toggle on or off the color controls"));
 
+  g->version = dt_bauhaus_combobox_from_params(self, "version");
+  gtk_widget_set_tooltip_text(g->version, _("v1: the shadows color cast scales the film exposure bias,\n"
+                                            "so it does nothing at zero bias and reverses with a negative one.\n"
+                                            "v2: one black point per channel holds both the bias and the color cast.\n"
+                                            "Switching keeps the image as it is, except where v1 cannot hold it."));
+
   gtk_box_pack_start(GTK_BOX(self->gui->widget), GTK_WIDGET(g->notebook), FALSE, FALSE, 0);
   const int active_page = dt_conf_get_int("plugins/darkroom/negadoctor/gui_page");
   gtk_widget_show(gtk_notebook_get_nth_page(g->notebook, active_page));
@@ -1143,9 +1289,42 @@ void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
     WB_high_picker_update(self);
   }
 
+  // switching versions moves the black points to the other version's sliders, so the image stays the same
+  if(w == g->version)
+  {
+    if(p->version == DT_NEGADOCTOR_V2)
+    {
+      for(int c = 0; c < 3; c++) p->black_point[c] = p->offset * p->wb_low[c];
+    }
+    else
+    {
+      // the bias is the black point farthest from the film base, which the others scale down from
+      int far = 0;
+      for(int c = 1; c < 3; c++)
+        if(fabsf(p->black_point[c]) > fabsf(p->black_point[far])) far = c;
+      p->offset = p->black_point[far];
+      for(int c = 0; c < 3; c++)
+        p->wb_low[c] = isnormal(p->offset) ? CLAMP(p->black_point[c] / p->offset,
+                                                   dt_bauhaus_slider_get_hard_min(g->wb_low_R),
+                                                   dt_bauhaus_slider_get_hard_max(g->wb_low_R))
+                                           : 1.0f;
+    }
+    _black_point_sliders_set(g, p);
+  }
+
+  if(IS_NULL_PTR(w) || w == g->version)
+  {
+    const gboolean v1 = (p->version == DT_NEGADOCTOR_V1);
+    GtkWidget *const v1_widgets[6] = { g->offset, g->WB_low_section, g->WB_low_row,
+                                       g->wb_low_R, g->wb_low_G, g->wb_low_B };
+    GtkWidget *const v2_widgets[4] = { g->black_point_row, g->black_point_R, g->black_point_G, g->black_point_B };
+    for(int k = 0; k < 6; k++) gtk_widget_set_visible(v1_widgets[k], v1);
+    for(int k = 0; k < 4; k++) gtk_widget_set_visible(v2_widgets[k], !v1);
+  }
+
   if(IS_NULL_PTR(w) || w == g->D_max) _density_sliders_update(g, p);
 
-  if(IS_NULL_PTR(w) || w == g->wb_low_R || w == g->wb_low_G || w == g->wb_low_B)
+  if(IS_NULL_PTR(w) || w == g->wb_low_R || w == g->wb_low_G || w == g->wb_low_B || w == g->version)
   {
     WB_low_picker_update(self);
   }

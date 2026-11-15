@@ -117,17 +117,17 @@ undo/DB churn. History is written only at the real commit. Crop/ashift use `resy
 two must NOT be mixed — routing crop's geometry through `_sync_focused_in_place` (partial)
 mishandles the warm cropped→uncropped geometry change.
 
-## negadoctor: the pickers solve against the coefficients `process()` applies
+## negadoctor: the shadows color cast scales the bias in v1; v2 has one black point per channel
 
-*Found on top of `6a9005ef9c`, 2026-11-13.*
+*Found on top of `6a9005ef9c`, 2026-11-13; v2's black points on top of the same commit, 2026-11-14; the black point picker's pixel on top of `8e77b45cff`, 2026-11-14.*
 
 `process()` prints `exposure · (1 + black) − exposure · 10^(wb_high[c] · (B[c] − D[c] / D_max))`,
 `D[c]` being the density above the film base. The density printed at the paper black
-(`exposure · black`) is therefore `B[c] · D_max` in each channel, `B[c]` being
-`offset · wb_low[c]`.
+(`exposure · black`) is therefore `B[c] · D_max` in each channel, `B[c]` being `_black_point()`:
+`offset · wb_low[c]` in v1, `black_point[c]` in v2. The `version` param selects it.
 
 The pickers solve against the coefficients `process()` applies: `_data_from_params()` derives them
-from the params, `commit_params()` and the six pickers that read the film's densities call it, and the
+from the params, `commit_params()` and the seven pickers that read the film's densities call it, and the
 paper black and print exposure pickers evaluate the density through `_corrected_density()`, the same
 expression as `process()`. A picker that rebuilds the formula from the params by itself drifts from
 the render. The exposure picker used to leave `wb_high` out of the black point term, an error of
@@ -140,7 +140,7 @@ black and white pick with `Dmin` stored as (1, 0.45, 0.25): with the D max picke
 params, the densest pick landed at 1.25 × D max instead of 1; with the exposure picker built the same
 way, its print reached 1.012 instead of the 0.96 target.
 
-A shadows offset moves the black point by `(wb_low[c] − 1) · offset`: nothing at zero bias, and
+In v1 a shadows offset moves the black point by `(wb_low[c] − 1) · offset`: nothing at zero bias, and
 the other way with a negative bias, such as −0.05 (−0.10 D), the bias default of params v1 and v2.
 The default is now 0, Cineon's reference black: code value 95 is the film base, 0.000 D above D-min
 in Kodak's recorder aims (H-387). The bias corrects how the film was exposed when shooting, not the scan:
@@ -150,9 +150,42 @@ picked on the same scan (measured on 20250921_0007: +1 EV gives the same render)
 exposure picked once per bias and then kept: a red shadows offset of 1.2 changes the red output at
 0.4 D above the base by −0.62 EV at bias +0.134 D, 0 at bias 0 and +0.41 EV at −0.102 D.
 
+In v2 the bias and the cast are one parameter, `black_point[c]`, the density of the blacks above the
+film base in each channel, so the cast is a difference between channels rather than a multiplier
+that needs a bias. v2 first kept the bias and added a dye density per channel,
+`B[c] = offset − shadows_density[c]`: dye in the layer channel c mostly sees, as a color filter in the
+enlarger, which the same replay showed to match 0.027 D really added to the film's red density, to
+7e-20. A black point slider acts the other way from such a dye: raising it darkens that channel of
+the print, so the blacks get the complementary color.
+
+The black point picker takes the pixel of the
+area whose densest channel is the least dense above the film base, the pixel clear in all three
+channels (`DT_COLOR_PICKER_EXTREMES_MAX_OF_MIN` on `log10(pixel / Dmin)`, see
+[`color-picker.md`](color-picker.md)), and gives its three densities to the three black points, so
+that it prints neutral at the paper black.
+
+It first took the clearest pixel of the clearest channel, the channel the bias picker keeps, which is
+wrong on a saturated color: a red object is clear on the film in blue and green but dense in red.
+Measured on top of `8e77b45cff`, 2026-11-14, by dumping the module input of image 51159 (Agfa HDC 200,
+D max 2.050) on a box holding a red glass and replaying both rules in Python: the old one took a pixel
+of the glass, black points 0.811 / 0.190 / −0.031 D, with 94.8 % of the box printing below the red black
+point; the pixel clear in all channels gives 0.016 / 0.033 / 0.033 D, 0.56 % of the box below it in
+blue at most. On 20250921_0007 (D max 1.429), on a box of blacks, both rules land within 3 px of each
+other and within 0.01 D (0.198 / 0.211 / 0.220 D against 0.192 / 0.207 / 0.228 D). Keeping the rule
+but choosing among the three per-channel clearest pixels the one clear in all channels is not enough:
+on 300 random boxes of 51159 it differed from the scan of every pixel by more than 0.05 D in 34, by
+0.26 D at most.
+
+`legacy_params()` maps params v1 and v2 to `DT_NEGADOCTOR_V1`, so older edits render as before, and
+fills `black_point[c] = offset · wb_low[c]`; new instances and the built-in presets are v2. Switching
+in the GUI converts with the same product one way, which keeps the image. The other way takes the
+black point farthest from the base as the bias and divides the others by it, which keeps the image
+except where v1 cannot hold it: black points of opposite signs, all at zero but one, or ratios outside
+`wb_low`'s 0.25–2. v1 keeps its own sliders, swatch, normalize and shadows picker, hidden in v2.
+
 Units: a density is the log10 of a transmission ratio, so 1 D = 10 dB = 3.32 EV; D max and the bias
-used to be labelled " dB", ten times off. `offset` is stored as a fraction of
-D max and shown as a density through the bauhaus factor, which is not a param: whatever sets D max
+used to be labelled " dB", ten times off. `offset` and `black_point` are stored as fractions of
+D max and shown as densities through the bauhaus factor, which is not a param: whatever sets D max
 without its slider callback (its picker, under `dt_gui_freeze_begin()`) calls
 `_density_sliders_update()` itself.
 
