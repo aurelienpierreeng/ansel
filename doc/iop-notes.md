@@ -140,6 +140,12 @@ black and white pick with `Dmin` stored as (1, 0.45, 0.25): with the D max picke
 params, the densest pick landed at 1.25 × D max instead of 1; with the exposure picker built the same
 way, its print reached 1.012 instead of the 0.96 target.
 
+Units: a density is the log10 of a transmission ratio, so 1 D = 10 dB = 3.32 EV; D max and the bias
+used to be labelled " dB", ten times off. `offset` is stored as a fraction of
+D max and shown as a density through the bauhaus factor, which is not a param: whatever sets D max
+without its slider callback (its picker, under `dt_gui_freeze_begin()`) calls
+`_density_sliders_update()` itself.
+
 ## retouch: what a shape costs per frame is its geometry, and most of it is ROI planning
 
 *Found `1019fcd2e0`, 2026-09-24.*

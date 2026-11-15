@@ -518,6 +518,13 @@ static void Dmin_picker_callback(GtkColorButton *widget, dt_iop_module_t *self)
   dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
 }
 
+// The bias is stored as a fraction of D max, and its slider shows a density
+static void _density_sliders_update(dt_iop_negadoctor_gui_data_t *const g, const dt_iop_negadoctor_params_t *const p)
+{
+  dt_bauhaus_slider_set_factor(g->offset, p->D_max);
+  gtk_widget_queue_draw(g->offset);
+}
+
 static void WB_low_picker_update(dt_iop_module_t *self)
 {
   dt_iop_negadoctor_gui_data_t *const g = (dt_iop_negadoctor_gui_data_t *)dt_iop_gui_data(self);
@@ -703,6 +710,8 @@ static void apply_auto_Dmax(dt_iop_module_t *self)
   dt_bauhaus_slider_set(g->D_max, p->D_max);
   dt_gui_freeze_end();
 
+  _density_sliders_update(g, p);
+  WB_low_picker_update(self);
   dt_control_queue_redraw_widget(self->gui->widget);
   dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
 }
@@ -930,7 +939,7 @@ void gui_init(dt_iop_module_t *self)
   gtk_box_pack_start(GTK_BOX(page1), dt_ui_section_label_new(_("dynamic range of the film")), FALSE, FALSE, 0);
 
   g->D_max = dt_color_picker_new(self, DT_COLOR_PICKER_AREA, dt_bauhaus_slider_from_params(self, "D_max"));
-  dt_bauhaus_slider_set_format(g->D_max, " dB");
+  dt_bauhaus_slider_set_format(g->D_max, " D");
   gtk_widget_set_tooltip_text(g->D_max, _("Maximum density of the film, corresponding to white after inversion.\n"
                                           "This value depends on the film specifications, the developing process,\n"
                                           "the dynamic range of the scene and the scanner exposure settings."));
@@ -938,7 +947,7 @@ void gui_init(dt_iop_module_t *self)
   gtk_box_pack_start(GTK_BOX(page1), dt_ui_section_label_new(_("scanner exposure settings")), FALSE, FALSE, 0);
 
   g->offset = dt_color_picker_new(self, DT_COLOR_PICKER_AREA, dt_bauhaus_slider_from_params(self, "offset"));
-  dt_bauhaus_slider_set_format(g->offset, " dB");
+  dt_bauhaus_slider_set_format(g->offset, " D");
   gtk_widget_set_tooltip_text(g->offset, _("Correct the exposure of the scanner, for all RGB channels,\n"
                                            "before the inversion, so blacks are neither clipped or too pale."));
 
@@ -1111,6 +1120,8 @@ void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
   {
     WB_high_picker_update(self);
   }
+
+  if(IS_NULL_PTR(w) || w == g->D_max) _density_sliders_update(g, p);
 
   if(IS_NULL_PTR(w) || w == g->wb_low_R || w == g->wb_low_G || w == g->wb_low_B)
   {
