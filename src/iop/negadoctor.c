@@ -688,6 +688,17 @@ static void apply_auto_Dmin(dt_iop_module_t *self)
   dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
 }
 
+// The channel v_maxf() / v_minf() return, which the darkroom marks as the one that decided.
+static inline int _channel_of_max(const dt_aligned_pixel_t RGB)
+{
+  return (RGB[0] >= RGB[1]) ? ((RGB[0] >= RGB[2]) ? 0 : 2) : ((RGB[1] >= RGB[2]) ? 1 : 2);
+}
+
+static inline int _channel_of_min(const dt_aligned_pixel_t RGB)
+{
+  return (RGB[0] <= RGB[1]) ? ((RGB[0] <= RGB[2]) ? 0 : 2) : ((RGB[1] <= RGB[2]) ? 1 : 2);
+}
+
 // from Dmin, find out the range of density values of the film and compute Dmax
 static void apply_auto_Dmax(dt_iop_module_t *self)
 {
@@ -705,6 +716,7 @@ static void apply_auto_Dmax(dt_iop_module_t *self)
 
   // Take the max(RGB) for safety. Big values unclip whites
   p->D_max = v_maxf(RGB);
+  dt_iop_color_picker_set_deciding_channel(self, _channel_of_max(RGB));
 
   dt_gui_freeze_begin();
   dt_bauhaus_slider_set(g->D_max, p->D_max);
@@ -731,6 +743,7 @@ static void apply_auto_offset(dt_iop_module_t *self)
 
   // Take the min(RGB) for safety. Negative values unclip blacks
   p->offset = v_minf(RGB);
+  dt_iop_color_picker_set_deciding_channel(self, _channel_of_min(RGB));
 
   dt_gui_freeze_begin();
   dt_bauhaus_slider_set(g->offset, p->offset);
@@ -839,6 +852,7 @@ static void apply_auto_exposure(dt_iop_module_t *self)
     RGB[c] = 0.96f / (1.0f - fast_exp10f(_corrected_density(&d, c, self->picked_color_min[c])) + p->black);
   }
   p->exposure = v_minf(RGB);
+  dt_iop_color_picker_set_deciding_channel(self, _channel_of_min(RGB));
 
   dt_gui_freeze_begin();
   dt_bauhaus_slider_set(g->exposure, log2f(p->exposure));
@@ -939,6 +953,7 @@ void gui_init(dt_iop_module_t *self)
   gtk_box_pack_start(GTK_BOX(page1), dt_ui_section_label_new(_("dynamic range of the film")), FALSE, FALSE, 0);
 
   g->D_max = dt_color_picker_new(self, DT_COLOR_PICKER_AREA, dt_bauhaus_slider_from_params(self, "D_max"));
+  dt_color_picker_set_extremes(g->D_max, DT_COLOR_PICKER_EXTREMES_MIN);
   dt_bauhaus_slider_set_format(g->D_max, " D");
   gtk_widget_set_tooltip_text(g->D_max, _("Maximum density of the film, corresponding to white after inversion.\n"
                                           "This value depends on the film specifications, the developing process,\n"
@@ -951,6 +966,7 @@ void gui_init(dt_iop_module_t *self)
   gtk_box_pack_start(GTK_BOX(page2), dt_ui_section_label_new(_("exposure of the film")), FALSE, FALSE, 0);
 
   g->offset = dt_color_picker_new(self, DT_COLOR_PICKER_AREA, dt_bauhaus_slider_from_params(self, "offset"));
+  dt_color_picker_set_extremes(g->offset, DT_COLOR_PICKER_EXTREMES_MAX);
   dt_bauhaus_slider_set_format(g->offset, " D");
   gtk_widget_set_tooltip_text(g->offset, _("This is the density of the blacks above the film base,\n"
                                            "which is printed at the paper black.\n"
@@ -1069,6 +1085,7 @@ void gui_init(dt_iop_module_t *self)
   gtk_box_pack_start(GTK_BOX(page3), dt_ui_section_label_new(_("virtual print emulation")), FALSE, FALSE, 0);
 
   g->exposure = dt_color_picker_new(self, DT_COLOR_PICKER_AREA, dt_bauhaus_slider_from_params(self, "exposure"));
+  dt_color_picker_set_extremes(g->exposure, DT_COLOR_PICKER_EXTREMES_MIN);
   dt_bauhaus_slider_set_soft_min(g->exposure, -1.0);
   dt_bauhaus_slider_set_soft_max(g->exposure, 1.0);
   dt_bauhaus_slider_set_default(g->exposure, 0.0);
