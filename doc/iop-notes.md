@@ -202,6 +202,20 @@ D max and shown as densities through the bauhaus factor, which is not a param: w
 without its slider callback (its picker, under `dt_gui_freeze_begin()`) calls
 `_density_sliders_update()` itself.
 
+The wand button of print properties sets print exposure and grade from the film settings and the paper
+black as it stands, which it leaves alone. They print Cineon's mid grey (code 470, 0.75 D above the
+blacks) at 18 % and diffuse white (code 685, 1.18 D) at 90 %, in geometric mean over RGB: two equations
+linear in grade and `log(exposure)`. A paper black low enough to print grey at zero or below in some
+channel leaves its log mean infinite or NaN, and the wand then keeps exposure and grade. Replayed in
+Python with paper black 0.1, which the black picker gives on blacks at the black point's density:
+grade 7.70 and +0.26 EV at D max 2.046, 9.03 and +0.12 EV at 1.60,
+10.10 at 1.40 and 12.02 at 1.18 D, the white's own density, below which the white aim leaves the film;
+a lower gloss or a stronger illuminant balance asks more (14.06 at 1.18 D with gloss 0.5, 14.93 with
+`wb_high` 1/1.2/1.4), which the grade's 20 maximum covers. These aims crush the shadows,
+0.30 D above the blacks printing at 0.001 to 0.003 against 0.033 on the Cineon line: the print curve,
+`log(output)` against density, is concave whatever its parameters, so no grade, exposure and black fit
+grey, white and a shadow point of that line together.
+
 ## retouch: what a shape costs per frame is its geometry, and most of it is ROI planning
 
 *Found `1019fcd2e0`, 2026-09-24.*

@@ -112,7 +112,7 @@ typedef struct dt_iop_negadoctor_params_t
   float black;                              /* display black level
                                                $MIN: -0.5 $MAX: 0.5 $DEFAULT: 0.0755 $DESCRIPTION: "paper black (density correction)" */
   float gamma;                              /* display gamma
-                                               $MIN: 1.0 $MAX: 8.0 $DEFAULT: 4.0 $DESCRIPTION: "paper grade (gamma)" */
+                                               $MIN: 1.0 $MAX: 20.0 $DEFAULT: 4.0 $DESCRIPTION: "paper grade (gamma)" */
   float soft_clip;                          /* highlights roll-off
                                                $MIN: 0.0001 $MAX: 1.0 $DEFAULT: 0.75 $DESCRIPTION: "paper gloss (specular highlights)" */
   float exposure;                           /* extra exposure
@@ -969,6 +969,63 @@ static void apply_auto_exposure(dt_iop_module_t *self)
   dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
 }
 
+// Kodak's Cineon aims, as densities above the blacks: mid grey at code 470 (18 % reflectance),
+// diffuse white at code 685 (90 %).
+#define NEGADOCTOR_GREY_DENSITY 0.75f
+#define NEGADOCTOR_GREY_PRINT 0.18f
+#define NEGADOCTOR_WHITE_DENSITY 1.18f
+#define NEGADOCTOR_WHITE_PRINT 0.90f
+
+// The print value before the paper gloss that the gloss turns into `print`, which must be below 1.
+static inline float _unglossed(const float print, const float soft_clip)
+{
+  return (print > soft_clip) ? soft_clip - (1.0f - soft_clip) * logf(1.0f - (print - soft_clip) / (1.0f - soft_clip))
+                             : print;
+}
+
+// Mean over RGB of log(1 + black - 10^corrected) for a neutral `density` above the blacks: the log of the
+// print before exposure and grade, in geometric mean.
+static inline float _mean_log_print(const dt_iop_negadoctor_params_t *const p, const float black, const float density)
+{
+  float mean = 0.0f;
+  for(int c = 0; c < 3; c++) mean += logf(1.0f + black - fast_exp10f(-p->wb_high[c] * density / p->D_max)) / 3.0f;
+  return mean;
+}
+
+// Set print exposure and paper grade from the film settings and the paper black as they stand, so that
+// mid grey and diffuse white print at their Cineon reflectances, in geometric mean over RGB.
+static void _auto_print_callback(GtkWidget *widget, dt_iop_module_t *self)
+{
+  if(dt_gui_widgets_suppressed()) return;
+  dt_iop_negadoctor_gui_data_t *g = (dt_iop_negadoctor_gui_data_t *)dt_iop_gui_data(self);
+  dt_iop_negadoctor_params_t *p = (dt_iop_negadoctor_params_t *)self->params;
+
+  // (exposure · print)^grade = aim at grey and white: two equations, linear in grade and log(exposure).
+  const float log_grey = logf(_unglossed(NEGADOCTOR_GREY_PRINT, p->soft_clip));
+  const float log_white = logf(_unglossed(NEGADOCTOR_WHITE_PRINT, p->soft_clip));
+  const float print_grey = _mean_log_print(p, p->black, NEGADOCTOR_GREY_DENSITY);
+  const float print_white = _mean_log_print(p, p->black, NEGADOCTOR_WHITE_DENSITY);
+
+  // A white balance that leaves white no lighter than grey, or a paper black so low that grey prints at
+  // zero or below in some channel (grey prints darker than white, so it reaches zero first), has no solution: keep exposure and grade.
+  if(isfinite(print_grey) && print_white > print_grey)
+  {
+    p->gamma = CLAMPF((log_white - log_grey) / (print_white - print_grey), dt_bauhaus_slider_get_hard_min(g->gamma),
+                      dt_bauhaus_slider_get_hard_max(g->gamma));
+    // Once the grade is clamped, the white misses its aim and the grey keeps it.
+    p->exposure = CLAMPF(expf(log_grey / p->gamma - print_grey), powf(2.0f, dt_bauhaus_slider_get_hard_min(g->exposure)),
+                         powf(2.0f, dt_bauhaus_slider_get_hard_max(g->exposure)));
+  }
+
+  dt_gui_freeze_begin();
+  dt_bauhaus_slider_set(g->exposure, log2f(p->exposure));
+  dt_bauhaus_slider_set(g->gamma, p->gamma);
+  dt_gui_freeze_end();
+
+  dt_control_queue_redraw_widget(self->gui->widget);
+  dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
+}
+
 
 void color_picker_apply(dt_iop_module_t *self, GtkWidget *picker, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece)
 {
@@ -1221,6 +1278,7 @@ void gui_init(dt_iop_module_t *self)
                                           "to adjust the global contrast while avoiding clipping shadows."));
 
   g->gamma = dt_bauhaus_slider_from_params(self, "gamma");
+  dt_bauhaus_slider_set_soft_range(g->gamma, 1.0f, 10.0f);
   dt_bauhaus_widget_set_label(g->gamma, N_("paper grade (gamma)"));
   gtk_widget_set_tooltip_text(g->gamma, _("Select the grade of the virtual paper, which is actually\n"
                                           "equivalent to applying a gamma. It compensates the film D max\n"
@@ -1244,6 +1302,11 @@ void gui_init(dt_iop_module_t *self)
   dt_bauhaus_slider_set_format(g->exposure, _(" EV"));
   gtk_widget_set_tooltip_text(g->exposure, _("Correct the printing exposure after inversion to adjust\n"
                                              "the global contrast and avoid clipping highlights."));
+
+  dt_iop_button_new(self, N_("Set the grade and print exposure from the film settings and the paper black:\n"
+                             "a mid grey 0.75 D above the blacks prints at 18 %\n"
+                             "and a white 1.18 D above them at 90 %, as in the Cineon aims."),
+                    G_CALLBACK(_auto_print_callback), FALSE, 0, 0, dtgtk_cairo_paint_wand, 0, page3);
 
   // start building top level widget
   self->gui->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
