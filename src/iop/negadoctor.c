@@ -101,7 +101,7 @@ typedef struct dt_iop_negadoctor_params_t
   float D_max;                              /* max density of film
                                                $MIN: 0.1 $MAX: 6 $DEFAULT: 2.046 */
   float offset;                             /* inversion offset
-                                               $MIN: -1.0 $MAX: 1.0 $DEFAULT: -0.05 $DESCRIPTION: "scan exposure bias" */
+                                               $MIN: -1.0 $MAX: 1.0 $DEFAULT: 0.0 $DESCRIPTION: "film exposure bias" */
   float black;                              /* display black level
                                                $MIN: -0.5 $MAX: 0.5 $DEFAULT: 0.0755 $DESCRIPTION: "paper black (density correction)" */
   float gamma;                              /* display gamma
@@ -380,7 +380,7 @@ void init_presets(dt_iop_module_so_t *self)
                                                                  .wb_high = { 1.0f, 1.0f, 1.0f, 0.0f },
                                                                  .wb_low = { 1.0f, 1.0f, 1.0f, 0.0f },
                                                                  .D_max = 1.6f,
-                                                                 .offset = -0.05f,
+                                                                 .offset = 0.0f,
                                                                  .gamma = 4.0f,
                                                                  .soft_clip = 0.75f,
                                                                  .exposure = 0.9245f,
@@ -395,7 +395,7 @@ void init_presets(dt_iop_module_so_t *self)
                                                                  .wb_high = { 1.0f, 1.0f, 1.0f, 0.0f },
                                                                  .wb_low = { 1.0f, 1.0f, 1.0f, 0.0f },
                                                                  .D_max = 2.2f,
-                                                                 .offset = -0.05f,
+                                                                 .offset = 0.0f,
                                                                  .gamma = 5.0f,
                                                                  .soft_clip = 0.75f,
                                                                  .exposure = 1.f,
@@ -934,7 +934,7 @@ void gui_init(dt_iop_module_t *self)
                                            "the chemical fog produced while developing the film,\n"
                                            "and the scanner white balance."));
 
-  // D max and scanner bias
+  // D max
 
   gtk_box_pack_start(GTK_BOX(page1), dt_ui_section_label_new(_("dynamic range of the film")), FALSE, FALSE, 0);
 
@@ -944,15 +944,20 @@ void gui_init(dt_iop_module_t *self)
                                           "This value depends on the film specifications, the developing process,\n"
                                           "the dynamic range of the scene and the scanner exposure settings."));
 
-  gtk_box_pack_start(GTK_BOX(page1), dt_ui_section_label_new(_("scanner exposure settings")), FALSE, FALSE, 0);
+  // Page CORRECTIONS
+  GtkWidget *page2 = self->gui->widget = dt_ui_notebook_page(g->notebook, N_("corrections"), NULL);
+
+  // the black point, which the shadows color cast then corrects
+  gtk_box_pack_start(GTK_BOX(page2), dt_ui_section_label_new(_("exposure of the film")), FALSE, FALSE, 0);
 
   g->offset = dt_color_picker_new(self, DT_COLOR_PICKER_AREA, dt_bauhaus_slider_from_params(self, "offset"));
   dt_bauhaus_slider_set_format(g->offset, " D");
-  gtk_widget_set_tooltip_text(g->offset, _("Correct the exposure of the scanner, for all RGB channels,\n"
-                                           "before the inversion, so blacks are neither clipped or too pale."));
-
-  // Page CORRECTIONS
-  GtkWidget *page2 = self->gui->widget = dt_ui_notebook_page(g->notebook, N_("corrections"), NULL);
+  gtk_widget_set_tooltip_text(g->offset, _("This is the density of the blacks above the film base,\n"
+                                           "which is printed at the paper black.\n"
+                                           "Correct the exposure error of the image on the film, made when shooting,\n"
+                                           "for all RGB channels, before the inversion, so blacks are neither clipped or too pale.\n"
+                                           "The exposure of the scanner is cancelled by the film base color,\n"
+                                           "once it is picked on the same scan."));
 
   // WB shadows
   gtk_box_pack_start(GTK_BOX(page2), dt_ui_section_label_new(_("shadows color cast")), FALSE, FALSE, 0);

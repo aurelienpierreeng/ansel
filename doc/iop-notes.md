@@ -140,6 +140,16 @@ black and white pick with `Dmin` stored as (1, 0.45, 0.25): with the D max picke
 params, the densest pick landed at 1.25 × D max instead of 1; with the exposure picker built the same
 way, its print reached 1.012 instead of the 0.96 target.
 
+A shadows offset moves the black point by `(wb_low[c] − 1) · offset`: nothing at zero bias, and
+the other way with a negative bias, such as −0.05 (−0.10 D), the bias default of params v1 and v2.
+The default is now 0, Cineon's reference black: code value 95 is the film base, 0.000 D above D-min
+in Kodak's recorder aims (H-387). The bias corrects how the film was exposed when shooting, not the scan:
+a scan exposure scales D min and the pixel alike and cancels in `log10(D min / pixel)` once the base is
+picked on the same scan (measured on 20250921_0007: +1 EV gives the same render). Measured by replaying
+`process()` in Python on a grey ramp, with image 18364's D min, D max and gamma, paper black and print
+exposure picked once per bias and then kept: a red shadows offset of 1.2 changes the red output at
+0.4 D above the base by −0.62 EV at bias +0.134 D, 0 at bias 0 and +0.41 EV at −0.102 D.
+
 Units: a density is the log10 of a transmission ratio, so 1 D = 10 dB = 3.32 EV; D max and the bias
 used to be labelled " dB", ten times off. `offset` is stored as a fraction of
 D max and shown as a density through the bauhaus factor, which is not a param: whatever sets D max
