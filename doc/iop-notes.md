@@ -194,7 +194,7 @@ fills `black_point[c] = offset · wb_low[c]`; new instances and the built-in pre
 in the GUI converts with the same product one way, which keeps the image. The other way takes the
 black point farthest from the base as the bias and divides the others by it, which keeps the image
 except where v1 cannot hold it: black points of opposite signs, all at zero but one, or ratios outside
-`wb_low`'s 0.25–2. v1 keeps its own sliders, swatch, normalize and shadows picker, hidden in v2.
+`wb_low`'s 0.05–2. v1 keeps its own sliders, swatch, normalize and shadows picker, hidden in v2.
 
 Units: a density is the log10 of a transmission ratio, so 1 D = 10 dB = 3.32 EV; D max and the bias
 used to be labelled " dB", ten times off. `offset` and `black_point` are stored as fractions of
