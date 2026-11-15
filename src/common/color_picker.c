@@ -771,6 +771,7 @@ static void _color_picker_locate_extremes(const float *const pixel, const dt_iop
 
   dt_aligned_pixel_t min = { INFINITY, INFINITY, INFINITY, INFINITY };
   dt_aligned_pixel_t max = { -INFINITY, -INFINITY, -INFINITY, -INFINITY };
+  float max_of_min = -INFINITY;
   for(int c = 0; c < 4; c++)
   {
     extremes->min[c][0] = box[0];
@@ -778,6 +779,8 @@ static void _color_picker_locate_extremes(const float *const pixel, const dt_iop
     extremes->max[c][0] = box[0];
     extremes->max[c][1] = box[1];
   }
+  extremes->max_of_min[0] = box[0];
+  extremes->max_of_min[1] = box[1];
 
   // One index over the box, row by row, so that raster order is kept.
   const size_t box_width = (size_t)(box[2] - box[0]);
@@ -803,6 +806,20 @@ static void _color_picker_locate_extremes(const float *const pixel, const dt_iop
         extremes->max[c][1] = j;
         memcpy(extremes->max_pixel[c], px, sizeof(dt_aligned_pixel_t));
       }
+    }
+    if(!extremes->locate_max_of_min) continue;
+
+    // The channel lowest on the caller's scale; the pixel where it is the highest wins. Pixels at or
+    // below zero are floored at -32 EV, as the modules do before taking a density.
+    float lowest = INFINITY;
+    for(int c = 0; c < 3; c++)
+      lowest = fminf(lowest, extremes->gain[c] * log10f(fmaxf(px[c], 0x1p-32f)) + extremes->bias[c]);
+    if(lowest > max_of_min)
+    {
+      max_of_min = lowest;
+      extremes->max_of_min[0] = i;
+      extremes->max_of_min[1] = j;
+      memcpy(extremes->max_of_min_pixel, px, sizeof(dt_aligned_pixel_t));
     }
   }
   extremes->valid = TRUE;

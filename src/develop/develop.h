@@ -396,9 +396,16 @@ typedef struct dt_develop_t
      * `extremes_picker` -- for the global picker, the scope stage's pixels holding the statistic
      * it shows. `extremes_valid` holds the dt_iop_color_picker_extremes_t flags located;
      * `extremes_channel` is the channel whose extreme decided the module's value, -1 when unknown.
+<<<<<<< HEAD
      * `extreme_pixels` holds all the channels of those pixels, as the module or the scope read them. */
+=======
+     * `extreme_pixels` holds all the channels of those pixels, as the module received them.
+     * `max_of_min_point` and `max_of_min_pixel` are the same for DT_COLOR_PICKER_EXTREMES_MAX_OF_MIN. */
+>>>>>>> fb4d827652 (color picker: locate the pixel high in all channels on a module's scale)
     float extreme_points[2][3][2];
     float extreme_pixels[2][3][4];
+    float max_of_min_point[2];
+    float max_of_min_pixel[4];
     int extremes_valid;
     int extremes_channel;
     const struct dt_iop_color_picker_t *extremes_picker;

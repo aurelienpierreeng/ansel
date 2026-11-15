@@ -1,6 +1,6 @@
 # Module color pickers: where the minimum and maximum come from
 
-*Established on top of `fda814dd0c`, 2026-11-14. Measurements on top of `6a9005ef9c`, 2026-11-13.*
+*Established on top of `fda814dd0c`, 2026-11-14; the max-of-min pixel on top of `8e77b45cff`, 2026-11-14. Measurements on top of `6a9005ef9c`, 2026-11-13.*
 
 ## What a module receives
 
@@ -31,6 +31,14 @@ them.
   kept; the darkroom draws that channel's mark as a +, the others as smaller, dimmed crosses.
 - `dt_iop_color_picker_get_extreme_pixel()` returns all the channels of one extreme's pixel, for a
   module that needs the pixel itself rather than one channel of it.
+- `DT_COLOR_PICKER_EXTREMES_MAX_OF_MIN` asks, in the same pass, for the first pixel whose lowest RGB
+  channel is the highest, a channel's score being `gain[c] · log10(pixel[c]) + bias[c]`: the pixel high
+  in all three channels at once, which the per-channel maxima are not, since each can sit on a
+  saturated color. The module gives `gain` and `bias` through the callback it hands
+  `dt_color_picker_set_channel_scale()` (1 and 0 without one); the proxy calls it on the GUI thread
+  before each input sample, so the scale follows the module's current params with nothing to keep in
+  sync. The darkroom marks the pixel with a white +, and `dt_iop_color_picker_get_extreme_pixel()`
+  returns it, the channel ignored. A log per channel and pixel is paid only by a picker that declared it.
 - The marks are drawn only when `ui_last/colorpicker_display_extremes` is set. Locating does not
   depend on it, since a module may read the pixel.
 

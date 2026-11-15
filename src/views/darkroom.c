@@ -393,6 +393,27 @@ static void _darkroom_picker_extremes_draw(cairo_t *cri, const dt_develop_t *dev
       cairo_stroke(cri);
     }
   }
+
+  // The pixel bright in all channels decides alone, as a white +.
+  if(dev->color_picker.extremes_valid & DT_COLOR_PICKER_EXTREMES_MAX_OF_MIN)
+  {
+    float point[2] = { dev->color_picker.max_of_min_point[0], dev->color_picker.max_of_min_point[1] };
+    dt_dev_coordinates_raw_norm_to_image_norm(dt_dev_get_global(), point, 1);
+    const double x = point[0] * wd;
+    const double y = point[1] * ht;
+    const double arm = 10.0 / scale;
+    cairo_move_to(cri, x - arm, y);
+    cairo_line_to(cri, x + arm, y);
+    cairo_move_to(cri, x, y - arm);
+    cairo_line_to(cri, x, y + arm);
+    cairo_set_dash(cri, NULL, 0, 0.0);
+    cairo_set_line_width(cri, lw * 4.0);
+    cairo_set_source_rgba(cri, 0.0, 0.0, 0.0, 0.7);
+    cairo_stroke_preserve(cri);
+    cairo_set_line_width(cri, lw * 2.0);
+    cairo_set_source_rgba(cri, 1.0, 1.0, 1.0, 1.0);
+    cairo_stroke(cri);
+  }
 }
 
 /**
