@@ -38,7 +38,10 @@ them.
   `dt_color_picker_set_channel_scale()` (1 and 0 without one); the proxy calls it on the GUI thread
   before each input sample, so the scale follows the module's current params with nothing to keep in
   sync. The darkroom marks the pixel with a white +, and `dt_iop_color_picker_get_extreme_pixel()`
-  returns it, the channel ignored. A log per channel and pixel is paid only by a picker that declared it.
+  returns it, the channel ignored. negadoctor's black point picker scores `log10(pixel / Dmin)`, the
+  pixel clear on the film in all channels, and its paper black picker the corrected density it prints,
+  the pixel dark on the print in all channels (see [`iop-notes.md`](iop-notes.md)). A log per channel
+  and pixel is paid only by a picker that declared it.
 - The marks are drawn only when `ui_last/colorpicker_display_extremes` is set. Locating does not
   depend on it, since a module may read the pixel.
 

@@ -739,21 +739,24 @@ static void apply_auto_Dmin(dt_iop_module_t *self)
   dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
 }
 
-// The scale on which the black point picker looks for the pixel high in all three channels, a channel's score
-// being gain · log10(pixel) + bias: the densities above the film base, negated, so the winner is the pixel
-// clear on the film in all channels.
+// The scale on which the black point and paper black pickers look for the pixel high in all three channels,
+// a channel's score being gain · log10(pixel) + bias. The black point picker compares the densities above
+// the film base, negated, so the winner is the pixel clear on the film in all channels; the paper black
+// picker compares the corrected density process() prints, so the winner is the pixel the print makes dark
+// in all channels.
 static void _picker_channel_scale(const dt_iop_module_t *self, GtkWidget *picker, dt_aligned_pixel_t gain,
                                   dt_aligned_pixel_t bias)
 {
-  (void)picker;
+  const dt_iop_negadoctor_gui_data_t *const g = (const dt_iop_negadoctor_gui_data_t *)dt_iop_gui_data(self);
   dt_iop_negadoctor_data_t d;
   _data_from_params((const dt_iop_negadoctor_params_t *)self->params, &d);
 
-  // -log10(Dmin / pixel) = log10(pixel) - log10(Dmin)
+  const gboolean printed = (picker == g->black);
   for(int c = 0; c < 3; c++)
   {
-    gain[c] = 1.0f;
-    bias[c] = -log10f(d.Dmin[c]);
+    // -log10(Dmin / pixel) = log10(pixel) - log10(Dmin), then as _corrected_density() for the print
+    gain[c] = printed ? d.wb_high[c] : 1.0f;
+    bias[c] = (printed ? d.offset[c] : 0.0f) - gain[c] * log10f(d.Dmin[c]);
   }
 }
 
@@ -916,11 +919,18 @@ static void apply_auto_black(dt_iop_module_t *self)
   dt_iop_negadoctor_data_t d;
   _data_from_params(p, &d);
 
+  // The pixel the print makes dark in all three channels: the per-channel maxima can each sit on a
+  // saturated color, clear on the film in one channel only, whose darkest channel would lift the blacks.
+  // Without the pixel itself, fall back to those maxima.
+  dt_aligned_pixel_t pixel;
+  if(dt_iop_color_picker_get_extreme_pixel(self, DT_COLOR_PICKER_EXTREMES_MAX_OF_MIN, 0, pixel))
+    for(int c = 0; c < 4; c++) pixel[c] = self->picked_color_max[c];
+
   dt_aligned_pixel_t RGB;
   for(int c = 0; c < 3; c++)
   {
     // actually, remap between -3.32 EV and infinity for safety because gamma comes later
-    RGB[c] = 0.1f - (1.0f - fast_exp10f(_corrected_density(&d, c, self->picked_color_max[c])));
+    RGB[c] = 0.1f - (1.0f - fast_exp10f(_corrected_density(&d, c, pixel[c])));
   }
   p->black = v_maxf(RGB);
 
@@ -1202,6 +1212,8 @@ void gui_init(dt_iop_module_t *self)
   gtk_box_pack_start(GTK_BOX(page3), dt_ui_section_label_new(_("virtual paper properties")), FALSE, FALSE, 0);
 
   g->black = dt_color_picker_new(self, DT_COLOR_PICKER_AREA, dt_bauhaus_slider_from_params(self, "black"));
+  dt_color_picker_set_extremes(g->black, DT_COLOR_PICKER_EXTREMES_MAX_OF_MIN);
+  dt_color_picker_set_channel_scale(g->black, _picker_channel_scale);
   dt_bauhaus_slider_set_digits(g->black, 4);
   dt_bauhaus_slider_set_factor(g->black, 100);
   dt_bauhaus_slider_set_format(g->black, "%");

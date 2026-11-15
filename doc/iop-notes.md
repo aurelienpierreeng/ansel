@@ -176,6 +176,19 @@ but choosing among the three per-channel clearest pixels the one clear in all ch
 on 300 random boxes of 51159 it differed from the scan of every pixel by more than 0.05 D in 34, by
 0.26 D at most.
 
+The paper black picker has the same flaw and the same fix. It takes `black` as the highest, over the
+channels, of `0.1 − (1 − 10^corrected density)`; it used to evaluate it on each channel's clearest value,
+so a saturated color lifted the blacks to keep its darkest channel above the paper. It now takes the
+pixel the print makes dark in all three channels, `DT_COLOR_PICKER_EXTREMES_MAX_OF_MIN` on the corrected
+density `_corrected_density()` gives, and evaluates the three channels of that pixel. Measured on top of
+`8e77b45cff`, 2026-11-14, on 300 random boxes of the module input of 51159 with the black points picked
+as above (`wb_high` 1.461 / 1.085 / 1): the old rule set `black` higher by 0.013 in median, 0.092 at the
+95th percentile and 0.214 at most. The black point picker's scale, `1 / Dmin` alone, is not the print's:
+`wb_high` and the black points differ between channels, and that pixel's `black` was off from the exact
+one by 0.037 at the 95th percentile and 0.136 at most. Both pickers ask negadoctor for their scale
+(`_picker_channel_scale()`) at each sample. The helper's C finds the same pixel as the exact rule in
+float64 Python on all 1,200 boxes tried (300 per picker, on 51159 and 20250921_0007).
+
 `legacy_params()` maps params v1 and v2 to `DT_NEGADOCTOR_V1`, so older edits render as before, and
 fills `black_point[c] = offset · wb_low[c]`; new instances and the built-in presets are v2. Switching
 in the GUI converts with the same product one way, which keeps the image. The other way takes the
