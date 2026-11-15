@@ -119,7 +119,7 @@ mishandles the warm cropped→uncropped geometry change.
 
 ## negadoctor: the shadows color cast scales the bias in v1; v2 has one black point per channel
 
-*Found on top of `6a9005ef9c`, 2026-11-13; v2's black points on top of the same commit, 2026-11-14; the black point picker's pixel on top of `8e77b45cff`, 2026-11-14.*
+*Found on top of `6a9005ef9c`, 2026-11-13; v2's black points on top of the same commit, 2026-11-14; the black point picker's pixel on top of `8e77b45cff`, 2026-11-14; what the black points and the illuminant gain do to each tone on top of `8e77b45cff`, 2026-11-15.*
 
 `process()` prints `exposure · (1 + black) − exposure · 10^(wb_high[c] · (B[c] − D[c] / D_max))`,
 `D[c]` being the density above the film base. The density printed at the paper black
@@ -157,6 +157,21 @@ that needs a bias. v2 first kept the bias and added a dye density per channel,
 enlarger, which the same replay showed to match 0.027 D really added to the film's red density, to
 7e-20. A black point slider acts the other way from such a dye: raising it darkens that channel of
 the print, so the blacks get the complementary color.
+
+A black point moves the shadows and hardly the rest, so it does not correct the tint of the image: the
+print curve `(1 + black − E)^grade` turns a density offset into a large change near the blacks only.
+Measured by replaying `process()` in Python (D max 2.05, paper black 0.0755, grade 4, gloss 0.75), a black
+point lowered by 0.05 D in one channel raises that channel of the print by 1.93 EV at 0.05 D above the
+blacks, 0.59 EV at 0.30 D, 0.21 EV at 0.75 D (Cineon's mid grey) and 0.03 EV at 2.05 D. Under an enlarger
+the same filter moves the mid-tones as well, the paper's curve being an S in log exposure.
+
+The illuminant gain `wb_high[c]` is neither a paper tint nor a preflash: it multiplies the slope of the
+paper's log exposure against the film's density in one channel, about the black point, so it is a contrast
+per layer, which corrects crossed curves and which an enlarger has no control for. Measured by replaying
+`process()` in Python (D max 2.05, paper black 0.0755, grade 4, gloss 0.75), gain 1.46 against 1: the print
+is the same at the black point and at the paper white (10 D above the blacks), and 2.71, 2.18 and 1.27 times
+higher at 0.30, 0.75 and 2.05 D. A tint would scale every value alike, white included; a preflash, a uniform
+exposure, is in this model a paper black per channel.
 
 The black point picker takes the pixel of the
 area whose densest channel is the least dense above the film base, the pixel clear in all three
