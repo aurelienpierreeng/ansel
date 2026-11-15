@@ -117,6 +117,29 @@ undo/DB churn. History is written only at the real commit. Crop/ashift use `resy
 two must NOT be mixed — routing crop's geometry through `_sync_focused_in_place` (partial)
 mishandles the warm cropped→uncropped geometry change.
 
+## negadoctor: the pickers solve against the coefficients `process()` applies
+
+*Found on top of `6a9005ef9c`, 2026-11-13.*
+
+`process()` prints `exposure · (1 + black) − exposure · 10^(wb_high[c] · (B[c] − D[c] / D_max))`,
+`D[c]` being the density above the film base. The density printed at the paper black
+(`exposure · black`) is therefore `B[c] · D_max` in each channel, `B[c]` being
+`offset · wb_low[c]`.
+
+The pickers solve against the coefficients `process()` applies: `_data_from_params()` derives them
+from the params, `commit_params()` and the six pickers that read the film's densities call it, and the
+paper black and print exposure pickers evaluate the density through `_corrected_density()`, the same
+expression as `process()`. A picker that rebuilds the formula from the params by itself drifts from
+the render. The exposure picker used to leave `wb_high` out of the black point term, an error of
+`(wb_high[c] − 1) · B[c]` in corrected density, nil only with `wb_high` at 1: replayed on the module
+input of 20250921_0007 (v2, bias 0.135) with `wb_high` 1/1.1/1.25, its densest pixel printed at 0.953
+instead of 0.96, and at 0.96 once the term is in. On black and white film,
+every picker used the three `Dmin` components that the Dmin picker stores, while the render uses only
+the first. Measured on 2026-11-12, on top of `6a9005ef9c`, by replaying both versions in Python on a
+black and white pick with `Dmin` stored as (1, 0.45, 0.25): with the D max picker built from the
+params, the densest pick landed at 1.25 × D max instead of 1; with the exposure picker built the same
+way, its print reached 1.012 instead of the 0.96 target.
+
 ## retouch: what a shape costs per frame is its geometry, and most of it is ROI planning
 
 *Found `1019fcd2e0`, 2026-09-24.*

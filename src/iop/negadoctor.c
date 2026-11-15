@@ -237,12 +237,10 @@ int legacy_params(dt_iop_module_t *self, const void *const old_params, const int
   return 1;
 }
 
-void commit_params(dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pixelpipe_t *pipe,
-                   dt_dev_pixelpipe_iop_t *piece)
+// The coefficients process() applies. The pickers solve against these same ones, so what they set is what
+// the image shows.
+static void _data_from_params(const dt_iop_negadoctor_params_t *const p, dt_iop_negadoctor_data_t *const d)
 {
-  const dt_iop_negadoctor_params_t *const p = (dt_iop_negadoctor_params_t *)p1;
-  dt_iop_negadoctor_data_t *const d = (dt_iop_negadoctor_data_t *)piece->data;
-
   // keep WB_high even in B&W mode to apply sepia or warm tone look
   // but premultiply it aheard with Dmax to spare one div per pixel
   for(size_t c = 0; c < 4; c++) d->wb_high[c] = p->wb_high[c] / p->D_max;
@@ -250,10 +248,11 @@ void commit_params(dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pixelpipe_
   for(size_t c = 0; c < 4; c++) d->offset[c] = p->wb_high[c] * p->offset * p->wb_low[c];
 
   // ensure we use a monochrome Dmin for B&W film
-  if(p->film_stock == DT_FILMSTOCK_COLOR)
-    for(size_t c = 0; c < 4; c++) d->Dmin[c] = p->Dmin[c];
-  else if(p->film_stock == DT_FILMSTOCK_NB)
-    for(size_t c = 0; c < 4; c++) d->Dmin[c] = p->Dmin[0];
+  for(size_t c = 0; c < 4; c++)
+  {
+    const size_t mono = (p->film_stock == DT_FILMSTOCK_NB) ? 0 : c;
+    d->Dmin[c] = p->Dmin[mono];
+  }
 
   // arithmetic trick allowing to rewrite the pixel inversion as FMA
   d->black = -p->exposure * (1.0f + p->black);
@@ -265,6 +264,18 @@ void commit_params(dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pixelpipe_
   // copy
   d->exposure = p->exposure;
   d->gamma = p->gamma;
+}
+
+// The corrected density process() gives value v in channel c
+static inline float _corrected_density(const dt_iop_negadoctor_data_t *const d, const int c, const float v)
+{
+  return d->wb_high[c] * -log10f(d->Dmin[c] / fmaxf(v, THRESHOLD)) + d->offset[c];
+}
+
+void commit_params(dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pixelpipe_t *pipe,
+                   dt_dev_pixelpipe_iop_t *piece)
+{
+  _data_from_params((const dt_iop_negadoctor_params_t *)p1, (dt_iop_negadoctor_data_t *)piece->data);
 }
 
 
@@ -676,11 +687,13 @@ static void apply_auto_Dmax(dt_iop_module_t *self)
   if(dt_gui_widgets_suppressed()) return;
   dt_iop_negadoctor_gui_data_t *g = (dt_iop_negadoctor_gui_data_t *)dt_iop_gui_data(self);
   dt_iop_negadoctor_params_t *p = (dt_iop_negadoctor_params_t *)self->params;
+  dt_iop_negadoctor_data_t d;
+  _data_from_params(p, &d);
 
   dt_aligned_pixel_t RGB;
   for(int c = 0; c < 3; c++)
   {
-    RGB[c] = log10f(p->Dmin[c] / fmaxf(self->picked_color_min[c], THRESHOLD));
+    RGB[c] = log10f(d.Dmin[c] / fmaxf(self->picked_color_min[c], THRESHOLD));
   }
 
   // Take the max(RGB) for safety. Big values unclip whites
@@ -700,10 +713,12 @@ static void apply_auto_offset(dt_iop_module_t *self)
   if(dt_gui_widgets_suppressed()) return;
   dt_iop_negadoctor_gui_data_t *g = (dt_iop_negadoctor_gui_data_t *)dt_iop_gui_data(self);
   dt_iop_negadoctor_params_t *p = (dt_iop_negadoctor_params_t *)self->params;
+  dt_iop_negadoctor_data_t d;
+  _data_from_params(p, &d);
 
   dt_aligned_pixel_t RGB;
   for(int c = 0; c < 3; c++)
-    RGB[c] = log10f(p->Dmin[c] / fmaxf(self->picked_color_max[c], THRESHOLD)) / p->D_max;
+    RGB[c] = log10f(d.Dmin[c] / fmaxf(self->picked_color_max[c], THRESHOLD)) / p->D_max;
 
   // Take the min(RGB) for safety. Negative values unclip blacks
   p->offset = v_minf(RGB);
@@ -723,10 +738,12 @@ static void apply_auto_WB_low(dt_iop_module_t *self)
   if(dt_gui_widgets_suppressed()) return;
   dt_iop_negadoctor_gui_data_t *g = (dt_iop_negadoctor_gui_data_t *)dt_iop_gui_data(self);
   dt_iop_negadoctor_params_t *p = (dt_iop_negadoctor_params_t *)self->params;
+  dt_iop_negadoctor_data_t d;
+  _data_from_params(p, &d);
 
   dt_aligned_pixel_t RGB_min;
   for(int c = 0; c < 3; c++)
-    RGB_min[c] = log10f(p->Dmin[c] / fmaxf(self->picked_color[c], THRESHOLD)) / p->D_max;
+    RGB_min[c] = log10f(d.Dmin[c] / fmaxf(self->picked_color[c], THRESHOLD)) / p->D_max;
 
   const float RGB_v_min = v_minf(RGB_min); // warning: can be negative
   for(int c = 0; c < 3; c++) p->wb_low[c] =  RGB_v_min / RGB_min[c];
@@ -749,10 +766,12 @@ static void apply_auto_WB_high(dt_iop_module_t *self)
   if(dt_gui_widgets_suppressed()) return;
   dt_iop_negadoctor_gui_data_t *g = (dt_iop_negadoctor_gui_data_t *)dt_iop_gui_data(self);
   dt_iop_negadoctor_params_t *p = (dt_iop_negadoctor_params_t *)self->params;
+  dt_iop_negadoctor_data_t d;
+  _data_from_params(p, &d);
 
   dt_aligned_pixel_t RGB_min;
   for(int c = 0; c < 3; c++)
-    RGB_min[c] = fabsf(-1.0f / (p->offset * p->wb_low[c] - log10f(p->Dmin[c] / fmaxf(self->picked_color[c], THRESHOLD)) / p->D_max));
+    RGB_min[c] = fabsf(-1.0f / (p->offset * p->wb_low[c] - log10f(d.Dmin[c] / fmaxf(self->picked_color[c], THRESHOLD)) / p->D_max));
 
   const float RGB_v_min = v_minf(RGB_min); // warning : must be positive
   for(int c = 0; c < 3; c++) p->wb_high[c] = RGB_min[c] / RGB_v_min;
@@ -775,14 +794,14 @@ static void apply_auto_black(dt_iop_module_t *self)
   if(dt_gui_widgets_suppressed()) return;
   dt_iop_negadoctor_gui_data_t *g = (dt_iop_negadoctor_gui_data_t *)dt_iop_gui_data(self);
   dt_iop_negadoctor_params_t *p = (dt_iop_negadoctor_params_t *)self->params;
+  dt_iop_negadoctor_data_t d;
+  _data_from_params(p, &d);
 
   dt_aligned_pixel_t RGB;
   for(int c = 0; c < 3; c++)
   {
-    RGB[c] = -log10f(p->Dmin[c] / fmaxf(self->picked_color_max[c], THRESHOLD));
-    RGB[c] *= p->wb_high[c] / p->D_max;
-    RGB[c] += p->wb_low[c] * p->offset * p->wb_high[c];
-    RGB[c] = 0.1f - (1.0f - fast_exp10f(RGB[c])); // actually, remap between -3.32 EV and infinity for safety because gamma comes later
+    // actually, remap between -3.32 EV and infinity for safety because gamma comes later
+    RGB[c] = 0.1f - (1.0f - fast_exp10f(_corrected_density(&d, c, self->picked_color_max[c])));
   }
   p->black = v_maxf(RGB);
 
@@ -801,14 +820,14 @@ static void apply_auto_exposure(dt_iop_module_t *self)
   if(dt_gui_widgets_suppressed()) return;
   dt_iop_negadoctor_gui_data_t *g = (dt_iop_negadoctor_gui_data_t *)dt_iop_gui_data(self);
   dt_iop_negadoctor_params_t *p = (dt_iop_negadoctor_params_t *)self->params;
+  dt_iop_negadoctor_data_t d;
+  _data_from_params(p, &d);
 
   dt_aligned_pixel_t RGB;
   for(int c = 0; c < 3; c++)
   {
-    RGB[c] = -log10f(p->Dmin[c] / fmaxf(self->picked_color_min[c], THRESHOLD));
-    RGB[c] *= p->wb_high[c] / p->D_max;
-    RGB[c] += p->wb_low[c] * p->offset;
-    RGB[c] = 0.96f / (1.0f - fast_exp10f(RGB[c]) + p->black); // actually, remap in [0; 0.96] for safety
+    // actually, remap in [0; 0.96] for safety
+    RGB[c] = 0.96f / (1.0f - fast_exp10f(_corrected_density(&d, c, self->picked_color_min[c])) + p->black);
   }
   p->exposure = v_minf(RGB);
 
