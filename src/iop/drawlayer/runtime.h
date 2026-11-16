@@ -28,6 +28,16 @@ typedef struct dt_drawlayer_session_state_t
   int preview_bg_mode;
   char missing_layer_error[256];
   gboolean background_job_running;
+  /** The picking modifier is DOWN: the tool is an eyedropper rather than a brush, for as long
+   *  as that lasts. Entered from key_pressed(), left from key_released(), and left again on
+   *  focus loss, where the release will never arrive. Every pointer handler and the cursor
+   *  branch on this one flag, so they cannot disagree about which tool is in the user's hand. */
+  gboolean picking_active;
+  /** This module armed the shared image picker and owes it back when picking ends. Separate
+   *  from picking_active because the first Ctrl+click arms it and the modifier may have been
+   *  held long before that -- and because a picker the USER armed with the button is not ours
+   *  to disarm. */
+  gboolean picker_armed_by_gesture;
 } dt_drawlayer_session_state_t;
 
 typedef struct dt_drawlayer_process_state_t
@@ -119,9 +129,17 @@ typedef struct dt_drawlayer_ui_state_t
   float cursor_hardness;
   int cursor_shape;
   float cursor_color[3];
-  float brush_display_color[3];
+  /** The brush colour, in PIPELINE (working) RGB -- the canonical one. Unclamped above 1: the
+   *  HDR headroom is real and the gain is applied when the dab is laid down. */
   float brush_pipeline_color[3];
+  /** Its display-RGB twin, for drawing only. Derived through the monitor's ICC profile, which
+   *  costs an LCMS transform, so it is cached rather than recomputed per redraw. */
+  float brush_display_color[3];
+  /** `dt_colorprofiles_settings_t.generation` the display twin was derived at. Anything else
+   *  means a profile or a monitor changed under it. */
+  uint64_t brush_display_generation;
   gboolean brush_color_valid;
+  gboolean brush_display_valid;
   dt_drawlayer_brush_settings_t brush_settings;
   gboolean brush_settings_valid;
 } dt_drawlayer_ui_state_t;

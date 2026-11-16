@@ -108,6 +108,7 @@ void dt_control_mouse_moved(double x, double y, double pressure, int which);
 void dt_control_set_pointer_input(const dt_control_pointer_input_t *input);
 void dt_control_get_pointer_input(dt_control_pointer_input_t *input);
 void dt_control_key_pressed(GdkEventKey *event);
+void dt_control_key_released(GdkEventKey *event);
 void dt_control_mouse_leave();
 void dt_control_mouse_enter();
 gboolean dt_control_configure(GtkWidget *da, GdkEventConfigure *event, gpointer user_data);

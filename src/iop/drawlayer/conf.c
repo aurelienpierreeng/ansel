@@ -192,12 +192,19 @@ drawlayer_mapping_profile_t dt_drawlayer_conf_mapping_profile(const char *key)
                                             DRAWLAYER_PROFILE_INV_QUADRATIC);
 }
 
-/** @brief Read configured display RGB brush color. */
-void dt_drawlayer_conf_display_color(float rgb[3])
+/**
+ * @brief Read the configured brush colour, in PIPELINE (working) RGB.
+ *
+ * @details Not clamped to [0,1]: working RGB is where the HDR headroom lives, and a colour
+ * picked off a specular highlight is legitimately above 1. It used to be a display-space
+ * triple clamped here, which flattened such a pick at read time rather than at paint time.
+ * Only the negative side is excluded -- there is no such thing as negative light.
+ */
+void dt_drawlayer_conf_brush_color(float rgb[3])
 {
-  rgb[0] = _clamp01(dt_conf_get_float(DRAWLAYER_CONF_COLOR_R));
-  rgb[1] = _clamp01(dt_conf_get_float(DRAWLAYER_CONF_COLOR_G));
-  rgb[2] = _clamp01(dt_conf_get_float(DRAWLAYER_CONF_COLOR_B));
+  rgb[0] = fmaxf(dt_conf_get_float(DRAWLAYER_CONF_COLOR_R), 0.0f);
+  rgb[1] = fmaxf(dt_conf_get_float(DRAWLAYER_CONF_COLOR_G), 0.0f);
+  rgb[2] = fmaxf(dt_conf_get_float(DRAWLAYER_CONF_COLOR_B), 0.0f);
 }
 
 /** @brief Build config key for one color-history channel entry. */
@@ -213,7 +220,7 @@ static void _color_history_valid_key(const int index, char *key, const size_t ke
 }
 
 /** @brief Load persisted color-history stack from config into widgets state. */
-void dt_drawlayer_conf_load_color_history(dt_iop_drawlayer_gui_data_t *g)
+void dt_drawlayer_conf_load_color_history(dt_iop_module_t *self, dt_iop_drawlayer_gui_data_t *g)
 {
   if(IS_NULL_PTR(g) || !g->ui.widgets) return;
 
@@ -227,13 +234,20 @@ void dt_drawlayer_conf_load_color_history(dt_iop_drawlayer_gui_data_t *g)
     valid[i] = dt_conf_key_exists(key) ? dt_conf_get_bool(key) : FALSE;
 
     _color_history_key(i, 'r', key, sizeof(key));
-    history[i][0] = _clamp01(dt_conf_key_exists(key) ? dt_conf_get_float(key) : 0.0f);
+    history[i][0] = fmaxf(dt_conf_key_exists(key) ? dt_conf_get_float(key) : 0.0f, 0.0f);
     _color_history_key(i, 'g', key, sizeof(key));
-    history[i][1] = _clamp01(dt_conf_key_exists(key) ? dt_conf_get_float(key) : 0.0f);
+    history[i][1] = fmaxf(dt_conf_key_exists(key) ? dt_conf_get_float(key) : 0.0f, 0.0f);
     _color_history_key(i, 'b', key, sizeof(key));
-    history[i][2] = _clamp01(dt_conf_key_exists(key) ? dt_conf_get_float(key) : 0.0f);
+    history[i][2] = fmaxf(dt_conf_key_exists(key) ? dt_conf_get_float(key) : 0.0f, 0.0f);
   }
-  dt_drawlayer_widgets_set_color_history(g->ui.widgets, history, valid);
+
+  /* Convert the whole stack once, here, rather than per swatch per redraw: this runs when the
+   * module is set up or the image changes, and the widgets then draw straight from the result. */
+  float display_history[DT_DRAWLAYER_COLOR_HISTORY_COUNT][3] = { { 0.0f } };
+  for(int i = 0; i < DT_DRAWLAYER_COLOR_HISTORY_COUNT; i++)
+    dt_drawlayer_brush_display_rgb(self, history[i], display_history[i]);
+
+  dt_drawlayer_widgets_set_color_history(g->ui.widgets, history, display_history, valid);
 }
 
 /** @brief Persist current widget color-history stack into config. */
@@ -260,33 +274,41 @@ static void _store_color_history(const dt_iop_drawlayer_gui_data_t *g)
   }
 }
 
-/** @brief Push current display color to history and trigger swatch redraw. */
-void dt_drawlayer_conf_remember_display_color(dt_iop_module_t *self, const float display_rgb[3])
+/** @brief Push the current brush colour to history and trigger a swatch redraw. */
+void dt_drawlayer_conf_remember_brush_color(dt_iop_module_t *self, const float work_rgb[3])
 {
   dt_iop_drawlayer_gui_data_t *g = self ? (dt_iop_drawlayer_gui_data_t *)dt_iop_gui_data(self) : NULL;
-  if(IS_NULL_PTR(g) || !g->ui.widgets || !display_rgb) return;
+  if(IS_NULL_PTR(g) || !g->ui.widgets || !work_rgb) return;
 
-  if(!dt_drawlayer_widgets_push_color_history(g->ui.widgets, display_rgb)) return;
+  /* The widgets hold both: the working value is the colour, the display one is only how this
+   * swatch is painted. The caller owns the conversion because it is the side that knows the
+   * module, and therefore the work profile. */
+  float display_rgb[3] = { 0.0f };
+  dt_drawlayer_brush_display_rgb(self, work_rgb, display_rgb);
+  if(!dt_drawlayer_widgets_push_color_history(g->ui.widgets, work_rgb, display_rgb)) return;
   _store_color_history(g);
   if(g->controls.color_swatch) gtk_widget_queue_draw(g->controls.color_swatch);
 }
 
-/** @brief Apply display-space brush color to conf, widgets and redraw. */
-void dt_drawlayer_conf_apply_display_brush_color(dt_iop_module_t *self, const float display_rgb[3], const gboolean remember)
+/** @brief Apply a working-RGB brush colour to conf, widgets and redraw. */
+void dt_drawlayer_conf_apply_brush_color(dt_iop_module_t *self, const float work_rgb[3], const gboolean remember)
 {
   dt_iop_drawlayer_gui_data_t *g = self ? (dt_iop_drawlayer_gui_data_t *)dt_iop_gui_data(self) : NULL;
-  if(IS_NULL_PTR(self) || IS_NULL_PTR(g) || !g->ui.widgets || !display_rgb) return;
+  if(IS_NULL_PTR(self) || IS_NULL_PTR(g) || !g->ui.widgets || !work_rgb) return;
 
   dt_drawlayer_invalidate_brush_settings_cache(g);
-  dt_conf_set_float(DRAWLAYER_CONF_COLOR_R, _clamp01(display_rgb[0]));
-  dt_conf_set_float(DRAWLAYER_CONF_COLOR_G, _clamp01(display_rgb[1]));
-  dt_conf_set_float(DRAWLAYER_CONF_COLOR_B, _clamp01(display_rgb[2]));
-  dt_drawlayer_sync_cached_brush_colors(self, display_rgb);
+  dt_conf_set_float(DRAWLAYER_CONF_COLOR_R, fmaxf(work_rgb[0], 0.0f));
+  dt_conf_set_float(DRAWLAYER_CONF_COLOR_G, fmaxf(work_rgb[1], 0.0f));
+  dt_conf_set_float(DRAWLAYER_CONF_COLOR_B, fmaxf(work_rgb[2], 0.0f));
+  dt_drawlayer_sync_cached_brush_colors(self, work_rgb);
 
-  dt_drawlayer_widgets_set_display_color(g->ui.widgets, display_rgb);
+  /* The widgets are handed the CACHED display twin, not the working colour and not a fresh
+   * conversion: sync_cached_brush_colors() has just refreshed it, and every later redraw reads
+   * that same cache rather than entering LCMS again. */
+  dt_drawlayer_widgets_set_display_color(g->ui.widgets, g->ui.brush_display_color);
   dt_drawlayer_ui_cursor_clear(&g->ui);
 
-  if(remember) dt_drawlayer_conf_remember_display_color(self, display_rgb);
+  if(remember) dt_drawlayer_conf_remember_brush_color(self, work_rgb);
 
   if(g->controls.color) gtk_widget_queue_draw(g->controls.color);
   if(g->controls.color_swatch) gtk_widget_queue_draw(g->controls.color_swatch);
@@ -299,11 +321,11 @@ void dt_drawlayer_conf_sync_color_picker(dt_iop_module_t *self)
   dt_iop_drawlayer_gui_data_t *g = self ? (dt_iop_drawlayer_gui_data_t *)dt_iop_gui_data(self) : NULL;
   if(IS_NULL_PTR(g) || !g->ui.widgets) return;
 
-  float display_rgb[3] = { 0.0f };
-  dt_drawlayer_conf_display_color(display_rgb);
-  dt_drawlayer_sync_cached_brush_colors(self, display_rgb);
+  float work_rgb[3] = { 0.0f };
+  dt_drawlayer_conf_brush_color(work_rgb);
+  dt_drawlayer_sync_cached_brush_colors(self, work_rgb);
 
-  dt_drawlayer_widgets_set_display_color(g->ui.widgets, display_rgb);
+  dt_drawlayer_widgets_set_display_color(g->ui.widgets, g->ui.brush_display_color);
   if(g->controls.color_swatch) gtk_widget_queue_draw(g->controls.color_swatch);
 }
 

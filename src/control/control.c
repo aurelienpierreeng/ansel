@@ -684,6 +684,11 @@ void dt_control_key_pressed(GdkEventKey *event)
   dt_view_manager_key_pressed(darktable.view_manager, event);
 }
 
+void dt_control_key_released(GdkEventKey *event)
+{
+  dt_view_manager_key_released(darktable.view_manager, event);
+}
+
 void dt_control_button_released(double x, double y, int which, uint32_t state)
 {
 

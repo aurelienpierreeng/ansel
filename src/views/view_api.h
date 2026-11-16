@@ -67,6 +67,7 @@ OPTIONAL(int, button_released, struct dt_view_t *self, double x, double y, int w
 OPTIONAL(int, button_pressed, struct dt_view_t *self, double x, double y, double pressure,
                               int which, int type, uint32_t state);
 OPTIONAL(int, key_pressed, struct dt_view_t *self, GdkEventKey *event);
+OPTIONAL(int, key_released, struct dt_view_t *self, GdkEventKey *event);
 
 OPTIONAL(void, configure, struct dt_view_t *self, int width, int height);
 OPTIONAL(int, scrolled, struct dt_view_t *self, double x, double y, int up, int state, int delta_y); // mouse scrolled in view

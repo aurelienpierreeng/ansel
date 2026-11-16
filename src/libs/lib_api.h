@@ -88,6 +88,7 @@ OPTIONAL(int, button_released, struct dt_lib_module_t *self, double x, double y,
 OPTIONAL(int, button_pressed, struct dt_lib_module_t *self, double x, double y, double pressure, int which, int type,
                    uint32_t state);
 OPTIONAL(int, key_pressed, struct dt_lib_module_t *self, GdkEventKey *event);
+OPTIONAL(int, key_released, struct dt_lib_module_t *self, GdkEventKey *event);
 OPTIONAL(int, scrolled, struct dt_lib_module_t *self, double x, double y, int up);
 OPTIONAL(void, configure, struct dt_lib_module_t *self, int width, int height);
 OPTIONAL(int, position, );

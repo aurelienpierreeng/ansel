@@ -71,6 +71,7 @@
 #include <sched.h>
 #include <stdlib.h>
 #include <string.h>
+#include "widgets/widget_settings.h"   // dt_modifier_is()
 #include "widgets/notebook.h"
 #include "widgets/widget_style.h"
 
@@ -136,6 +137,7 @@ static gboolean _prompt_layer_name_dialog(const char *title, const char *message
 gboolean dt_drawlayer_sync_widget_cache(dt_iop_module_t *self);
 void dt_drawlayer_set_pipeline_realtime_mode(dt_iop_module_t *self, gboolean state);
 static gboolean _background_layer_job_done_idle(gpointer user_data);
+static void _release_picking_gesture(dt_iop_module_t *self);
 static dt_drawlayer_runtime_result_t _update_gui_runtime_manager(dt_iop_module_t *self,
                                                                  dt_iop_drawlayer_gui_data_t *g,
                                                                  dt_drawlayer_runtime_event_t event,
@@ -148,50 +150,185 @@ typedef struct drawlayer_wait_dialog_t
 
 #include "control/signal.h"
 
-/** @brief Convert one display-space brush color snapshot to pipeline space. */
-static void _brush_pipeline_color_from_display(dt_iop_module_t *self, const float display_rgb[3], float pipeline_rgb[3])
+/* --- the brush colour lives in PIPELINE RGB, and only the screen sees anything else -----------
+ *
+ * Picking an image pixel yields working RGB, painting consumes working RGB, and the layer is
+ * stored in working RGB. So that is what conf holds and what `brush_pipeline_color` caches: the
+ * colour needs no conversion at all on the path that matters, and nothing about it depends on
+ * which monitor happened to be attached when it was chosen.
+ *
+ * It used to be the other way round -- conf held a *display*-space triple and painting converted
+ * it back through `dt_ioppr_get_pipe_output_profile_info()`. Three things came of that, and the
+ * first is the one that was visible:
+ *
+ * - **Soft-proofing made picking and painting disagree.** `iop/colorout.c` only puts the pipe in
+ *   a soft-proof mode for `DT_DEV_PIXELPIPE_FULL` (`d->mode = (pipe->type == FULL) ? settings.mode
+ *   : DT_PROFILE_NORMAL`). The picker runs on one pipe and the paint conversion read
+ *   `self->dev->pipe`, so with proofing on, the colour laid down was not the colour picked.
+ * - **The stored value meant something different on every monitor.** Change the display profile
+ *   and every saved brush colour, and the whole history, silently moved.
+ * - **The clamp happened too early.** Display space was clamped to [0,1] before the HDR exposure
+ *   gain, so an out-of-gamut pick was flattened at pick time rather than at paint time.
+ *
+ * Going to the screen is now the only conversion, it is the monitor's real ICC profile rather
+ * than the pipe's output profile, and it is CACHED -- see `_refresh_brush_display_color()`.
+ */
+
+/**
+ * @brief Convert one working-RGB colour to display RGB for drawing on screen.
+ *
+ * @details Through the monitor's ICC profile, via `dt_colorprofiles_xyz_to_display()` -- which is
+ * documented for exactly this (colour pickers and overlay swatches), takes the profile read lock
+ * for the span of the conversion, and falls back to sRGB when no display profile has been
+ * resolved. A matrix of the display profile would be wrong for a LUT-based monitor profile; this
+ * runs the real transform.
+ *
+ * @warning One pixel per call, LCMS inside. Never call it from a draw handler -- that is what the
+ * cache exists for.
+ */
+void dt_drawlayer_brush_display_rgb(dt_iop_module_t *self, const float work_rgb[3], float display_rgb[3])
 {
-  if(!display_rgb || IS_NULL_PTR(pipeline_rgb)) return;
+  if(IS_NULL_PTR(work_rgb) || IS_NULL_PTR(display_rgb)) return;
 
-  pipeline_rgb[0] = _clamp01(display_rgb[0]);
-  pipeline_rgb[1] = _clamp01(display_rgb[1]);
-  pipeline_rgb[2] = _clamp01(display_rgb[2]);
+  dt_aligned_pixel_t XYZ = { 0.0f, 0.0f, 0.0f, 0.0f };
+  const dt_aligned_pixel_t rgb = { work_rgb[0], work_rgb[1], work_rgb[2], 0.0f };
+  const dt_iop_order_iccprofile_info_t *const work_profile
+      = (!IS_NULL_PTR(self) && self->dev) ? dt_ioppr_get_iop_work_profile_info(self, self->dev->iop) : NULL;
 
-  if(!IS_NULL_PTR(self) && self->dev && self->dev->pipe)
+  if(!IS_NULL_PTR(work_profile))
+    dt_ioppr_rgb_matrix_to_xyz(rgb, XYZ, work_profile->matrix_in_transposed, work_profile->lut_in,
+                               work_profile->unbounded_coeffs_in, work_profile->lutsize,
+                               work_profile->nonlinearlut);
+  else
+    dt_linearRGB_to_XYZ(rgb, XYZ);
+
+  dt_aligned_pixel_t out = { 0.0f, 0.0f, 0.0f, 0.0f };
+  dt_colorprofiles_xyz_to_display(XYZ, out);
+
+  display_rgb[0] = _clamp01(out[0]);
+  display_rgb[1] = _clamp01(out[1]);
+  display_rgb[2] = _clamp01(out[2]);
+}
+
+/**
+ * @brief Convert one colour chosen in the panel's gradient widget to working RGB.
+ *
+ * @details The gradient is generated in sRGB and is an abstract chooser rather than a sample of
+ * anything on screen, so sRGB is what its coordinates mean. The image picker does not come
+ * through here: it already produces working RGB and is stored untouched.
+ */
+static void _working_rgb_from_srgb(dt_iop_module_t *self, const float srgb[3], float work_rgb[3])
+{
+  if(IS_NULL_PTR(srgb) || IS_NULL_PTR(work_rgb)) return;
+
+  work_rgb[0] = _clamp01(srgb[0]);
+  work_rgb[1] = _clamp01(srgb[1]);
+  work_rgb[2] = _clamp01(srgb[2]);
+
+  const dt_iop_order_iccprofile_info_t *const work_profile
+      = (!IS_NULL_PTR(self) && self->dev) ? dt_ioppr_get_iop_work_profile_info(self, self->dev->iop) : NULL;
+  const dt_iop_order_iccprofile_info_t *const srgb_profile
+      = dt_colorspaces_add_profile(DT_COLORSPACE_SRGB, "", DT_INTENT_PERCEPTUAL);
+  if(IS_NULL_PTR(work_profile) || IS_NULL_PTR(srgb_profile)) return;
+
+  float in[4] = { work_rgb[0], work_rgb[1], work_rgb[2], 0.0f };
+  float out[4] = { work_rgb[0], work_rgb[1], work_rgb[2], 0.0f };
+  dt_ioppr_transform_image_colorspace_rgb(in, out, 1, 1, srgb_profile, work_profile,
+                                          "drawlayer brush color");
+  work_rgb[0] = out[0];
+  work_rgb[1] = out[1];
+  work_rgb[2] = out[2];
+}
+
+/**
+ * @brief Refresh the cached display-RGB twin of the brush colour when it can have gone stale.
+ *
+ * @details Keyed on `dt_colorprofiles_settings_t.generation`, which the colour-profile module
+ * advances on every accepted settings change AND from `_notify_profile_changed()` -- so moving
+ * the window to a screen with a different profile bumps it too, even though the DISPLAY entry's
+ * name and filename are unchanged. That is the one number that can say "same profile name,
+ * different profile"; keying on the name instead would serve the previous monitor's colour
+ * indefinitely.
+ *
+ * @return TRUE when the cached value changed, so a caller can skip a redraw.
+ */
+static gboolean _refresh_brush_display_color(dt_iop_module_t *self)
+{
+  dt_iop_drawlayer_gui_data_t *g = self ? (dt_iop_drawlayer_gui_data_t *)dt_iop_gui_data(self) : NULL;
+  if(IS_NULL_PTR(g) || !g->ui.brush_color_valid) return FALSE;
+
+  dt_colorprofiles_settings_t settings = { 0 };
+  dt_colorprofiles_get_settings(&settings);
+  if(g->ui.brush_display_valid && g->ui.brush_display_generation == settings.generation) return FALSE;
+
+  dt_drawlayer_brush_display_rgb(self, g->ui.brush_pipeline_color, g->ui.brush_display_color);
+  g->ui.brush_display_generation = settings.generation;
+  g->ui.brush_display_valid = TRUE;
+
+  /* The swatch, the gradient widget and the history strip all hold their own screen copies, so a
+   * profile that moved under them has to reach those too -- otherwise the cache is right and the
+   * panel still shows the previous monitor's colours until something else happens to touch them.
+   * Reloading the history from conf re-derives every twin from the working values it persists. */
+  if(!IS_NULL_PTR(g->ui.widgets))
   {
-    const dt_iop_order_iccprofile_info_t *const display_profile
-        = dt_ioppr_get_pipe_output_profile_info(self->dev->pipe);
-    const dt_iop_order_iccprofile_info_t *const work_profile
-        = dt_ioppr_get_iop_work_profile_info(self, self->dev->iop);
-    if(!IS_NULL_PTR(display_profile) && !IS_NULL_PTR(work_profile))
+    dt_drawlayer_widgets_set_display_color(g->ui.widgets, g->ui.brush_display_color);
+    dt_drawlayer_conf_load_color_history(self, g);
+  }
+  dt_drawlayer_ui_cursor_clear(&g->ui);
+  return TRUE;
+}
+
+/**
+ * @brief The brush colour as it must appear on screen, from the cache.
+ *
+ * @details The one way GUI code should ask. It refills the cache from conf when nothing has
+ * populated it yet and re-derives it when the display profile generation has moved, so a caller
+ * never has to know which of those happened -- and never pays for an LCMS transform just to
+ * repaint a swatch or a cursor.
+ */
+static void _brush_display_color_cached(dt_iop_module_t *self, float display_rgb[3])
+{
+  dt_iop_drawlayer_gui_data_t *g = self ? (dt_iop_drawlayer_gui_data_t *)dt_iop_gui_data(self) : NULL;
+  if(IS_NULL_PTR(display_rgb)) return;
+
+  if(!IS_NULL_PTR(g))
+  {
+    if(!g->ui.brush_color_valid)
     {
-      float in[4] = { pipeline_rgb[0], pipeline_rgb[1], pipeline_rgb[2], 0.0f };
-      float out[4] = { pipeline_rgb[0], pipeline_rgb[1], pipeline_rgb[2], 0.0f };
-      dt_ioppr_transform_image_colorspace_rgb(in, out, 1, 1, display_profile, work_profile,
-                                              "drawlayer brush color");
-      pipeline_rgb[0] = out[0];
-      pipeline_rgb[1] = out[1];
-      pipeline_rgb[2] = out[2];
+      float work_rgb[3] = { 0.0f };
+      dt_drawlayer_conf_brush_color(work_rgb);
+      dt_drawlayer_sync_cached_brush_colors(self, work_rgb);
+    }
+    else
+      _refresh_brush_display_color(self);
+
+    if(g->ui.brush_color_valid)
+    {
+      memcpy(display_rgb, g->ui.brush_display_color, 3 * sizeof(float));
+      return;
     }
   }
 
-  const float gain = exp2f(dt_drawlayer_conf_hdr_exposure());
-  pipeline_rgb[0] *= gain;
-  pipeline_rgb[1] *= gain;
-  pipeline_rgb[2] *= gain;
+  /* No GUI data to cache in -- convert once and hand it back. */
+  float work_rgb[3] = { 0.0f };
+  dt_drawlayer_conf_brush_color(work_rgb);
+  dt_drawlayer_brush_display_rgb(self, work_rgb, display_rgb);
 }
 
 /** @brief Cache brush colors in GUI state so stroke input snapshots don't re-transform per event. */
-void dt_drawlayer_sync_cached_brush_colors(dt_iop_module_t *self, const float display_rgb[3])
+void dt_drawlayer_sync_cached_brush_colors(dt_iop_module_t *self, const float work_rgb[3])
 {
   dt_iop_drawlayer_gui_data_t *g = self ? (dt_iop_drawlayer_gui_data_t *)dt_iop_gui_data(self) : NULL;
-  if(IS_NULL_PTR(g) || !display_rgb) return;
+  if(IS_NULL_PTR(g) || !work_rgb) return;
 
-  g->ui.brush_display_color[0] = _clamp01(display_rgb[0]);
-  g->ui.brush_display_color[1] = _clamp01(display_rgb[1]);
-  g->ui.brush_display_color[2] = _clamp01(display_rgb[2]);
-  _brush_pipeline_color_from_display(self, g->ui.brush_display_color, g->ui.brush_pipeline_color);
+  /* No clamp to [0,1]: working RGB is where the HDR headroom lives, and the gain below is what
+   * the brush actually lays down. Only the screen copy is clamped, where it has to be. */
+  g->ui.brush_pipeline_color[0] = fmaxf(work_rgb[0], 0.0f);
+  g->ui.brush_pipeline_color[1] = fmaxf(work_rgb[1], 0.0f);
+  g->ui.brush_pipeline_color[2] = fmaxf(work_rgb[2], 0.0f);
   g->ui.brush_color_valid = TRUE;
+  g->ui.brush_display_valid = FALSE;
+  _refresh_brush_display_color(self);
 }
 
 /**
@@ -278,8 +415,10 @@ static void _fill_input_brush_settings(dt_iop_module_t *self, dt_drawlayer_paint
   }
   else
   {
-    dt_drawlayer_conf_display_color(display_rgb);
-    if(!IS_NULL_PTR(g)) dt_drawlayer_sync_cached_brush_colors(self, display_rgb);
+    /* conf holds the canonical working colour, so it needs no conversion to be painted --
+     * only its screen twin does, and only when there is a GUI to show it on. */
+    dt_drawlayer_conf_brush_color(pipeline_rgb);
+    if(!IS_NULL_PTR(g)) dt_drawlayer_sync_cached_brush_colors(self, pipeline_rgb);
     if(!IS_NULL_PTR(g) && g->ui.brush_color_valid)
     {
       memcpy(display_rgb, g->ui.brush_display_color, sizeof(display_rgb));
@@ -287,10 +426,7 @@ static void _fill_input_brush_settings(dt_iop_module_t *self, dt_drawlayer_paint
     }
     else
     {
-      _brush_pipeline_color_from_display(self, display_rgb, pipeline_rgb);
-      display_rgb[0] = _clamp01(display_rgb[0]);
-      display_rgb[1] = _clamp01(display_rgb[1]);
-      display_rgb[2] = _clamp01(display_rgb[2]);
+      dt_drawlayer_brush_display_rgb(self, pipeline_rgb, display_rgb);
     }
   }
 
@@ -310,9 +446,14 @@ static void _fill_input_brush_settings(dt_iop_module_t *self, dt_drawlayer_paint
   input->brush_sprinkle_coarseness = c ? c->brush_sprinkle_coarseness : dt_drawlayer_conf_sprinkle_coarseness() / 100.0f;
   input->brush_shape = c ? c->brush_shape : dt_drawlayer_conf_brush_shape();
   input->brush_mode = c ? c->brush_mode : dt_drawlayer_conf_brush_mode();
-  input->color[0] = pipeline_rgb[0];
-  input->color[1] = pipeline_rgb[1];
-  input->color[2] = pipeline_rgb[2];
+  /* The HDR exposure is a property of what the brush LAYS DOWN, not of the colour that was
+   * chosen, so it multiplies here and is absent from conf, from the cached working colour and
+   * from the swatch. It used to be folded into the cached pipeline colour, which meant the one
+   * number had to be divided back out again on the picking path to stay round-trippable. */
+  const float hdr_gain = exp2f(dt_drawlayer_conf_hdr_exposure());
+  input->color[0] = pipeline_rgb[0] * hdr_gain;
+  input->color[1] = pipeline_rgb[1] * hdr_gain;
+  input->color[2] = pipeline_rgb[2] * hdr_gain;
   input->display_color[0] = display_rgb[0];
   input->display_color[1] = display_rgb[1];
   input->display_color[2] = display_rgb[2];
@@ -1183,7 +1324,7 @@ static void _ensure_cursor_stamp_surface(dt_iop_module_t *self, const float widg
 
   const double ppd = (dt_gui_get_global() && dt_gui_get_global()->ppd > 0.0) ? dt_gui_get_global()->ppd : 1.0;
   float display_rgb[3] = { 0.0f };
-  dt_drawlayer_conf_display_color(display_rgb);
+  _brush_display_color_cached(self, display_rgb);
   const int shape = dt_drawlayer_conf_brush_shape();
   const int size_px = MAX(2, (int)ceil((2.0f * widget_radius + 2.0f) * ppd));
 
@@ -1371,9 +1512,15 @@ static gboolean _color_picker_set_from_position(dt_iop_module_t *self, const flo
   dt_iop_drawlayer_gui_data_t *g = self ? (dt_iop_drawlayer_gui_data_t *)dt_iop_gui_data(self) : NULL;
   if(IS_NULL_PTR(g) || !g->ui.widgets || IS_NULL_PTR(g->controls.color)) return FALSE;
 
-  float display_rgb[3] = { 0.0f };
-  if(!dt_drawlayer_widgets_update_from_picker_position(g->ui.widgets, g->controls.color, x, y, display_rgb)) return FALSE;
-  dt_drawlayer_conf_apply_display_brush_color(self, display_rgb, FALSE);
+  float picked_srgb[3] = { 0.0f };
+  if(!dt_drawlayer_widgets_update_from_picker_position(g->ui.widgets, g->controls.color, x, y, picked_srgb))
+    return FALSE;
+
+  /* The gradient is an sRGB-defined chooser, not a sample of anything on screen, so that is what
+   * its coordinates mean. Store the working colour they stand for. */
+  float work_rgb[3] = { 0.0f };
+  _working_rgb_from_srgb(self, picked_srgb, work_rgb);
+  dt_drawlayer_conf_apply_brush_color(self, work_rgb, FALSE);
   return TRUE;
 }
 
@@ -1391,6 +1538,8 @@ static gboolean _color_swatch_draw(GtkWidget *widget, cairo_t *cr, gpointer user
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
   dt_iop_drawlayer_gui_data_t *g = self ? (dt_iop_drawlayer_gui_data_t *)dt_iop_gui_data(self) : NULL;
   if(IS_NULL_PTR(g) || !g->ui.widgets) return FALSE;
+  /* One uint64 compare in the common case; an LCMS transform only when the profile moved. */
+  _refresh_brush_display_color(self);
   return dt_drawlayer_widgets_draw_swatch(g->ui.widgets, widget, cr);
 }
 
@@ -1400,9 +1549,9 @@ static gboolean _color_swatch_button_press(GtkWidget *widget, GdkEventButton *ev
   dt_iop_drawlayer_gui_data_t *g = self ? (dt_iop_drawlayer_gui_data_t *)dt_iop_gui_data(self) : NULL;
   if(IS_NULL_PTR(g) || !g->ui.widgets || !widget || IS_NULL_PTR(event) || event->button != 1) return FALSE;
 
-  float display_rgb[3] = { 0.0f };
-  if(!dt_drawlayer_widgets_pick_history_color(g->ui.widgets, widget, event->x, event->y, display_rgb)) return FALSE;
-  dt_drawlayer_conf_apply_display_brush_color(self, display_rgb, FALSE);
+  float work_rgb[3] = { 0.0f };
+  if(!dt_drawlayer_widgets_pick_history_color(g->ui.widgets, widget, event->x, event->y, work_rgb)) return FALSE;
+  dt_drawlayer_conf_apply_brush_color(self, work_rgb, FALSE);
   return TRUE;
 }
 
@@ -1443,37 +1592,19 @@ static gboolean _brush_profile_button_press(GtkWidget *widget, GdkEventButton *e
   return TRUE;
 }
 
-static gboolean _working_rgb_to_display_rgb(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe,
-                                            const float working_rgb[3], float display_rgb[3])
+/**
+ * @brief Is the eyedropper modifier down?
+ *
+ * @details DT_PRIMARY_MASK rather than GDK_CONTROL_MASK, so this is Cmd on macOS and Ctrl
+ * everywhere else -- the modifier the rest of the application already means by "primary".
+ *
+ * Asked in two places that must agree: `button_pressed()`, which samples instead of painting,
+ * and `gui_post_expose()`, which has to draw the cursor that promises it. A cursor that still
+ * shows a brush while the click will sample is a worse bug than either one alone.
+ */
+static inline gboolean _picking_modifier_is_down(const uint32_t state)
 {
-  if(IS_NULL_PTR(working_rgb) || !display_rgb) return FALSE;
-
-  const float gain = exp2f(dt_drawlayer_conf_hdr_exposure());
-  const float inv_gain = (gain > 0.0f) ? 1.0f / gain : 1.0f;
-  const float preview_rgb[3] = {
-    working_rgb[0] * inv_gain,
-    working_rgb[1] * inv_gain,
-    working_rgb[2] * inv_gain,
-  };
-
-  display_rgb[0] = _clamp01(preview_rgb[0]);
-  display_rgb[1] = _clamp01(preview_rgb[1]);
-  display_rgb[2] = _clamp01(preview_rgb[2]);
-
-  if(IS_NULL_PTR(self) || IS_NULL_PTR(pipe)) return TRUE;
-
-  const dt_iop_order_iccprofile_info_t *const work_profile
-      = self->dev ? dt_ioppr_get_iop_work_profile_info(self, self->dev->iop) : NULL;
-  const dt_iop_order_iccprofile_info_t *const display_profile = dt_ioppr_get_pipe_output_profile_info(pipe);
-  if(IS_NULL_PTR(work_profile) || !display_profile) return TRUE;
-
-  float in[4] = { preview_rgb[0], preview_rgb[1], preview_rgb[2], 0.0f };
-  float out[4] = { preview_rgb[0], preview_rgb[1], preview_rgb[2], 0.0f };
-  dt_ioppr_transform_image_colorspace_rgb(in, out, 1, 1, work_profile, display_profile, "drawlayer picked color");
-  display_rgb[0] = _clamp01(out[0]);
-  display_rgb[1] = _clamp01(out[1]);
-  display_rgb[2] = _clamp01(out[2]);
-  return TRUE;
+  return dt_modifier_is((GdkModifierType)state, DT_PRIMARY_MASK);
 }
 
 /**
@@ -1506,9 +1637,18 @@ void color_picker_apply(dt_iop_module_t *self, GtkWidget *picker, dt_dev_pixelpi
       = (source == DRAWLAYER_PICK_SOURCE_OUTPUT) ? self->picked_output_color_max : self->picked_color_max;
   if(picked_max[0] < picked_min[0]) return;
 
-  float display_rgb[3] = { 0.0f };
-  if(!_working_rgb_to_display_rgb(self, pipe, picked, display_rgb)) return;
-  dt_drawlayer_conf_apply_display_brush_color(self, display_rgb, TRUE);
+  /* `picked` is already working RGB -- the space the brush colour is kept in -- so there is
+   * nothing to convert, which is the point of the change. Only the HDR gain comes back out, so
+   * that picking a patch this brush painted returns the colour that was chosen for it. */
+  (void)pipe;
+  const float gain = exp2f(dt_drawlayer_conf_hdr_exposure());
+  const float inv_gain = (gain > 0.0f) ? 1.0f / gain : 1.0f;
+  const float work_rgb[3] = { picked[0] * inv_gain, picked[1] * inv_gain, picked[2] * inv_gain };
+  dt_drawlayer_conf_apply_brush_color(self, work_rgb, TRUE);
+
+  /* The picker is deliberately NOT handed back here. The gesture is modal: while the modifier
+   * is held every click samples, which is the whole point of pairing it with painting. The
+   * release does the disarm, in key_released(). */
 }
 
 static gboolean _color_picker_button_press(GtkWidget *widget, GdkEventButton *event, gpointer user_data)
@@ -1527,9 +1667,13 @@ static gboolean _color_picker_button_release(GtkWidget *widget, GdkEventButton *
   (void)event;
   if(!IS_NULL_PTR(g) && g->ui.widgets)
   {
-    float display_rgb[3] = { 0.0f };
-    if(dt_drawlayer_widgets_finish_picker_drag(g->ui.widgets, display_rgb))
-      dt_drawlayer_conf_remember_display_color(self, display_rgb);
+    float picked_srgb[3] = { 0.0f };
+    if(dt_drawlayer_widgets_finish_picker_drag(g->ui.widgets, picked_srgb))
+    {
+      float work_rgb[3] = { 0.0f };
+      _working_rgb_from_srgb(self, picked_srgb, work_rgb);
+      dt_drawlayer_conf_remember_brush_color(self, work_rgb);
+    }
   }
   return FALSE;
 }
@@ -3199,7 +3343,7 @@ void gui_init(dt_iop_module_t *self)
   g->ui.widgets = dt_drawlayer_widgets_init();
   dt_drawlayer_runtime_manager_init(&g->manager);
   dt_drawlayer_process_state_init(&g->process);
-  dt_drawlayer_conf_load_color_history(g);
+  dt_drawlayer_conf_load_color_history(self, g);
   dt_drawlayer_sanitize_params(self, params);
 
   dt_drawlayer_worker_init(self, &g->stroke.worker, &g->manager.painting_active,
@@ -3354,6 +3498,13 @@ void change_image(dt_iop_module_t *self)
 /** @brief Focus transition hook (enter/leave) for drawlayer GUI mode. */
 void gui_focus(dt_iop_module_t *self, gboolean in)
 {
+  /* Picking mode does not survive a focus change in either direction. Leaving: the key release
+   * is delivered to the FOCUSED module, so once focus has moved the release that would end the
+   * mode never arrives here and the picker would stay armed for good. Arriving: the modifier
+   * may have gone down while another module held focus, so this module never saw the press and
+   * must not assume the mode it did not enter. */
+  _release_picking_gesture(self);
+
   if(!in)
   {
     dt_iop_drawlayer_gui_data_t *g = (dt_iop_drawlayer_gui_data_t *)dt_iop_gui_data(self);
@@ -3574,29 +3725,69 @@ void gui_post_expose(dt_iop_module_t *self, cairo_t *cr, int32_t width, int32_t 
       widget_radius = dt_drawlayer_widget_brush_radius(self, &dab, widget_radius);
     }
 
-    // Draw the brush mipmap
     const float draw_radius = fmaxf(0.5f, widget_radius);
-    if(show_paint_fill)
+
+    /* While the eyedropper modifier is held the next click samples rather than paints, so the
+     * cursor says so: a cross, which can be aimed at one pixel, instead of a brush circle whose
+     * whole job is to show an area. Read from the mode rather than from the live keyboard, so
+     * the cursor and the click can never disagree about which tool is in the user's hand --
+     * key_pressed() queues the redraw that makes the swap immediate. */
+    if(g->session.picking_active)
     {
-      _ensure_cursor_stamp_surface(self, draw_radius, hud.opacity, hud.hardness);
-      if(g->ui.cursor_surface)
+      /* A gap in the middle leaves the sampled pixel visible, which is the point of using a
+       * cross. Drawn dark-under-light so it survives both ends of the tone range. */
+      const float arm = fmaxf(8.0f, fminf(draw_radius, 16.0f));
+      const float gap = 2.0f;
+      for(int pass = 0; pass < 2; pass++)
       {
-        const float surface_half_extent = 0.5f * (float)g->ui.cursor_surface_size / (float)g->ui.cursor_surface_ppd;
-        cairo_set_source_surface(cr, g->ui.cursor_surface, draw_x - surface_half_extent, draw_y - surface_half_extent);
-        cairo_paint(cr);
+        if(pass == 0)
+        {
+          cairo_set_source_rgba(cr, 0.0, 0.0, 0.0, 0.6);
+          cairo_set_line_width(cr, 3.0);
+        }
+        else
+        {
+          cairo_set_source_rgba(cr, 1.0, 1.0, 1.0, 0.9);
+          cairo_set_line_width(cr, 1.0);
+        }
+        cairo_move_to(cr, draw_x - arm, draw_y);
+        cairo_line_to(cr, draw_x - gap, draw_y);
+        cairo_move_to(cr, draw_x + gap, draw_y);
+        cairo_line_to(cr, draw_x + arm, draw_y);
+        cairo_move_to(cr, draw_x, draw_y - arm);
+        cairo_line_to(cr, draw_x, draw_y - gap);
+        cairo_move_to(cr, draw_x, draw_y + gap);
+        cairo_line_to(cr, draw_x, draw_y + arm);
+        cairo_stroke(cr);
       }
     }
+    else
+    {
+      // Draw the brush mipmap
+      if(show_paint_fill)
+      {
+        _ensure_cursor_stamp_surface(self, draw_radius, hud.opacity, hud.hardness);
+        if(g->ui.cursor_surface)
+        {
+          const float surface_half_extent
+              = 0.5f * (float)g->ui.cursor_surface_size / (float)g->ui.cursor_surface_ppd;
+          cairo_set_source_surface(cr, g->ui.cursor_surface, draw_x - surface_half_extent,
+                                   draw_y - surface_half_extent);
+          cairo_paint(cr);
+        }
+      }
 
-    // Draw the outer circle in case we are lost
-    cairo_set_source_rgba(cr, 0., 0., 0., 0.5);
-    cairo_set_line_width(cr, 2.5);
-    cairo_arc(cr, draw_x, draw_y, draw_radius + 1.0f, 0.0, 2.0 * M_PI);
-    cairo_stroke(cr);
+      // Draw the outer circle in case we are lost
+      cairo_set_source_rgba(cr, 0., 0., 0., 0.5);
+      cairo_set_line_width(cr, 2.5);
+      cairo_arc(cr, draw_x, draw_y, draw_radius + 1.0f, 0.0, 2.0 * M_PI);
+      cairo_stroke(cr);
 
-    cairo_set_source_rgba(cr, 1., 1., 1., 0.5);
-    cairo_set_line_width(cr, 1.0);
-    cairo_arc(cr, draw_x, draw_y, draw_radius, 0.0, 2.0 * M_PI);
-    cairo_stroke(cr);
+      cairo_set_source_rgba(cr, 1., 1., 1., 0.5);
+      cairo_set_line_width(cr, 1.0);
+      cairo_arc(cr, draw_x, draw_y, draw_radius, 0.0, 2.0 * M_PI);
+      cairo_stroke(cr);
+    }
 
     if(self->dev->gui_module == self)
     {
@@ -3630,6 +3821,14 @@ int mouse_moved(dt_iop_module_t *self, double x, double y, double pressure, int 
     if(g->session.pointer_valid)
       _update_gui_runtime_manager(self, g, DT_DRAWLAYER_RUNTIME_EVENT_GUI_MOUSE_LEAVE, FALSE);
     _update_gui_runtime_manager(self, g, DT_DRAWLAYER_RUNTIME_EVENT_GUI_STROKE_ABORT, FALSE);
+    return 0;
+  }
+
+  /* Picking mode: follow the pointer so the cross tracks it, but never start or extend a
+   * stroke. Returning 0 leaves the event to whatever else wants it. */
+  if(g->session.picking_active)
+  {
+    dt_control_queue_redraw_center();
     return 0;
   }
 
@@ -3721,18 +3920,158 @@ int mouse_moved(dt_iop_module_t *self, double x, double y, double pressure, int 
 }
 
 /** @brief Button press handler (starts stroke capture on left button). */
+/**
+ * @brief Hand the image picker back, if this module is the one holding it.
+ *
+ * @details `dt_iop_color_picker_reset(self, FALSE)` and nothing else. Toggling the picker
+ * button off does NOT do this -- the button's state is appearance, the arming lives on
+ * `dev->color_picker`, and a disarm written as `gtk_toggle_button_set_active(FALSE)` leaves
+ * `enabled` TRUE. The symptom is the tool never going back to being a brush: the darkroom view
+ * keeps handing clicks to a picker that looks switched off.
+ *
+ * Guarded on our own flag so a picker the user armed deliberately, with the button, is left
+ * alone.
+ */
+static void _release_picking_gesture(dt_iop_module_t *self)
+{
+  dt_iop_drawlayer_gui_data_t *g = self ? (dt_iop_drawlayer_gui_data_t *)dt_iop_gui_data(self) : NULL;
+  if(IS_NULL_PTR(g)) return;
+  if(!g->session.picking_active && !g->session.picker_armed_by_gesture) return;
+
+  const gboolean was_armed = g->session.picker_armed_by_gesture;
+  g->session.picking_active = FALSE;
+  g->session.picker_armed_by_gesture = FALSE;
+  /* Only a picker THIS gesture armed is handed back; one the user armed with the button is
+   * theirs. dt_iop_color_picker_reset() is the real disarm -- turning the button's toggle off
+   * only changes how it looks and leaves dev->color_picker.enabled set, which is how the tool
+   * came to keep sampling while appearing to be a brush again. */
+  if(was_armed) dt_iop_color_picker_reset(self, FALSE);
+  dt_control_queue_redraw_center();
+}
+
+/**
+ * @brief Ctrl+click: take the colour under the cursor as the brush colour.
+ *
+ * @details Photoshop's eyedropper modifier, and it borrows the module's own image picker rather
+ * than sampling anything itself -- the pixel it wants only exists part-way through a pipe run,
+ * and `color_picker_apply()` is already the place that receives it.
+ *
+ * So this arms that picker for exactly one sample through
+ * `dt_iop_color_picker_sample_point()`, and lets `color_picker_apply()` disarm it again.
+ *
+ * Aiming the sample is NOT enough on its own, and that is the part that looks like it should
+ * work: writing `primary_sample->point` sets where to look, but the pipeline only samples for
+ * the picker registered on the dev, so an unarmed pick returns nothing at all. The first cut of
+ * this did exactly that -- it set the point, flipped the picker button's toggle state, and
+ * sampled nothing, because the button's arming lives on `button-press-event` and a programmatic
+ * `gtk_toggle_button_set_active()` never reaches it.
+ *
+ * The one-shot part is not a nicety either. The darkroom
+ * view tests the picker BEFORE it offers a click to the focused module
+ * (`views/darkroom.c:button_pressed`), so a picker left armed would eat every following click
+ * and the brush would stop painting with no visible reason.
+ *
+ * The sample point is stored in normalised RAW space, which is what `dt_colorpicker_sample_t`
+ * documents and what the view does on the same path -- widget to image-normalised, then image to
+ * raw-normalised. Storing image-normalised coordinates there samples a different pixel on any
+ * cropped or rotated image.
+ */
+static gboolean _pick_brush_color_at(dt_iop_module_t *self, const double x, const double y)
+{
+  dt_iop_drawlayer_gui_data_t *g = self ? (dt_iop_drawlayer_gui_data_t *)dt_iop_gui_data(self) : NULL;
+  if(IS_NULL_PTR(g) || IS_NULL_PTR(self->dev) || IS_NULL_PTR(g->controls.image_colorpicker)) return FALSE;
+  if(!_brush_paints_color()) return FALSE;
+
+  dt_develop_t *const dev = self->dev;
+
+  /* Image-normalised is what dt_iop_color_picker_sample_point() wants; it converts to the
+   * raw-normalised space the sample is stored in. */
+  float point[2] = { (float)x, (float)y };
+  dt_dev_coordinates_widget_to_image_norm(dev, point, 1);
+  if(point[0] < 0.0f || point[0] > 1.0f || point[1] < 0.0f || point[1] > 1.0f) return FALSE;
+
+  g->session.picker_armed_by_gesture = TRUE;
+  if(!dt_iop_color_picker_sample_point(g->controls.image_colorpicker, point))
+  {
+    g->session.picker_armed_by_gesture = FALSE;
+    return FALSE;
+  }
+  return TRUE;
+}
+
+/**
+ * @brief Is this the key that IS the picking modifier?
+ *
+ * @details The keyval, not the modifier bit: a press event for Ctrl itself does not yet carry
+ * GDK_CONTROL_MASK in its own state, so asking dt_modifier_is() here would miss the very
+ * transition this is for.
+ */
+static inline gboolean _is_picking_modifier_key(const guint keyval)
+{
+#ifdef GDK_WINDOWING_QUARTZ
+  return keyval == GDK_KEY_Meta_L || keyval == GDK_KEY_Meta_R;
+#else
+  return keyval == GDK_KEY_Control_L || keyval == GDK_KEY_Control_R;
+#endif
+}
+
+/**
+ * @brief Enter picking mode while the modifier is held.
+ *
+ * @return 0, ALWAYS. The modifier is the prefix of half the application's shortcuts, so
+ * claiming its press would eat every one of them. This only wants to know.
+ */
+int key_pressed(dt_iop_module_t *self, GdkEventKey *event)
+{
+  dt_iop_drawlayer_gui_data_t *g = self ? (dt_iop_drawlayer_gui_data_t *)dt_iop_gui_data(self) : NULL;
+  if(IS_NULL_PTR(g) || IS_NULL_PTR(event) || !_is_picking_modifier_key(event->keyval)) return 0;
+  if(g->session.picking_active) return 0;
+
+  /* A stroke in progress is ended rather than carried into picking mode: the button is still
+   * down, and the release that would have finished it is about to be read as a pick. */
+  _update_gui_runtime_manager(self, g, DT_DRAWLAYER_RUNTIME_EVENT_GUI_STROKE_ABORT, FALSE);
+  g->session.picking_active = TRUE;
+  dt_control_queue_redraw_center();
+  return 0;
+}
+
+/**
+ * @brief Leave picking mode when the modifier comes up, and hand the picker back.
+ *
+ * @return 0, ALWAYS, for the same reason as the press.
+ */
+int key_released(dt_iop_module_t *self, GdkEventKey *event)
+{
+  dt_iop_drawlayer_gui_data_t *g = self ? (dt_iop_drawlayer_gui_data_t *)dt_iop_gui_data(self) : NULL;
+  if(IS_NULL_PTR(g) || IS_NULL_PTR(event) || !_is_picking_modifier_key(event->keyval)) return 0;
+
+  _release_picking_gesture(self);
+  return 0;
+}
+
 int button_pressed(dt_iop_module_t *self, double x, double y, double pressure, int which, int type, uint32_t state)
 {
   dt_iop_drawlayer_gui_data_t *g = (dt_iop_drawlayer_gui_data_t *)dt_iop_gui_data(self);
   dt_iop_drawlayer_params_t *params = (dt_iop_drawlayer_params_t *)self->params;
   if(IS_NULL_PTR(g) || IS_NULL_PTR(self->dev) || which != 1) return 0;
-  if(!dt_drawlayer_layer_name_non_empty(params ? params->layer_name : NULL)) return 0;
 
   if(self->dev->gui_module != self)
   {
     dt_iop_request_focus(self);
     return 1;
   }
+
+  /* Picking mode samples instead of painting, and does not need a layer to do it: picking a
+   * colour is useful before there is anywhere to put it. The modifier bit in `state` is read as
+   * well as the mode, so a click still samples when the key went down before this module had
+   * focus and no key_pressed() was ever delivered to it. */
+  if(g->session.picking_active || _picking_modifier_is_down(state))
+  {
+    g->session.picking_active = TRUE;
+    return _pick_brush_color_at(self, x, y) ? 1 : 0;
+  }
+
+  if(!dt_drawlayer_layer_name_non_empty(params ? params->layer_name : NULL)) return 0;
 
   dt_control_pointer_input_t pointer_input = { 0 };
   dt_control_get_pointer_input(&pointer_input);
@@ -3787,6 +4126,10 @@ int button_released(dt_iop_module_t *self, double x, double y, int which, uint32
 {
   dt_iop_drawlayer_gui_data_t *g = (dt_iop_drawlayer_gui_data_t *)dt_iop_gui_data(self);
   if(IS_NULL_PTR(g) || IS_NULL_PTR(self->dev) || which != 1) return 0;
+
+  /* The press was a sample, so its release is not the end of a stroke -- there is none. Claimed
+   * rather than ignored so nothing downstream reads it as one. */
+  if(g->session.picking_active) return 1;
 
   if(g->manager.painting_active)
   {

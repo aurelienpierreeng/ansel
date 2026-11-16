@@ -39,7 +39,15 @@ gboolean dt_drawlayer_commit_dabs(dt_iop_module_t *self, gboolean record_history
  * The pipeline-space colour is derived through the display profile, which is why this
  * lives with the module rather than with the configuration it is usually set from.
  */
-void dt_drawlayer_sync_cached_brush_colors(dt_iop_module_t *self, const float display_rgb[3]);
+void dt_drawlayer_sync_cached_brush_colors(dt_iop_module_t *self, const float work_rgb[3]);
+
+/**
+ * @brief Convert one working-RGB brush colour to display RGB, through the monitor's ICC profile.
+ *
+ * @warning One pixel per call, with an LCMS transform inside. For setting up a cache, never for
+ * a draw handler -- see `brush_display_color` in runtime.h.
+ */
+void dt_drawlayer_brush_display_rgb(dt_iop_module_t *self, const float work_rgb[3], float display_rgb[3]);
 
 /* Reached from the layer store (layers.c); defined in drawlayer.c, where the module's
  * own state they read and write lives. */

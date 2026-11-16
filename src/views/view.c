@@ -576,6 +576,33 @@ int dt_view_manager_key_pressed(dt_view_manager_t *vm, GdkEventKey *event)
   return handled;
 }
 
+int dt_view_manager_key_released(dt_view_manager_t *vm, GdkEventKey *event)
+{
+  if(IS_NULL_PTR(vm->current_view)) return 0;
+  dt_view_t *v = vm->current_view;
+
+  /* lets check if any plugins want to handle the key release */
+  gboolean handled = FALSE;
+  for(const GList *plugins = g_list_last(dt_lib_get_global()->plugins);
+      plugins;
+      plugins = g_list_previous(plugins))
+  {
+    dt_lib_module_t *plugin = (dt_lib_module_t *)(plugins->data);
+
+    /* does this module belong to current view ?*/
+    if(plugin->key_released && dt_lib_is_visible_in_view(plugin, v))
+      if(plugin->key_released(plugin, event)) handled = TRUE;
+  }
+
+  if(handled)
+    return 1;
+  /* if not handled by any plugin let pass to view handler*/
+  else if(v->key_released)
+    handled = v->key_released(v, event);
+
+  return handled;
+}
+
 int dt_view_manager_button_released(dt_view_manager_t *vm, double x, double y, int which, uint32_t state)
 {
   if(IS_NULL_PTR(vm->current_view)) return 0;

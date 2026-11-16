@@ -3303,6 +3303,29 @@ static void _key_scroll(dt_develop_t *dev)
 }
 
 
+/**
+ * @brief Hand a key release to the focused module, and to nothing else.
+ *
+ * @details The press handler goes on to the view's own shortcuts; a release has none, so this
+ * exists for one purpose: a module holding a MODE for as long as a key is down needs to hear the
+ * key come up. Without it such a mode is entered and never left -- drawlayer's colour-picking
+ * modifier is the first user.
+ */
+int key_released(dt_view_t *self, GdkEventKey *event)
+{
+  if(!gtk_window_is_active(GTK_WINDOW(dt_gui_get_ui()->main_window))) return FALSE;
+
+  dt_develop_t *dev = (dt_develop_t *)self->data;
+  if(IS_NULL_PTR(dev)) return 0;
+
+  if(!IS_NULL_PTR(dev->gui_module)
+     && !IS_NULL_PTR(dev->gui_module->key_released)
+     && dev->gui_module->key_released(dev->gui_module, event))
+    return 1;
+
+  return 0;
+}
+
 int key_pressed(dt_view_t *self, GdkEventKey *event)
 {
   if(!gtk_window_is_active(GTK_WINDOW(dt_gui_get_ui()->main_window))) return FALSE;
