@@ -47,6 +47,10 @@
 
 #include <cmocka.h>
 
+#ifdef _WIN32
+#include "win/main_wrapper.h"
+#endif
+
 /** @brief A pixel whose channels encode its coordinates, so a misplaced copy is identifiable. */
 static void _fill_identifiable(float *const pixels, const int width, const int height)
 {
@@ -160,7 +164,7 @@ static void test_window_single_pixel_source(void **state)
   _check_window(1, 1, -2, -2, 8, 8);
 }
 
-int main(void)
+int main(int argc, char *argv[])
 {
   const struct CMUnitTest tests[] = {
     cmocka_unit_test(test_window_contained),
