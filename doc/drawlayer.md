@@ -450,9 +450,16 @@ names a transposed canvas for every portrait image — the identical defect, one
 for resolution to start failing. They now go through `dt_drawlayer_canvas_from_sidecar()`, which
 reads the dimensions the stored page was authored at, and fail when there is no page yet.
 
-**Still open, and not drawlayer's:** that `memcpy` fast path will read past the end of its input
-for *any* caller whose output window exceeds its input, silently, at scale 1. The generic path
-clips; the fast path does not. Nothing in the tree trips it today.
+**Since closed, and it was not drawlayer's:** that `memcpy` fast path would read past the end of
+its input for *any* caller whose output window exceeded its input, silently, at scale 1 — the
+generic path clips, the fast path did not, and which one runs is decided by `roi_out->scale`
+alone. `_interpolation_resample_plain()` now tests containment first: a contained window keeps
+the straight-line copy it always had, and anything else replicates the edge, which is the answer
+the generic path already gives. `tests/unittests/test_interpolation_resample_window.c` pins it.
+The control matters more than the test: against the pre-fix resampler **6 of its 7 cases fail**,
+and only the contained one passes, with valgrind naming the read — `Invalid read of size 8 ... at
+memmove ... interpolation.c:955`, which is that `memcpy`. After the fix, 7/7 and `ERROR SUMMARY:
+0 errors`.
 
 ## 9. "Move the rasterizer to the GPU" — the verdict
 

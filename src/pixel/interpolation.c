@@ -945,20 +945,85 @@ static void _interpolation_resample_plain(const struct dt_interpolation *itor,
   // Fast code path for 1:1 copy, only cropping area can change
   if(roi_out->scale == 1.f || roi_out->scale == roi_in->scale)
   {
-    const size_t x0 = (roi_out->x - roi_in->x) * 4 * sizeof(float);
-    const size_t y0 = (roi_out->y - roi_in->y);
-    __OMP_PARALLEL_FOR__()
-    for(int yt = 0; yt < roi_out->height; yt += TILE_ROWS)
-    {
-      const int y_end = MIN(yt + TILE_ROWS, roi_out->height);
-      for(int y = yt; y < y_end; y++)
-        memcpy((char *)__builtin_assume_aligned(out, 64) + (size_t)out_stride_floats * sizeof(float) * y,
-              (char *)__builtin_assume_aligned(in, 64) + (size_t)in_stride_floats * sizeof(float) * (y + y0) + x0,
-              out_stride_floats * sizeof(float));
-    }
-    
+    const int dx = roi_out->x - roi_in->x;
+    const int dy = roi_out->y - roi_in->y;
 
-    // All done, so easy case
+    /* Does the requested window actually sit inside the source?
+     *
+     * It is not a given, and when it is not, this used to read whatever followed the input
+     * buffer. The copy below walks roi_out->height rows at the INPUT's stride: ask for a window
+     * taller or wider than the source, or at a negative offset, and it runs off the end with no
+     * diagnostic -- the pixels are simply someone else's. The generic path one screen down cannot
+     * do that, because _prepare_resampling_plan() clips every tap into the source
+     * (RESAMPLING_BORDER_MODE is BORDER_REPLICATE), so the two paths disagreed about a case only
+     * one of them survived -- and which one runs is decided by roi_out->scale alone.
+     *
+     * That is how a transposed drawlayer canvas (7380x4928 read as 4928x7380) turned into a band
+     * of unallocated heap across the bottom of every full-resolution export, starting at exactly
+     * row 4928, while every downscaled pipe showed the same mistake as merely misplaced paint.
+     * See doc/drawlayer.md section 8b.
+     *
+     * The containment test is two comparisons per call on a path that then memcpys megabytes, so
+     * the common case keeps its straight-line copy and the out-of-range case becomes defined
+     * instead of undefined. */
+    const gboolean contained = (dx >= 0) && (dy >= 0)
+                               && (dx + roi_out->width <= roi_in->width)
+                               && (dy + roi_out->height <= roi_in->height);
+
+    if(contained)
+    {
+      const size_t x0 = (size_t)dx * 4 * sizeof(float);
+      const size_t y0 = (size_t)dy;
+      __OMP_PARALLEL_FOR__()
+      for(int yt = 0; yt < roi_out->height; yt += TILE_ROWS)
+      {
+        const int y_end = MIN(yt + TILE_ROWS, roi_out->height);
+        for(int y = yt; y < y_end; y++)
+          memcpy((char *)__builtin_assume_aligned(out, 64) + (size_t)out_stride_floats * sizeof(float) * y,
+                (char *)__builtin_assume_aligned(in, 64) + (size_t)in_stride_floats * sizeof(float) * (y + y0) + x0,
+                out_stride_floats * sizeof(float));
+      }
+
+      // All done, so easy case
+      return;
+    }
+
+    /* Out of range, so replicate the edge -- the same answer the generic path gives, since this
+     * IS the generic path at a resampling ratio of 1. A row splits into at most three runs: the
+     * columns left of the source replicate its first pixel, the overlap is one memcpy, and the
+     * columns right of it replicate its last. Rows outside clamp to the first or last row, which
+     * makes each of those a full-width copy of an edge row. */
+    /* Nothing to replicate FROM. Zero rather than leave the caller's buffer undefined: there is
+     * no edge pixel to clamp to, and the old code read past a zero-sized allocation here too. */
+    if(roi_in->width <= 0 || roi_in->height <= 0)
+    {
+      memset(out, 0, (size_t)out_stride_floats * sizeof(float) * roi_out->height);
+      return;
+    }
+
+    const int copy_first = CLAMP(-dx, 0, roi_out->width);
+    const int copy_last = MAX(CLAMP(roi_in->width - dx, 0, roi_out->width), copy_first);
+
+    __OMP_PARALLEL_FOR__()
+    for(int y = 0; y < roi_out->height; y++)
+    {
+      const int source_y = CLAMP(y + dy, 0, roi_in->height - 1);
+      const float *const source_row = in + (size_t)source_y * in_stride_floats;
+      float *const target_row = out + (size_t)y * out_stride_floats;
+      const float *const last_pixel = source_row + (size_t)(roi_in->width - 1) * 4;
+
+      for(int x = 0; x < copy_first; x++)
+        copy_pixel(target_row + (size_t)x * 4, source_row);
+
+      if(copy_last > copy_first)
+        memcpy(target_row + (size_t)copy_first * 4,
+               source_row + (size_t)(copy_first + dx) * 4,
+               (size_t)(copy_last - copy_first) * 4 * sizeof(float));
+
+      for(int x = copy_last; x < roi_out->width; x++)
+        copy_pixel(target_row + (size_t)x * 4, last_pixel);
+    }
+
     return;
   }
 
