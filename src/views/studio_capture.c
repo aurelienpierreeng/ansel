@@ -93,10 +93,6 @@ typedef struct dt_studio_capture_t
   gboolean picker_dragging_box;
   float picker_box_anchor[2];
 
-  // Deferred refresh after an import: styles are applied right after the
-  // import signal fires, so the first fetched surface may predate them.
-  guint refresh_timeout;
-
   // Own develop instance. While the atelier is active it is published as
   // darktable.develop and runs the pixelpipe on the displayed image so the
   // scopes (which read darktable.develop->preview_pipe) have data to show.
@@ -188,7 +184,6 @@ void gui_init(dt_view_t *self)
 void cleanup(dt_view_t *self)
 {
   dt_studio_capture_t *d = (dt_studio_capture_t *)self->data;
-  if(d->refresh_timeout) g_source_remove(d->refresh_timeout);
   dt_view_image_surface_fetcher_invalidate(&d->fetcher, &d->surface);
   dt_view_image_surface_fetcher_cleanup(&d->fetcher);
   // Guard against leave() never having run (e.g. app shutdown while this view
@@ -417,19 +412,10 @@ static void _studio_filmstrip_activate_callback(gpointer instance, int32_t imgid
 }
 
 /**
- * @brief Re-fetch the displayed surface once, after auto-styles had time to land.
- */
-static gboolean _studio_deferred_refresh(gpointer user_data)
-{
-  dt_studio_capture_t *d = (dt_studio_capture_t *)user_data;
-  d->refresh_timeout = 0;
-  dt_view_image_surface_fetcher_invalidate(&d->fetcher, &d->surface);
-  dt_control_queue_redraw_center();
-  return G_SOURCE_REMOVE;
-}
-
-/**
  * @brief Follow the shooting session: every new import becomes the displayed image.
+ *
+ * The import job raises the signal once the survey styles are written to the new image's
+ * history, so what the develop loads here and the surface fetched for it are already styled.
  */
 static void _studio_image_imported_callback(gpointer instance, int32_t imgid, gpointer user_data)
 {
@@ -438,12 +424,6 @@ static void _studio_image_imported_callback(gpointer instance, int32_t imgid, gp
   if(imgid <= UNKNOWN_IMAGE) return;
 
   _studio_set_image(d, imgid);
-
-  // The import signal fires before the survey styles are applied to the new
-  // image, so the surface fetched right away may show the unstyled state.
-  // Schedule one deferred re-fetch after the styles have been written.
-  if(d->refresh_timeout) g_source_remove(d->refresh_timeout);
-  d->refresh_timeout = g_timeout_add(1500, _studio_deferred_refresh, d);
 }
 
 /**
@@ -548,12 +528,6 @@ void leave(dt_view_t *self)
                                      (gpointer)self);
   DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(dt_control_signal_get_global(), G_CALLBACK(_studio_history_changed_callback),
                                      (gpointer)self);
-
-  if(d->refresh_timeout)
-  {
-    g_source_remove(d->refresh_timeout);
-    d->refresh_timeout = 0;
-  }
 
   // Release the color picker while our develop is still the global one: both
   // read/write darktable.develop directly, not a passed-in pointer.

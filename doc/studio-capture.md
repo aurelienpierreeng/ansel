@@ -221,6 +221,20 @@ keys pan at 100%, and Ctrl+/- toggles zoom the same as double-click since
 there is no continuous scale to step through). Every new import becomes the
 displayed image, so the view follows the shooting session.
 
+A capture is announced to the view (`DT_SIGNAL_IMAGE_IMPORT`, raised by
+`dt_image_notify_imported()` from `_import_image()` in
+`control/jobs/import_jobs.c`) only once the pool's styles are written to its
+history, never from `dt_image_import()` itself, which the survey calls with
+signals off. The announcement is what starts the computation — the develop
+loads the history and starts its pipes, the fetcher requests the surface — so
+an announcement made before the styles computes an unstyled image that nothing
+afterwards replaces: applying the styles at import raises no
+`DT_SIGNAL_DEVELOP_HISTORY_CHANGE`, so the develop keeps the history it loaded.
+The copy's byte comparison before deleting the source comes after the
+announcement, so it does not delay the display. (Established on top of
+`5c05c61c73`, 2026-11-17, from the import order, and checked on a running
+session: the first image shown after an import is already styled.)
+
 That following is this atelier's own doing, and only here. An automatic import
 carries the `DT_COLLECTION_IMPORT_VIEW_KEEP` policy
 (`dt_collection_load_filmroll()`, `common/collection.c`), which moves nothing:
