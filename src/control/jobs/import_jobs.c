@@ -30,6 +30,7 @@
 #include "control/control.h"
 #include "common/film.h"
 #include "common/image.h"
+#include "common/image_notify.h"
 #include "control/jobs/control_jobs.h"
 
 #ifndef _WIN32
@@ -184,11 +185,9 @@ const int32_t _import_job(dt_control_import_t *data, gchar *img_path_to_db)
 
   dt_film_t film;
   const int32_t filmid = dt_film_new(&film, dirname);
-  // Regular imports skip the per-file DT_SIGNAL_IMAGE_IMPORT (large batches
-  // would otherwise raise it hundreds of times). Folder survey imports one or
-  // a few files at a time, and Studio Capture needs that signal to know which
-  // image to display as soon as it lands, so raise it for that case only.
-  const int32_t imgid = dt_image_import(filmid, img_path_to_db, data->folder_survey);
+  // No per-file signals here: a regular import would raise them hundreds of times, and a folder
+  // survey import announces its image itself, once its styles are written (_import_image()).
+  const int32_t imgid = dt_image_import(filmid, img_path_to_db, FALSE);
   dt_free(dirname);
   return imgid;
 }
@@ -393,10 +392,13 @@ void _write_xmp_id(const char *filename, int32_t imgid)
 /**
  * @brief process to copy (or not) and import an image to database.
  *
- * Sidecars are read only after database import succeeds. Source deletion requires
- * a successful copy and complete byte equality; stream errors preserve the source.
- * Styles are applied in their configured order using one merge batch, followed
- * by cache and thumbnail invalidation because the history was written to the DB.
+ * Sidecars are read only after database import succeeds. Styles are applied in their
+ * configured order using one merge batch, followed by cache and thumbnail invalidation
+ * because the history was written to the DB. A folder survey import is announced
+ * (DT_SIGNAL_IMAGE_IMPORT) only then: Studio Capture starts computing the image it is
+ * told about, and an announcement before the styles would compute the unstyled one.
+ * Source deletion comes last, so the byte comparison does not delay the display; it
+ * requires a successful copy and complete byte equality; stream errors preserve the source.
  *
  * @param img the current image.
  * @param data info from import module.
@@ -436,7 +438,23 @@ int32_t _import_image(const GList *img, dt_control_import_t *data, const char *f
   dt_print(DT_DEBUG_IMPORT, "[Import] Found and imported %i XMP for %s.\n", *xmps, img_path_to_db);
   dt_print(DT_DEBUG_IMPORT, "[Import] successfully imported %s in DB at imgid %i\n", img_path_to_db, imgid);
 
-  if(!data->delete_source || copy_status != 1) goto apply_styles;
+  if(!IS_NULL_PTR(data->styles))
+  {
+    dt_hm_batch_state_t batch = { 0 };
+    for(GList *s = data->styles; s; s = g_list_next(s))
+    {
+      const char *style_name = (const char *)s->data;
+      const int32_t style_id = dt_styles_get_id_by_name(style_name);
+      if(style_id <= 0) continue;
+      dt_styles_apply_to_image_merge(style_name, style_id, imgid, DT_HISTORY_MERGE_APPEND, &batch);
+    }
+    dt_hm_batch_state_cleanup(&batch);
+    dt_image_history_changed(imgid, TRUE);
+  }
+
+  if(data->folder_survey) dt_image_notify_imported(imgid);
+
+  if(!data->delete_source || copy_status != 1) return imgid;
 
   int identical = 0;
   GStatBuf source_stat;
@@ -463,20 +481,6 @@ int32_t _import_image(const GList *img, dt_control_import_t *data, const char *f
     dt_control_alert(_("Import problem"),
                      _("The imported file was verified but the original could not be deleted"), filename);
   }
-
-apply_styles:
-  if(IS_NULL_PTR(data->styles)) return imgid;
-
-  dt_hm_batch_state_t batch = { 0 };
-  for(GList *s = data->styles; s; s = g_list_next(s))
-  {
-    const char *style_name = (const char *)s->data;
-    const int32_t style_id = dt_styles_get_id_by_name(style_name);
-    if(style_id <= 0) continue;
-    dt_styles_apply_to_image_merge(style_name, style_id, imgid, DT_HISTORY_MERGE_APPEND, &batch);
-  }
-  dt_hm_batch_state_cleanup(&batch);
-  dt_image_history_changed(imgid, TRUE);
 
   return imgid;
 }
