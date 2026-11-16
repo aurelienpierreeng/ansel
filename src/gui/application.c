@@ -876,6 +876,19 @@ static gboolean _key_pressed(GtkWidget *w, GdkEventKey *event)
   return TRUE;
 }
 
+/* A key RELEASE is routed exactly like the press, and for the same reason the press is: a mode
+ * held for as long as a key is down has to be told when it comes up, or it is entered and never
+ * left. GTK routes only the press by default, so the release gets its own handler.
+ *
+ * It returns FALSE rather than TRUE: a release carries no shortcut of its own, and claiming it
+ * would stop it reaching anything else that is watching. */
+static gboolean _key_released(GtkWidget *w, GdkEventKey *event)
+{
+  if(!gtk_window_is_active(GTK_WINDOW(darktable.gui->ui->main_window))) return FALSE;
+  dt_control_key_released(event);
+  return FALSE;
+}
+
 /* Keyboard trace for "-d input", installed by dt_gui_gtk_init() on that flag alone.
  *
  * A keystroke goes to whichever toplevel holds the focus, and each of them handles keys on
@@ -1298,6 +1311,7 @@ int dt_gui_gtk_init(dt_gui_gtk_t *gui)
   g_signal_connect(G_OBJECT(widget), "draw", G_CALLBACK(_draw), NULL);
   g_signal_connect(G_OBJECT(widget), "motion-notify-event", G_CALLBACK(_mouse_moved), NULL);
   g_signal_connect(G_OBJECT(widget), "key-press-event", G_CALLBACK(_key_pressed), NULL);
+  g_signal_connect(G_OBJECT(widget), "key-release-event", G_CALLBACK(_key_released), NULL);
   g_signal_connect(G_OBJECT(widget), "leave-notify-event", G_CALLBACK(_center_leave), NULL);
   g_signal_connect(G_OBJECT(widget), "enter-notify-event", G_CALLBACK(_center_enter), NULL);
   g_signal_connect(G_OBJECT(widget), "button-press-event", G_CALLBACK(_button_pressed), NULL);
@@ -1749,6 +1763,7 @@ static void _init_widgets(dt_gui_gtk_t *gui)
   g_signal_connect(G_OBJECT(gui->ui->main_window ), "focus-in-event", G_CALLBACK(_focus_in_out_event), NULL);
   g_signal_connect(G_OBJECT(gui->ui->main_window ), "focus-out-event", G_CALLBACK(_focus_in_out_event), NULL);
   g_signal_connect_after(G_OBJECT(gui->ui->main_window ), "key-press-event", G_CALLBACK(_key_pressed), NULL);
+  g_signal_connect_after(G_OBJECT(gui->ui->main_window ), "key-release-event", G_CALLBACK(_key_released), NULL);
 
   container = gui->ui->main_window;
 

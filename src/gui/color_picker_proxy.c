@@ -802,6 +802,59 @@ static void _init_picker(dt_iop_color_picker_t *picker, dt_iop_module_t *module,
   _color_picker_reset(picker);
 }
 
+gboolean dt_iop_color_picker_sample_point(GtkWidget *picker_widget, const float image_point[2])
+{
+  if(IS_NULL_PTR(picker_widget) || IS_NULL_PTR(image_point)) return FALSE;
+  if(dt_gui_widgets_suppressed()) return FALSE;
+
+  dt_iop_color_picker_t *const self
+      = (dt_iop_color_picker_t *)g_object_get_data(G_OBJECT(picker_widget), "dt-iop-color-picker");
+  if(IS_NULL_PTR(self)) return FALSE;
+
+  dt_develop_t *const dev = dt_dev_get_global();
+  if(IS_NULL_PTR(dev) || IS_NULL_PTR(dev->color_picker.primary_sample)) return FALSE;
+
+  dt_iop_module_t *const module = self->module;
+
+  dt_iop_color_picker_t *const prior_picker = dev->color_picker.picker;
+  if(prior_picker && prior_picker != self)
+  {
+    _color_picker_reset(prior_picker);
+    if(prior_picker->module) prior_picker->module->request_color_pick = DT_REQUEST_COLORPICK_OFF;
+  }
+
+  /* Arming is the whole job, and it is what a caller cannot do for itself: the pipeline only
+   * samples for a module whose picker is the one registered on the dev. Setting
+   * `primary_sample->point` without this looks like it should work and silently samples nothing
+   * -- the sample is aimed, but nothing is looking through it. */
+  dev->color_picker.picker = self;
+  dev->color_picker.widget = self->colorpick;
+  dev->color_picker.module = module;
+  dev->color_picker.kind = self->kind;
+  dev->color_picker.picker_cst = self->picker_cst;
+  dev->color_picker.enabled = TRUE;
+  if(module) module->request_color_pick = DT_REQUEST_COLORPICK_MODULE;
+
+  _picker_initialize_geometry_raw(self, dev);
+
+  dt_gui_freeze_begin();
+  if(DTGTK_IS_TOGGLEBUTTON(self->colorpick))
+    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(self->colorpick), TRUE);
+  else
+    dt_bauhaus_widget_set_quad_active(self->colorpick, TRUE);
+  dt_gui_freeze_end();
+
+  if(module) dt_iop_request_focus(module);
+
+  dt_lib_colorpicker_set_point(dt_lib_get_global(), image_point);
+
+  /* dt_lib_colorpicker_set_point() only requests an update when the point MOVED, so sampling
+   * the same pixel twice in a row would otherwise do nothing the second time -- which is
+   * exactly what a one-shot pick repeated on the same spot looks like. */
+  dt_iop_color_picker_request_update();
+  return TRUE;
+}
+
 static gboolean _color_picker_callback_button_press(GtkWidget *button, GdkEventButton *e, dt_iop_color_picker_t *self)
 {
   // module is NULL if primary colorpicker

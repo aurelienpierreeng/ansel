@@ -47,13 +47,15 @@ gboolean dt_drawlayer_widgets_get_display_color(const dt_drawlayer_widgets_t *wi
 /** @brief Replace full color-history stack and validity flags. */
 void dt_drawlayer_widgets_set_color_history(dt_drawlayer_widgets_t *widgets,
                                             const float history[DT_DRAWLAYER_COLOR_HISTORY_COUNT][3],
+                                            const float display_history[DT_DRAWLAYER_COLOR_HISTORY_COUNT][3],
                                             const gboolean valid[DT_DRAWLAYER_COLOR_HISTORY_COUNT]);
 /** @brief Read full color-history stack and validity flags. */
 void dt_drawlayer_widgets_get_color_history(const dt_drawlayer_widgets_t *widgets,
                                             float history[DT_DRAWLAYER_COLOR_HISTORY_COUNT][3],
                                             gboolean valid[DT_DRAWLAYER_COLOR_HISTORY_COUNT]);
 /** @brief Push one color in history if it differs from current head. */
-gboolean dt_drawlayer_widgets_push_color_history(dt_drawlayer_widgets_t *widgets, const float display_rgb[3]);
+gboolean dt_drawlayer_widgets_push_color_history(dt_drawlayer_widgets_t *widgets, const float work_rgb[3],
+                                                 const float display_rgb[3]);
 
 /** @brief Update picker selection from widget coordinates during drag. */
 gboolean dt_drawlayer_widgets_update_from_picker_position(dt_drawlayer_widgets_t *widgets, GtkWidget *widget,

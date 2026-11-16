@@ -58,7 +58,13 @@ struct dt_drawlayer_widgets_t
   float picker_chroma;   /**< Polar chroma derived from U/V. */
   int picker_drag_mode;  /**< Active drag mode (disc/plane/none). */
 
-  float color_history[DT_DRAWLAYER_COLOR_HISTORY_COUNT][3]; /**< Display-RGB history stack. */
+  /** History in PIPELINE RGB -- what a click on a swatch actually restores, and what conf
+   *  persists. The display twin below is derived from it. */
+  float color_history_work[DT_DRAWLAYER_COLOR_HISTORY_COUNT][3];
+  /** The same stack converted once to display RGB, for drawing. Derived through the monitor's
+   *  ICC profile by the owner (which has the module and therefore the work profile), never
+   *  here: these widgets draw, they do not colour-manage. */
+  float color_history[DT_DRAWLAYER_COLOR_HISTORY_COUNT][3];
   gboolean color_history_valid[DT_DRAWLAYER_COLOR_HISTORY_COUNT]; /**< Validity flags per history slot. */
 
   cairo_surface_t *color_surface;  /**< Cached picker surface. */
@@ -383,15 +389,20 @@ gboolean dt_drawlayer_widgets_get_display_color(const dt_drawlayer_widgets_t *wi
 /** @brief Replace full color-history content and validity flags. */
 void dt_drawlayer_widgets_set_color_history(dt_drawlayer_widgets_t *widgets,
                                             const float history[DT_DRAWLAYER_COLOR_HISTORY_COUNT][3],
+                                            const float display_history[DT_DRAWLAYER_COLOR_HISTORY_COUNT][3],
                                             const gboolean valid[DT_DRAWLAYER_COLOR_HISTORY_COUNT])
 {
-  if(IS_NULL_PTR(widgets) || !history || !valid) return;
+  if(IS_NULL_PTR(widgets) || !history || !display_history || !valid) return;
   for(int i = 0; i < DT_DRAWLAYER_COLOR_HISTORY_COUNT; i++)
   {
     widgets->color_history_valid[i] = valid[i];
-    widgets->color_history[i][0] = _clamp01(history[i][0]);
-    widgets->color_history[i][1] = _clamp01(history[i][1]);
-    widgets->color_history[i][2] = _clamp01(history[i][2]);
+    /* Working RGB is not clamped to [0,1]; only its screen twin is. */
+    widgets->color_history_work[i][0] = fmaxf(history[i][0], 0.0f);
+    widgets->color_history_work[i][1] = fmaxf(history[i][1], 0.0f);
+    widgets->color_history_work[i][2] = fmaxf(history[i][2], 0.0f);
+    widgets->color_history[i][0] = _clamp01(display_history[i][0]);
+    widgets->color_history[i][1] = _clamp01(display_history[i][1]);
+    widgets->color_history[i][2] = _clamp01(display_history[i][2]);
   }
 }
 
@@ -404,31 +415,39 @@ void dt_drawlayer_widgets_get_color_history(const dt_drawlayer_widgets_t *widget
   for(int i = 0; i < DT_DRAWLAYER_COLOR_HISTORY_COUNT; i++)
   {
     valid[i] = widgets->color_history_valid[i];
-    history[i][0] = widgets->color_history[i][0];
-    history[i][1] = widgets->color_history[i][1];
-    history[i][2] = widgets->color_history[i][2];
+    history[i][0] = widgets->color_history_work[i][0];
+    history[i][1] = widgets->color_history_work[i][1];
+    history[i][2] = widgets->color_history_work[i][2];
   }
 }
 
 /** @brief Push one color to history head if different from current head. */
-gboolean dt_drawlayer_widgets_push_color_history(dt_drawlayer_widgets_t *widgets, const float display_rgb[3])
+gboolean dt_drawlayer_widgets_push_color_history(dt_drawlayer_widgets_t *widgets, const float work_rgb[3],
+                                                 const float display_rgb[3])
 {
-  if(!widgets || !display_rgb) return FALSE;
+  if(!widgets || !work_rgb || !display_rgb) return FALSE;
 
-  if(widgets->color_history_valid[0] && _display_rgb_equal(widgets->color_history[0], display_rgb)) return FALSE;
+  /* Deduplicate on the WORKING value. Two different working colours can land on the same
+   * display triple once the monitor profile has clipped them, and collapsing those would lose
+   * a colour the user can still tell apart in the image. */
+  if(widgets->color_history_valid[0] && _display_rgb_equal(widgets->color_history_work[0], work_rgb)) return FALSE;
 
   for(int i = DT_DRAWLAYER_COLOR_HISTORY_COUNT - 1; i > 0; i--)
   {
     widgets->color_history_valid[i] = widgets->color_history_valid[i - 1];
-    widgets->color_history[i][0] = widgets->color_history[i - 1][0];
-    widgets->color_history[i][1] = widgets->color_history[i - 1][1];
-    widgets->color_history[i][2] = widgets->color_history[i - 1][2];
+    for(int c = 0; c < 3; c++)
+    {
+      widgets->color_history_work[i][c] = widgets->color_history_work[i - 1][c];
+      widgets->color_history[i][c] = widgets->color_history[i - 1][c];
+    }
   }
 
   widgets->color_history_valid[0] = TRUE;
-  widgets->color_history[0][0] = _clamp01(display_rgb[0]);
-  widgets->color_history[0][1] = _clamp01(display_rgb[1]);
-  widgets->color_history[0][2] = _clamp01(display_rgb[2]);
+  for(int c = 0; c < 3; c++)
+  {
+    widgets->color_history_work[0][c] = fmaxf(work_rgb[c], 0.0f);
+    widgets->color_history[0][c] = _clamp01(display_rgb[c]);
+  }
   return TRUE;
 }
 
@@ -508,9 +527,9 @@ gboolean dt_drawlayer_widgets_is_picker_dragging(const dt_drawlayer_widgets_t *w
 
 /** @brief Pick one history swatch color from widget coordinates. */
 gboolean dt_drawlayer_widgets_pick_history_color(const dt_drawlayer_widgets_t *widgets, GtkWidget *widget,
-                                                 float x, float y, float display_rgb[3])
+                                                 float x, float y, float work_rgb[3])
 {
-  if(!widgets || !widget || !display_rgb) return FALSE;
+  if(!widgets || !widget || !work_rgb) return FALSE;
 
   const int width = gtk_widget_get_allocated_width(widget);
   const int height = gtk_widget_get_allocated_height(widget);
@@ -523,9 +542,9 @@ gboolean dt_drawlayer_widgets_pick_history_color(const dt_drawlayer_widgets_t *w
   const int index = row * DT_DRAWLAYER_COLOR_HISTORY_COLS + col;
   if(index < 0 || index >= DT_DRAWLAYER_COLOR_HISTORY_COUNT || !widgets->color_history_valid[index]) return FALSE;
 
-  display_rgb[0] = widgets->color_history[index][0];
-  display_rgb[1] = widgets->color_history[index][1];
-  display_rgb[2] = widgets->color_history[index][2];
+  work_rgb[0] = widgets->color_history_work[index][0];
+  work_rgb[1] = widgets->color_history_work[index][1];
+  work_rgb[2] = widgets->color_history_work[index][2];
   return TRUE;
 }
 

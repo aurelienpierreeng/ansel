@@ -300,6 +300,15 @@ int dt_view_manager_button_released(dt_view_manager_t *vm, double x, double y, i
 int dt_view_manager_button_pressed(dt_view_manager_t *vm, double x, double y, double pressure, int which,
                                    int type, uint32_t state);
 int dt_view_manager_key_pressed(dt_view_manager_t *vm, GdkEventKey *event);
+/**
+ * @brief Route a key RELEASE the same way dt_view_manager_key_pressed() routes a press.
+ *
+ * @details A press and a release are not symmetrical in GTK terms -- only the press is routed
+ * by default -- but they are symmetrical to anything holding a MODE for as long as a key is
+ * down. Without this, such a mode can be entered and never left: nothing tells the view, or
+ * the module, that the key came back up.
+ */
+int dt_view_manager_key_released(dt_view_manager_t *vm, GdkEventKey *event);
 void dt_view_manager_configure(dt_view_manager_t *vm, int width, int height);
 int dt_view_manager_scrolled(dt_view_manager_t *vm, double x, double y, int up, int state, int delta_y);
 

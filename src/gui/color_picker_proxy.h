@@ -108,6 +108,26 @@ void dt_iop_color_picker_set_cst(dt_iop_module_t *module, const dt_iop_colorspac
 dt_iop_colorspace_type_t dt_iop_color_picker_get_active_cst(dt_iop_module_t *module);
 
 /* mark that the active picker geometry or selection changed and resample from cache if possible */
+/**
+ * @brief Arm one module's picker and take a single POINT sample at a given place.
+ *
+ * @param picker_widget the widget `dt_color_picker_new*()` returned for that module.
+ * @param image_point where to sample, in IMAGE-normalised coordinates (not the raw-normalised
+ * space `dt_colorpicker_sample_t` stores -- `dt_lib_colorpicker_set_point()` converts).
+ * @return FALSE when there is no picker behind that widget, or widgets are suppressed.
+ *
+ * @details For a gesture that samples without the user first arming the picker by hand, such as
+ * a modifier-click on the canvas. It does what pressing the picker button does, minus the two
+ * things that only make sense for a real press: it never consults the keyboard, so a modifier
+ * held for the GESTURE cannot flip the picker into box mode, and it forces nothing else off.
+ *
+ * @warning It leaves the picker ARMED, because that is what sampling requires. A caller doing a
+ * one-shot gesture must disarm it again once the sample arrives, or the picker will swallow the
+ * clicks that follow -- the darkroom view offers a click to the picker before the focused
+ * module ever sees it.
+ */
+gboolean dt_iop_color_picker_sample_point(GtkWidget *picker_widget, const float image_point[2]);
+
 void dt_iop_color_picker_request_update(void);
 
 /**

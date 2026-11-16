@@ -461,6 +461,140 @@ and only the contained one passes, with valgrind naming the read — `Invalid re
 memmove ... interpolation.c:955`, which is that `memcpy`. After the fix, 7/7 and `ERROR SUMMARY:
 0 errors`.
 
+## 8c. The brush colour is pipeline RGB; only the screen sees anything else
+
+*Established 2026-11-16 against `53488dd8e5`.*
+
+The brush colour used to be kept in **display space** — conf held a triple converted through
+`dt_ioppr_get_pipe_output_profile_info()`, and painting converted it back the other way. It is
+now kept in **working (pipeline) RGB**, which is the space picking already produces and painting
+already consumes, so the path that matters does no conversion at all.
+
+What the old arrangement cost, in the order the symptoms appear:
+
+- **Soft-proofing made picking and painting disagree.** `iop/colorout.c` puts the pipe in a
+  soft-proof mode only for `DT_DEV_PIXELPIPE_FULL` (`d->mode = (pipe->type == FULL) ?
+  settings.mode : DT_PROFILE_NORMAL`). The picker runs on one pipe and the paint conversion read
+  `self->dev->pipe`, so with proofing on, the colour laid down was not the colour picked.
+- **A stored colour meant something different on every monitor**, because the profile it was
+  encoded against was not stored with it. Changing the display profile silently moved the saved
+  brush colour and the entire history.
+- **The clamp happened in the wrong space.** Display values were clamped to [0,1] *before* the
+  HDR exposure gain, so a pick off a specular highlight was flattened at pick time.
+
+The model now: conf and `brush_pipeline_color` hold working RGB, unclamped above 1 and only
+floored at 0. The HDR gain multiplies once, where the dab colour is produced, and is divided back
+out on the picking path so that picking a patch this brush painted returns the colour chosen for
+it. Everything the user *sees* — swatch, history strip, gradient widget, on-canvas cursor stamp —
+reads a cached display twin.
+
+**The twin is cached, and the cache key is `dt_colorprofiles_settings_t.generation`.** Converting
+costs an LCMS transform (`dt_colorprofiles_xyz_to_display()`, which is documented for exactly
+this and takes the profile read lock for the span of the call), and a redraw must not pay it.
+Two things about that key, both load-bearing:
+
+- `generation` is advanced by the settings setters **and** by `_notify_profile_changed()`
+  (`colorprofiles/colorspaces.c`), so moving the window to a screen with a different profile
+  bumps it too. That matters because the `DT_COLORSPACE_DISPLAY` entry keeps its name and
+  filename across such a change — only the bytes behind them differ — so a cache keyed on the
+  profile's *identity* would serve the previous monitor's colours indefinitely.
+- The recompute has to reach the widgets, not just `brush_display_color`. The swatch, the
+  gradient widget and the history strip each hold their own screen copies; refreshing the module
+  cache alone leaves the panel showing the old monitor's colours until something unrelated
+  touches them.
+
+A matrix of the display profile would have been cheaper and wrong: it is correct only for a
+matrix/TRC profile and silently wrong for a LUT-based one, which is what a real colord monitor
+profile usually is.
+
+**Ctrl+click is the eyedropper**, and it borrows the module's own image picker rather than
+sampling anything itself: the pixel it wants only exists part-way through a pipe run, and
+`color_picker_apply()` already receives it.
+
+**Aiming the sample is not enough, and that is the trap.** Writing
+`dev->color_picker.primary_sample->point` sets *where* to look, but the pipeline only samples for
+the picker **registered on the dev**, so an unarmed pick returns nothing at all — no error, no
+callback, just a gesture that does nothing. The first cut of this did exactly that. It compounded
+the mistake by trying to arm the picker with
+`gtk_toggle_button_set_active(picker_widget, TRUE)`: the picker button's arming lives on
+**`button-press-event`**, not on `toggled`, so setting the toggle flips the button's appearance
+and nothing else. The cursor looked armed and sampled nothing.
+
+Arming is now `dt_iop_color_picker_sample_point()` (`gui/color_picker_proxy.c`), which does what
+a real press does minus the two things that only make sense for a press: it never reads the
+keyboard — a modifier held for the *gesture* would otherwise flip the picker into box mode, since
+the press handler treats Ctrl as "area" — and it forces nothing else off. It takes
+**image-normalised** coordinates and lets `dt_lib_colorpicker_set_point()` convert to the
+raw-normalised space the sample is stored in; passing raw-normalised coordinates there samples a
+different pixel on any cropped or rotated image. It also re-requests an update unconditionally,
+because `dt_lib_colorpicker_set_point()` is a no-op when the point did not move — which is
+exactly what a one-shot pick repeated on the same pixel looks like.
+
+**The gesture is modal on the key, not one-shot on the click.** While the modifier is held every
+click samples; the moment it comes up the tool is a brush again. That is what makes
+sample-then-paint fast, and it is also the only shape that is safe:
+`views/darkroom.c:button_pressed` tests the picker *before* it offers a click to the focused
+module, so a picker left armed eats every following click and the brush stops painting with no
+visible cause.
+
+Which means **the disarm has to be real**, and that is a second place the button's state lies.
+`gtk_toggle_button_set_active(picker, FALSE)` turns the button's *appearance* off and leaves
+`dev->color_picker.enabled` TRUE — the picker goes on intercepting while looking switched off.
+The disarm is `dt_iop_color_picker_reset(self, FALSE)`, which clears `enabled`, `picker`,
+`module`, `widget` and `request_color_pick` together.
+
+Nothing in the module API could see a key *release* — `dt_view_t` had `key_pressed` and no
+`key_released`, and an IOP got neither — so **the release is now plumbed**, mirroring the press
+at every level it already existed at: `OPTIONAL(int, key_released, …)` in `iop_api.h`,
+`view_api.h` and `lib_api.h`, `dt_view_manager_key_released()` beside its press twin in
+`views/view.c`, `dt_control_key_released()`, a `key-release-event` handler on both widgets that
+already carry `key-press-event`, and `key_released()` in `views/darkroom.c` handing the event to
+the focused module. The press half of that chain was always there; only the release was missing,
+because nothing had yet needed to know that a key came back *up*.
+
+Two things about that plumbing, both deliberate:
+
+- **Every handler in the chain returns 0/FALSE.** A release carries no shortcut of its own, and
+  the picking modifier is the prefix of half the application's shortcuts — claiming it would eat
+  them. The handlers observe; they never consume.
+- **Adding a name to `iop_api.h` is not enough on its own.** `tools/generate_iop_static.py`
+  writes a `DT_MODULE_HAS_<fn>` for every API name into each module's generated `_present.h`,
+  and the static-IOP binding is a compile error rather than a silent NULL when one is missing.
+  A build tree that does not regenerate that header fails with
+  `call to undeclared function 'DT_MODULE_PICK_DT_MODULE_HAS_key_released'`, which reads like a
+  macro bug and is a stale generated file. GCC let it through here and clang did not.
+
+**The mode is a flag, not a keyboard read.** `session.picking_active` is set by `key_pressed()`,
+cleared by `key_released()`, and cleared again by `gui_focus()` in *both* directions — leaving,
+because the release is delivered to the focused module and will never arrive once focus has
+moved; arriving, because the modifier may have gone down while another module had focus, so this
+one never saw the press and must not assume a mode it did not enter. `button_pressed()`,
+`button_released()`, `mouse_moved()` and `gui_post_expose()` all branch on that one flag, so the
+cursor and the click cannot disagree about which tool is in the user's hand. `button_pressed()`
+additionally accepts the modifier bit out of its own `state`, which covers the same
+focus-arrived-late case from the other side.
+
+The disarm is still `dt_iop_color_picker_reset(self, FALSE)`, and it is guarded on
+`picker_armed_by_gesture` so a picker the user armed deliberately with the button is left alone.
+
+**The cursor has to promise the gesture.** While the modifier is held the brush circle is
+replaced by a cross with a gap at its centre, so the sampled pixel stays visible and can be aimed
+at — a circle exists to show an area, which is the wrong thing to show when the next click reads
+one pixel. `gui_post_expose()` reads `dt_key_modifier_state()` live, because a repaint is not an
+event and carries no state of its own; the key watch above queues the redraw that makes the swap
+immediate rather than waiting for the next pointer motion. Both the cursor and
+`button_pressed()` ask the same `_picking_modifier_is_down()`, on `DT_PRIMARY_MASK` rather than
+`GDK_CONTROL_MASK` so it is Cmd on macOS — a cursor promising one thing while the click does
+another is worse than either being wrong alone.
+
+**Verified in the GUI:** the colours match between the panel and the painted image. The rest —
+the eyedropper and its cursor — compiles clean under GCC 16 and clang 20 but has not been
+exercised there since the arming fix; the first version WAS tried in the GUI and sampled nothing,
+which is how the arming trap above was found. Everything else here is reasoned from the code — there is no headless path that paints a
+stroke or repaints a swatch. The conf format changed meaning without a migration, by decision, so
+a brush colour and history saved before this commit are reinterpreted as working RGB and will
+look different once.
+
 ## 9. "Move the rasterizer to the GPU" — the verdict
 
 No, not as the next step, and the reasoning is not about kernel speed. The dab stream is

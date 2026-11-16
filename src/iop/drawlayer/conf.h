@@ -113,16 +113,16 @@ drawlayer_pick_source_t dt_drawlayer_conf_pick_source(void);
 drawlayer_mapping_profile_t dt_drawlayer_conf_mapping_profile(const char *key);
 
 /** @brief Read configured display RGB brush color. */
-void dt_drawlayer_conf_display_color(float rgb[3]);
+void dt_drawlayer_conf_brush_color(float rgb[3]);
 
 /** @brief Load persisted color-history stack from config into widgets state. */
-void dt_drawlayer_conf_load_color_history(dt_iop_drawlayer_gui_data_t *g);
+void dt_drawlayer_conf_load_color_history(dt_iop_module_t *self, dt_iop_drawlayer_gui_data_t *g);
 
 /** @brief Push current display color to history and trigger swatch redraw. */
-void dt_drawlayer_conf_remember_display_color(dt_iop_module_t *self, const float display_rgb[3]);
+void dt_drawlayer_conf_remember_brush_color(dt_iop_module_t *self, const float work_rgb[3]);
 
 /** @brief Apply display-space brush color to conf, widgets and redraw. */
-void dt_drawlayer_conf_apply_display_brush_color(dt_iop_module_t *self, const float display_rgb[3], const gboolean remember);
+void dt_drawlayer_conf_apply_brush_color(dt_iop_module_t *self, const float work_rgb[3], const gboolean remember);
 
 /** @brief Refresh picker widgets from persisted config color. */
 void dt_drawlayer_conf_sync_color_picker(dt_iop_module_t *self);
