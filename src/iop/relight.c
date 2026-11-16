@@ -244,7 +244,7 @@ void gui_init(struct dt_iop_module_t *self)
       = { { 0, 0, 0, 1.0 }, { NEUTRAL_GRAY, NEUTRAL_GRAY, NEUTRAL_GRAY, 1.0 } };
 
   g->center = DTGTK_GRADIENT_SLIDER(dtgtk_gradient_slider_new_with_color_and_name(_gradient_L[0], _gradient_L[1], "gslider-relight"));
-  gtk_widget_set_tooltip_text(GTK_WIDGET(g->center), _("select the center of fill-light\nctrl+click to select an area"));
+  gtk_widget_set_tooltip_text(GTK_WIDGET(g->center), _("select the center of fill-light\nclick in the image to pick a point, drag to pick an area"));
   g_signal_connect(G_OBJECT(g->center), "value-changed", G_CALLBACK(center_callback), self);
   gtk_box_pack_start(sliderbox, GTK_WIDGET(g->center), TRUE, TRUE, 0);
   g->colorpicker = dt_color_picker_new(self, DT_COLOR_PICKER_POINT_AREA, GTK_WIDGET(sliderbox));

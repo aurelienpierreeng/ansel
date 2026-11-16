@@ -40,13 +40,57 @@
 #include "develop/imageop.h"
 #include "develop/develop.h"
 
+/**
+ * @brief What a picker can be given on the image: a point, an area, or either.
+ *
+ * @details The picker's button only turns it on and off. Which of the two the user gets is
+ * decided on the image, by the gesture: **a click places a point, a drag draws an area.** A
+ * picker declares here which of those it can make sense of, and the gesture is clamped to it.
+ *
+ * The rule for choosing: a picker whose module reads `picked_color_min` or `picked_color_max`
+ * is `DT_COLOR_PICKER_AREA`, since a point has no extent to take an extreme over -- its minimum,
+ * its maximum and its mean are one pixel. A picker whose module only reads the mean can take
+ * either, and the last two values differ only in what the picker shows the FIRST time it is
+ * turned on, before the user has drawn anything.
+ */
 typedef enum _iop_color_picker_kind_t
 {
+  /** a point only: a click places it, a drag moves it */
   DT_COLOR_PICKER_POINT = 0,
   // FIXME: s/AREA/BOX/
+  /** an area only: a click drops a small one, a drag draws it */
   DT_COLOR_PICKER_AREA,
-  DT_COLOR_PICKER_POINT_AREA // allow the user to select between point and area
+  /** either, opening on a point */
+  DT_COLOR_PICKER_POINT_AREA,
+  /** either, opening on an area covering the image */
+  DT_COLOR_PICKER_AREA_POINT
 } dt_iop_color_picker_kind_t;
+
+/** @brief Can a picker of this kind be given a point? */
+gboolean dt_iop_color_picker_kind_takes_point(dt_iop_color_picker_kind_t kind);
+
+/** @brief Can a picker of this kind be given an area? */
+gboolean dt_iop_color_picker_kind_takes_area(dt_iop_color_picker_kind_t kind);
+
+/**
+ * @brief Where a button press on the image has got to.
+ *
+ * @details A press cannot tell a click from the start of a drag, so for a picker that takes
+ * either it decides nothing: it is `PENDING` until the pointer travels (an area) or the button
+ * comes up where it went down (a point). Sampling at the press instead would hand the module a
+ * point it then has to take back -- and a module's sample is not free to take back, it is a
+ * history item.
+ */
+typedef enum dt_iop_color_picker_pointer_t
+{
+  DT_COLOR_PICKER_POINTER_IDLE = 0,
+  /** the button is down and has not moved: a point if it comes up here, an area if it travels */
+  DT_COLOR_PICKER_POINTER_PENDING,
+  /** the button is down and the point follows it */
+  DT_COLOR_PICKER_POINTER_POINT,
+  /** the button is down and stretches an area against a fixed corner */
+  DT_COLOR_PICKER_POINTER_BOX
+} dt_iop_color_picker_pointer_t;
 
 /** Which per-channel extremes of an area a module reads, so the darkroom marks where they lie. */
 typedef enum dt_iop_color_picker_extremes_t
@@ -75,6 +119,11 @@ typedef struct dt_iop_color_picker_t
   float pick_pos[2];
   dt_boundingbox_t pick_box;
   gboolean geometry_is_raw;
+  /** which of `pick_pos` and `pick_box` the picker last showed, and shows again when turned on */
+  gboolean pick_is_box;
+  /** not one of the pickers the picking modifier chooses between; see
+   * dt_color_picker_exclude_from_gesture() */
+  gboolean excluded_from_gesture;
   /** the extremes the module reads from this picker's input sample */
   dt_iop_color_picker_extremes_t extremes;
   /** One-shot request for the next signal emission after activation or colorspace change. */
@@ -107,27 +156,120 @@ void dt_iop_color_picker_set_cst(dt_iop_module_t *module, const dt_iop_colorspac
 /* returns the active picker colorspace (if any) */
 dt_iop_colorspace_type_t dt_iop_color_picker_get_active_cst(dt_iop_module_t *module);
 
-/* mark that the active picker geometry or selection changed and resample from cache if possible */
 /**
- * @brief Arm one module's picker and take a single POINT sample at a given place.
+ * @name The pointer on the image, for the picker that is turned on
  *
- * @param picker_widget the widget `dt_color_picker_new*()` returned for that module.
- * @param image_point where to sample, in IMAGE-normalised coordinates (not the raw-normalised
- * space `dt_colorpicker_sample_t` stores -- `dt_lib_colorpicker_set_point()` converts).
- * @return FALSE when there is no picker behind that widget, or widgets are suppressed.
+ * @details One implementation of "a click places a point, a drag draws an area", for every view
+ * that shows a picker over an image. A view converts its own widget coordinates to
+ * IMAGE-normalised ones and forwards its three button events here; it keeps no picker state of
+ * its own. (Each view used to carry a copy of this, with its own anchor and its own idea of
+ * what a press meant.)
  *
- * @details For a gesture that samples without the user first arming the picker by hand, such as
- * a modifier-click on the canvas. It does what pressing the picker button does, minus the two
- * things that only make sense for a real press: it never consults the keyboard, so a modifier
- * held for the GESTURE cannot flip the picker into box mode, and it forces nothing else off.
- *
- * @warning It leaves the picker ARMED, because that is what sampling requires. A caller doing a
- * one-shot gesture must disarm it again once the sample arrives, or the picker will swallow the
- * clicks that follow -- the darkroom view offers a click to the picker before the focused
- * module ever sees it.
+ * All three are no-ops returning `DT_COLOR_PICKER_POINTER_IDLE` when no picker is turned on.
+ * @{
  */
-gboolean dt_iop_color_picker_sample_point(GtkWidget *picker_widget, const float image_point[2]);
 
+/**
+ * @brief The left button went down on the image.
+ *
+ * @param image_point where, in image-normalised coordinates.
+ * @param slop how far the pointer may travel, in image-normalised units along each axis, and
+ * still count as not having moved. It is also the reach of an area's corner handles. A view
+ * passes a few widget pixels converted to its own scale.
+ *
+ * @return the phase the gesture is now in. `DT_COLOR_PICKER_POINTER_BOX` means an area is
+ * being stretched, which a view will want to show with its cursor.
+ */
+dt_iop_color_picker_pointer_t dt_iop_color_picker_pointer_pressed(const float image_point[2], const float slop[2]);
+
+/** @brief The pointer moved with the button down. @return the phase, as above. */
+dt_iop_color_picker_pointer_t dt_iop_color_picker_pointer_moved(const float image_point[2]);
+
+/**
+ * @brief The left button came up.
+ *
+ * @details A press that never travelled becomes a point here, where it went down. This is also
+ * where a picker the modifier turned on is turned off again, if the modifier came up while the
+ * button was still down.
+ */
+void dt_iop_color_picker_pointer_released(void);
+
+/** @brief The phase of the gesture in progress, `DT_COLOR_PICKER_POINTER_IDLE` when none is. */
+dt_iop_color_picker_pointer_t dt_iop_color_picker_pointer_phase(void);
+
+/**
+ * @brief The `slop` to pass with a press, for a caller working in the darkroom's widget space.
+ *
+ * @details 6 widget pixels along each axis, converted with the develop's own zoom to the
+ * image-normalised units the picker works in. Slightly more than an area's corner handles as
+ * drawn, to give room for an unsteady hand. A view with a geometry of its own (studio capture)
+ * computes its own.
+ */
+void dt_iop_color_picker_darkroom_slop(dt_develop_t *dev, float slop[2]);
+
+/** @} */
+
+/**
+ * @name The picking modifier: sample without turning a picker on by hand
+ *
+ * @details While the primary modifier is held, a click in the image samples for the one picker
+ * there is no doubt about, and a drag samples an area for it if it takes one. Releasing the
+ * modifier turns that picker off again, so the image goes back to whatever it was for.
+ *
+ * "No doubt" is decided from what is on screen (dt_iop_color_picker_gesture_has_target()):
+ * - the focused module shows exactly one picker of its own: that one;
+ * - it shows several: none, the modifier does nothing -- there is no telling which was meant;
+ * - it shows none, or no module has the focus: the global picker, if its panel shows it.
+ *
+ * A picker that is not shown is never turned on this way: the user could neither see that it
+ * is on nor turn it off.
+ * @{
+ */
+
+/** @brief Is this key the picking modifier itself? (Ctrl; Cmd on macOS.) */
+gboolean dt_iop_color_picker_is_gesture_key(guint keyval);
+
+/** @brief Would a modifier-click in the image sample for something right now? */
+gboolean dt_iop_color_picker_gesture_has_target(void);
+
+/**
+ * @brief Turn a picker on for the modifier, and take the press that did it.
+ *
+ * @param picker_widget the picker to use, for a module that knows which one it means and
+ * handles the click itself; NULL to let the rule above choose.
+ * @param image_point where the button went down, in image-normalised coordinates.
+ * @param slop as dt_iop_color_picker_pointer_pressed().
+ *
+ * @return FALSE when nothing was turned on: no unambiguous picker, or widgets are suppressed.
+ * The caller then leaves the click to whoever else wants it.
+ *
+ * @details It turns the picker on WITHOUT sampling what it remembered. A picker turned on by
+ * its button shows its previous point or area at once and the module acts on it; here that
+ * would act on an area the user is not looking at, an instant before the click they meant.
+ *
+ * The motion and the release that follow are the view's to forward, through the pointer calls
+ * above -- the picker is on by then, and a view offers a picker the pointer before anything else.
+ */
+gboolean dt_iop_color_picker_gesture_begin(GtkWidget *picker_widget, const float image_point[2], const float slop[2]);
+
+/**
+ * @brief The modifier came up: turn off the picker it turned on.
+ *
+ * @details A picker the user turned on with its button is left alone. So is one whose sample
+ * has not come back yet: a sample is taken from the pipeline's cache and may have to wait for a
+ * recompute, and the modifier is routinely released before that. Turning the picker off at once
+ * would throw the click away, so it is turned off when the sample lands instead.
+ *
+ * Safe to call when no gesture is in progress.
+ */
+void dt_iop_color_picker_gesture_end(void);
+
+/** @brief Is the picker that is on one the modifier turned on? */
+gboolean dt_iop_color_picker_gesture_is_active(void);
+
+/** @} */
+
+/* mark that the active picker geometry or selection changed and resample from cache if possible */
 void dt_iop_color_picker_request_update(void);
 
 /**
@@ -166,6 +308,18 @@ GtkWidget *dt_color_picker_new(dt_iop_module_t *module, dt_iop_color_picker_kind
 /* link color picker to widget and initialize color picker color space with given value */
 GtkWidget *dt_color_picker_new_with_cst(dt_iop_module_t *module, dt_iop_color_picker_kind_t kind, GtkWidget *w,
                                         const dt_iop_colorspace_type_t cst);
+
+/**
+ * @brief Take a picker out of the ones the picking modifier chooses between.
+ *
+ * @details For a picker that samples for something other than its module's own controls. The
+ * blending's two pickers are the case: they are created on behalf of every module that blends,
+ * and counted as that module's they would make every such module ambiguous, exposure and color
+ * calibration included. A module with a main picker and an incidental one can use it the same way.
+ *
+ * @param picker Widget returned by dt_color_picker_new() or dt_color_picker_new_with_cst().
+ */
+void dt_color_picker_exclude_from_gesture(GtkWidget *picker);
 
 /**
  * @brief Declare that a module reads the minimum or the maximum of each channel from this picker.

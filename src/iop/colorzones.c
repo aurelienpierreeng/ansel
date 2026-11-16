@@ -2316,7 +2316,7 @@ void gui_init(struct dt_iop_module_t *self)
 
   // color pickers
   c->colorpicker = dt_color_picker_new_with_cst(self, DT_COLOR_PICKER_POINT_AREA, hbox, IOP_CS_LCH);
-  gtk_widget_set_tooltip_text(c->colorpicker, _("pick GUI color from image\nctrl+click or right-click to select an area"));
+  gtk_widget_set_tooltip_text(c->colorpicker, _("pick GUI color from image\nclick in the image to pick a point, drag to pick an area"));
   c->colorpicker_set_values = dt_color_picker_new_with_cst(self, DT_COLOR_PICKER_AREA, hbox, IOP_CS_LCH);
   dtgtk_togglebutton_set_paint(DTGTK_TOGGLEBUTTON(c->colorpicker_set_values),
                                dtgtk_cairo_paint_colorpicker, CPF_ALTER, NULL);

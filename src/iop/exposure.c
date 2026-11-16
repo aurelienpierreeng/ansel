@@ -1120,7 +1120,9 @@ void gui_init(struct dt_iop_module_t *self)
   gtk_widget_set_tooltip_text(g->compensate_exposure_bias, _("automatically remove the camera exposure bias\n"
                                                              "this is useful if you exposed the image to the right."));
 
-  g->exposure = dt_color_picker_new(self, DT_COLOR_PICKER_AREA,
+  /* Only the mean is read (_auto_set_exposure()), so a point serves as well as an area. It
+   * opens on the area it always opened on: turning the picker on meters the whole frame. */
+  g->exposure = dt_color_picker_new(self, DT_COLOR_PICKER_AREA_POINT,
                                     dt_bauhaus_slider_from_params(self, N_("exposure")));
   gtk_widget_set_tooltip_text(g->exposure, _("adjust the exposure correction"));
   dt_bauhaus_slider_set_digits(g->exposure, 3);

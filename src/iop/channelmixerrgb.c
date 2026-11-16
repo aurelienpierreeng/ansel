@@ -5266,7 +5266,9 @@ void gui_init(struct dt_iop_module_t *self)
   g_signal_connect(G_OBJECT(g->illum_color), "draw", G_CALLBACK(illuminant_color_draw), self);
   gtk_box_pack_start(GTK_BOX(hbox), g->illum_color, TRUE, TRUE, 0);
 
-  g->color_picker = dt_color_picker_new(self, DT_COLOR_PICKER_AREA, hbox);
+  /* Only the mean is read (_auto_set_illuminant()), so a point serves as well as an area. It
+   * opens on the area it always opened on: turning the picker on reads the whole frame. */
+  g->color_picker = dt_color_picker_new(self, DT_COLOR_PICKER_AREA_POINT, hbox);
   gtk_widget_set_tooltip_text(g->color_picker, _("set white balance to detected from area"));
 
   gtk_box_pack_start(GTK_BOX(self->gui->widget), GTK_WIDGET(hbox), FALSE, FALSE, 0);

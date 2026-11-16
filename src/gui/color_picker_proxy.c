@@ -81,9 +81,56 @@
 */
 
 
+/* Every picker there is, whichever view shows it. They are widgets, not per-develop state: the
+ * studio view swaps the global develop under the same physical buttons, so a list hung on a
+ * develop would be empty in exactly the view that borrowed them. Only the picking modifier
+ * reads it, to count what the focused module shows. A picker is added when it is created and
+ * removed when its widget is destroyed. GUI thread only, like everything else here. */
+static GSList *_pickers = NULL;
+
+/* Forget the gesture in progress. Every path that turns the picker off, or hands it to the
+ * user's own click on a button, goes through here: a gesture outliving its picker would turn
+ * off the NEXT picker to be turned on, the first time the modifier came up. */
+static void _gesture_clear(dt_develop_t *dev)
+{
+  dev->color_picker.pointer.phase = DT_COLOR_PICKER_POINTER_IDLE;
+  dev->color_picker.gesture_armed = FALSE;
+  dev->color_picker.gesture_ending = FALSE;
+  if(dev->color_picker.gesture_timeout_source)
+  {
+    g_source_remove(dev->color_picker.gesture_timeout_source);
+    dev->color_picker.gesture_timeout_source = 0;
+  }
+}
+
+/* The modifier that turned the picker on has come up, and the button with it: the picker is
+ * still registered, but only so that the sample it asked for can land. The image is no longer
+ * its own. */
+static gboolean _gesture_is_winding_down(const dt_develop_t *dev)
+{
+  return dev->color_picker.gesture_armed && dev->color_picker.gesture_ending
+         && dev->color_picker.pointer.phase == DT_COLOR_PICKER_POINTER_IDLE;
+}
+
+gboolean dt_iop_color_picker_kind_takes_point(const dt_iop_color_picker_kind_t kind)
+{
+  return kind != DT_COLOR_PICKER_AREA;
+}
+
+gboolean dt_iop_color_picker_kind_takes_area(const dt_iop_color_picker_kind_t kind)
+{
+  return kind != DT_COLOR_PICKER_POINT;
+}
+
 // FIXME: should this be here or perhaps lib.c?
 gboolean dt_iop_color_picker_is_visible(const dt_develop_t *dev)
 {
+  /* A picker the modifier turned on gives the image back the instant the modifier is up,
+   * whether or not its sample has landed. Waiting for the sample here would have the picker
+   * take the click that follows -- the first dab of a brush, for the user who picked a colour
+   * to paint with it -- for as long as the pipeline takes to recompute. */
+  if(dev && _gesture_is_winding_down(dev)) return FALSE;
+
   const gboolean module_picker = dev->gui_module
     && dev->gui_module->enabled
     && dev->color_picker.enabled
@@ -131,6 +178,7 @@ static gboolean _record_point_area(dt_iop_color_picker_t *self)
         }
       }
       self->geometry_is_raw = TRUE;
+      self->pick_is_box = FALSE;
     }
     else if(sample->size == DT_LIB_COLORPICKER_SIZE_BOX)
     {
@@ -143,6 +191,7 @@ static gboolean _record_point_area(dt_iop_color_picker_t *self)
         }
       }
       self->geometry_is_raw = TRUE;
+      self->pick_is_box = TRUE;
     }
   }
   return changed;
@@ -162,6 +211,7 @@ typedef enum dt_color_picker_resample_status_t
 } dt_color_picker_resample_status_t;
 
 static void _refresh_active_picker(dt_develop_t *dev);
+static void _gesture_finish(dt_develop_t *dev, const gboolean sample_settled);
 static void _track_active_picker_hashes(dt_develop_t *dev);
 static void _restart_picker_cache_wait(gpointer user_data);
 
@@ -697,15 +747,22 @@ static void _refresh_active_picker(dt_develop_t *dev)
       dev->color_picker.picker->update_pending = FALSE;
       dev->color_picker.update_pending = FALSE;
       dt_control_queue_redraw_center();
+      _gesture_finish(dev, TRUE);
       return;
     }
+
+    /* Not ready, and nothing below can sample for a picker that has no module: it would report
+     * the request consumed and a modifier gesture would be closed on a sample that never came.
+     * The next preview run asks again. */
+    return;
   }
 
   if(dev->preview_pipe)
   {
     const dt_color_picker_resample_status_t sampled = _sample_picker_from_cache(dev);
-    if(sampled != DT_COLOR_PICKER_RESAMPLE_RETRY)
-      return;
+    /* Emitted or given up on, the request is over either way -- which is what a modifier that
+     * came up early is waiting for. */
+    if(sampled != DT_COLOR_PICKER_RESAMPLE_RETRY) _gesture_finish(dev, TRUE);
   }
 }
 
@@ -729,6 +786,8 @@ static void _color_picker_reset(dt_iop_color_picker_t *picker)
 static void _color_picker_widget_destroy(GtkWidget *widget, dt_iop_color_picker_t *picker)
 {
   (void)widget;
+  _pickers = g_slist_remove(_pickers, picker);
+
   dt_develop_t *const dev = dt_dev_get_global();
   if(IS_NULL_PTR(dev) || dev->color_picker.picker != picker) return;
 
@@ -751,6 +810,7 @@ static void _color_picker_widget_destroy(GtkWidget *widget, dt_iop_color_picker_
   dev->color_picker.picker_cst = IOP_CS_NONE;
   dev->color_picker.enabled = FALSE;
   dev->color_picker.update_pending = FALSE;
+  _gesture_clear(dev);
   if(module) module->request_color_pick = DT_REQUEST_COLORPICK_OFF;
 }
 
@@ -773,6 +833,7 @@ void dt_iop_color_picker_reset(dt_iop_module_t *module, gboolean keep)
       dev->color_picker.picker_cst = IOP_CS_NONE;
       dev->color_picker.enabled = FALSE;
       dev->color_picker.update_pending = FALSE;
+      _gesture_clear(dev);
       if(module) module->request_color_pick = DT_REQUEST_COLORPICK_OFF;
     }
   }
@@ -789,6 +850,9 @@ static void _init_picker(dt_iop_color_picker_t *picker, dt_iop_module_t *module,
   picker->update_pending = FALSE;
   picker->geometry_is_raw = FALSE;
   picker->extremes = DT_COLOR_PICKER_EXTREMES_NONE;
+  // What it shows the first time it is turned on, before the user has drawn anything.
+  picker->pick_is_box = (kind == DT_COLOR_PICKER_AREA || kind == DT_COLOR_PICKER_AREA_POINT);
+  picker->excluded_from_gesture = FALSE;
 
   // default values
   const float middle = 0.5f;
@@ -802,18 +866,13 @@ static void _init_picker(dt_iop_color_picker_t *picker, dt_iop_module_t *module,
   _color_picker_reset(picker);
 }
 
-gboolean dt_iop_color_picker_sample_point(GtkWidget *picker_widget, const float image_point[2])
+/* Make a picker the one that is on, as far as the develop is concerned. This is the whole of
+ * "turning it on", and it is what a caller cannot do for itself: the pipeline only samples for
+ * the picker registered here. Aiming `primary_sample` without it looks like it should work and
+ * samples nothing -- the sample is aimed, but nothing is looking through it. */
+static void _picker_take_over(dt_iop_color_picker_t *self, dt_develop_t *dev)
 {
-  if(IS_NULL_PTR(picker_widget) || IS_NULL_PTR(image_point)) return FALSE;
-  if(dt_gui_widgets_suppressed()) return FALSE;
-
-  dt_iop_color_picker_t *const self
-      = (dt_iop_color_picker_t *)g_object_get_data(G_OBJECT(picker_widget), "dt-iop-color-picker");
-  if(IS_NULL_PTR(self)) return FALSE;
-
-  dt_develop_t *const dev = dt_dev_get_global();
-  if(IS_NULL_PTR(dev) || IS_NULL_PTR(dev->color_picker.primary_sample)) return FALSE;
-
+  // module is NULL if primary colorpicker
   dt_iop_module_t *const module = self->module;
 
   dt_iop_color_picker_t *const prior_picker = dev->color_picker.picker;
@@ -823,20 +882,26 @@ gboolean dt_iop_color_picker_sample_point(GtkWidget *picker_widget, const float 
     if(prior_picker->module) prior_picker->module->request_color_pick = DT_REQUEST_COLORPICK_OFF;
   }
 
-  /* Arming is the whole job, and it is what a caller cannot do for itself: the pipeline only
-   * samples for a module whose picker is the one registered on the dev. Setting
-   * `primary_sample->point` without this looks like it should work and silently samples nothing
-   * -- the sample is aimed, but nothing is looking through it. */
+  GtkWidget *off = dt_iop_gui_get_off(module);
+  if(off) gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(off), TRUE);
+
   dev->color_picker.picker = self;
   dev->color_picker.widget = self->colorpick;
   dev->color_picker.module = module;
   dev->color_picker.kind = self->kind;
   dev->color_picker.picker_cst = self->picker_cst;
   dev->color_picker.enabled = TRUE;
+
   if(module) module->request_color_pick = DT_REQUEST_COLORPICK_MODULE;
 
   _picker_initialize_geometry_raw(self, dev);
+}
 
+/* The half of turning a picker on that the user sees: its button, and its module's focus.
+ * After _picker_take_over() and after the sample geometry is in place -- it is important to
+ * have set up state before toggling the button and triggering more callbacks. */
+static void _picker_show_on(dt_iop_color_picker_t *self)
+{
   dt_gui_freeze_begin();
   if(DTGTK_IS_TOGGLEBUTTON(self->colorpick))
     gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(self->colorpick), TRUE);
@@ -844,22 +909,390 @@ gboolean dt_iop_color_picker_sample_point(GtkWidget *picker_widget, const float 
     dt_bauhaus_widget_set_quad_active(self->colorpick, TRUE);
   dt_gui_freeze_end();
 
-  if(module) dt_iop_request_focus(module);
+  if(self->module) dt_iop_request_focus(self->module);
+}
 
-  dt_lib_colorpicker_set_point(dt_lib_get_global(), image_point);
+/* Put back on the image what the picker showed the last time it was on: the point or the area
+ * it remembers, whichever it had. A picker that takes only one of them has only that one. */
+static void _picker_publish_remembered(dt_iop_color_picker_t *self, dt_develop_t *dev)
+{
+  const gboolean as_box = dt_iop_color_picker_kind_takes_area(self->kind)
+                          && (self->pick_is_box || !dt_iop_color_picker_kind_takes_point(self->kind));
+  if(as_box)
+  {
+    dt_boundingbox_t image_box = { 0.0f };
+    _picker_raw_box_to_image_norm(dev, self->pick_box, image_box);
+    dt_lib_colorpicker_set_box_area(dt_lib_get_global(), image_box);
+  }
+  else
+  {
+    float image_point[2] = { 0.0f };
+    _picker_raw_point_to_image_norm(dev, self->pick_pos, image_point);
+    dt_lib_colorpicker_set_point(dt_lib_get_global(), image_point);
+  }
+}
 
-  /* dt_lib_colorpicker_set_point() only requests an update when the point MOVED, so sampling
-   * the same pixel twice in a row would otherwise do nothing the second time -- which is
-   * exactly what a one-shot pick repeated on the same spot looks like. */
-  dt_iop_color_picker_request_update();
+/* Stretch the area between the corner that stays put and the pointer. */
+static void _pointer_stretch_box(dt_develop_t *dev, const float image_point[2])
+{
+  const float *const anchor = dev->color_picker.pointer.anchor;
+
+  // One image pixel of margin on each side, so an area dragged flat still holds pixels to average.
+  const dt_dev_image_geometry_t geometry = dt_dev_geometry_snapshot(dev);
+  const float margin[2] = {
+    (geometry.processed_width > 0) ? 1.0f / (float)geometry.processed_width : 0.0f,
+    (geometry.processed_height > 0) ? 1.0f / (float)geometry.processed_height : 0.0f
+  };
+
+  const dt_boundingbox_t box = {
+    fmaxf(0.0f, fminf(anchor[0], image_point[0]) - margin[0]),
+    fmaxf(0.0f, fminf(anchor[1], image_point[1]) - margin[1]),
+    fminf(1.0f, fmaxf(anchor[0], image_point[0]) + margin[0]),
+    fminf(1.0f, fmaxf(anchor[1], image_point[1]) + margin[1])
+  };
+  dt_lib_colorpicker_set_box_area(dt_lib_get_global(), box);
+}
+
+void dt_iop_color_picker_darkroom_slop(dt_develop_t *dev, float slop[2])
+{
+  slop[0] = 6.0f;
+  slop[1] = 6.0f;
+  dt_dev_coordinates_widget_delta_to_image_delta(dev, slop, 1);
+
+  const dt_dev_image_geometry_t geometry = dt_dev_geometry_snapshot(dev);
+  if(geometry.processed_width > 0) slop[0] /= (float)geometry.processed_width;
+  if(geometry.processed_height > 0) slop[1] /= (float)geometry.processed_height;
+}
+
+dt_iop_color_picker_pointer_t dt_iop_color_picker_pointer_phase(void)
+{
+  const dt_develop_t *const dev = dt_dev_get_global();
+  return dev ? (dt_iop_color_picker_pointer_t)dev->color_picker.pointer.phase : DT_COLOR_PICKER_POINTER_IDLE;
+}
+
+dt_iop_color_picker_pointer_t dt_iop_color_picker_pointer_pressed(const float image_point[2], const float slop[2])
+{
+  dt_develop_t *const dev = dt_dev_get_global();
+  const dt_iop_color_picker_t *const picker = dev ? dev->color_picker.picker : NULL;
+  const dt_colorpicker_sample_t *const sample = dev ? dev->color_picker.primary_sample : NULL;
+  if(IS_NULL_PTR(picker) || IS_NULL_PTR(sample) || !dev->color_picker.enabled)
+    return DT_COLOR_PICKER_POINTER_IDLE;
+
+  const gboolean takes_point = dt_iop_color_picker_kind_takes_point(picker->kind);
+  const gboolean takes_area = dt_iop_color_picker_kind_takes_area(picker->kind);
+
+  for(int k = 0; k < 2; k++)
+  {
+    dev->color_picker.pointer.anchor[k] = image_point[k];
+    dev->color_picker.pointer.slop[k] = slop[k];
+  }
+
+  /* A press on a corner of the area that is there takes hold of that corner: the opposite one
+   * becomes what the drag stretches against. This comes before anything else the press could
+   * mean, or an area could be drawn and never adjusted. */
+  if(takes_area && sample->size == DT_LIB_COLORPICKER_SIZE_BOX)
+  {
+    dt_boundingbox_t image_box = { 0.0f };
+    _picker_raw_box_to_image_norm(dev, sample->box, image_box);
+
+    gboolean on_corner = TRUE;
+    float opposite[2] = { 0.0f };
+    for(int k = 0; k < 2; k++)
+    {
+      if(fabsf(image_point[k] - image_box[k]) <= slop[k])
+        opposite[k] = image_box[k + 2];
+      else if(fabsf(image_point[k] - image_box[k + 2]) <= slop[k])
+        opposite[k] = image_box[k];
+      else
+        on_corner = FALSE;
+    }
+
+    if(on_corner)
+    {
+      dev->color_picker.pointer.anchor[0] = opposite[0];
+      dev->color_picker.pointer.anchor[1] = opposite[1];
+      dev->color_picker.pointer.phase = DT_COLOR_PICKER_POINTER_BOX;
+      return DT_COLOR_PICKER_POINTER_BOX;
+    }
+  }
+
+  if(!takes_area)
+  {
+    // A point and nothing else: there is nothing to wait for, and it follows the pointer.
+    dt_lib_colorpicker_set_point(dt_lib_get_global(), image_point);
+    dev->color_picker.pointer.phase = DT_COLOR_PICKER_POINTER_POINT;
+  }
+  else if(!takes_point)
+  {
+    /* An area and nothing else: a click that never travels still has to leave one, so the
+     * press drops a small square -- 1 % of the image width -- for the drag to stretch. */
+    const dt_dev_image_geometry_t geometry = dt_dev_geometry_snapshot(dev);
+    const float half_x = 0.01f;
+    const float half_y = (geometry.processed_width > 0 && geometry.processed_height > 0)
+                             ? half_x * (float)geometry.processed_width / (float)geometry.processed_height
+                             : half_x;
+    const dt_boundingbox_t box = {
+      fmaxf(0.0f, image_point[0] - half_x),
+      fmaxf(0.0f, image_point[1] - half_y),
+      fminf(1.0f, image_point[0] + half_x),
+      fminf(1.0f, image_point[1] + half_y)
+    };
+    dt_lib_colorpicker_set_box_area(dt_lib_get_global(), box);
+    dev->color_picker.pointer.phase = DT_COLOR_PICKER_POINTER_BOX;
+  }
+  else
+  {
+    /* Either: nothing is decided, and so nothing is sampled. The module acts on every sample
+     * it is handed, so a point sampled here and replaced by an area a moment later would be
+     * one edit made and one taken back. */
+    dev->color_picker.pointer.phase = DT_COLOR_PICKER_POINTER_PENDING;
+  }
+
+  return (dt_iop_color_picker_pointer_t)dev->color_picker.pointer.phase;
+}
+
+dt_iop_color_picker_pointer_t dt_iop_color_picker_pointer_moved(const float image_point[2])
+{
+  dt_develop_t *const dev = dt_dev_get_global();
+  if(IS_NULL_PTR(dev) || IS_NULL_PTR(dev->color_picker.picker) || !dev->color_picker.enabled)
+    return DT_COLOR_PICKER_POINTER_IDLE;
+
+  if(dev->color_picker.pointer.phase == DT_COLOR_PICKER_POINTER_PENDING)
+  {
+    const float *const anchor = dev->color_picker.pointer.anchor;
+    const float *const slop = dev->color_picker.pointer.slop;
+    const gboolean travelled = fabsf(image_point[0] - anchor[0]) > slop[0]
+                               || fabsf(image_point[1] - anchor[1]) > slop[1];
+    // Past the slop it was a drag all along, and the press is the corner that stays put.
+    if(travelled) dev->color_picker.pointer.phase = DT_COLOR_PICKER_POINTER_BOX;
+  }
+
+  if(dev->color_picker.pointer.phase == DT_COLOR_PICKER_POINTER_BOX)
+    _pointer_stretch_box(dev, image_point);
+  else if(dev->color_picker.pointer.phase == DT_COLOR_PICKER_POINTER_POINT)
+    dt_lib_colorpicker_set_point(dt_lib_get_global(), image_point);
+
+  return (dt_iop_color_picker_pointer_t)dev->color_picker.pointer.phase;
+}
+
+void dt_iop_color_picker_pointer_released(void)
+{
+  dt_develop_t *const dev = dt_dev_get_global();
+  if(IS_NULL_PTR(dev)) return;
+
+  const int phase = dev->color_picker.pointer.phase;
+  dev->color_picker.pointer.phase = DT_COLOR_PICKER_POINTER_IDLE;
+  if(IS_NULL_PTR(dev->color_picker.picker) || !dev->color_picker.enabled) return;
+
+  if(phase == DT_COLOR_PICKER_POINTER_PENDING)
+  {
+    // It came up where it went down: a click, and so a point, where the user aimed it.
+    dt_lib_colorpicker_set_point(dt_lib_get_global(), dev->color_picker.pointer.anchor);
+
+    /* dt_lib_colorpicker_set_point() only asks for a sample when the point MOVED, and this one
+     * may not have: clicking the same pixel twice, or a gesture that placed the point when it
+     * began. A click that samples nothing is exactly what that looks like. */
+    dt_iop_color_picker_request_update();
+  }
+
+  // The modifier came up while the button was still down; it was waiting for this.
+  _gesture_finish(dev, FALSE);
+}
+
+gboolean dt_iop_color_picker_is_gesture_key(const guint keyval)
+{
+  /* The key, not the modifier bit: the press event for the modifier itself does not carry the
+   * bit in its own state yet, so asking dt_modifier_is() about it misses the very transition
+   * this is for. DT_PRIMARY_MASK's two keys, spelled out. */
+#ifdef GDK_WINDOWING_QUARTZ
+  return keyval == GDK_KEY_Meta_L || keyval == GDK_KEY_Meta_R;
+#else
+  return keyval == GDK_KEY_Control_L || keyval == GDK_KEY_Control_R;
+#endif
+}
+
+/* The picker a modifier-click samples for, NULL when there is none or no telling which.
+ *
+ * Decided from what is on screen. The focused module's own pickers come first: exactly one
+ * shown is the answer, several is no answer at all. Only when it shows none -- or nothing has
+ * the focus -- does the global picker get the click, and only if its panel shows it.
+ *
+ * "Shown" is mapped and sensitive: on the current notebook page, in an expanded module, in a
+ * panel that is open, and not greyed out. A picker that fails that is one the user can neither
+ * see come on nor turn off. */
+static dt_iop_color_picker_t *_gesture_target(const dt_develop_t *dev)
+{
+  const dt_iop_module_t *const focused = dev->gui_module;
+  dt_iop_color_picker_t *own = NULL;
+  dt_iop_color_picker_t *global = NULL;
+  int own_count = 0;
+
+  for(GSList *l = _pickers; l; l = g_slist_next(l))
+  {
+    dt_iop_color_picker_t *const picker = (dt_iop_color_picker_t *)l->data;
+    if(picker->excluded_from_gesture || IS_NULL_PTR(picker->colorpick)) continue;
+    if(!gtk_widget_get_mapped(picker->colorpick) || !gtk_widget_is_sensitive(picker->colorpick)) continue;
+
+    if(IS_NULL_PTR(picker->module))
+      global = picker;
+    else if(picker->module == focused)
+    {
+      own = picker;
+      own_count++;
+    }
+  }
+
+  if(own_count == 1) return own;
+  if(own_count > 1) return NULL;
+
+  /* Nothing of its own to show. A module that handles clicks on the image keeps them: what a
+   * modifier-click means there is its business, and offering the global picker a click the
+   * module may then take is a promise this cannot keep. */
+  if(focused && focused->button_pressed) return NULL;
+  return global;
+}
+
+gboolean dt_iop_color_picker_gesture_has_target(void)
+{
+  const dt_develop_t *const dev = dt_dev_get_global();
+  if(IS_NULL_PTR(dev) || IS_NULL_PTR(dev->color_picker.primary_sample)) return FALSE;
+  if(dt_gui_widgets_suppressed()) return FALSE;
+  return !IS_NULL_PTR(_gesture_target(dev));
+}
+
+gboolean dt_iop_color_picker_gesture_is_active(void)
+{
+  const dt_develop_t *const dev = dt_dev_get_global();
+  return dev && dev->color_picker.gesture_armed;
+}
+
+gboolean dt_iop_color_picker_gesture_begin(GtkWidget *picker_widget, const float image_point[2], const float slop[2])
+{
+  if(IS_NULL_PTR(image_point) || IS_NULL_PTR(slop)) return FALSE;
+  if(dt_gui_widgets_suppressed()) return FALSE;
+
+  dt_develop_t *const dev = dt_dev_get_global();
+  dt_colorpicker_sample_t *const sample = dev ? dev->color_picker.primary_sample : NULL;
+  if(IS_NULL_PTR(sample)) return FALSE;
+
+  dt_iop_color_picker_t *const self
+      = picker_widget ? (dt_iop_color_picker_t *)g_object_get_data(G_OBJECT(picker_widget), "dt-iop-color-picker")
+                      : _gesture_target(dev);
+  if(IS_NULL_PTR(self)) return FALSE;
+
+  /* A picker the user turned on with its button stays theirs: the modifier coming up must not
+   * turn it off. (It can be on and still reach here -- on, but not showing, because its module
+   * was switched off under it.) */
+  const gboolean was_the_users = dev->color_picker.picker == self && dev->color_picker.enabled
+                                 && !dev->color_picker.gesture_armed;
+
+  _picker_take_over(self, dev);
+  _gesture_clear(dev);
+  dev->color_picker.gesture_armed = !was_the_users;
+
+  /* Nothing the picker remembered is sampled, which is the difference with its button. The
+   * button shows the previous point or area at once and the module acts on it; here that would
+   * be an edit made from somewhere the user is not looking, an instant before the click they
+   * meant. So the request a previous life may have left behind is dropped, and the sample is
+   * aimed at the press without asking for it: the overlay follows the click, and the release
+   * decides what, if anything, is sampled. */
+  self->update_pending = FALSE;
+  dev->color_picker.update_pending = FALSE;
+
+  float raw_point[2] = { image_point[0], image_point[1] };
+  dt_dev_coordinates_image_norm_to_raw_norm(dev, raw_point, 1);
+  sample->size = DT_LIB_COLORPICKER_SIZE_POINT;
+  sample->point[0] = raw_point[0];
+  sample->point[1] = raw_point[1];
+
+  _picker_show_on(self);
+
+  dt_print(DT_DEBUG_DEV, "[picker] gesture begin module=%s picker=%p kind=%d point=(%g,%g)\n",
+           self->module ? self->module->op : "global", (void *)self, self->kind, image_point[0], image_point[1]);
+
+  /* A picker that takes only a point, or only an area, samples at the press. The point is
+   * already where the press is, so its setter would see nothing change and ask for nothing. */
+  if(dt_iop_color_picker_pointer_pressed(image_point, slop) != DT_COLOR_PICKER_POINTER_PENDING)
+    dt_iop_color_picker_request_update();
+
+  dt_control_queue_redraw_center();
   return TRUE;
+}
+
+/* How long a picker the modifier turned on outlives the modifier, waiting for its sample.
+ * Measured on a 12 Mpx raw, the sample lands 12 to 70 ms after the click when the cache has to
+ * recompute the module; this leaves two orders of magnitude of margin over that. */
+#define DT_COLOR_PICKER_GESTURE_WAIT_MS 3000
+
+static gboolean _gesture_timed_out(gpointer user_data)
+{
+  dt_develop_t *const dev = (dt_develop_t *)user_data;
+  dev->color_picker.gesture_timeout_source = 0;
+  dt_print(DT_DEBUG_DEV, "[picker] gesture gave up waiting for its sample\n");
+  _gesture_finish(dev, TRUE);
+  return G_SOURCE_REMOVE;
+}
+
+/* Turn off the picker the modifier turned on, once nothing is left to wait for.
+ *
+ * Called from every place one of the things it waits for can end: the modifier coming up, the
+ * button coming up, and the sample landing (`sample_settled`, from the refresh). Whichever
+ * comes last does the work; the others find something still outstanding and leave. */
+static void _gesture_finish(dt_develop_t *dev, const gboolean sample_settled)
+{
+  if(!dev->color_picker.gesture_armed || !dev->color_picker.gesture_ending) return;
+
+  dt_iop_color_picker_t *const picker = dev->color_picker.picker;
+  if(IS_NULL_PTR(picker))
+  {
+    _gesture_clear(dev);
+    return;
+  }
+
+  // The button is still down: its release decides what was drawn, and comes back here.
+  if(dev->color_picker.pointer.phase != DT_COLOR_PICKER_POINTER_IDLE) return;
+
+  /* The sample has not come back. It is taken from the pipeline's cache, which may first have
+   * to recompute, and a modifier is routinely let go before that -- so turning the picker off
+   * now would throw the click away. The refresh calls back when it lands.
+   *
+   * Not for ever, though: a sample is not guaranteed to land at all (a source that never
+   * becomes ready, a cache line whose hash drifted), and a picker left registered keeps its
+   * module's cache bypassed and its button lit. So the wait is bounded. */
+  if(!sample_settled && (picker->update_pending || dev->color_picker.update_pending))
+  {
+    if(!dev->color_picker.gesture_timeout_source)
+      dev->color_picker.gesture_timeout_source = g_timeout_add(DT_COLOR_PICKER_GESTURE_WAIT_MS, _gesture_timed_out, dev);
+    return;
+  }
+
+  dt_print(DT_DEBUG_DEV, "[picker] gesture end module=%s picker=%p\n",
+           picker->module ? picker->module->op : "global", (void *)picker);
+
+  /* dt_iop_color_picker_reset() is the real thing. Switching the button's toggle off only
+   * changes how it looks and leaves the picker registered, which is how a picker comes to keep
+   * taking the image's clicks while appearing to be off. */
+  dt_iop_color_picker_reset(picker->module, FALSE);
+  dt_control_queue_redraw_center();
+}
+
+void dt_iop_color_picker_gesture_end(void)
+{
+  dt_develop_t *const dev = dt_dev_get_global();
+  if(IS_NULL_PTR(dev) || !dev->color_picker.gesture_armed) return;
+
+  dev->color_picker.gesture_ending = TRUE;
+  _gesture_finish(dev, FALSE);
 }
 
 static gboolean _color_picker_callback_button_press(GtkWidget *button, GdkEventButton *e, dt_iop_color_picker_t *self)
 {
+  (void)button;
+  (void)e;
   // module is NULL if primary colorpicker
   dt_iop_module_t *module = self->module;
   dt_develop_t *const dev = dt_dev_get_global();
+  if(IS_NULL_PTR(dev)) return FALSE;
 
   if(dt_gui_widgets_suppressed())
   {
@@ -868,76 +1301,31 @@ static gboolean _color_picker_callback_button_press(GtkWidget *button, GdkEventB
     return FALSE;
   }
 
-  dt_iop_color_picker_t *prior_picker = dev ? dev->color_picker.picker : NULL;
-  if(prior_picker && prior_picker != self)
+  /* The button turns the picker on and off, and that is all it does. Whether the user gets a
+   * point or an area is decided on the image, by clicking or dragging -- it used to be decided
+   * here, by which button or modifier the picker was turned on with. */
+  if(dev->color_picker.picker != self)
   {
-    _color_picker_reset(prior_picker);
-    if(prior_picker->module) prior_picker->module->request_color_pick = DT_REQUEST_COLORPICK_OFF;
-  }
-
-  GtkWidget *off = dt_iop_gui_get_off(module);
-  if(off) gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(off), TRUE);
-
-  const GdkModifierType state = !IS_NULL_PTR(e) ? e->state : dt_key_modifier_state();
-  const gboolean ctrl_key_pressed = dt_modifier_is(state, DT_PRIMARY_MASK) || (!IS_NULL_PTR(e) && e->button == 3);
-  dt_iop_color_picker_kind_t kind = self->kind;
-
-  if(prior_picker != self || (kind == DT_COLOR_PICKER_POINT_AREA &&
-      (ctrl_key_pressed ^ (dev->color_picker.primary_sample->size == DT_LIB_COLORPICKER_SIZE_BOX))))
-  {
-    dev->color_picker.picker = self;
-    dev->color_picker.widget = self->colorpick;
-    dev->color_picker.module = module;
-    dev->color_picker.kind = kind;
-    dev->color_picker.picker_cst = self->picker_cst;
-    dev->color_picker.enabled = TRUE;
-
-    if(module) module->request_color_pick = DT_REQUEST_COLORPICK_MODULE;
-
-    if(kind == DT_COLOR_PICKER_POINT_AREA)
-    {
-      kind = ctrl_key_pressed ? DT_COLOR_PICKER_AREA : DT_COLOR_PICKER_POINT;
-    }
-    _picker_initialize_geometry_raw(self, dev);
-
-    if(kind == DT_COLOR_PICKER_AREA)
-    {
-      dt_boundingbox_t image_box = { 0.0f };
-      _picker_raw_box_to_image_norm(dev, self->pick_box, image_box);
-      dt_lib_colorpicker_set_box_area(dt_lib_get_global(), image_box);
-    }
-    else if(kind == DT_COLOR_PICKER_POINT)
-    {
-      float image_point[2] = { 0.0f };
-      _picker_raw_point_to_image_norm(dev, self->pick_pos, image_point);
-      dt_lib_colorpicker_set_point(dt_lib_get_global(), image_point);
-    }
-    else
-      dt_unreachable_codepath();
-
-    // important to have set up state before toggling button and
-    // triggering more callbacks
-    dt_gui_freeze_begin();
-    if(DTGTK_IS_TOGGLEBUTTON(self->colorpick))
-      gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(self->colorpick), TRUE);
-    else
-      dt_bauhaus_widget_set_quad_active(self->colorpick, TRUE);
-    dt_gui_freeze_end();
-
     dt_iop_module_t *const gui_module_before_focus = dev->gui_module;
-    if(module)
-      dt_iop_request_focus(module);
+
+    _picker_take_over(self, dev);
+    // Whatever the modifier had turned on, this one is the user's.
+    _gesture_clear(dev);
+    _picker_publish_remembered(self, dev);
+    _picker_show_on(self);
 
     dt_print(DT_DEBUG_DEV,
              "[picker] activate module=%s picker=%p widget=%p kind=%d cst=%d gui_module_before=%s "
              "gui_module_after=%s widgets_suppressed=%d\n",
-             module ? module->op : "global", (void *)self, (void *)self->colorpick, kind, self->picker_cst,
+             module ? module->op : "global", (void *)self, (void *)self->colorpick, self->kind, self->picker_cst,
              gui_module_before_focus ? gui_module_before_focus->op : "-",
              dev->gui_module ? dev->gui_module->op : "-", dt_gui_widgets_suppressed());
-
   }
   else
   {
+    GtkWidget *off = dt_iop_gui_get_off(module);
+    if(off) gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(off), TRUE);
+
     dt_dev_pixelpipe_cache_wait_cleanup(&dev->color_picker.input_wait, "picker-deactivate-input");
     dt_dev_pixelpipe_cache_wait_cleanup(&dev->color_picker.output_wait, "picker-deactivate-output");
     dev->color_picker.picker = NULL;
@@ -948,6 +1336,7 @@ static gboolean _color_picker_callback_button_press(GtkWidget *button, GdkEventB
     dev->color_picker.picker_cst = IOP_CS_NONE;
     dev->color_picker.enabled = FALSE;
     dev->color_picker.update_pending = FALSE;
+    _gesture_clear(dev);
     _color_picker_reset(self);
     if(module)
     {
@@ -1146,6 +1535,7 @@ static GtkWidget *_color_picker_new(dt_iop_module_t *module, dt_iop_color_picker
                           G_CALLBACK(_color_picker_callback_button_press), color_picker, (GClosureNotify)g_free, 0);
     g_signal_connect(G_OBJECT(button), "destroy", G_CALLBACK(_color_picker_widget_destroy), color_picker);
     g_object_set_data(G_OBJECT(button), "dt-iop-color-picker", color_picker);
+    _pickers = g_slist_prepend(_pickers, color_picker);
     if(w) gtk_box_pack_start(GTK_BOX(w), button, FALSE, FALSE, 0);
 
     dt_develop_t *const dev = dt_dev_get_global();
@@ -1175,6 +1565,7 @@ static GtkWidget *_color_picker_new(dt_iop_module_t *module, dt_iop_color_picker
                           G_CALLBACK(_color_picker_callback), color_picker, (GClosureNotify)g_free, 0);
     g_signal_connect(G_OBJECT(w), "destroy", G_CALLBACK(_color_picker_widget_destroy), color_picker);
     g_object_set_data(G_OBJECT(w), "dt-iop-color-picker", color_picker);
+    _pickers = g_slist_prepend(_pickers, color_picker);
 
     dt_develop_t *const dev = dt_dev_get_global();
     if(dev && dev->color_picker.enabled && dev->color_picker.module == module
@@ -1192,6 +1583,12 @@ static GtkWidget *_color_picker_new(dt_iop_module_t *module, dt_iop_color_picker
 
     return w;
   }
+}
+
+void dt_color_picker_exclude_from_gesture(GtkWidget *picker)
+{
+  dt_iop_color_picker_t *const color_picker = picker ? g_object_get_data(G_OBJECT(picker), "dt-iop-color-picker") : NULL;
+  if(color_picker) color_picker->excluded_from_gesture = TRUE;
 }
 
 void dt_color_picker_set_extremes(GtkWidget *picker, const dt_iop_color_picker_extremes_t extremes)

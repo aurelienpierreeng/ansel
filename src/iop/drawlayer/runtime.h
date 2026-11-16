@@ -33,11 +33,6 @@ typedef struct dt_drawlayer_session_state_t
    *  focus loss, where the release will never arrive. Every pointer handler and the cursor
    *  branch on this one flag, so they cannot disagree about which tool is in the user's hand. */
   gboolean picking_active;
-  /** This module armed the shared image picker and owes it back when picking ends. Separate
-   *  from picking_active because the first Ctrl+click arms it and the modifier may have been
-   *  held long before that -- and because a picker the USER armed with the button is not ours
-   *  to disarm. */
-  gboolean picker_armed_by_gesture;
 } dt_drawlayer_session_state_t;
 
 typedef struct dt_drawlayer_process_state_t

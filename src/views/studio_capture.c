@@ -90,8 +90,6 @@ typedef struct dt_studio_capture_t
   double pan_start_y;
 
   // Color picker box-drag state (image-normalized anchor corner)
-  gboolean picker_dragging_box;
-  float picker_box_anchor[2];
 
   // Own develop instance. While the atelier is active it is published as
   // darktable.develop and runs the pixelpipe on the displayed image so the
@@ -534,7 +532,6 @@ void leave(dt_view_t *self)
   dt_iop_color_picker_cleanup();
   if(d->dev->color_picker.picker)
     dt_iop_color_picker_reset(d->dev->color_picker.picker->module, FALSE);
-  d->picker_dragging_box = FALSE;
 
   // Stop sharing darkroom's primary sample instance (see enter()): our own
   // develop must own a real, private instance again before it can be freed.
@@ -935,29 +932,28 @@ void mouse_moved(dt_view_t *self, double x, double y, double pressure, int which
 {
   dt_studio_capture_t *d = (dt_studio_capture_t *)self->data;
 
-  if(dt_iop_color_picker_is_visible(d->dev) && dt_control_button_down(1))
+  // The modifier came up where no key release was delivered; see darkroom's mouse_moved().
+  if(dt_iop_color_picker_gesture_is_active()
+     && !dt_modifiers_include(dt_key_modifier_state(), DT_PRIMARY_MASK))
+    dt_iop_color_picker_gesture_end();
+
+  if(dt_iop_color_picker_is_visible(d->dev)
+     && dt_iop_color_picker_pointer_phase() != DT_COLOR_PICKER_POINTER_IDLE)
   {
-    if(d->picker_dragging_box)
+    if(!dt_control_button_down(1))
     {
-      float point[2] = { 0.0f };
-      if(_studio_widget_to_image_norm(d, x, y, point))
-      {
-        const dt_boundingbox_t box = { MIN(d->picker_box_anchor[0], point[0]),
-                                       MIN(d->picker_box_anchor[1], point[1]),
-                                       MAX(d->picker_box_anchor[0], point[0]),
-                                       MAX(d->picker_box_anchor[1], point[1]) };
-        dt_lib_colorpicker_set_box_area(dt_lib_get_global(), box);
-        dt_control_queue_redraw_center();
-      }
+      dt_iop_color_picker_pointer_released();
+      dt_control_change_cursor(GDK_LEFT_PTR);
     }
-    else if(d->dev->color_picker.primary_sample->size == DT_LIB_COLORPICKER_SIZE_POINT)
+    else
     {
-      // Point mode: the picker follows the pointer for as long as the button
-      // stays down, matching darkroom's mouse_moved.
+      /* A point that follows the pointer, an area being stretched, or a press that becomes
+       * an area once it has travelled: the picker says which (gui/color_picker_proxy.c). */
       float point[2] = { 0.0f };
       if(_studio_widget_to_image_norm(d, x, y, point))
       {
-        dt_lib_colorpicker_set_point(dt_lib_get_global(), point);
+        if(dt_iop_color_picker_pointer_moved(point) == DT_COLOR_PICKER_POINTER_BOX)
+          dt_control_change_cursor(GDK_FLEUR);
         dt_control_queue_redraw_center();
       }
     }
@@ -972,62 +968,28 @@ void mouse_moved(dt_view_t *self, double x, double y, double pressure, int which
 }
 
 /**
+ * @brief How far the pointer may travel and still be a click, and the reach of an area's corner
+ * handles: 6 widget pixels, in image-normalised units.
+ */
+static void _studio_picker_slop(const double logical_width, const double logical_height, float slop[2])
+{
+  slop[0] = (logical_width > 0.0) ? (float)(6.0 / logical_width) : 0.02f;
+  slop[1] = (logical_height > 0.0) ? (float)(6.0 / logical_height) : 0.02f;
+}
+
+/**
  * @brief Left-click handling while the color picker is active.
  *
- * Point vs. box mode is decided by sample->size, which the picker button's
- * own ctrl+click/right-click already sets (shared code in
- * gui/color_picker_proxy.c, unrelated to this handler). Mirrors darkroom's
- * button_pressed: clicking near an existing box corner grabs it (the
- * opposite corner becomes the drag anchor); clicking elsewhere starts a
- * fresh small default box centered on the click.
+ * A click places a point and a drag draws an area; what a press means until one of them is
+ * known is the picker's business, shared with darkroom (gui/color_picker_proxy.c).
  */
-static void _studio_picker_left_click(dt_studio_capture_t *d, const float point[2], const double logical_width,
+static void _studio_picker_left_click(const float point[2], const double logical_width,
                                       const double logical_height)
 {
-  dt_colorpicker_sample_t *const sample = d->dev->color_picker.primary_sample;
-
-  if(sample->size != DT_LIB_COLORPICKER_SIZE_BOX)
-  {
-    d->picker_dragging_box = FALSE;
-    dt_lib_colorpicker_set_point(dt_lib_get_global(), point);
-    return;
-  }
-
-  float image_box[4] = { sample->box[0], sample->box[1], sample->box[2], sample->box[3] };
-  dt_dev_coordinates_raw_norm_to_image_norm(d->dev, image_box, 2);
-
-  // 6 widget pixels of corner-grab slop, converted to image-normalized units.
-  const float handle_x = (logical_width > 0.0) ? (float)(6.0 / logical_width) : 0.02f;
-  const float handle_y = (logical_height > 0.0) ? (float)(6.0 / logical_height) : 0.02f;
-
-  gboolean on_corner = TRUE;
-  float opposite[2] = { 0.0f };
-  if(fabsf(point[0] - image_box[0]) <= handle_x) opposite[0] = image_box[2];
-  else if(fabsf(point[0] - image_box[2]) <= handle_x) opposite[0] = image_box[0];
-  else on_corner = FALSE;
-
-  if(fabsf(point[1] - image_box[1]) <= handle_y) opposite[1] = image_box[3];
-  else if(fabsf(point[1] - image_box[3]) <= handle_y) opposite[1] = image_box[1];
-  else on_corner = FALSE;
-
-  if(on_corner)
-  {
-    d->picker_box_anchor[0] = opposite[0];
-    d->picker_box_anchor[1] = opposite[1];
-  }
-  else
-  {
-    // The default box is a small square, 1% of the image width, centered on the click.
-    const float delta = 0.01f;
-    d->picker_box_anchor[0] = point[0];
-    d->picker_box_anchor[1] = point[1];
-    const dt_boundingbox_t box = { fmaxf(0.0f, point[0] - delta), fmaxf(0.0f, point[1] - delta),
-                                   fminf(1.0f, point[0] + delta), fminf(1.0f, point[1] + delta) };
-    dt_lib_colorpicker_set_box_area(dt_lib_get_global(), box);
-  }
-
-  d->picker_dragging_box = TRUE;
-  dt_control_change_cursor(GDK_FLEUR);
+  float slop[2] = { 0.0f };
+  _studio_picker_slop(logical_width, logical_height, slop);
+  if(dt_iop_color_picker_pointer_pressed(point, slop) == DT_COLOR_PICKER_POINTER_BOX)
+    dt_control_change_cursor(GDK_FLEUR);
 }
 
 /**
@@ -1092,12 +1054,36 @@ int button_pressed(dt_view_t *self, double x, double y, double pressure, int whi
     if(_studio_widget_to_image_norm(d, x, y, point))
     {
       if(which == 1)
-        _studio_picker_left_click(d, point, logical_width, logical_height);
+        _studio_picker_left_click(point, logical_width, logical_height);
       else
         _studio_picker_right_click(d, point, logical_width, logical_height);
       dt_control_queue_redraw_center();
     }
     return 1;
+  }
+
+  /* The picking modifier, as in darkroom: a modifier-click samples without the picker having
+   * been turned on by hand, and the modifier coming up turns it off again. Nothing here has
+   * the focus, so the picker in question is the global one, when its panel shows it. Only
+   * inside the image -- _studio_widget_to_image_norm() clamps, and a click in the margin
+   * would otherwise sample the nearest edge. */
+  if(which == 1 && dt_modifier_is(state, DT_PRIMARY_MASK))
+  {
+    float point[2] = { 0.0f };
+    double tr_x = 0.0, tr_y = 0.0, logical_width = 0.0, logical_height = 0.0;
+    const gboolean inside = _studio_surface_geometry(d, &tr_x, &tr_y, &logical_width, &logical_height)
+                            && x >= tr_x && x <= tr_x + logical_width
+                            && y >= tr_y && y <= tr_y + logical_height;
+    if(inside && _studio_widget_to_image_norm(d, x, y, point))
+    {
+      float slop[2] = { 0.0f };
+      _studio_picker_slop(logical_width, logical_height, slop);
+      if(dt_iop_color_picker_gesture_begin(NULL, point, slop))
+      {
+        dt_control_queue_redraw_center();
+        return 1;
+      }
+    }
   }
 
   if(which == 2 || (which == 1 && type == GDK_2BUTTON_PRESS))
@@ -1126,8 +1112,9 @@ int button_released(dt_view_t *self, double x, double y, int which, uint32_t sta
 
   if(dt_iop_color_picker_is_visible(d->dev) && which == 1)
   {
-    if(d->picker_dragging_box) dt_control_change_cursor(GDK_LEFT_PTR);
-    d->picker_dragging_box = FALSE;
+    // A press that never travelled becomes a point here.
+    dt_iop_color_picker_pointer_released();
+    dt_control_change_cursor(GDK_LEFT_PTR);
     dt_control_queue_redraw_center();
     return 1;
   }
@@ -1155,6 +1142,18 @@ int scrolled(dt_view_t *self, double x, double y, int up, int state, int delta_y
     _studio_toggle_zoom(d, x, y);
     return 1;
   }
+  return 0;
+}
+
+/**
+ * @brief The picking modifier came up: turn off the picker it turned on.
+ *
+ * @return 0, always. The modifier begins half the shortcuts there are; this only listens.
+ */
+int key_released(dt_view_t *self, GdkEventKey *event)
+{
+  (void)self;
+  if(dt_iop_color_picker_is_gesture_key(event->keyval)) dt_iop_color_picker_gesture_end();
   return 0;
 }
 
