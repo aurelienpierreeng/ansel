@@ -238,12 +238,21 @@ a click, a drag and a corner, and surviving Ctrl; filmic's scene tab (nothing) a
 global picker); an area-only picker under a click (a small box, `min != max`). Studio capture
 shares the code and was **not** driven.
 
-## Seen on the way, and left alone
+## Seen on the way: the scopes drew nothing on a new profile
 
-On a fresh profile the Scopes panel draws nothing and the global picker reads `0 0 0`, turned on
-by its button or by the modifier alike. The stage defaults to `initialscale`, whose backbuffer was
-never ready in that session; launched with `--conf plugin/darkroom/histogram/op=gamma` the scope
-draws and the picker reads (137 / 111 / 85 on a cloud). Note the key: the code reads and writes
-`plugin/darkroom/histogram/op`, while `data/anselconfig.xml.in` declares
-`plugins/darkroom/histogram/op`, so the declared default never reaches it. This is what made the
-bounded wait above necessary, and is otherwise outside this change.
+On a fresh profile the Scopes panel drew nothing and the global picker read `0 0 0`, turned on by
+its button or by the modifier alike. Launched with `--conf plugin/darkroom/histogram/op=gamma` the
+scope drew and the picker read (137 / 111 / 85 on a cloud). This is what made the bounded wait
+above necessary.
+
+> **What this section said about the cause was wrong.** It said "the stage defaults to
+> `initialscale`". It does not: `initialscale` is only what the legacy value `demosaic` is
+> migrated to. On a new profile the stage was the **empty string**, because the code read
+> `plugin/darkroom/histogram/op` while `data/anselconfig.xml.in` declared
+> `plugins/darkroom/histogram/op`, and a setting read without being declared is created empty.
+> The mismatch was reported correctly; the mechanism was guessed from one line of
+> `_set_params()` instead of read back from a profile.
+
+Fixed in the commit after this one, with two more settings of the same module that had the same
+mistake. [`preferences.md`](preferences.md), *A setting read without being declared*, has the
+account and what it showed about declaring a setting late.
