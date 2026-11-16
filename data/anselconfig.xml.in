@@ -2341,22 +2341,30 @@
     <shortdescription>last chosen guide style</shortdescription>
     <longdescription/>
   </dtconfig>
+  <!-- plugin/, singular, for all four of the scopes' settings: it is what libs/histogram.c reads
+       and writes, and so what every existing profile stores. Three of them were declared under
+       plugins/ instead, so none of their defaults ever reached the code. -->
   <dtconfig>
-    <name>plugins/darkroom/histogram/display</name>
-    <type min="0" max="2">int</type>
+    <name>plugin/darkroom/histogram/display</name>
+    <!-- No min/max on purpose. dt_conf_get_int() clamps what it returns to a bound declared
+         here, and this one said max="2" for an enum of six scope types: harmless while the name
+         was wrong, it would have turned every parade and vectorscope into a vertical waveform
+         the moment the name was right. The module clamps to its own enum, which is the only
+         place that knows how many there are. -->
+    <type>int</type>
     <default>0</default>
     <shortdescription>Histogram display mode</shortdescription>
     <longdescription />
   </dtconfig>
   <dtconfig>
-    <name>plugins/darkroom/histogram/op</name>
+    <name>plugin/darkroom/histogram/op</name>
     <type>string</type>
     <default>gamma</default>
     <shortdescription>Module at which the histogram is sampled</shortdescription>
     <longdescription />
   </dtconfig>
   <dtconfig>
-    <name>plugins/darkroom/histogram/zoom</name>
+    <name>plugin/darkroom/histogram/zoom</name>
     <type>float</type>
     <default>220.0</default>
     <shortdescription>Zoom level in vectorscope</shortdescription>

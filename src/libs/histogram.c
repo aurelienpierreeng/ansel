@@ -109,7 +109,14 @@
 #define DT_LIB_HISTOGRAM_SCOPE_MIN_HEIGHT 120
 #define DT_LIB_HISTOGRAM_SCOPE_MAX_HEIGHT 500
 #define DT_LIB_HISTOGRAM_SCOPE_HANDLE_HEIGHT 8
+/* This module's settings, each spelled ONCE. They were typed out at every use, and three of them
+ * with `plugin/` where data/anselconfig.xml.in declared `plugins/` -- eight call sites agreeing
+ * with each other and none with the declaration, so no default ever reached them and nothing
+ * said so: an undeclared setting is not an error, it reads as an empty string. */
 #define DT_LIB_HISTOGRAM_SCOPE_HEIGHT_CONF "plugin/darkroom/histogram/scope_height"
+#define DT_LIB_HISTOGRAM_OP_CONF "plugin/darkroom/histogram/op"
+#define DT_LIB_HISTOGRAM_DISPLAY_CONF "plugin/darkroom/histogram/display"
+#define DT_LIB_HISTOGRAM_ZOOM_CONF "plugin/darkroom/histogram/zoom"
 
 DT_MODULE(1)
 
@@ -2494,13 +2501,13 @@ static void _set_stage(dt_lib_module_t *self, int value)
 {
   dt_lib_histogram_t *d = (dt_lib_histogram_t *)self->data;
   _backbuf_int_to_op(value, d);
-  dt_conf_set_string("plugin/darkroom/histogram/op", d->op);
+  dt_conf_set_string(DT_LIB_HISTOGRAM_OP_CONF, d->op);
 
   // Vectorscope is meaningless for raw Bayer data
   if(!strcmp(d->op, "initialscale") && d->scope == DT_LIB_HISTOGRAM_SCOPE_VECTORSCOPE)
   {
     d->scope = DT_LIB_HISTOGRAM_SCOPE_HISTOGRAM;
-    dt_conf_set_int("plugin/darkroom/histogram/display", d->scope);
+    dt_conf_set_int(DT_LIB_HISTOGRAM_DISPLAY_CONF, d->scope);
   }
 
   _refresh_preview_histograms(dt_dev_get_global());
@@ -2511,7 +2518,7 @@ static void _set_scope(dt_lib_module_t *self, dt_lib_histogram_scope_type_t scop
 {
   dt_lib_histogram_t *d = (dt_lib_histogram_t *)self->data;
   d->scope = scope;
-  dt_conf_set_int("plugin/darkroom/histogram/display", d->scope);
+  dt_conf_set_int(DT_LIB_HISTOGRAM_DISPLAY_CONF, d->scope);
   if(_trigger_recompute(d)) _redraw_scopes(d);
 }
 
@@ -2535,7 +2542,7 @@ static gboolean _area_scrolled_callback(GtkWidget *widget, GdkEventScroll *event
   if(new_value < 512.f && new_value > 32.f)
   {
     d->zoom = new_value;
-    dt_conf_set_float("plugin/darkroom/histogram/zoom", new_value);
+    dt_conf_set_float(DT_LIB_HISTOGRAM_ZOOM_CONF, new_value);
     if(_is_backbuf_ready(d))
     {
       _redraw_surface(d);
@@ -2577,19 +2584,39 @@ static int _scope_resize_handle_resize(int requested_size, gboolean finished, gp
   return d->scope_height;
 }
 
+/* Is this the name of a stage the scopes can read from? The three _get_histogram_backbuf() knows. */
+static gboolean _op_is_stage(const char *op)
+{
+  return !IS_NULL_PTR(op)
+         && (!strcmp(op, "initialscale") || !strcmp(op, "colorout") || !strcmp(op, "gamma"));
+}
+
 void _set_params(dt_lib_histogram_t *d)
 {
-  d->op = dt_conf_get_string_const("plugin/darkroom/histogram/op");
+  d->op = dt_conf_get_string_const(DT_LIB_HISTOGRAM_OP_CONF);
   if(!strcmp(d->op, "demosaic"))
   {
     d->op = "initialscale";
-    dt_conf_set_string("plugin/darkroom/histogram/op", d->op);
+    dt_conf_set_string(DT_LIB_HISTOGRAM_OP_CONF, d->op);
+  }
+  else if(!_op_is_stage(d->op))
+  {
+    /* Not a stage at all, and in practice the empty string: what every profile holds that was
+     * written while this setting was read without being declared. A setting read that way is
+     * created empty and SAVED empty, and a stored value wins over a declared default -- so
+     * declaring it now is not enough on its own, the empty value has to be read as "never
+     * chosen". Left as it is the scopes have no buffer to read and draw nothing, while the menu
+     * shows "Final display" ticked, which _backbuf_op_to_int() answers for anything it does
+     * not know. */
+    const char *const declared = dt_confgen_get(DT_LIB_HISTOGRAM_OP_CONF, DT_DEFAULT);
+    d->op = _op_is_stage(declared) ? declared : "gamma";
+    dt_conf_set_string(DT_LIB_HISTOGRAM_OP_CONF, d->op);
   }
   d->backbuf = _get_histogram_backbuf(dt_dev_get_global(), d->op);
-  d->zoom = fminf(fmaxf(dt_conf_get_float("plugin/darkroom/histogram/zoom"), 32.f), 252.f);
+  d->zoom = fminf(fmaxf(dt_conf_get_float(DT_LIB_HISTOGRAM_ZOOM_CONF), 32.f), 252.f);
 
   d->scope = (dt_lib_histogram_scope_type_t)CLAMP(
-      dt_conf_get_int("plugin/darkroom/histogram/display"), 0, DT_LIB_HISTOGRAM_SCOPE_N - 1);
+      dt_conf_get_int(DT_LIB_HISTOGRAM_DISPLAY_CONF), 0, DT_LIB_HISTOGRAM_SCOPE_N - 1);
 
   // Vectorscope is not valid on raw Bayer data; fall back to histogram
   if(!strcmp(d->op, "initialscale") && d->scope == DT_LIB_HISTOGRAM_SCOPE_VECTORSCOPE)
