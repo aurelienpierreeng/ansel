@@ -159,6 +159,20 @@ Every field that affects this check re-evaluates it on change; **on
 conflict** and **delete original file** don't, since they only affect what
 happens to a conflicting/copied file, never whether the session can start.
 
+**Presets** (the module header's presets menu, through `get_params()`/`set_params()`
+in `libs/studio_import.c`) store every setting of the module except the project
+date, which changes with every shoot: source folder, scan frequency, add vs
+copy, delete-after-verify, on conflict, jobcode, base directory and the two
+naming patterns. The blob is a fixed head of the four numeric settings followed
+by the five strings, each NUL-terminated. A preset is refused while a session
+runs, since the source folder and the scan frequency are locked then; the
+refusal is an alert and `set_params()` still returns 0, because
+`dt_lib_presets_apply()` (`libs/lib.c`) deletes, as obsolete, the preset of a
+module whose `set_params()` fails. Applying one writes the conf keys, then
+sets the widgets: their own callbacks write back the same values, except the
+two folder choosers, which emit nothing when set from code. (Established on
+top of `ba3c893c31`, 2026-11-17, and checked on a running session.)
+
 The **Base directory of all projects** setting has its own conf key
 (`studio_capture/base_directory_pattern`), independent from the regular
 Import dialog's `session/base_directory_pattern` — editing one does not

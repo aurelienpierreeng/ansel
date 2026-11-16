@@ -31,6 +31,7 @@
 #include "common/folder_survey.h"
 #include "common/conf.h"
 #include "control/jobs/import_jobs.h"
+#include "control/user_message.h"
 #include "widgets/gtkentry.h"
 #include "libs/lib.h"
 #include "libs/lib_api.h"
@@ -65,6 +66,24 @@ typedef struct dt_lib_studio_import_t
   GtkWidget *status;
   GtkWidget *toggle;
 } dt_lib_studio_import_t;
+
+/** Fixed head of a preset blob; the strings of _studio_import_preset_keys follow, each NUL-terminated,
+    in that order. The project date is not part of a preset: it changes with every shoot. */
+typedef struct dt_lib_studio_import_params_t
+{
+  int32_t copy;
+  int32_t delete_source;
+  int32_t on_conflict;
+  int32_t interval;
+} dt_lib_studio_import_params_t;
+
+static const char *const _studio_import_preset_keys[] = {
+  "studio_capture/folder",
+  "studio_capture/jobcode",
+  "studio_capture/base_directory_pattern",
+  "studio_capture/sub_directory_pattern",
+  "studio_capture/filename_pattern",
+};
 
 const char *name(dt_lib_module_t *self)
 {
@@ -527,6 +546,78 @@ void gui_cleanup(dt_lib_module_t *self)
                                      self->data);
   g_free(self->data);
   self->data = NULL;
+}
+
+void *get_params(dt_lib_module_t *self, int *size)
+{
+  const dt_lib_studio_import_params_t fixed = {
+    .copy = dt_conf_get_bool("studio_capture/copy"),
+    .delete_source = dt_conf_get_bool("studio_capture/delete_source"),
+    .on_conflict = dt_conf_get_int("studio_capture/on_conflict"),
+    .interval = dt_conf_get_int("studio_capture/interval"),
+  };
+
+  GByteArray *blob = g_byte_array_new();
+  g_byte_array_append(blob, (const guint8 *)&fixed, sizeof(fixed));
+  for(size_t k = 0; k < G_N_ELEMENTS(_studio_import_preset_keys); k++)
+  {
+    const char *value = dt_conf_get_string_const(_studio_import_preset_keys[k]);
+    if(IS_NULL_PTR(value)) value = "";
+    g_byte_array_append(blob, (const guint8 *)value, strlen(value) + 1);
+  }
+
+  *size = blob->len;
+  return g_byte_array_free(blob, FALSE);
+}
+
+int set_params(dt_lib_module_t *self, const void *params, int size)
+{
+  dt_lib_studio_import_t *d = (dt_lib_studio_import_t *)self->data;
+  if(size < (int)sizeof(dt_lib_studio_import_params_t)) return 1;
+
+  const char *values[G_N_ELEMENTS(_studio_import_preset_keys)];
+  const char *cursor = (const char *)params + sizeof(dt_lib_studio_import_params_t);
+  const char *end = (const char *)params + size;
+  for(size_t k = 0; k < G_N_ELEMENTS(values); k++)
+  {
+    const char *nul = memchr(cursor, '\0', end - cursor);
+    if(IS_NULL_PTR(nul)) return 1;
+    values[k] = cursor;
+    cursor = nul + 1;
+  }
+
+  // The source folder and the scan frequency are locked during a session. Not an error return:
+  // dt_lib_presets_apply() deletes the preset of a module whose set_params() fails.
+  if(dt_folder_survey_is_active())
+  {
+    dt_control_alert(_("Preset not applied"), _("Stop the session before applying a preset."), NULL);
+    return 0;
+  }
+
+  dt_lib_studio_import_params_t fixed;
+  memcpy(&fixed, params, sizeof(fixed));
+  dt_conf_set_bool("studio_capture/copy", fixed.copy);
+  dt_conf_set_bool("studio_capture/delete_source", fixed.delete_source);
+  dt_conf_set_int("studio_capture/on_conflict", fixed.on_conflict);
+  dt_conf_set_int("studio_capture/interval", fixed.interval);
+  for(size_t k = 0; k < G_N_ELEMENTS(values); k++)
+    dt_conf_set_string(_studio_import_preset_keys[k], values[k]);
+
+  // The widgets' own callbacks write back what conf now holds; the folder choosers emit nothing.
+  dt_bauhaus_combobox_set(d->copy, fixed.copy);
+  gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(d->delete_source), fixed.delete_source);
+  dt_bauhaus_combobox_set(d->on_conflict, CLAMP(fixed.on_conflict, DT_IMPORT_ONCONFLICT_SKIP,
+                                                DT_IMPORT_ONCONFLICT_UNIQUE));
+  gtk_spin_button_set_value(GTK_SPIN_BUTTON(d->interval), fixed.interval);
+  gtk_file_chooser_set_current_folder(GTK_FILE_CHOOSER(d->source_folder), values[0]);
+  gtk_entry_set_text(GTK_ENTRY(d->jobcode), values[1]);
+  gtk_file_chooser_set_current_folder(GTK_FILE_CHOOSER(d->base_folder), values[2]);
+  gtk_entry_set_text(GTK_ENTRY(d->subfolder_pattern), values[3]);
+  gtk_entry_set_text(GTK_ENTRY(d->file_pattern), values[4]);
+
+  _studio_import_update_preview(d);
+  _studio_import_update_state(d);
+  return 0;
 }
 
 // clang-format off
