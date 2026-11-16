@@ -434,6 +434,18 @@ jobs:
       # A package that reached the release is announced even when the other did not: the job
       # still fails for the missing one, and the message only ever names what was sent. No
       # package sent, no message.
+
+      # simplematrixbotlib pins pillow <11, whose newest release (10.4.0) ships no wheel
+      # for the Python ubuntu-latest now defaults to. Without a wheel pip builds pillow from
+      # its 46 MB sdist, and that needs libjpeg headers the runner does not carry, so the
+      # step dies on "RequiredDependencyException: jpeg" and the message is never sent.
+      # Pinning to the newest Python pillow 10.4.0 HAS a wheel for keeps this a download.
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        if: ${{ !cancelled() && steps.arrived.outputs.names != '' }}
+        with:
+          python-version: '3.13'
+
       - name: Install dependencies
         if: ${{ !cancelled() && steps.arrived.outputs.names != '' }}
         run: |
