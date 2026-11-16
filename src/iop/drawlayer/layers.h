@@ -99,6 +99,9 @@ static inline __attribute__((always_inline)) uint64_t dt_drawlayer_params_cache_
   return hash ? hash : 1u;
 }
 
+gboolean dt_drawlayer_canvas_from_sidecar(dt_iop_module_t *self, const dt_iop_drawlayer_params_t *params,
+                                          int *width, int *height);
+
 void dt_drawlayer_layers_append_error(GString *errors, const char *message);
 
 void dt_drawlayer_layers_log_errors(GString *errors);

@@ -399,6 +399,61 @@ Still open: the **pipeline thread writes `self->params` and opens the sidecar** 
 exactly one place, inside that function, so a display pipe would never composite the layer
 again without a GUI-thread request path to replace it.
 
+## 8b. The canvas was resolved before the orientation was knowable
+
+*Established 2026-11-16 against `dcb82baf2a`, on a 7380x4928 Nikon raw held portrait with one
+painted layer.*
+
+A lipstick stroke on the lips came out in the hair above the temple, by the same offset at every
+zoom, and a full-resolution export carried a washed-out band across the bottom third of the frame
+starting at exactly row 4928. One cause.
+
+`_flip_swaps_axes()` (`coordinates.c`) asks flip's size fold whether this image's axes are
+swapped, reading `piece->buf_in`/`buf_out` on a pipe and the geometry chain's record off one. It
+returned a plain `gboolean`, so **"upright" and "cannot tell yet" were the same answer**. Those
+rectangles are written by `dt_dev_pixelpipe_get_roi_out()`, and the canvas is resolved before
+that runs. Measured, in one CLI render, the same function on the same pipe answering twice:
+
+```
+[DL-FLIP]  found=1 in=0x0       out=0x0       -> swap=0     <- canvas resolved here
+[DL-ALLOC] have_pipe_geom=1 resolved=7380x4928 info=4928x7380
+[DL-FLIP]  found=1 in=7380x4928 out=4928x7380 -> swap=1     <- correct, too late
+```
+
+The flip piece *is* found, so the old `in.width <= 0` guard read "not written yet" as "no swap",
+and `dt_drawlayer_layer_canvas_for_pipe()` reported **success** with a transposed canvas. Because
+it succeeded, `_refresh_piece_base_cache`'s fallback — the sidecar page's own dimensions, right
+there in `info` and correct — was never consulted. The patch was then allocated 7380x4928 and
+cached, and the cache's own validity check re-hashes with the patch's *own* width and height, so
+it is self-consistent and never notices.
+
+Two symptoms, one transpose:
+
+- **The paint moves.** The layer is sampled through a mapping whose axes are swapped, so every
+  stroke lands somewhere else — by an offset that does not depend on the render scale, which is
+  why it looked identical in the thumbnail, the preview and the export.
+- **The export reads unallocated heap.** `_interpolation_resample_plain()` takes a `memcpy` fast
+  path when `roi_out->scale == 1.f`, which is the export. It copies `roi_out->height` rows at
+  `roi_in->width` stride **with no bounds check**, so 7380 rows were read out of a 4928-row
+  buffer: everything from row 4928 on is whatever followed it in the arena. Below scale 1 the
+  generic path runs instead, and it clips every tap into the source (`BORDER_REPLICATE`), so the
+  smaller pipes showed misplaced paint but no garbage. That is the whole of "export only" — it
+  was never export-only, it was *out-of-bounds* only at export.
+
+The fix is that `_flip_swaps_axes()` now reports whether it could answer at all, and an
+unresolved orientation fails the canvas rather than defaulting to upright. The two answers are a
+transpose of each other, so guessing is not a near miss.
+
+The same mistake was also sitting in the fallbacks: four callers substituted
+`geometry.raw_width/raw_height` when resolution failed. The raw pair is **unrotated**, so that
+names a transposed canvas for every portrait image — the identical defect, one level up, waiting
+for resolution to start failing. They now go through `dt_drawlayer_canvas_from_sidecar()`, which
+reads the dimensions the stored page was authored at, and fail when there is no page yet.
+
+**Still open, and not drawlayer's:** that `memcpy` fast path will read past the end of its input
+for *any* caller whose output window exceeds its input, silently, at scale 1. The generic path
+clips; the fast path does not. Nothing in the tree trips it today.
+
 ## 9. "Move the rasterizer to the GPU" — the verdict
 
 No, not as the next step, and the reasoning is not about kernel speed. The dab stream is

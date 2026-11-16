@@ -1935,12 +1935,11 @@ static gboolean _delete_current_layer(dt_iop_module_t *self)
   gboolean deleted = FALSE;
   int layer_width = 0;
   int layer_height = 0;
-  if(!dt_drawlayer_resolve_layer_geometry(self, NULL, NULL, &layer_width, &layer_height, NULL, NULL))
-  {
-    const dt_dev_image_geometry_t geometry = dt_dev_geometry_snapshot(self->dev);
-    layer_width = geometry.raw_width;
-    layer_height = geometry.raw_height;
-  }
+  /* The sidecar page, not the raw pair: the raw pair is unrotated and names a transposed canvas
+   * for a portrait image. See dt_drawlayer_canvas_from_sidecar(). */
+  if(!dt_drawlayer_resolve_layer_geometry(self, NULL, NULL, &layer_width, &layer_height, NULL, NULL)
+     && !dt_drawlayer_canvas_from_sidecar(self, params, &layer_width, &layer_height))
+    return FALSE;
 
   char path[DT_PATH_MAX] = { 0 };
   if(!dt_drawlayer_io_sidecar_path(self->dev->image_storage.id, path, sizeof(path)))
@@ -2043,12 +2042,11 @@ static gboolean _rename_current_layer_from_gui(dt_iop_module_t *self, const char
   gboolean renamed = FALSE;
   int layer_width = 0;
   int layer_height = 0;
-  if(!dt_drawlayer_resolve_layer_geometry(self, NULL, NULL, &layer_width, &layer_height, NULL, NULL))
-  {
-    const dt_dev_image_geometry_t geometry = dt_dev_geometry_snapshot(self->dev);
-    layer_width = geometry.raw_width;
-    layer_height = geometry.raw_height;
-  }
+  /* The sidecar page, not the raw pair: the raw pair is unrotated and names a transposed canvas
+   * for a portrait image. See dt_drawlayer_canvas_from_sidecar(). */
+  if(!dt_drawlayer_resolve_layer_geometry(self, NULL, NULL, &layer_width, &layer_height, NULL, NULL)
+     && !dt_drawlayer_canvas_from_sidecar(self, params, &layer_width, &layer_height))
+    return FALSE;
 
   if(!dt_drawlayer_commit_dabs(self, FALSE))
     dt_drawlayer_layers_append_error(errors, _("failed to commit drawing stroke before renaming"));

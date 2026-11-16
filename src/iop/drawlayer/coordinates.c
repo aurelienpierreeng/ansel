@@ -50,12 +50,29 @@
  * A disabled flip folds its input to itself, so the answer is FALSE, which is what an orientation
  * of NONE means. A square frame cannot express a swap, and does not need to: the canvas has the
  * same dimensions either way.
+ *
+ * @param resolved set to TRUE only when the fold was actually readable. FALSE means the question
+ * cannot be answered YET -- not that the image is upright.
+ *
+ * The distinction is the whole point of this parameter, and it was missing. The rectangles this
+ * reads are written by dt_dev_pixelpipe_get_roi_out(), and a pipe asks for the canvas BEFORE that
+ * runs: the flip piece exists, so the search succeeds, but its buf_in/buf_out are still {0}. The
+ * old `in.width <= 0` guard returned FALSE for that, which every caller read as "upright", so a
+ * portrait image got a canvas with its axes the wrong way round -- measured on a 7380x4928 raw
+ * held portrait, the canvas came out 7380x4928 instead of 4928x7380. The paint was then sampled
+ * through a transposed mapping (a stroke placed over the temple landed in the hair, by the same
+ * offset at every zoom), and at export, where roi_out->scale is 1.0 and
+ * _interpolation_resample_plain() takes its memcpy fast path, the copy walked 7380 rows of a
+ * 4928-row buffer and read heap past the end from row 4928 on -- a washed-out band across the
+ * bottom half of the frame, starting at exactly the canvas height.
  */
-static gboolean _flip_swaps_axes(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe)
+static gboolean _flip_swaps_axes(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, gboolean *resolved)
 {
   dt_iop_roi_t in = { 0 };
   dt_iop_roi_t out = { 0 };
   gboolean found = FALSE;
+
+  if(!IS_NULL_PTR(resolved)) *resolved = FALSE;
 
   if(IS_NULL_PTR(pipe))
   {
@@ -80,7 +97,13 @@ static gboolean _flip_swaps_axes(dt_iop_module_t *self, const dt_dev_pixelpipe_t
     }
   }
 
-  if(!found || in.width <= 0 || in.height <= 0) return FALSE;
+  /* Not found, or found with rectangles the size fold has not written yet. Either way the fold
+   * cannot be read, so there is no answer to give -- say so instead of guessing upright. */
+  if(!found) return FALSE;
+  if(in.width <= 0 || in.height <= 0) return FALSE;
+  if(out.width <= 0 || out.height <= 0) return FALSE;
+
+  if(!IS_NULL_PTR(resolved)) *resolved = TRUE;
   return (out.width == in.height) && (out.height == in.width) && (in.width != in.height);
 }
 
@@ -99,8 +122,16 @@ gboolean dt_drawlayer_layer_canvas_for_pipe(dt_iop_module_t *self, const dt_dev_
   /* A raw buffer is landscape; a portrait image is that buffer seen rotated a quarter turn, and
    * the paint is rotated with it. Carried by transposing the canvas rather than by rotating
    * pixels: the layer the user paints, and the page the sidecar holds, are both in the
-   * orientation they see. */
-  const gboolean swap = _flip_swaps_axes(self, pipe);
+   * orientation they see.
+   *
+   * Which way round is not knowable until flip's size fold has run, and this is asked before it
+   * has. An unresolved orientation is a FAILURE here rather than a default, because the two
+   * answers are a transpose of each other and picking the wrong one is not a near miss -- it
+   * mislocates every stroke and, at scale 1.0, walks off the end of the canvas. Callers have
+   * somewhere better to go: the sidecar page carries the dimensions it was authored at. */
+  gboolean orientation_resolved = FALSE;
+  const gboolean swap = _flip_swaps_axes(self, pipe, &orientation_resolved);
+  if(!orientation_resolved) return FALSE;
 
   if(!IS_NULL_PTR(width)) *width = swap ? raw_height : raw_width;
   if(!IS_NULL_PTR(height)) *height = swap ? raw_width : raw_height;

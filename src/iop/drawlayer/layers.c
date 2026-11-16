@@ -32,6 +32,42 @@ typedef struct drawlayer_layer_cache_key_t
   int layer_order;
 } drawlayer_layer_cache_key_t;
 
+/**
+ * @brief The canvas dimensions the stored page was authored at.
+ *
+ * @details The fallback for when dt_drawlayer_resolve_layer_geometry() cannot answer, which it
+ * now admits to instead of guessing upright -- see _flip_swaps_axes() in coordinates.c.
+ *
+ * This is the right fallback and the raw frame was the wrong one. The canvas is the raw frame in
+ * the image's OWN orientation, so substituting the raw pair unrotated names a transposed canvas
+ * for every portrait image: exactly the state the orientation fix exists to prevent, reinstated
+ * one level up. The page in the sidecar was written at the canvas size, by a session that did
+ * know the orientation, so it carries the answer for every layer that already exists.
+ *
+ * A layer that does not exist yet has no answer here, and gets none: FALSE leaves the caller to
+ * try again on a later pass, by which time the size fold has run.
+ */
+gboolean dt_drawlayer_canvas_from_sidecar(dt_iop_module_t *self, const dt_iop_drawlayer_params_t *params,
+                                          int *width, int *height)
+{
+  if(!IS_NULL_PTR(width)) *width = 0;
+  if(!IS_NULL_PTR(height)) *height = 0;
+  if(IS_NULL_PTR(self) || IS_NULL_PTR(self->dev) || IS_NULL_PTR(params)) return FALSE;
+  if(!dt_drawlayer_layer_name_non_empty(params->layer_name)) return FALSE;
+
+  char path[DT_PATH_MAX] = { 0 };
+  if(!dt_drawlayer_io_sidecar_path(self->dev->image_storage.id, path, sizeof(path))) return FALSE;
+  if(!g_file_test(path, G_FILE_TEST_EXISTS)) return FALSE;
+
+  dt_drawlayer_io_layer_info_t info = { 0 };
+  if(!dt_drawlayer_io_find_layer(path, params->layer_name, params->layer_order, &info)) return FALSE;
+  if(!info.found || info.width == 0 || info.height == 0) return FALSE;
+
+  if(!IS_NULL_PTR(width)) *width = (int)info.width;
+  if(!IS_NULL_PTR(height)) *height = (int)info.height;
+  return TRUE;
+}
+
 void dt_drawlayer_layers_append_error(GString *errors, const char *message)
 {
   if(IS_NULL_PTR(errors) || IS_NULL_PTR(message) || message[0] == '\0') return;
@@ -144,12 +180,9 @@ gboolean dt_drawlayer_ensure_layer_cache(dt_iop_module_t *self)
   const int32_t imgid = self->dev->image_storage.id;
   GMainContext *const ui_ctx = g_main_context_default();
   const gboolean ui_thread = ui_ctx && g_main_context_is_owner(ui_ctx);
-  if(!dt_drawlayer_resolve_layer_geometry(self, NULL, NULL, &layer_width, &layer_height, NULL, NULL))
-  {
-    const dt_dev_image_geometry_t geometry = dt_dev_geometry_snapshot(self->dev);
-    layer_width = geometry.raw_width;
-    layer_height = geometry.raw_height;
-  }
+  if(!dt_drawlayer_resolve_layer_geometry(self, NULL, NULL, &layer_width, &layer_height, NULL, NULL)
+     && !dt_drawlayer_canvas_from_sidecar(self, params, &layer_width, &layer_height))
+    return FALSE;
   if(imgid <= 0 || layer_width <= 0 || layer_height <= 0) return FALSE;
   if(!dt_drawlayer_layer_name_non_empty(params->layer_name))
   {
