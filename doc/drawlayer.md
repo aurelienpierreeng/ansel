@@ -463,7 +463,9 @@ memmove ... interpolation.c:955`, which is that `memcpy`. After the fix, 7/7 and
 
 ## 8c. The brush colour is pipeline RGB; only the screen sees anything else
 
-*Established 2026-11-16 against `53488dd8e5`.*
+*Established 2026-11-16 against `53488dd8e5`. The eyedropper paragraphs were amended the same
+day on top of `aad29756a2`, where the gesture moved into the picker proxy; what changed, and
+what turned out to be wrong, is marked where it stands.*
 
 The brush colour used to be kept in **display space** — conf held a triple converted through
 `dt_ioppr_get_pipe_output_profile_info()`, and painting converted it back the other way. It is
@@ -520,15 +522,15 @@ the mistake by trying to arm the picker with
 **`button-press-event`**, not on `toggled`, so setting the toggle flips the button's appearance
 and nothing else. The cursor looked armed and sampled nothing.
 
-Arming is now `dt_iop_color_picker_sample_point()` (`gui/color_picker_proxy.c`), which does what
-a real press does minus the two things that only make sense for a press: it never reads the
-keyboard — a modifier held for the *gesture* would otherwise flip the picker into box mode, since
-the press handler treats Ctrl as "area" — and it forces nothing else off. It takes
-**image-normalised** coordinates and lets `dt_lib_colorpicker_set_point()` convert to the
-raw-normalised space the sample is stored in; passing raw-normalised coordinates there samples a
-different pixel on any cropped or rotated image. It also re-requests an update unconditionally,
-because `dt_lib_colorpicker_set_point()` is a no-op when the point did not move — which is
-exactly what a one-shot pick repeated on the same pixel looks like.
+Arming was first `dt_iop_color_picker_sample_point()`, written for this module alone. **It is
+gone**: the commit after this one made the same gesture available to every module with a single
+picker, and drawlayer now begins it with `dt_iop_color_picker_gesture_begin()` like any other
+caller ([`color-picker.md`](color-picker.md) has the whole account). What that function
+established still holds for its replacement: it takes **image-normalised** coordinates and lets
+`dt_lib_colorpicker_set_point()` convert to the raw-normalised space the sample is stored in —
+passing raw-normalised coordinates there samples a different pixel on any cropped or rotated
+image — and it asks for the sample unconditionally, because that setter is a no-op when the point
+did not move, which is exactly what a pick repeated on the same pixel looks like.
 
 **The gesture is modal on the key, not one-shot on the click.** While the modifier is held every
 click samples; the moment it comes up the tool is a brush again. That is what makes
@@ -574,26 +576,44 @@ cursor and the click cannot disagree about which tool is in the user's hand. `bu
 additionally accepts the modifier bit out of its own `state`, which covers the same
 focus-arrived-late case from the other side.
 
-The disarm is still `dt_iop_color_picker_reset(self, FALSE)`, and it is guarded on
-`picker_armed_by_gesture` so a picker the user armed deliberately with the button is left alone.
+The disarm is still `dt_iop_color_picker_reset()`, but **it is no longer this module's to
+call**, and how that was found is the useful part. The module reset its picker the moment the
+modifier came up. Driven in the GUI with Ctrl released in the same instant as the click, that
+threw the click away whenever the sample had not landed yet — and a sample takes 12 to 70 ms on
+an idle pipeline, 290 ms and more with a stroke under way. The picker proxy now owns the whole
+life of a picker the modifier turned on, and keeps it registered until its sample lands while
+giving the image back at once ([`color-picker.md`](color-picker.md), *The modifier comes up
+before the sample does*). `picker_armed_by_gesture` went with it: the proxy knows whose picker it
+is (`gesture_armed`).
+
+**A second defect hid behind that one.** `mouse_moved()` aborted any stroke while
+`self->request_color_pick` was set, meaning "the picker is active". That flag says the picker is
+*registered*, which now outlives its owning the image by the latency above — so a stroke begun
+right after a pick was started by `button_pressed()` and aborted on its first motion, leaving
+one dab where a line had been painted. It asks `dt_iop_color_picker_is_visible()` now.
 
 **The cursor has to promise the gesture.** While the modifier is held the brush circle is
 replaced by a cross with a gap at its centre, so the sampled pixel stays visible and can be aimed
 at — a circle exists to show an area, which is the wrong thing to show when the next click reads
-one pixel. `gui_post_expose()` reads `dt_key_modifier_state()` live, because a repaint is not an
-event and carries no state of its own; the key watch above queues the redraw that makes the swap
-immediate rather than waiting for the next pointer motion. Both the cursor and
-`button_pressed()` ask the same `_picking_modifier_is_down()`, on `DT_PRIMARY_MASK` rather than
-`GDK_CONTROL_MASK` so it is Cmd on macOS — a cursor promising one thing while the click does
-another is worse than either being wrong alone.
+one pixel. `gui_post_expose()` draws it from `session.picking_active`, the same flag the click
+branches on, and `key_pressed()` queues the redraw that makes the swap immediate rather than
+waiting for the next pointer motion. *(An earlier state of this paragraph said the expose read
+`dt_key_modifier_state()` live. It did, for one revision; the flag replaced it so that the cursor
+and the click could not disagree, and the paragraph was not updated with it.)* The modifier is
+`DT_PRIMARY_MASK` rather than `GDK_CONTROL_MASK`, so it is Cmd on macOS.
 
-**Verified in the GUI:** the colours match between the panel and the painted image. The rest —
-the eyedropper and its cursor — compiles clean under GCC 16 and clang 20 but has not been
-exercised there since the arming fix; the first version WAS tried in the GUI and sampled nothing,
-which is how the arming trap above was found. Everything else here is reasoned from the code — there is no headless path that paints a
-stroke or repaints a swatch. The conf format changed meaning without a migration, by decision, so
-a brush colour and history saved before this commit are reinterpreted as working RGB and will
-look different once.
+**Verified in the GUI:** the colours match between the panel and the painted image, and the
+eyedropper works as a mode held on the key. The first version of it was tried in the GUI and
+sampled nothing, which is how the arming trap above was found.
+
+*This section used to end: "there is no headless path that paints a stroke or repaints a
+swatch." **That was wrong**, and believing it is what let three rounds of this gesture be
+written from reading alone. A headless compositor, a rootful Xwayland and XTest drive the real
+GUI on a display of its own; [`color-picker.md`](color-picker.md), *How this was measured*, has
+the recipe. It painted strokes, picked colours and found two defects reading had not.*
+
+The conf format changed meaning without a migration, by decision, so a brush colour and history
+saved before this commit are reinterpreted as working RGB and will look different once.
 
 ## 9. "Move the rasterizer to the GPU" — the verdict
 

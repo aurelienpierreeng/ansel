@@ -402,6 +402,29 @@ typedef struct dt_develop_t
     int extremes_valid;
     int extremes_channel;
     const struct dt_iop_color_picker_t *extremes_picker;
+
+    /* The button gesture in progress on the image, for the picker that is on. A press decides
+     * nothing for a picker that takes a point or an area: `phase` (a
+     * dt_iop_color_picker_pointer_t) stays PENDING until the pointer leaves `slop` around
+     * `anchor`, which makes it an area, or the button comes up, which makes it a point. While
+     * an area is stretched, `anchor` is its fixed corner. Image-normalised, like the events. */
+    struct
+    {
+      int phase;
+      float anchor[2];
+      float slop[2];
+    } pointer;
+
+    /* The picker was turned on by the picking modifier rather than by its button, so the
+     * modifier coming up turns it off again. `gesture_ending` records that the modifier DID
+     * come up while that could not be done yet -- the button was still down, or the sample had
+     * not come back -- so whichever happens last does it. From then on the picker is only
+     * waiting for its sample: it no longer shows on the image nor takes its clicks. */
+    gboolean gesture_armed;
+    gboolean gesture_ending;
+    /* Bounds the wait for that sample: a sample that never comes back must not leave the
+     * picker on for good. */
+    guint gesture_timeout_source;
   } color_picker;
 
   /* proxy for communication between plugins and develop/darkroom */

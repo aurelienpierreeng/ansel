@@ -1648,7 +1648,8 @@ void color_picker_apply(dt_iop_module_t *self, GtkWidget *picker, dt_dev_pixelpi
 
   /* The picker is deliberately NOT handed back here. The gesture is modal: while the modifier
    * is held every click samples, which is the whole point of pairing it with painting. The
-   * release does the disarm, in key_released(). */
+   * modifier coming up turns it off, and that is the picker proxy's doing, not this module's
+   * (dt_iop_color_picker_gesture_end(), from the view's key_released()). */
 }
 
 static gboolean _color_picker_button_press(GtkWidget *widget, GdkEventButton *event, gpointer user_data)
@@ -3500,7 +3501,7 @@ void gui_focus(dt_iop_module_t *self, gboolean in)
 {
   /* Picking mode does not survive a focus change in either direction. Leaving: the key release
    * is delivered to the FOCUSED module, so once focus has moved the release that would end the
-   * mode never arrives here and the picker would stay armed for good. Arriving: the modifier
+   * mode never arrives here and the brush would go on sampling for good. Arriving: the modifier
    * may have gone down while another module held focus, so this module never saw the press and
    * must not assume the mode it did not enter. */
   _release_picking_gesture(self);
@@ -3813,11 +3814,18 @@ int mouse_moved(dt_iop_module_t *self, double x, double y, double pressure, int 
   dt_iop_drawlayer_gui_data_t *g = (dt_iop_drawlayer_gui_data_t *)dt_iop_gui_data(self);
   if(IS_NULL_PTR(g) || IS_NULL_PTR(self->dev)) return 0;
 
-  if(self->request_color_pick != DT_REQUEST_COLORPICK_OFF)
+  if(dt_iop_color_picker_is_visible(self->dev))
   {
     /* When the standard image color picker is active, drawlayer must stop
      * capturing the pointer entirely so darkroom can drive the picker overlay
-     * and sampling path without competing cursor state from the brush tool. */
+     * and sampling path without competing cursor state from the brush tool.
+     *
+     * "Active" is the picker OWNING THE IMAGE, which is what the view asks too. It used to be
+     * `request_color_pick`, which only says this module's picker is registered -- and a picker
+     * the modifier turned on stays registered after the modifier is up, for as long as its
+     * sample takes to land. Measured: 290 ms with a stroke under way. A stroke begun in that
+     * window was started by button_pressed() and aborted here on its first motion, leaving
+     * one dab where the user had painted a line. */
     if(g->session.pointer_valid)
       _update_gui_runtime_manager(self, g, DT_DRAWLAYER_RUNTIME_EVENT_GUI_MOUSE_LEAVE, FALSE);
     _update_gui_runtime_manager(self, g, DT_DRAWLAYER_RUNTIME_EVENT_GUI_STROKE_ABORT, FALSE);
@@ -3828,6 +3836,11 @@ int mouse_moved(dt_iop_module_t *self, double x, double y, double pressure, int 
    * stroke. Returning 0 leaves the event to whatever else wants it. */
   if(g->session.picking_active)
   {
+    /* The mode ends when the modifier comes up, and the key release that says so is not
+     * always delivered -- the key can come up over another window. Left alone the brush would
+     * go on sampling instead of painting until the modifier was pressed again, so the pointer
+     * moving with the modifier no longer down is heard as the release it stands for. */
+    if(!dt_modifiers_include(dt_key_modifier_state(), DT_PRIMARY_MASK)) _release_picking_gesture(self);
     dt_control_queue_redraw_center();
     return 0;
   }
@@ -3921,31 +3934,20 @@ int mouse_moved(dt_iop_module_t *self, double x, double y, double pressure, int 
 
 /** @brief Button press handler (starts stroke capture on left button). */
 /**
- * @brief Hand the image picker back, if this module is the one holding it.
+ * @brief Leave picking mode: the brush is a brush again.
  *
- * @details `dt_iop_color_picker_reset(self, FALSE)` and nothing else. Toggling the picker
- * button off does NOT do this -- the button's state is appearance, the arming lives on
- * `dev->color_picker`, and a disarm written as `gtk_toggle_button_set_active(FALSE)` leaves
- * `enabled` TRUE. The symptom is the tool never going back to being a brush: the darkroom view
- * keeps handing clicks to a picker that looks switched off.
- *
- * Guarded on our own flag so a picker the user armed deliberately, with the button, is left
- * alone.
+ * @details Only this module's half of it -- the cursor and what a press means. The picker the
+ * gesture turned on is not turned off here: the picker proxy does that when the modifier comes
+ * up (dt_iop_color_picker_gesture_end()), and waits for the sample if it has not come back yet.
+ * This module used to do it itself, at once, and a click whose sample was still being computed
+ * when the modifier was let go was thrown away.
  */
 static void _release_picking_gesture(dt_iop_module_t *self)
 {
   dt_iop_drawlayer_gui_data_t *g = self ? (dt_iop_drawlayer_gui_data_t *)dt_iop_gui_data(self) : NULL;
-  if(IS_NULL_PTR(g)) return;
-  if(!g->session.picking_active && !g->session.picker_armed_by_gesture) return;
+  if(IS_NULL_PTR(g) || !g->session.picking_active) return;
 
-  const gboolean was_armed = g->session.picker_armed_by_gesture;
   g->session.picking_active = FALSE;
-  g->session.picker_armed_by_gesture = FALSE;
-  /* Only a picker THIS gesture armed is handed back; one the user armed with the button is
-   * theirs. dt_iop_color_picker_reset() is the real disarm -- turning the button's toggle off
-   * only changes how it looks and leaves dev->color_picker.enabled set, which is how the tool
-   * came to keep sampling while appearing to be a brush again. */
-  if(was_armed) dt_iop_color_picker_reset(self, FALSE);
   dt_control_queue_redraw_center();
 }
 
@@ -3956,25 +3958,15 @@ static void _release_picking_gesture(dt_iop_module_t *self)
  * than sampling anything itself -- the pixel it wants only exists part-way through a pipe run,
  * and `color_picker_apply()` is already the place that receives it.
  *
- * So this arms that picker for exactly one sample through
- * `dt_iop_color_picker_sample_point()`, and lets `color_picker_apply()` disarm it again.
+ * This is the picking modifier every module with a single picker gets from the darkroom view
+ * (`gui/color_picker_proxy.h`), begun from here instead of from there for one reason: this
+ * module claims every click on the image, to paint, so the view never gets to offer one to the
+ * modifier. It also names its picker rather than letting the proxy find it -- the answer would
+ * be the same, and this way it does not depend on the count.
  *
- * Aiming the sample is NOT enough on its own, and that is the part that looks like it should
- * work: writing `primary_sample->point` sets where to look, but the pipeline only samples for
- * the picker registered on the dev, so an unarmed pick returns nothing at all. The first cut of
- * this did exactly that -- it set the point, flipped the picker button's toggle state, and
- * sampled nothing, because the button's arming lives on `button-press-event` and a programmatic
- * `gtk_toggle_button_set_active()` never reaches it.
- *
- * The one-shot part is not a nicety either. The darkroom
- * view tests the picker BEFORE it offers a click to the focused module
- * (`views/darkroom.c:button_pressed`), so a picker left armed would eat every following click
- * and the brush would stop painting with no visible reason.
- *
- * The sample point is stored in normalised RAW space, which is what `dt_colorpicker_sample_t`
- * documents and what the view does on the same path -- widget to image-normalised, then image to
- * raw-normalised. Storing image-normalised coordinates there samples a different pixel on any
- * cropped or rotated image.
+ * Only the press is handled here. It turns the picker on, and from the next event the view
+ * gives the pointer to the picker before it asks this module, so the release that makes it a
+ * point -- or the drag that makes it an area, whose mean becomes the colour -- never comes back.
  */
 static gboolean _pick_brush_color_at(dt_iop_module_t *self, const double x, const double y)
 {
@@ -3984,35 +3976,14 @@ static gboolean _pick_brush_color_at(dt_iop_module_t *self, const double x, cons
 
   dt_develop_t *const dev = self->dev;
 
-  /* Image-normalised is what dt_iop_color_picker_sample_point() wants; it converts to the
-   * raw-normalised space the sample is stored in. */
+  // Image-normalised is what the picker works in; it converts to the raw-normalised space the sample is stored in.
   float point[2] = { (float)x, (float)y };
   dt_dev_coordinates_widget_to_image_norm(dev, point, 1);
   if(point[0] < 0.0f || point[0] > 1.0f || point[1] < 0.0f || point[1] > 1.0f) return FALSE;
 
-  g->session.picker_armed_by_gesture = TRUE;
-  if(!dt_iop_color_picker_sample_point(g->controls.image_colorpicker, point))
-  {
-    g->session.picker_armed_by_gesture = FALSE;
-    return FALSE;
-  }
-  return TRUE;
-}
-
-/**
- * @brief Is this the key that IS the picking modifier?
- *
- * @details The keyval, not the modifier bit: a press event for Ctrl itself does not yet carry
- * GDK_CONTROL_MASK in its own state, so asking dt_modifier_is() here would miss the very
- * transition this is for.
- */
-static inline gboolean _is_picking_modifier_key(const guint keyval)
-{
-#ifdef GDK_WINDOWING_QUARTZ
-  return keyval == GDK_KEY_Meta_L || keyval == GDK_KEY_Meta_R;
-#else
-  return keyval == GDK_KEY_Control_L || keyval == GDK_KEY_Control_R;
-#endif
+  float slop[2] = { 0.0f };
+  dt_iop_color_picker_darkroom_slop(dev, slop);
+  return dt_iop_color_picker_gesture_begin(g->controls.image_colorpicker, point, slop);
 }
 
 /**
@@ -4024,7 +3995,7 @@ static inline gboolean _is_picking_modifier_key(const guint keyval)
 int key_pressed(dt_iop_module_t *self, GdkEventKey *event)
 {
   dt_iop_drawlayer_gui_data_t *g = self ? (dt_iop_drawlayer_gui_data_t *)dt_iop_gui_data(self) : NULL;
-  if(IS_NULL_PTR(g) || IS_NULL_PTR(event) || !_is_picking_modifier_key(event->keyval)) return 0;
+  if(IS_NULL_PTR(g) || IS_NULL_PTR(event) || !dt_iop_color_picker_is_gesture_key(event->keyval)) return 0;
   if(g->session.picking_active) return 0;
 
   /* A stroke in progress is ended rather than carried into picking mode: the button is still
@@ -4036,14 +4007,14 @@ int key_pressed(dt_iop_module_t *self, GdkEventKey *event)
 }
 
 /**
- * @brief Leave picking mode when the modifier comes up, and hand the picker back.
+ * @brief Leave picking mode when the modifier comes up.
  *
  * @return 0, ALWAYS, for the same reason as the press.
  */
 int key_released(dt_iop_module_t *self, GdkEventKey *event)
 {
   dt_iop_drawlayer_gui_data_t *g = self ? (dt_iop_drawlayer_gui_data_t *)dt_iop_gui_data(self) : NULL;
-  if(IS_NULL_PTR(g) || IS_NULL_PTR(event) || !_is_picking_modifier_key(event->keyval)) return 0;
+  if(IS_NULL_PTR(g) || IS_NULL_PTR(event) || !dt_iop_color_picker_is_gesture_key(event->keyval)) return 0;
 
   _release_picking_gesture(self);
   return 0;

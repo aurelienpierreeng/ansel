@@ -3550,7 +3550,7 @@ void dt_iop_gui_init_blendif(GtkBox *blendw, dt_iop_module_t *module, GtkWidget 
     dt_gui_add_class(GTK_WIDGET(bd->channel_tabs), "empty");
 
     bd->colorpicker = dt_color_picker_new(module, DT_COLOR_PICKER_POINT_AREA, header);
-    gtk_widget_set_tooltip_text(bd->colorpicker, _("pick GUI color from image\nctrl+click or right-click to select an area"));
+    gtk_widget_set_tooltip_text(bd->colorpicker, _("pick GUI color from image\nclick in the image to pick a point, drag to pick an area"));
 
     bd->colorpicker_set_values = dt_color_picker_new(module, DT_COLOR_PICKER_AREA, header);
     dtgtk_togglebutton_set_paint(DTGTK_TOGGLEBUTTON(bd->colorpicker_set_values),
@@ -3559,6 +3559,12 @@ void dt_iop_gui_init_blendif(GtkBox *blendw, dt_iop_module_t *module, GtkWidget 
     gtk_widget_set_tooltip_text(bd->colorpicker_set_values, _("set the range based on an area from the image\n"
                                                               "drag to use the input image\n"
                                                               "ctrl+drag to use the output image"));
+
+    /* These two sample for the blending's parametric mask, not for the module's own controls.
+     * They exist for every module that blends, so counted as the module's they would leave no
+     * module with a single picker -- and the picking modifier with nothing it could ever choose. */
+    dt_color_picker_exclude_from_gesture(bd->colorpicker);
+    dt_color_picker_exclude_from_gesture(bd->colorpicker_set_values);
 
     dt_iop_togglebutton_new_no_register(module, "blend`tools", N_("invert all channel's polarities"), NULL,
                                                          G_CALLBACK(_blendop_blendif_invert), FALSE, 0, 0,
