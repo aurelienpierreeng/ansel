@@ -162,6 +162,19 @@ are populated:
   per eviction burst; at four, 468 children and 0.93 s. Paging one page every 800 ms never reaches
   the cap (336 children at most).
 
+**A thumbnail's image record exists only while the thumbnail does.**
+`dt_thumbtable_get_thumbnail_info()` copies the `dt_image_t` a materialised thumbnail holds, and
+answers FALSE for every image without one: off screen, behind a hidden filmstrip, or not built yet.
+That last case includes the image just opened in the darkroom: established 2026-11-16 on top of
+`85e45716be`, with a probe in `_metadata_view_update_values()` printing the image it looked for and
+the answer, the image-information panel's first refresh after the image loaded found it in neither
+table (`FALSE`), although it was the image to act on. The filmstrip builds its thumbnails after that
+refresh, so the panel kept the previous image until the pointer moved. A reader that must show any
+image therefore falls back to `dt_image_cache_get(imgid, 'r')`, which is where the thumbnails take
+their own copy (`_add_thumbnail_at_rowid()`); `libs/metadata_view.c` does. With that fallback, the
+same probe found the image on every open, including six switches by Alt+→ / Alt+← that leave the
+pointer still.
+
 ## Thumbnail highlight
 
 Both modes reuse the thumbnail's "selected" visual (a lighter frame plus a small triangle) but

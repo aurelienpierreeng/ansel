@@ -527,18 +527,6 @@ static void _metadata_get_flags(const dt_image_t *const img, char *const text, c
 #undef FLAG_NB
 }
 
-static gboolean _metadata_view_get_thumb_info(const int32_t imgid, dt_image_t *info)
-{
-  if(imgid <= 0 || IS_NULL_PTR(info) || IS_NULL_PTR(dt_gui_get_global()) || IS_NULL_PTR(dt_gui_get_ui())) return FALSE;
-
-  if(dt_thumbtable_get_thumbnail_info(dt_gui_get_ui()->thumbtable_lighttable, imgid, info))
-    return TRUE;
-  if(dt_thumbtable_get_thumbnail_info(dt_gui_get_ui()->thumbtable_filmstrip, imgid, info))
-    return TRUE;
-
-  return FALSE;
-}
-
 static void _concatenate_multiple_images(gboolean skip[md_size])
 {
   GList *imgids = dt_selection_get_list(dt_selection_get_global());
@@ -592,9 +580,16 @@ static void _metadata_view_update_values(dt_lib_module_t *self)
 
   if(count > 1) _concatenate_multiple_images(skip);
 
+  // An image no thumbnail shows (just opened in the darkroom, off screen) is read from the image cache.
   dt_image_t tinfo = {0};
-  const gboolean have_thumb_info = _metadata_view_get_thumb_info(img_id, &tinfo);
-  if(!have_thumb_info) return;
+  if(!dt_thumbtable_get_thumbnail_info(dt_gui_get_ui()->thumbtable_lighttable, img_id, &tinfo)
+     && !dt_thumbtable_get_thumbnail_info(dt_gui_get_ui()->thumbtable_filmstrip, img_id, &tinfo))
+  {
+    const dt_image_t *img = dt_image_cache_get(img_id, 'r');
+    if(IS_NULL_PTR(img)) return;
+    tinfo = *img;
+    dt_image_cache_read_release(img);
+  }
 
   if(img_id == d->imgid) return; // nothing to update, spare the SQL queries
   d->imgid = img_id;
@@ -1310,6 +1305,10 @@ void gui_init(dt_lib_module_t *self)
                             G_CALLBACK(_mouse_over_image_callback), self);
 
   DT_DEBUG_CONTROL_SIGNAL_CONNECT(dt_control_signal_get_global(), DT_SIGNAL_SELECTION_CHANGED,
+                                  G_CALLBACK(_mouse_over_image_callback), self);
+
+  // With nothing hovered or selected, the panel shows the image to act on: in the darkroom, the active image.
+  DT_DEBUG_CONTROL_SIGNAL_CONNECT(dt_control_signal_get_global(), DT_SIGNAL_ACTIVE_IMAGES_CHANGE,
                                   G_CALLBACK(_mouse_over_image_callback), self);
 }
 
