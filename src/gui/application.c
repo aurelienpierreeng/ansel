@@ -98,6 +98,9 @@
 #include "gui/splash.h"
 #include "gui/closing.h"
 #include "gui/alert.h"
+#ifdef HAVE_WAYLAND_COLOR
+#include "gui/wayland_color.h" // conditional-ok: the file behind it is only built where the Wayland protocol was found
+#endif
 #include "caches/pixelpipe_cache.h"
 
 #include "common/conf.h"
@@ -281,6 +284,11 @@ void dt_gui_gtk_quit()
 
   // Write out windows dimension
   dt_gui_gtk_write_config();
+
+#ifdef HAVE_WAYLAND_COLOR
+  // before the window is hidden: hiding it destroys the surface the compositor's events are about
+  dt_gui_wayland_color_cleanup();
+#endif
 
   // hide main window
   gtk_widget_hide(dt_ui_main_window(darktable.gui->ui));
@@ -1316,6 +1324,13 @@ int dt_gui_gtk_init(dt_gui_gtk_t *gui)
   // update the profile when the window is moved. resize is already handled in configure()
   widget = dt_ui_main_window(darktable.gui->ui);
   g_signal_connect(G_OBJECT(widget), "configure-event", G_CALLBACK(_window_configure), NULL);
+
+#ifdef HAVE_WAYLAND_COLOR
+  /* A Wayland compositor says which colour space it wants this window in, and says so again
+   * whenever that changes -- no window event announces it, and no window ever learns its own
+   * position, so the configure handlers above see nothing of a move to another monitor. */
+  dt_gui_wayland_color_init(widget);
+#endif
 
   dt_gui_freeze_reset();
 

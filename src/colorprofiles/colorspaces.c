@@ -35,17 +35,17 @@
     Copyright (C) 2022 Martin Bařinka.
     Copyright (C) 2023 Alynx Zhou.
     Copyright (C) 2023 Luca Zulberti.
-
+    
     darktable is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
     the Free Software Foundation, either version 3 of the License, or
     (at your option) any later version.
-
+    
     darktable is distributed in the hope that it will be useful,
     but WITHOUT ANY WARRANTY; without even the implied warranty of
     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
     GNU General Public License for more details.
-
+    
     You should have received a copy of the GNU General Public License
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
@@ -1700,13 +1700,15 @@ gboolean dt_colorprofiles_srgb_to_display_strided(uint8_t *const pixels, const i
 }
 
 // caller holds _transforms_lock for writing
-static void _update_display_profile(guchar *tmp_data, gsize size, char *name, size_t name_size)
+static void _update_display_profile(guchar *tmp_data, gsize size, char *name, size_t name_size,
+                                    const dt_colorspaces_display_source_t source)
 {
   dt_colorspaces_t *color_profiles = dt_colorspaces_get_global();
 
   dt_free(color_profiles->xprofile_data);
   color_profiles->xprofile_data = tmp_data;
   color_profiles->xprofile_size = size;
+  color_profiles->display_source = source;
 
   cmsHPROFILE profile = cmsOpenProfileFromMem(tmp_data, size);
   if(profile)
@@ -1804,7 +1806,7 @@ static GList *load_profile_from_dir(const char *subdir)
           dt_colorspaces_get_profile_name(tmpprof, lang, lang + 3, prof->name, sizeof(prof->name));
           if(prof->name[0] == '\0')
             g_strlcpy(prof->name, _("(unknown name)"), sizeof(prof->name));
-
+            
           g_strlcpy(prof->filename, filename, sizeof(prof->filename));
           prof->type = DT_COLORSPACE_FILE;
           prof->profile = tmpprof;
@@ -2028,6 +2030,7 @@ static void _colorspaces_destroy(dt_colorspaces_t *self)
 
   dt_free(self->colord_profile_file);
   dt_free(self->xprofile_data);
+  dt_free(self->compositor_profile_data);
 
   dt_free(self);
 }
@@ -2102,6 +2105,60 @@ const char *dt_colorspaces_get_name(dt_colorspaces_color_profile_type_t type,
   return NULL;
 }
 
+/* Install the profile a Wayland compositor offered, if the user's choice of source and what
+ * colord knows leave room for it, and if it is not the installed profile already. Caller holds
+ * _transforms_lock for writing, and notifies when this returns TRUE.
+ *
+ * Called from the three places where the answer can change: when the offer arrives, when
+ * colord comes back with nothing, and on the window events that re-read the user's choice.
+ *
+ * Under `all`, colord has the last word. What it holds is the monitor's own response, measured
+ * or read from its EDID; what a compositor prefers is the space it composites in, which on a
+ * compositor that leaves the monitor's response to the applications (Mutter) is plain sRGB
+ * whatever the panel is. So the compositor's profile is the fallback for a monitor colord has
+ * nothing for -- which is also the only case where, before it existed, there was no system
+ * profile at all. `wayland` asks for the compositor by name and stops asking colord. */
+static gboolean _install_compositor_profile_if_wanted(dt_colorspaces_t *const color_profiles)
+{
+  if(IS_NULL_PTR(color_profiles->compositor_profile_data)) return FALSE;
+
+  const char *display_profile_source = dt_conf_get_string_const("ui_last/display_profile_source");
+  if(!g_strcmp0(display_profile_source, "xatom")) return FALSE;
+  if(!g_strcmp0(display_profile_source, "colord")) return FALSE;
+
+  if(g_strcmp0(display_profile_source, "wayland"))
+  {
+#if defined GDK_WINDOWING_X11 && defined USE_COLORDGTK
+    // the two conditions under which dt_colorspaces_set_display_profile() asks colord at all
+    if(!color_profiles->colord_asked) return FALSE;
+#endif
+    if(color_profiles->colord_pending > 0) return FALSE;
+    if(!IS_NULL_PTR(color_profiles->colord_profile_file)) return FALSE;
+  }
+
+  const int size = color_profiles->compositor_profile_size;
+  const gboolean same_bytes = color_profiles->xprofile_size == size
+                              && !IS_NULL_PTR(color_profiles->xprofile_data)
+                              && !memcmp(color_profiles->xprofile_data, color_profiles->compositor_profile_data, size);
+  if(same_bytes)
+  {
+    /* Another source handed over these very bytes. Nothing to rebuild, but the windows may
+     * now be declared in them, and the GUI only learns that from a notification. */
+    const gboolean source_changed = color_profiles->display_source != DT_DISPLAY_SOURCE_COMPOSITOR;
+    color_profiles->display_source = DT_DISPLAY_SOURCE_COMPOSITOR;
+    return source_changed;
+  }
+
+  guchar *copy = g_malloc(size);
+  memcpy(copy, color_profiles->compositor_profile_data, size);
+
+  char name[512] = { 0 };
+  _update_display_profile(copy, size, name, sizeof(name), DT_DISPLAY_SOURCE_COMPOSITOR);
+  dt_print(DT_DEBUG_CONTROL, "[color profile] we got a new screen profile `%s' from the Wayland compositor (size: %d)\n",
+           *name ? name : "(unknown)", size);
+  return TRUE;
+}
+
 #ifdef USE_COLORDGTK
 static void dt_colorspaces_get_display_profile_colord_callback(GObject *source, GAsyncResult *res, gpointer user_data)
 {
@@ -2112,6 +2169,8 @@ static void dt_colorspaces_get_display_profile_colord_callback(GObject *source, 
    * lock-order note on _transforms_lock. */
   pthread_rwlock_wrlock(&_transforms_lock);
 
+  if(color_profiles->colord_pending > 0) color_profiles->colord_pending--;
+
   int profile_changed = 0;
   CdWindow *window = CD_WINDOW(source);
   GError *error = NULL;
@@ -2121,7 +2180,11 @@ static void dt_colorspaces_get_display_profile_colord_callback(GObject *source, 
     const gchar *filename = cd_profile_get_filename(profile);
     if(filename)
     {
-      if(g_strcmp0(filename, color_profiles->colord_profile_file))
+      /* An unchanged path costs nothing -- unless the compositor's profile is the one
+       * installed. That happens when it was asked for by name and the user then went back to
+       * colord: the path colord reports is the one cached, and its profile is not installed. */
+      if(g_strcmp0(filename, color_profiles->colord_profile_file)
+         || color_profiles->display_source == DT_DISPLAY_SOURCE_COMPOSITOR)
       {
         /* the profile has changed (either because the user changed the colord settings or because we are on a
          * different screen now) */
@@ -2138,7 +2201,7 @@ static void dt_colorspaces_get_display_profile_colord_callback(GObject *source, 
 
         if(profile_changed)
         {
-          _update_display_profile(tmp_data, size, NULL, 0);
+          _update_display_profile(tmp_data, size, NULL, 0, DT_DISPLAY_SOURCE_COLORD);
           dt_print(DT_DEBUG_CONTROL,
                    "[color profile] colord gave us a new screen profile: '%s' (size: %" G_GSIZE_FORMAT ")\n", filename, size);
         }
@@ -2150,7 +2213,12 @@ static void dt_colorspaces_get_display_profile_colord_callback(GObject *source, 
     }
   }
   if(profile) g_object_unref(profile);
+  if(error) g_error_free(error);
   g_object_unref(window);
+
+  /* colord has nothing for this monitor: a profile the compositor offered while this answer
+   * was on its way may stand in now. */
+  if(!profile_changed) profile_changed = _install_compositor_profile_if_wanted(color_profiles);
 
   pthread_rwlock_unlock(&_transforms_lock);
 
@@ -2201,6 +2269,12 @@ void dt_colorspaces_set_display_profile(const dt_colorspaces_color_profile_type_
       use_colord = FALSE;
     else if(!strcmp(display_profile_source, "colord"))
       use_xatom = FALSE;
+    else if(!strcmp(display_profile_source, "wayland"))
+    {
+      // the compositor was asked for by name: see _install_compositor_profile_if_wanted()
+      use_colord = FALSE;
+      use_xatom = FALSE;
+    }
   }
 #endif
 
@@ -2214,6 +2288,8 @@ void dt_colorspaces_set_display_profile(const dt_colorspaces_color_profile_type_
   if(use_colord)
   {
     CdWindow *window = cd_window_new();
+    color_profiles->colord_pending++;
+    color_profiles->colord_asked = TRUE;
     cd_window_get_profile(window, widget, NULL, dt_colorspaces_get_display_profile_colord_callback,
                           GINT_TO_POINTER(profile_type));
   }
@@ -2229,17 +2305,153 @@ void dt_colorspaces_set_display_profile(const dt_colorspaces_color_profile_type_
   if(profile_changed)
   {
     char name[512] = { 0 };
-    _update_display_profile(buffer, buffer_size, name, sizeof(name));
+    _update_display_profile(buffer, buffer_size, name, sizeof(name), DT_DISPLAY_SOURCE_SYSTEM);
     dt_print(DT_DEBUG_CONTROL, "[color profile] we got a new screen profile `%s' from the %s (size: %d)\n",
              *name ? name : "(unknown)", profile_source, buffer_size);
   }
   else
   {
     dt_free(buffer);
+    /* The user's choice of source was just read again, and it is the one thing that can make
+     * room for the compositor's offer without anything else happening. */
+    profile_changed = _install_compositor_profile_if_wanted(color_profiles);
   }
   pthread_rwlock_unlock(&_transforms_lock);
   if(profile_changed) _notify_profile_changed();
   dt_free(profile_source);
+}
+
+static gboolean _chromaticity_usable(const double xy[2])
+{
+  // y = 0 puts the colour at infinity once lcms2 divides by it
+  return isfinite(xy[0]) && isfinite(xy[1]) && xy[0] >= 0.0 && xy[0] <= 1.0 && xy[1] > 0.0 && xy[1] <= 1.0;
+}
+
+uint8_t *dt_colorspaces_build_display_profile(const dt_colorspaces_display_description_t *const description,
+                                              size_t *const size)
+{
+  if(IS_NULL_PTR(size)) return NULL;
+  *size = 0;
+  if(IS_NULL_PTR(description)) return NULL;
+
+  if(!_chromaticity_usable(description->red)) return NULL;
+  if(!_chromaticity_usable(description->green)) return NULL;
+  if(!_chromaticity_usable(description->blue)) return NULL;
+  if(!_chromaticity_usable(description->white)) return NULL;
+
+  // twice the area of the triangle the primaries span in the chromaticity diagram
+  const double area = (description->green[0] - description->red[0]) * (description->blue[1] - description->red[1])
+                      - (description->blue[0] - description->red[0]) * (description->green[1] - description->red[1]);
+  if(fabs(area) < 1e-6) return NULL;
+
+  cmsToneCurve *curve = NULL;
+  if(description->srgb_curve)
+  {
+    cmsFloat64Number srgb_parameters[5] = { 2.4, 1.0 / 1.055, 0.055 / 1.055, 1.0 / 12.92, 0.04045 };
+    curve = cmsBuildParametricToneCurve(NULL, 4, srgb_parameters);
+  }
+  else
+  {
+    // cmsBuildGamma() takes 0 without complaint, and the profile then maps everything to white
+    if(!isfinite(description->gamma) || description->gamma < 1.0 || description->gamma > 10.0) return NULL;
+    curve = cmsBuildGamma(NULL, description->gamma);
+  }
+  if(IS_NULL_PTR(curve)) return NULL;
+
+  const cmsCIExyY whitepoint = { description->white[0], description->white[1], 1.0 };
+  const cmsCIExyYTRIPLE primaries = { { description->red[0], description->red[1], 1.0 },
+                                      { description->green[0], description->green[1], 1.0 },
+                                      { description->blue[0], description->blue[1], 1.0 } };
+
+  /* Version 4: a v2 profile stores a power law as an 8.8 fixed-point exponent, which turns
+   * 2.2 into 2.1992. The windows are declared to the compositor with the exact exponent. */
+  cmsHPROFILE profile = _create_lcms_profile("Wayland compositor", "Wayland compositor", &whitepoint, &primaries,
+                                             curve, FALSE);
+  cmsFreeToneCurve(curve);
+  if(IS_NULL_PTR(profile)) return NULL;
+
+  uint8_t *data = NULL;
+  cmsUInt32Number profile_size = 0;
+  if(cmsSaveProfileToMem(profile, NULL, &profile_size) && profile_size > 0)
+  {
+    data = g_malloc(profile_size);
+    if(cmsSaveProfileToMem(profile, data, &profile_size))
+    {
+      /* lcms2 stamps the creation time into the header: twelve bytes at offset 24, six
+       * big-endian 16-bit fields. Overwritten with 2000-01-01 00:00:00, so that the same
+       * description gives the same bytes whenever it is built. */
+      static const uint8_t fixed_date[12] = { 0x07, 0xD0, 0x00, 0x01, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
+      if(profile_size >= 24 + sizeof(fixed_date)) memcpy(data + 24, fixed_date, sizeof(fixed_date));
+      *size = profile_size;
+    }
+    else
+    {
+      dt_free(data);
+    }
+  }
+  cmsCloseProfile(profile);
+
+  return data;
+}
+
+void dt_colorspaces_offer_compositor_display_profile(const uint8_t *const data, const size_t size)
+{
+  if(IS_NULL_PTR(data) || size == 0 || size > (size_t)G_MAXINT) return;
+
+  dt_colorspaces_t *color_profiles = dt_colorspaces_get_global();
+  if(IS_NULL_PTR(color_profiles)) return;
+
+  /* Can lcms2 drive a screen with this profile? A compositor hands over whatever its
+   * configuration names, and the display transforms are built from it without a second look. */
+  cmsHPROFILE offered = cmsOpenProfileFromMem(data, size);
+  const gboolean usable = !IS_NULL_PTR(offered)
+                          && cmsGetColorSpace(offered) == cmsSigRgbData
+                          && (cmsIsMatrixShaper(offered)
+                              || cmsIsCLUT(offered, INTENT_PERCEPTUAL, LCMS_USED_AS_OUTPUT));
+  if(!IS_NULL_PTR(offered)) cmsCloseProfile(offered);
+  if(!usable)
+  {
+    dt_print(DT_DEBUG_CONTROL, "[color profile] the Wayland compositor's profile is not a usable RGB output profile (size: %"
+             G_GSIZE_FORMAT ")\n", size);
+    return;
+  }
+
+  pthread_rwlock_wrlock(&_transforms_lock);
+
+  const gboolean same_offer = color_profiles->compositor_profile_size == (int)size
+                              && !IS_NULL_PTR(color_profiles->compositor_profile_data)
+                              && !memcmp(color_profiles->compositor_profile_data, data, size);
+  if(!same_offer)
+  {
+    dt_free(color_profiles->compositor_profile_data);
+    color_profiles->compositor_profile_data = g_malloc(size);
+    memcpy(color_profiles->compositor_profile_data, data, size);
+    color_profiles->compositor_profile_size = (int)size;
+  }
+
+  const gboolean profile_changed = _install_compositor_profile_if_wanted(color_profiles);
+
+  pthread_rwlock_unlock(&_transforms_lock);
+
+  if(profile_changed) _notify_profile_changed();
+}
+
+gboolean dt_colorspaces_display_follows_compositor(void)
+{
+  const dt_colorspaces_t *const color_profiles = dt_colorspaces_get_global();
+  if(IS_NULL_PTR(color_profiles)) return FALSE;
+
+  pthread_rwlock_rdlock(&_transforms_lock);
+  const gboolean from_compositor = color_profiles->display_source == DT_DISPLAY_SOURCE_COMPOSITOR;
+  pthread_rwlock_unlock(&_transforms_lock);
+  if(!from_compositor) return FALSE;
+
+  /* The user may have told Ansel to treat the monitor as something else. The pixels are then
+   * encoded for that choice, and declaring them in the compositor's description would be
+   * declaring something they are not. */
+  dt_colorprofiles_settings_t settings;
+  dt_colorprofiles_get_settings(&settings);
+  return settings.display_type == DT_COLORSPACE_DISPLAY;
 }
 
 static gboolean _colorspaces_is_base_name(const char *profile)

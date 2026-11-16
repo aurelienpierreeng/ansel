@@ -1,5 +1,6 @@
 option(USE_NLS "Enable Native Language Support (using gettext)." ON)
 option(USE_COLORD "Enable colord support." ON)
+option(USE_WAYLAND_COLOR "Enable colour management with Wayland compositors." ON)
 option(USE_MAP "Enable the map module." ON)
 option(USE_OPENMP "Enable OpenMP threading support." ON)
 option(USE_OPENCL "Enable OpenCL support." ON)

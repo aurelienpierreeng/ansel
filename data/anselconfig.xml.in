@@ -2620,11 +2620,12 @@
         <option>all</option>
         <option>xatom</option>
         <option>colord</option>
+        <option>wayland</option>
       </enum>
     </type>
     <default>all</default>
     <shortdescription>method to use for getting the display profile</shortdescription>
-    <longdescription>this option allows to force a specific means of getting the current display profile. this is useful when one alternative gives wrong results</longdescription>
+    <longdescription>this option allows to force a specific means of getting the current display profile. this is useful when one alternative gives wrong results. 'all' uses colord when it knows the monitor, and otherwise what the windowing system says: the X atom, or the colour space a Wayland compositor asks for. 'wayland' uses the compositor only.</longdescription>
   </dtconfig>
   <dtconfig>
     <name>metadata/resolution</name>
