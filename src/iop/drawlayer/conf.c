@@ -290,6 +290,21 @@ void dt_drawlayer_conf_remember_brush_color(dt_iop_module_t *self, const float w
   if(g->controls.color_swatch) gtk_widget_queue_draw(g->controls.color_swatch);
 }
 
+/**
+ * @brief Put the gradient chooser's marker on the brush colour.
+ *
+ * @details From the colour the cache has just been given, in the chooser's own coordinates.
+ * It used to be handed the cached monitor twin, which is the same triple only on an sRGB
+ * display: measured with an Adobe RGB display profile, working (0.5, 0.1, 0.05) is sRGB
+ * (0.890, 0.249, 0.212) and was placed as (0.770, 0.258, 0.224).
+ */
+static void _show_brush_color_in_picker(dt_iop_module_t *self, dt_iop_drawlayer_gui_data_t *g)
+{
+  float picker_srgb[3] = { 0.0f };
+  dt_drawlayer_brush_picker_srgb(self, g->ui.brush_pipeline_color, picker_srgb);
+  dt_drawlayer_widgets_set_picker_srgb(g->ui.widgets, picker_srgb);
+}
+
 /** @brief Apply a working-RGB brush colour to conf, widgets and redraw. */
 void dt_drawlayer_conf_apply_brush_color(dt_iop_module_t *self, const float work_rgb[3], const gboolean remember)
 {
@@ -302,10 +317,7 @@ void dt_drawlayer_conf_apply_brush_color(dt_iop_module_t *self, const float work
   dt_conf_set_float(DRAWLAYER_CONF_COLOR_B, fmaxf(work_rgb[2], 0.0f));
   dt_drawlayer_sync_cached_brush_colors(self, work_rgb);
 
-  /* The widgets are handed the CACHED display twin, not the working colour and not a fresh
-   * conversion: sync_cached_brush_colors() has just refreshed it, and every later redraw reads
-   * that same cache rather than entering LCMS again. */
-  dt_drawlayer_widgets_set_display_color(g->ui.widgets, g->ui.brush_display_color);
+  _show_brush_color_in_picker(self, g);
   dt_drawlayer_ui_cursor_clear(&g->ui);
 
   if(remember) dt_drawlayer_conf_remember_brush_color(self, work_rgb);
@@ -325,7 +337,7 @@ void dt_drawlayer_conf_sync_color_picker(dt_iop_module_t *self)
   dt_drawlayer_conf_brush_color(work_rgb);
   dt_drawlayer_sync_cached_brush_colors(self, work_rgb);
 
-  dt_drawlayer_widgets_set_display_color(g->ui.widgets, g->ui.brush_display_color);
+  _show_brush_color_in_picker(self, g);
   if(g->controls.color_swatch) gtk_widget_queue_draw(g->controls.color_swatch);
 }
 

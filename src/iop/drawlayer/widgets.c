@@ -114,8 +114,8 @@ static void _picker_update_uv_from_polar(dt_drawlayer_widgets_t *widgets)
   widgets->picker_v = widgets->picker_chroma * sinf(widgets->picker_hue);
 }
 
-/** @brief Project opponent-space color to display RGB; fail when out of gamut. */
-static int _picker_project_opponent_to_display_rgb(const float m, const float u, const float v, float display_rgb[3])
+/** @brief Project an opponent-space position to the sRGB triple it stands for; fail when out of gamut. */
+static int _picker_project_opponent_to_srgb(const float m, const float u, const float v, float srgb[3])
 {
   const float r = m + u * 0.70710678f + v * 0.40824829f;
   const float g = m - u * 0.70710678f + v * 0.40824829f;
@@ -124,13 +124,13 @@ static int _picker_project_opponent_to_display_rgb(const float m, const float u,
   if(!isfinite(r) || !isfinite(g) || !isfinite(b)) return 1;
   if(r < 0.0f || r > 1.0f || g < 0.0f || g > 1.0f || b < 0.0f || b > 1.0f) return 1;
 
-  display_rgb[0] = r;
-  display_rgb[1] = g;
-  display_rgb[2] = b;
+  srgb[0] = r;
+  srgb[1] = g;
+  srgb[2] = b;
   return 0;
 }
 
-/** @brief Compute max reachable chroma at given lightness/hue within display gamut. */
+/** @brief Compute max reachable chroma at given lightness/hue within the sRGB gamut. */
 static float _picker_max_chroma_for_m_hue(const float m, const float hue)
 {
   const float ku = cosf(hue);
@@ -156,7 +156,7 @@ static float _picker_max_chroma_for_m_hue(const float m, const float hue)
   return limit;
 }
 
-/** @brief Clamp picker state so projected display RGB always remains valid. */
+/** @brief Clamp picker state so the projected sRGB triple always remains valid. */
 static void _picker_clamp_state_to_gamut(dt_drawlayer_widgets_t *widgets)
 {
   if(IS_NULL_PTR(widgets)) return;
@@ -171,14 +171,14 @@ static void _picker_clamp_state_to_gamut(dt_drawlayer_widgets_t *widgets)
   }
 }
 
-/** @brief Initialize picker opponent coordinates from display RGB color. */
-static void _sync_picker_from_display_rgb(dt_drawlayer_widgets_t *widgets, const float display_rgb[3])
+/** @brief Initialize picker opponent coordinates from an sRGB colour. */
+static void _sync_picker_from_srgb(dt_drawlayer_widgets_t *widgets, const float srgb[3])
 {
-  if(IS_NULL_PTR(widgets) || !display_rgb) return;
+  if(IS_NULL_PTR(widgets) || !srgb) return;
 
-  widgets->picker_m = (display_rgb[0] + display_rgb[1] + display_rgb[2]) / 3.0f;
-  widgets->picker_u = (display_rgb[0] - display_rgb[1]) * 0.70710678f;
-  widgets->picker_v = (display_rgb[0] + display_rgb[1] - 2.0f * display_rgb[2]) * 0.40824829f;
+  widgets->picker_m = (srgb[0] + srgb[1] + srgb[2]) / 3.0f;
+  widgets->picker_u = (srgb[0] - srgb[1]) * 0.70710678f;
+  widgets->picker_v = (srgb[0] + srgb[1] - 2.0f * srgb[2]) * 0.40824829f;
   _picker_clamp_state_to_gamut(widgets);
 }
 
@@ -371,19 +371,12 @@ void dt_drawlayer_widgets_cleanup(dt_drawlayer_widgets_t **widgets)
   dt_free(*widgets);
 }
 
-/** @brief Set current color and synchronize picker internals. */
-void dt_drawlayer_widgets_set_display_color(dt_drawlayer_widgets_t *widgets, const float display_rgb[3])
+/** @brief Place the marker on a colour given in sRGB, the chooser's own coordinates. */
+void dt_drawlayer_widgets_set_picker_srgb(dt_drawlayer_widgets_t *widgets, const float srgb[3])
 {
-  if(IS_NULL_PTR(widgets) || !display_rgb) return;
-  _sync_picker_from_display_rgb(widgets, display_rgb);
+  if(IS_NULL_PTR(widgets) || !srgb) return;
+  _sync_picker_from_srgb(widgets, srgb);
   widgets->color_surface_dirty = TRUE;
-}
-
-/** @brief Get current color projected to display RGB. */
-gboolean dt_drawlayer_widgets_get_display_color(const dt_drawlayer_widgets_t *widgets, float display_rgb[3])
-{
-  if(!widgets || !display_rgb) return FALSE;
-  return _picker_project_opponent_to_display_rgb(widgets->picker_m, widgets->picker_u, widgets->picker_v, display_rgb) == 0;
 }
 
 /** @brief Replace full color-history content and validity flags. */
@@ -453,9 +446,9 @@ gboolean dt_drawlayer_widgets_push_color_history(dt_drawlayer_widgets_t *widgets
 
 /** @brief Update picker state from mouse position and return selected color. */
 gboolean dt_drawlayer_widgets_update_from_picker_position(dt_drawlayer_widgets_t *widgets, GtkWidget *widget,
-                                                          float x, float y, float display_rgb[3])
+                                                          float x, float y, float srgb[3])
 {
-  if(!widgets || !widget || !display_rgb) return FALSE;
+  if(!widgets || !widget || !srgb) return FALSE;
 
   float uv_x = 0.0f, uv_y = 0.0f, uv_size = 0.0f;
   float plane_x = 0.0f, plane_y = 0.0f, plane_w = 0.0f, plane_h = 0.0f;
@@ -488,7 +481,7 @@ gboolean dt_drawlayer_widgets_update_from_picker_position(dt_drawlayer_widgets_t
     const float new_chroma = tx * DT_DRAWLAYER_PICKER_C_MAX;
     const float new_u = new_chroma * cosf(widgets->picker_hue);
     const float new_v = new_chroma * sinf(widgets->picker_hue);
-    if(_picker_project_opponent_to_display_rgb(new_m, new_u, new_v, display_rgb)) return FALSE;
+    if(_picker_project_opponent_to_srgb(new_m, new_u, new_v, srgb)) return FALSE;
 
     widgets->picker_m = new_m;
     widgets->picker_chroma = new_chroma;
@@ -502,7 +495,7 @@ gboolean dt_drawlayer_widgets_update_from_picker_position(dt_drawlayer_widgets_t
   }
 
   _picker_clamp_state_to_gamut(widgets);
-  if(!_picker_project_opponent_to_display_rgb(widgets->picker_m, widgets->picker_u, widgets->picker_v, display_rgb))
+  if(!_picker_project_opponent_to_srgb(widgets->picker_m, widgets->picker_u, widgets->picker_v, srgb))
   {
     widgets->color_surface_dirty = TRUE;
     return TRUE;
@@ -511,12 +504,12 @@ gboolean dt_drawlayer_widgets_update_from_picker_position(dt_drawlayer_widgets_t
 }
 
 /** @brief End picker drag mode and optionally output current color. */
-gboolean dt_drawlayer_widgets_finish_picker_drag(dt_drawlayer_widgets_t *widgets, float display_rgb[3])
+gboolean dt_drawlayer_widgets_finish_picker_drag(dt_drawlayer_widgets_t *widgets, float srgb[3])
 {
   if(IS_NULL_PTR(widgets)) return FALSE;
   widgets->picker_drag_mode = DT_DRAWLAYER_COLOR_DRAG_NONE;
-  if(IS_NULL_PTR(display_rgb)) return FALSE;
-  return !_picker_project_opponent_to_display_rgb(widgets->picker_m, widgets->picker_u, widgets->picker_v, display_rgb);
+  if(IS_NULL_PTR(srgb)) return FALSE;
+  return !_picker_project_opponent_to_srgb(widgets->picker_m, widgets->picker_u, widgets->picker_v, srgb);
 }
 
 /** @brief Tell whether picker drag interaction is currently active. */
@@ -606,7 +599,7 @@ gboolean dt_drawlayer_widgets_draw_picker(dt_drawlayer_widgets_t *widgets, GtkWi
           const float ty = 1.0f - 2.0f * _clamp01((fy - uv_y) / fmaxf(uv_size, 1.0f));
           const float u = tx * DT_DRAWLAYER_PICKER_U_MAX;
           const float v = ty * DT_DRAWLAYER_PICKER_V_MAX;
-          if(_picker_project_opponent_to_display_rgb(widgets->picker_m, u, v, rgb)) paint = FALSE;
+          if(_picker_project_opponent_to_srgb(widgets->picker_m, u, v, rgb)) paint = FALSE;
         }
         else if(fx >= plane_x && fx <= plane_x + plane_w && fy >= plane_y && fy <= plane_y + plane_h)
         {
@@ -616,7 +609,7 @@ gboolean dt_drawlayer_widgets_draw_picker(dt_drawlayer_widgets_t *widgets, GtkWi
           const float chroma = tx * DT_DRAWLAYER_PICKER_C_MAX;
           const float u = chroma * cosf(widgets->picker_hue);
           const float v = chroma * sinf(widgets->picker_hue);
-          if(_picker_project_opponent_to_display_rgb(m, u, v, rgb)) paint = FALSE;
+          if(_picker_project_opponent_to_srgb(m, u, v, rgb)) paint = FALSE;
         }
         else
         {

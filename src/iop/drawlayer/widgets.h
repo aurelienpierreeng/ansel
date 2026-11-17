@@ -39,10 +39,15 @@ dt_drawlayer_widgets_t *dt_drawlayer_widgets_init(void);
 /** @brief Destroy widget runtime state and owned surfaces. */
 void dt_drawlayer_widgets_cleanup(dt_drawlayer_widgets_t **widgets);
 
-/** @brief Set current display RGB color and refresh picker state. */
-void dt_drawlayer_widgets_set_display_color(dt_drawlayer_widgets_t *widgets, const float display_rgb[3]);
-/** @brief Get current display RGB color. */
-gboolean dt_drawlayer_widgets_get_display_color(const dt_drawlayer_widgets_t *widgets, float display_rgb[3]);
+/**
+ * @brief Place the gradient chooser's marker on a colour given in sRGB.
+ *
+ * The chooser's coordinates are sRGB by definition: the triples it hands out
+ * (dt_drawlayer_widgets_update_from_picker_position(), ..._finish_picker_drag()) and the one it
+ * takes here are in that one space, whatever the monitor. It is not colour-managed and must not
+ * be handed a monitor-profile triple -- see dt_drawlayer_brush_picker_srgb().
+ */
+void dt_drawlayer_widgets_set_picker_srgb(dt_drawlayer_widgets_t *widgets, const float srgb[3]);
 
 /** @brief Replace full color-history stack and validity flags. */
 void dt_drawlayer_widgets_set_color_history(dt_drawlayer_widgets_t *widgets,
@@ -57,17 +62,17 @@ void dt_drawlayer_widgets_get_color_history(const dt_drawlayer_widgets_t *widget
 gboolean dt_drawlayer_widgets_push_color_history(dt_drawlayer_widgets_t *widgets, const float work_rgb[3],
                                                  const float display_rgb[3]);
 
-/** @brief Update picker selection from widget coordinates during drag. */
+/** @brief Update picker selection from widget coordinates during drag; returns its sRGB triple. */
 gboolean dt_drawlayer_widgets_update_from_picker_position(dt_drawlayer_widgets_t *widgets, GtkWidget *widget,
-                                                          float x, float y, float display_rgb[3]);
-/** @brief End picker drag and return final selected color. */
-gboolean dt_drawlayer_widgets_finish_picker_drag(dt_drawlayer_widgets_t *widgets, float display_rgb[3]);
+                                                          float x, float y, float srgb[3]);
+/** @brief End picker drag and return the final selected colour, in sRGB. */
+gboolean dt_drawlayer_widgets_finish_picker_drag(dt_drawlayer_widgets_t *widgets, float srgb[3]);
 /** @brief Query whether picker drag is currently active. */
 gboolean dt_drawlayer_widgets_is_picker_dragging(const dt_drawlayer_widgets_t *widgets);
 
-/** @brief Hit-test and pick color from history swatches. */
+/** @brief Hit-test and pick color from history swatches; returns the WORKING colour it stores. */
 gboolean dt_drawlayer_widgets_pick_history_color(const dt_drawlayer_widgets_t *widgets, GtkWidget *widget,
-                                                 float x, float y, float display_rgb[3]);
+                                                 float x, float y, float work_rgb[3]);
 
 /** @brief Draw full picker UI (map, marker, history swatches). */
 gboolean dt_drawlayer_widgets_draw_picker(dt_drawlayer_widgets_t *widgets, GtkWidget *widget, cairo_t *cr,

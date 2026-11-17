@@ -487,8 +487,9 @@ What the old arrangement cost, in the order the symptoms appear:
 The model now: conf and `brush_pipeline_color` hold working RGB, unclamped above 1 and only
 floored at 0. The HDR gain multiplies once, where the dab colour is produced, and is divided back
 out on the picking path so that picking a patch this brush painted returns the colour chosen for
-it. Everything the user *sees* — swatch, history strip, gradient widget, on-canvas cursor stamp —
-reads a cached display twin.
+it. Everything the user *sees* **of the colour** — history strip, on-canvas cursor stamp — reads a
+cached display twin. *(This sentence listed the gradient widget too. That was wrong, and was a
+bug rather than a slip of the pen: see "Two triples for one colour" at the end of this section.)*
 
 **The twin is cached, and the cache key is `dt_colorprofiles_settings_t.generation`.** Converting
 costs an LCMS transform (`dt_colorprofiles_xyz_to_display()`, which is documented for exactly
@@ -500,10 +501,10 @@ Two things about that key, both load-bearing:
   bumps it too. That matters because the `DT_COLORSPACE_DISPLAY` entry keeps its name and
   filename across such a change — only the bytes behind them differ — so a cache keyed on the
   profile's *identity* would serve the previous monitor's colours indefinitely.
-- The recompute has to reach the widgets, not just `brush_display_color`. The swatch, the
-  gradient widget and the history strip each hold their own screen copies; refreshing the module
-  cache alone leaves the panel showing the old monitor's colours until something unrelated
-  touches them.
+- The recompute has to reach the widgets, not just `brush_display_color`. The history strip
+  holds its own screen copies; refreshing the module cache alone leaves the panel showing the
+  old monitor's colours until something unrelated touches them. *(The gradient widget was
+  listed here as well, and the code did push the twin into it. It must not: same section.)*
 
 A matrix of the display profile would have been cheaper and wrong: it is correct only for a
 matrix/TRC profile and silently wrong for a LUT-based one, which is what a real colord monitor
@@ -605,6 +606,65 @@ and the click could not disagree, and the paragraph was not updated with it.)* T
 **Verified in the GUI:** the colours match between the panel and the painted image, and the
 eyedropper works as a mode held on the key. The first version of it was tried in the GUI and
 sampled nothing, which is how the arming trap above was found.
+
+### Two triples for one colour, and two callers that mixed them up
+
+*Established 2026-11-17 on top of `6e2f787835`, where an automated review of the PR (Sentry's
+Seer) flagged both. Each was measured before it was touched; the probes were `fprintf`s in
+`dt_drawlayer_sync_cached_brush_colors()` and next to the chooser's setter, run on the private
+display with the brush colour seeded in conf as working (0.5, 0.1, 0.05).*
+
+The gradient chooser is **an sRGB-defined map**: `_color_picker_set_from_position()` reads the
+triple under the pointer as sRGB and converts it to working RGB. Its marker is a position in
+those coordinates. So this module carries, for one brush colour, **three** triples — working
+RGB (conf, the cache, what is painted), the monitor twin (history strip, cursor stamp), and the
+chooser's sRGB — and the change to pipeline RGB above only renamed two of them. The chooser's
+API went on calling its own triple `display_rgb`, and two mistakes followed from that one name.
+
+**1. Two callers handed the chooser's triple to a function that takes working RGB.**
+`dt_drawlayer_sync_cached_brush_colors()` took display RGB before the change and working RGB
+after it. `gui_update()` and the HDR-exposure branch of `_widget_changed()` still fed it
+`dt_drawlayer_widgets_get_display_color()`. Measured at darkroom entry:
+
+| | cache given | conf holds |
+|---|---|---|
+| first sync (from conf) | 0.5000 0.1000 0.0500 | 0.5000 0.1000 0.0500 |
+| second sync (`gui_update`, from the chooser) | **0.8900 0.2493 0.2115** | 0.5000 0.1000 0.0500 |
+
+So every refresh of the panel replaced the brush colour by its own encoded value, and the next
+stroke laid that down, until a colour was chosen again; the HDR slider did it once per step.
+Both blocks existed to re-apply the HDR gain to the cached colour, which this same section had
+taken out of the cache ("the HDR gain multiplies once, where the dab colour is produced"), so
+they were deleted rather than converted, and `..._get_display_color()` went with them. After:
+one sync, given what conf holds. Painted after a restart without choosing a colour again, the
+layer in the sidecar holds 0.2749 0.3623 0.6577 at alpha 1 for a conf colour of 0.2750 0.3624
+0.6575 (half-float storage).
+
+**2. The chooser's marker was placed from the monitor twin.** Same triple on an sRGB display,
+a different one on any other. Measured with `ui_last/color/display_type=2` (Adobe RGB):
+working (0.5, 0.1, 0.05) is sRGB 0.8900 0.2493 0.2115 and was placed as 0.7704 0.2575 0.2243.
+A drag in one half of the chooser keeps the other half's coordinate from that state (the
+plane keeps the hue, the disc keeps the lightness), so each motion event carried the
+displacement into the next colour. The marker is now placed from
+`dt_drawlayer_brush_picker_srgb()`, the inverse of the conversion the pick uses, and
+`_refresh_brush_display_color()` no longer moves it when the monitor profile changes. After,
+on the Adobe RGB profile: the chooser is given 0.8900 0.2493 0.2115 while the twin is 0.7704
+0.2575 0.2243, and a drag released at (1440, 600) in the disc and at (1590, 560) in the plane
+leaves the marker on those two pixels.
+
+The setter is `dt_drawlayer_widgets_set_picker_srgb()` now, and the chooser's parameters say
+`srgb`. **What was not measured:** the drag on the build before the fix (the displacement is
+known as triples, not as pixels), and anything on a LUT-based monitor profile.
+
+**Not changed, and worth knowing:** the chooser paints its sRGB triples to the screen
+unmanaged. On a wide-gamut monitor the map therefore looks more saturated than the colour a
+click on it picks; the history strip and the cursor stamp show the colour picked.
+
+**And one thing this section had let be assumed:** the twin is the colour converted to the
+display profile, not the colour as the image will show it. The module sits before filmic in
+the pipeline (`iop_order.c`: 41.7 against 46.0), so paint goes through every later module with
+the image. Measured on the test raw's default history: working 0.2750 0.3624 0.6575 has the
+twin (135, 162, 214) and reads (212, 228, 255) on screen once painted.
 
 *This section used to end: "there is no headless path that paints a stroke or repaints a
 swatch." **That was wrong**, and believing it is what let three rounds of this gesture be

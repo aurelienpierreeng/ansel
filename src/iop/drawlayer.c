@@ -241,6 +241,43 @@ static void _working_rgb_from_srgb(dt_iop_module_t *self, const float srgb[3], f
 }
 
 /**
+ * @brief The brush colour in the gradient chooser's own coordinates, which are sRGB.
+ *
+ * @details The inverse of _working_rgb_from_srgb(), and the only triple the chooser may be
+ * handed. Its marker is a position in an sRGB-defined map, so it must be placed from the sRGB
+ * triple of the colour -- not from the monitor twin, which is a different triple for the same
+ * colour on any display whose profile is not sRGB. Fed the twin, the marker sat where the
+ * colour was not, and because a drag in one half of the chooser keeps the other half's
+ * coordinate from that state, every motion event carried the error into the next colour.
+ *
+ * Not clamped per channel: a working colour outside sRGB comes out outside [0,1], and the
+ * chooser brings its marker back inside its own gamut at constant hue, which a clamp here
+ * would not do. Only the marker is derived from this; the brush colour is not read back.
+ */
+void dt_drawlayer_brush_picker_srgb(dt_iop_module_t *self, const float work_rgb[3], float srgb[3])
+{
+  if(IS_NULL_PTR(work_rgb) || IS_NULL_PTR(srgb)) return;
+
+  srgb[0] = work_rgb[0];
+  srgb[1] = work_rgb[1];
+  srgb[2] = work_rgb[2];
+
+  const dt_iop_order_iccprofile_info_t *const work_profile
+      = (!IS_NULL_PTR(self) && self->dev) ? dt_ioppr_get_iop_work_profile_info(self, self->dev->iop) : NULL;
+  const dt_iop_order_iccprofile_info_t *const srgb_profile
+      = dt_colorspaces_add_profile(DT_COLORSPACE_SRGB, "", DT_INTENT_PERCEPTUAL);
+  if(IS_NULL_PTR(work_profile) || IS_NULL_PTR(srgb_profile)) return;
+
+  const float in[4] = { work_rgb[0], work_rgb[1], work_rgb[2], 0.0f };
+  float out[4] = { work_rgb[0], work_rgb[1], work_rgb[2], 0.0f };
+  dt_ioppr_transform_image_colorspace_rgb(in, out, 1, 1, work_profile, srgb_profile,
+                                          "drawlayer brush color");
+  srgb[0] = out[0];
+  srgb[1] = out[1];
+  srgb[2] = out[2];
+}
+
+/**
  * @brief Refresh the cached display-RGB twin of the brush colour when it can have gone stale.
  *
  * @details Keyed on `dt_colorprofiles_settings_t.generation`, which the colour-profile module
@@ -265,15 +302,14 @@ static gboolean _refresh_brush_display_color(dt_iop_module_t *self)
   g->ui.brush_display_generation = settings.generation;
   g->ui.brush_display_valid = TRUE;
 
-  /* The swatch, the gradient widget and the history strip all hold their own screen copies, so a
-   * profile that moved under them has to reach those too -- otherwise the cache is right and the
-   * panel still shows the previous monitor's colours until something else happens to touch them.
-   * Reloading the history from conf re-derives every twin from the working values it persists. */
-  if(!IS_NULL_PTR(g->ui.widgets))
-  {
-    dt_drawlayer_widgets_set_display_color(g->ui.widgets, g->ui.brush_display_color);
-    dt_drawlayer_conf_load_color_history(self, g);
-  }
+  /* The history strip holds its own screen copies, so a profile that moved under it has to
+   * reach those too -- otherwise the cache is right and the panel still shows the previous
+   * monitor's colours until something else happens to touch them. Reloading the history from
+   * conf re-derives every twin from the working values it persists.
+   *
+   * The gradient chooser is NOT one of them: its marker is a position in sRGB coordinates
+   * (dt_drawlayer_brush_picker_srgb()), which no monitor profile moves. */
+  if(!IS_NULL_PTR(g->ui.widgets)) dt_drawlayer_conf_load_color_history(self, g);
   dt_drawlayer_ui_cursor_clear(&g->ui);
   return TRUE;
 }
@@ -2460,13 +2496,6 @@ static void _widget_changed(GtkWidget *widget, gpointer user_data)
   if(widget == g->controls.size || widget == g->controls.softness || widget == g->controls.brush_shape)
     _update_gui_runtime_manager(self, g, DT_DRAWLAYER_RUNTIME_EVENT_GUI_SYNC_TEMP_BUFFERS, TRUE);
 
-  if(widget == g->controls.hdr_exposure)
-  {
-    float display_rgb[3] = { 0.0f };
-    if(dt_drawlayer_widgets_get_display_color(g->ui.widgets, display_rgb))
-      dt_drawlayer_sync_cached_brush_colors(self, display_rgb);
-  }
-
   if(widget == g->controls.brush_shape || widget == g->controls.opacity || widget == g->controls.softness || widget == g->controls.sprinkles
      || widget == g->controls.sprinkle_size || widget == g->controls.sprinkle_coarseness)
     _sync_brush_profile_preview_widget(self);
@@ -3448,17 +3477,6 @@ void gui_update(dt_iop_module_t *self)
   dt_drawlayer_conf_sync_color_picker(self);
   _sync_brush_profile_preview_widget(self);
   if(g->controls.color) gtk_widget_queue_draw(g->controls.color);
-
-  /* The cached display and pipeline brush colours depend on the HDR exposure refilled above,
-   * and `brush_color_valid` is set once and never cleared, so nothing rebuilds them lazily.
-   * They used to be refreshed only because setting that slider woke _widget_changed on the
-   * unfrozen paths -- an accident, and one the frozen path never had. Asked for directly,
-   * every caller gets it. */
-  {
-    float display_rgb[3] = { 0.0f };
-    if(dt_drawlayer_widgets_get_display_color(g->ui.widgets, display_rgb))
-      dt_drawlayer_sync_cached_brush_colors(self, display_rgb);
-  }
 
   dt_drawlayer_mapping_row_t mapping[DT_DRAWLAYER_MAPPING_ROWS];
   dt_drawlayer_mapping_rows(g, mapping);

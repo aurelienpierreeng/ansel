@@ -49,6 +49,15 @@ void dt_drawlayer_sync_cached_brush_colors(dt_iop_module_t *self, const float wo
  */
 void dt_drawlayer_brush_display_rgb(dt_iop_module_t *self, const float work_rgb[3], float display_rgb[3]);
 
+/**
+ * @brief Convert one working-RGB brush colour to the gradient chooser's coordinates, which are
+ *        sRGB whatever the monitor is.
+ *
+ * Not the display twin above: that one is for painting a colour on screen, this one for placing
+ * the chooser's marker. Handing the chooser the twin is the mistake this function exists to end.
+ */
+void dt_drawlayer_brush_picker_srgb(dt_iop_module_t *self, const float work_rgb[3], float srgb[3]);
+
 /* Reached from the layer store (layers.c); defined in drawlayer.c, where the module's
  * own state they read and write lives. */
 gboolean dt_drawlayer_layer_name_non_empty(const char *name);
