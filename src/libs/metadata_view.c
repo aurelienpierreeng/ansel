@@ -578,6 +578,14 @@ static void _metadata_view_update_values(dt_lib_module_t *self)
     img_id = dt_act_on_get_first_image();
   }
 
+  // Nothing hovered, selected or active: the panel shows no image, not the last one it showed.
+  if(img_id == UNKNOWN_IMAGE)
+  {
+    if(d->imgid == UNKNOWN_IMAGE) return;
+    d->imgid = UNKNOWN_IMAGE;
+    goto fill_minuses;
+  }
+
   if(count > 1) _concatenate_multiple_images(skip);
 
   // An image no thumbnail shows (just opened in the darkroom, off screen) is read from the image cache.

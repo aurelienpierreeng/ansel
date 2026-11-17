@@ -191,6 +191,22 @@ about and is not clobbered by the other. This matters because opening a new pict
 the selection it would lose its developed-image marker on every navigation
 ([issue #954](https://github.com/aurelienpierreeng/ansel/issues/954)).
 
+**The top bar's image line follows the highlight, and is emptied with it.** `_refresh_highlights`
+writes the first highlighted thumbnail into the line (`dt_view_image_info_update()`). A scan that
+finds none highlighted on screen keeps the image the line shows only while the visible table's
+`is_thumb_highlighted` still holds for it: a selected image scrolled off screen stays; one no
+longer highlighted empties the line. The selection loses its images without anyone deselecting
+them when the collection changes: `_selection_update_collection()` drops every selected image the
+new collection does not hold, and selects nothing in their place. Established 2026-11-17 on top of
+`248dcec22b`, with a probe at the end of `_refresh_highlights` and one in
+`_metadata_view_update_values()`: after selecting one image and switching to another folder, the
+grid's scan reported `found=0 selection=0` while the line still named the old image, and the
+image-information panel was asked for image `-1` and returned without updating. Both signals are
+asynchronous and reach the tables after the view's own `enter()` has written the line, but a hidden
+table returns before the scan, so in the darkroom only the filmstrip judges the line, and it
+highlights the image the darkroom shows. With nothing hovered, selected or active, the
+image-information panel likewise shows dashes instead of the last image it showed.
+
 ## Lifecycle
 
 1. `dt_thumbtable_new(mode)` — allocates the table, binds `table->ops = _ops_for_mode(mode)`,
