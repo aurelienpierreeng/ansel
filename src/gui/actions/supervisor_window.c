@@ -58,6 +58,7 @@ static struct
   GtkWidget *grouped_list;
   GtkWidget *mem_box;     // vbox holding the memory view content
   GHashTable *mem_sections; // memory section key -> _mem_section_t*, kept from one refresh to the next
+  gboolean mem_gpu;       // OpenCL was on at the last refresh of the memory view
   GtkWidget *search_entry; // global search entry (in the toolbar)
   GtkWidget *search_list;  // search results page
   GtkWidget *count_label;
@@ -1203,6 +1204,15 @@ static void _rebuild_memory(void)
    * kept for longer -- counts in it without being lines. Lines and allocations are what the usage
    * sums, read under one hold of the cache lock. */
   const gboolean gpu = dt_opencl_is_enabled();
+  /* OpenCL on or off makes the view: the pipeline bar's segments and legend, the vRAM sections. It
+   * goes on or off with the preferences, or off on errors, while the window is open: the view is
+   * then built anew. */
+  if(gpu != _g.mem_gpu)
+  {
+    g_hash_table_remove_all(_g.mem_sections);
+    _clear_list(_g.mem_box);
+    _g.mem_gpu = gpu;
+  }
   size_t in_ram = 0, reserved = 0, allocated = 0;
   guint lines = 0;
   for(guint i = 0; i < pe->len; i++)
