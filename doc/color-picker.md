@@ -75,11 +75,17 @@ and a plain click in point mode.
 | Kind | A click | A drag | First time it is turned on |
 |---|---|---|---|
 | `DT_COLOR_PICKER_POINT` | places the point | moves it | a point |
-| `DT_COLOR_PICKER_AREA` | drops a square 1 % of the image wide | draws the area | the image, less a 64 px margin |
+| `DT_COLOR_PICKER_AREA` | drops a square 2 % of the image wide | draws the area | the image, less a 64 px margin |
 | `DT_COLOR_PICKER_POINT_AREA` | places a point | draws an area | a point |
 | `DT_COLOR_PICKER_AREA_POINT` | places a point | draws an area | the image, less a 64 px margin |
 
 After the first time, a picker reopens on whatever it last showed (`pick_is_box`).
+
+*The area-only row said "1 % of the image wide" until 2026-11-17 (`974a9dc5b6`). The square is
+1 % of the image width **either side** of the click (`half_x = 0.01f` in
+`dt_iop_color_picker_pointer_pressed()`), so 2 % across; the figure was copied from the half-width
+without reading what it was half of. Its size was never measured in the GUI, only that the click
+leaves an area (`min != max`).*
 
 **The rule for choosing a kind: a picker whose module reads `picked_color_min` or
 `picked_color_max` is `DT_COLOR_PICKER_AREA`.** A point has no extent to take an extreme over; its
