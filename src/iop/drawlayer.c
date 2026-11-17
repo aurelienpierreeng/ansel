@@ -1659,6 +1659,25 @@ static gboolean _brush_paints_color(void)
   return dt_drawlayer_conf_brush_mode() == DT_DRAWLAYER_BRUSH_MODE_PAINT;
 }
 
+/**
+ * @brief Is the brush a colour picker right now?
+ *
+ * @details The modifier is held AND the brush lays down a colour. In erase, blur and smudge
+ * there is no colour to pick -- the module's picker is not even shown -- so the modifier means
+ * nothing to this module there: no cross, and the stroke goes on. The mode used to be the flag
+ * alone, which in those three modes ended the stroke under way, drew a cross that promised a
+ * pick, and then refused it in _pick_brush_color_at(): a brush that neither painted nor picked
+ * for as long as the key was held.
+ *
+ * Asked everywhere the mode is read rather than only where the flag is set, so a flag that
+ * outlived a change of brush mode cannot bring that back. The conf read behind
+ * _brush_paints_color() is only reached while the flag is up.
+ */
+static gboolean _brush_is_picking(const dt_iop_drawlayer_gui_data_t *g)
+{
+  return g->session.picking_active && _brush_paints_color();
+}
+
 /** @brief Apply selected picker color to drawlayer brush color. */
 void color_picker_apply(dt_iop_module_t *self, GtkWidget *picker, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece)
 {
@@ -3751,7 +3770,7 @@ void gui_post_expose(dt_iop_module_t *self, cairo_t *cr, int32_t width, int32_t 
      * whole job is to show an area. Read from the mode rather than from the live keyboard, so
      * the cursor and the click can never disagree about which tool is in the user's hand --
      * key_pressed() queues the redraw that makes the swap immediate. */
-    if(g->session.picking_active)
+    if(_brush_is_picking(g))
     {
       /* A gap in the middle leaves the sampled pixel visible, which is the point of using a
        * cross. Drawn dark-under-light so it survives both ends of the tone range. */
@@ -3852,7 +3871,7 @@ int mouse_moved(dt_iop_module_t *self, double x, double y, double pressure, int 
 
   /* Picking mode: follow the pointer so the cross tracks it, but never start or extend a
    * stroke. Returning 0 leaves the event to whatever else wants it. */
-  if(g->session.picking_active)
+  if(_brush_is_picking(g))
   {
     /* The mode ends when the modifier comes up, and the key release that says so is not
      * always delivered -- the key can come up over another window. Left alone the brush would
@@ -4016,6 +4035,10 @@ int key_pressed(dt_iop_module_t *self, GdkEventKey *event)
   if(IS_NULL_PTR(g) || IS_NULL_PTR(event) || !dt_iop_color_picker_is_gesture_key(event->keyval)) return 0;
   if(g->session.picking_active) return 0;
 
+  /* A brush with no colour has none to pick: the modifier is not this module's business, and
+   * the stroke under way is left alone. */
+  if(!_brush_paints_color()) return 0;
+
   /* A stroke in progress is ended rather than carried into picking mode: the button is still
    * down, and the release that would have finished it is about to be read as a pick. */
   _update_gui_runtime_manager(self, g, DT_DRAWLAYER_RUNTIME_EVENT_GUI_STROKE_ABORT, FALSE);
@@ -4054,7 +4077,7 @@ int button_pressed(dt_iop_module_t *self, double x, double y, double pressure, i
    * colour is useful before there is anywhere to put it. The modifier bit in `state` is read as
    * well as the mode, so a click still samples when the key went down before this module had
    * focus and no key_pressed() was ever delivered to it. */
-  if(g->session.picking_active || _picking_modifier_is_down(state))
+  if(_brush_paints_color() && (g->session.picking_active || _picking_modifier_is_down(state)))
   {
     g->session.picking_active = TRUE;
     return _pick_brush_color_at(self, x, y) ? 1 : 0;
@@ -4118,7 +4141,7 @@ int button_released(dt_iop_module_t *self, double x, double y, int which, uint32
 
   /* The press was a sample, so its release is not the end of a stroke -- there is none. Claimed
    * rather than ignored so nothing downstream reads it as one. */
-  if(g->session.picking_active) return 1;
+  if(_brush_is_picking(g)) return 1;
 
   if(g->manager.painting_active)
   {

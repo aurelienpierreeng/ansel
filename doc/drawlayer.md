@@ -577,6 +577,19 @@ cursor and the click cannot disagree about which tool is in the user's hand. `bu
 additionally accepts the modifier bit out of its own `state`, which covers the same
 focus-arrived-late case from the other side.
 
+*Amended 2026-11-17 on top of `bf17acb633`:* **the mode is that flag AND a brush that lays down a
+colour** (`_brush_is_picking()`), which is what all four now ask. The flag alone was the mode in
+erase, blur and smudge too, where there is no colour to pick and the module's picker is not even
+shown. Read from the code by an automated review (Codex) and confirmed by reading, not measured:
+there `key_pressed()` ended the stroke under way and raised the flag, the cursor became the
+cross, `mouse_moved()` stopped extending strokes, and `_pick_brush_color_at()` refused the pick
+-- a brush that neither erased nor picked for as long as the modifier was held. Now
+`key_pressed()` leaves those modes alone. Measured after, in the GUI: in erase mode the cursor
+with the modifier held is pixel-identical to the one without, and a drag made with it held
+erased the stroke it crossed (the crossing reads (30, 27, 27), the stroke either side (240, 75,
+69)); in paint mode the cross still replaces the circle and a modifier-click changed the conf
+colour from (0.5, 0.1, 0.05) to the sky's (0.216, 0.232, 0.224).
+
 The disarm is still `dt_iop_color_picker_reset()`, but **it is no longer this module's to
 call**, and how that was found is the useful part. The module reset its picker the moment the
 modifier came up. Driven in the GUI with Ctrl released in the same instant as the click, that
