@@ -901,13 +901,10 @@ static void _refresh_highlights(dt_thumbtable_t *table)
   gboolean first = TRUE;
 
   dt_pthread_mutex_lock(&table->lock);
-  if(IS_NULL_PTR(table->lut) || !table->collection_inited || table->collection_count == 0)
-  {
-    dt_pthread_mutex_unlock(&table->lock);
-    return;
-  }
+  const gboolean populated
+      = table->lut && table->collection_inited && table->collection_count > 0;
 
-  for(int rowid = 0; rowid < table->collection_count; rowid++)
+  for(int rowid = 0; populated && rowid < table->collection_count; rowid++)
   {
     dt_thumbnail_t *thumb = table->lut[rowid].thumb;
     if(IS_NULL_PTR(thumb)) continue;
@@ -934,6 +931,13 @@ static void _refresh_highlights(dt_thumbtable_t *table)
       gtk_widget_queue_draw(thumb->widget);
   }
   dt_pthread_mutex_unlock(&table->lock);
+
+  // No thumbnail on screen is highlighted. The top bar may still name an image that is
+  // highlighted off screen, and keeps it; one this table no longer highlights -- the selection
+  // emptied by a new collection, or by "select none" -- is named by nothing any more.
+  const int32_t shown = dt_view_manager_get_global()->image_info_id;
+  if(first && shown != UNKNOWN_IMAGE && !table->ops->is_thumb_highlighted(table, shown))
+    dt_view_image_info_update(UNKNOWN_IMAGE);
 }
 
 static void _dt_selection_changed_callback(gpointer instance, gpointer user_data)
