@@ -25,6 +25,7 @@
 #include "common/conf.h"
 #include "develop/supervisor.h"
 #include "gui/application.h"
+#include "system/mem_alloc.h"
 #include "system/sys_resources.h"
 #include "widgets/scroll_wrap.h"
 #include "widgets/widget_style.h"
@@ -56,7 +57,7 @@ static struct
   GtkWidget *timeline_scroll;
   GtkWidget *grouped_list;
   GtkWidget *mem_box;     // vbox holding the memory view content
-  GHashTable *mem_lists;  // memory section key -> its list's resizable area (a reference), kept across rebuilds
+  GHashTable *mem_sections; // memory section key -> _mem_section_t*, kept from one refresh to the next
   GtkWidget *search_entry; // global search entry (in the toolbar)
   GtkWidget *search_list;  // search results page
   GtkWidget *count_label;
@@ -485,11 +486,34 @@ static void _rebuild_grouped_now(void)
 
 // ---- Memory view -------------------------------------------------------------
 
+/* The memory view is refreshed in place: its sections, bars, legends and list rows are built once
+ * and kept, and a refresh only sets the texts that changed, on the rows in sight. Rebuilt at every
+ * refresh instead, a view of some 1500 rows held the GUI thread for about 450 ms every 1.2 s, half of
+ * it destroying and building widgets, half GTK laying the new ones out. Kept but with every changed
+ * text set, it still held it 160 to 280 ms during a zoom, which changes 300 to 730 of them at every
+ * refresh: GTK lays out each label whose text changes, about 0.4 ms apiece, in sight or not. */
+
+// A label's markup, set only when it changed: setting it, even to the same text, relays it out.
+static void _set_label_markup(GtkWidget *label, const char *markup)
+{
+  if(g_strcmp0(gtk_label_get_label(GTK_LABEL(label)), markup)) gtk_label_set_markup(GTK_LABEL(label), markup);
+}
+
+// The theme's disabled look on an item, without making it insensitive: its link stays clickable.
+static void _set_mem_item_evictable(GtkWidget *item, const gboolean evictable)
+{
+  GtkStyleContext *context = gtk_widget_get_style_context(item);
+  if(evictable == gtk_style_context_has_class(context, "dt_supervisor_evictable")) return;
+  if(evictable)
+    gtk_style_context_add_class(context, "dt_supervisor_evictable");
+  else
+    gtk_style_context_remove_class(context, "dt_supervisor_evictable");
+}
+
 // A clickable memory item (markup carries the navigation link). When `trailing`
 // is non-NULL it is packed at the right edge as a separate label, so the trailing
-// column (e.g. vRAM) lines up vertically across rows. An `evictable` item wears the
-// theme's disabled look, without being insensitive: its link stays clickable.
-static void _add_mem_item(GtkWidget *box, const char *markup, const char *trailing, const gboolean evictable)
+// column (e.g. vRAM) lines up vertically across rows. Returns the item, shown.
+static GtkWidget *_new_mem_item(const char *markup, const char *trailing, GtkWidget **label, GtkWidget **trailing_label)
 {
   GtkWidget *lbl = gtk_label_new(NULL);
   gtk_label_set_markup(GTK_LABEL(lbl), markup);
@@ -499,24 +523,139 @@ static void _add_mem_item(GtkWidget *box, const char *markup, const char *traili
   gtk_label_set_ellipsize(GTK_LABEL(lbl), PANGO_ELLIPSIZE_END);
   _wire_hash_label(lbl);
 
-  if(trailing && *trailing)
+  GtkWidget *item = lbl;
+  GtkWidget *tl = NULL;
+  if(trailing)
   {
-    GtkWidget *row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 8);
-    gtk_widget_set_margin_start(row, 12);
-    gtk_box_pack_start(GTK_BOX(row), lbl, TRUE, TRUE, 0); // expands → pushes trailing to the right
-    GtkWidget *tl = gtk_label_new(NULL);
+    item = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 8);
+    gtk_box_pack_start(GTK_BOX(item), lbl, TRUE, TRUE, 0); // expands → pushes trailing to the right
+    tl = gtk_label_new(NULL);
     gtk_label_set_markup(GTK_LABEL(tl), trailing);
     gtk_label_set_xalign(GTK_LABEL(tl), 1.0);
-    gtk_box_pack_end(GTK_BOX(row), tl, FALSE, FALSE, 0);
-    if(evictable) gtk_style_context_add_class(gtk_widget_get_style_context(row), "dt_supervisor_evictable");
-    gtk_box_pack_start(GTK_BOX(box), row, FALSE, FALSE, 0);
+    gtk_box_pack_end(GTK_BOX(item), tl, FALSE, FALSE, 0);
   }
-  else
+  gtk_widget_set_margin_start(item, 12);
+  gtk_widget_show_all(item);
+  if(label) *label = lbl;
+  if(trailing_label) *trailing_label = tl;
+  return item;
+}
+
+/* A row of a memory list: its widgets, and what it shows once in sight. A row out of sight keeps its
+ * texts until it comes into it: its labels keep what they showed. */
+typedef struct _mem_row_t
+{
+  GtkWidget *item;
+  GtkWidget *label;
+  GtkWidget *trailing;  // NULL: a row without a trailing column
+  gchar *markup;
+  gchar *trailing_text;
+  gboolean evictable;
+  gboolean pending;     // its texts are not set on its labels yet
+} _mem_row_t;
+
+static void _mem_row_free(gpointer p)
+{
+  _mem_row_t *r = (_mem_row_t *)p;
+  dt_free(r->markup);
+  dt_free(r->trailing_text);
+  dt_free(r);
+}
+
+static void _mem_row_apply(_mem_row_t *r)
+{
+  if(!r->pending) return;
+  _set_label_markup(r->label, r->markup);
+  if(r->trailing) _set_label_markup(r->trailing, r->trailing_text ? r->trailing_text : "");
+  _set_mem_item_evictable(r->item, r->evictable);
+  r->pending = FALSE;
+}
+
+// How many rows past each edge of the list's sight are set with those in it.
+#define MEMORY_ROWS_AROUND_SIGHT 4
+
+/* A row in sight of its list's scrolled area, by its allocation, which is in the list's coordinates,
+ * those of the area's adjustment. A row not laid out yet is taken as in sight. */
+static gboolean _mem_row_in_sight(GtkWidget *list, const _mem_row_t *r)
+{
+  GtkAdjustment *adj = (GtkAdjustment *)g_object_get_data(G_OBJECT(list), "vadjustment");
+  GtkAllocation a;
+  gtk_widget_get_allocation(r->item, &a);
+  if(IS_NULL_PTR(adj) || a.y < 0 || a.height <= 1) return TRUE;
+  const double margin = MEMORY_ROWS_AROUND_SIGHT * (double)a.height;
+  const double value = gtk_adjustment_get_value(adj);
+  return a.y + a.height >= value - margin && a.y <= value + gtk_adjustment_get_page_size(adj) + margin;
+}
+
+// The list scrolled, resized by its grip or laid out: the texts of the rows now in sight set.
+static void _mem_list_apply_sight(GtkAdjustment *adj, gpointer list)
+{
+  GPtrArray *rows = (GPtrArray *)g_object_get_data(G_OBJECT(list), "rows");
+  for(guint i = 0; i < rows->len; i++)
   {
-    gtk_widget_set_margin_start(lbl, 12);
-    if(evictable) gtk_style_context_add_class(gtk_widget_get_style_context(lbl), "dt_supervisor_evictable");
-    gtk_box_pack_start(GTK_BOX(box), lbl, FALSE, FALSE, 0);
+    _mem_row_t *r = (_mem_row_t *)g_ptr_array_index(rows, i);
+    if(r->pending && _mem_row_in_sight(GTK_WIDGET(list), r)) _mem_row_apply(r);
   }
+}
+
+/* Item `i` of a memory list: what the row there shows, set at once when it is in sight; a new row
+ * when the list has none there or one of the other kind, set at once too, being not laid out yet. */
+static void _set_mem_item(GtkWidget *list, const guint i, const char *markup, const char *trailing,
+                          const gboolean evictable)
+{
+  GPtrArray *rows = (GPtrArray *)g_object_get_data(G_OBJECT(list), "rows");
+  _mem_row_t *r = i < rows->len ? (_mem_row_t *)g_ptr_array_index(rows, i) : NULL;
+  if(r && (trailing != NULL) != (r->trailing != NULL))
+  {
+    // A row of the other kind: replaced where it stood.
+    gtk_widget_destroy(r->item);
+    _mem_row_free(r);
+    g_ptr_array_index(rows, i) = NULL;
+    r = NULL;
+  }
+  if(IS_NULL_PTR(r))
+  {
+    r = g_new0(_mem_row_t, 1);
+    r->item = _new_mem_item("", trailing ? "" : NULL, &r->label, &r->trailing);
+    gtk_box_pack_start(GTK_BOX(list), r->item, FALSE, FALSE, 0);
+    if(i < rows->len)
+    {
+      gtk_box_reorder_child(GTK_BOX(list), r->item, (gint)i);
+      g_ptr_array_index(rows, i) = r;
+    }
+    else
+      g_ptr_array_add(rows, r);
+    r->pending = TRUE;
+  }
+
+  if(g_strcmp0(r->markup, markup))
+  {
+    dt_free(r->markup);
+    r->markup = g_strdup(markup);
+    r->pending = TRUE;
+  }
+  if(g_strcmp0(r->trailing_text, trailing))
+  {
+    dt_free(r->trailing_text);
+    r->trailing_text = g_strdup(trailing);
+    r->pending = TRUE;
+  }
+  if(r->evictable != evictable)
+  {
+    r->evictable = evictable;
+    r->pending = TRUE;
+  }
+  if(!r->pending) return;
+
+  if(_mem_row_in_sight(list, r)) _mem_row_apply(r);
+}
+
+// The rows of a memory list from `count` on, destroyed: what the refresh did not set.
+static void _trim_mem_list(GtkWidget *list, const guint count)
+{
+  GPtrArray *rows = (GPtrArray *)g_object_get_data(G_OBJECT(list), "rows");
+  for(guint i = count; i < rows->len; i++) gtk_widget_destroy(((_mem_row_t *)g_ptr_array_index(rows, i))->item);
+  if(count < rows->len) g_ptr_array_set_size(rows, count);
 }
 
 // "12 s", "14 min", "2 h": how long ago, to the unit that keeps it under two digits.
@@ -714,24 +853,44 @@ static gboolean _bar_tooltip(GtkWidget *widget, gint x, gint y, gboolean keyboar
   return TRUE;
 }
 
-/* One legend block: its swatch, then its label with its size on the line below, both lined up
- * clear of the swatch. Only the swatch wears the colour. */
-static GtkWidget *_bar_legend_block(const _bar_segment_t *seg, const char *swatch)
+// A legend block's text: the segment's label with its size on the line below.
+static gchar *_bar_legend_text(const _bar_segment_t *seg)
 {
-  gchar *mark = seg->color ? g_markup_printf_escaped("<span foreground=\"%s\">%s</span>", seg->color, swatch)
-                           : g_markup_escape_text(swatch, -1);
+  gchar *size = _bar_segment_text(seg);
+  gchar *text = g_markup_printf_escaped("%s\n%s", seg->label, size);
+  g_free(size);
+  return text;
+}
+
+// A legend label's segment: its index in the bar's segments, or -1 for what is free.
+#define BAR_LEGEND_FREE (-1)
+
+static gchar *_bar_legend_text_of(const _bar_t *bar, const int k)
+{
+  if(k != BAR_LEGEND_FREE) return _bar_legend_text(&bar->seg[k]);
+  const _bar_segment_t free_seg = { bar->free_label, _bar_free(bar), NULL, FALSE, FALSE, 0 };
+  return _bar_legend_text(&free_seg);
+}
+
+/* One legend block: its swatch, then its text, both lined up clear of the swatch. Only the swatch
+ * wears the colour. The text label goes in `texts`, with its segment `k` in its "segment" data. */
+static GtkWidget *_bar_legend_block(const _bar_t *bar, const int k, const char *swatch, GPtrArray *texts)
+{
+  const char *color = k == BAR_LEGEND_FREE ? NULL : bar->seg[k].color;
+  gchar *mark = color ? g_markup_printf_escaped("<span foreground=\"%s\">%s</span>", color, swatch)
+                      : g_markup_escape_text(swatch, -1);
   GtkWidget *swatch_label = gtk_label_new(NULL);
   gtk_label_set_markup(GTK_LABEL(swatch_label), mark);
   gtk_widget_set_valign(swatch_label, GTK_ALIGN_START);
   g_free(mark);
 
-  gchar *size = _bar_segment_text(seg);
-  gchar *text = g_markup_printf_escaped("%s\n%s", seg->label, size);
+  gchar *text = _bar_legend_text_of(bar, k);
   GtkWidget *text_label = gtk_label_new(NULL);
   gtk_label_set_markup(GTK_LABEL(text_label), text);
   gtk_label_set_xalign(GTK_LABEL(text_label), 0.0);
-  g_free(size);
   g_free(text);
+  g_object_set_data(G_OBJECT(text_label), "segment", GINT_TO_POINTER(k));
+  g_ptr_array_add(texts, text_label);
 
   GtkWidget *block = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 4);
   gtk_box_pack_start(GTK_BOX(block), swatch_label, FALSE, FALSE, 0);
@@ -739,8 +898,8 @@ static GtkWidget *_bar_legend_block(const _bar_segment_t *seg, const char *swatc
   return block;
 }
 
-// A bar, then its legend.
-static void _add_bar(GtkWidget *box, const _bar_t *bar)
+// A bar, then its legend, whose text labels go in `texts`. Returns the bar.
+static GtkWidget *_add_bar(GtkWidget *box, const _bar_t *bar, GPtrArray *texts)
 {
   GtkWidget *area = gtk_drawing_area_new();
   gtk_widget_set_size_request(area, -1, 16);
@@ -753,7 +912,7 @@ static void _add_bar(GtkWidget *box, const _bar_t *bar)
   gtk_box_pack_start(GTK_BOX(box), area, FALSE, FALSE, 0);
 
   // A single segment needs no legend: the title names it.
-  if(bar->count < 2) return;
+  if(bar->count < 2) return area;
   /* In the bar's order: the segments packed from the left, what is free, then, against the right
    * edge as in the bar, the segment left to others. */
   GtkWidget *row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 24);
@@ -763,63 +922,106 @@ static void _add_bar(GtkWidget *box, const _bar_t *bar)
   gtk_flow_box_set_column_spacing(GTK_FLOW_BOX(legend), 24);
   for(int k = 0; k < bar->count; k++)
     if(!bar->seg[k].right)
-      gtk_container_add(GTK_CONTAINER(legend), _bar_legend_block(&bar->seg[k], bar->seg[k].hatched ? "▨" : "■"));
-  const _bar_segment_t free_seg = { bar->free_label, _bar_free(bar), NULL, FALSE, FALSE, 0 };
-  gtk_container_add(GTK_CONTAINER(legend), _bar_legend_block(&free_seg, "□"));
+      gtk_container_add(GTK_CONTAINER(legend), _bar_legend_block(bar, k, bar->seg[k].hatched ? "▨" : "■", texts));
+  gtk_container_add(GTK_CONTAINER(legend), _bar_legend_block(bar, BAR_LEGEND_FREE, "□", texts));
   gtk_box_pack_start(GTK_BOX(row), legend, TRUE, TRUE, 0);
   for(int k = bar->count - 1; k >= 0; k--)
     if(bar->seg[k].right)
-      gtk_box_pack_end(GTK_BOX(row), _bar_legend_block(&bar->seg[k], bar->seg[k].hatched ? "▨" : "■"), FALSE,
+      gtk_box_pack_end(GTK_BOX(row), _bar_legend_block(bar, k, bar->seg[k].hatched ? "▨" : "■", texts), FALSE,
                        FALSE, 0);
   gtk_box_pack_start(GTK_BOX(box), row, FALSE, FALSE, 0);
+  return area;
+}
+
+// A bar and its legend's texts, set to what `bar` counts now.
+static void _update_bar(GtkWidget *area, GPtrArray *texts, const _bar_t *bar)
+{
+  *(_bar_t *)g_object_get_data(G_OBJECT(area), "bar") = *bar;
+  gtk_widget_queue_draw(area);
+  for(guint i = 0; i < texts->len; i++)
+  {
+    GtkWidget *label = (GtkWidget *)g_ptr_array_index(texts, i);
+    gchar *text = _bar_legend_text_of(bar, GPOINTER_TO_INT(g_object_get_data(G_OBJECT(label), "segment")));
+    _set_label_markup(label, text);
+    g_free(text);
+  }
 }
 
 static void _rebuild_memory(void);
 
-static gboolean _rebuild_memory_idle(gpointer user_data)
-{
-  _rebuild_memory();
-  return G_SOURCE_REMOVE;
-}
-
-/* A section is rebuilt at once rather than at the next refresh, folded or opened: what it folds is
- * built only while it is open. Not from here: the rebuild destroys this expander. */
 // The conf key of a memory section's `setting`: "ui/supervisor/memory/ram/pipeline/folded".
 static gchar *_mem_conf_key(const char *section, const char *setting)
 {
   return g_strdup_printf("ui/supervisor/memory/%s/%s", section, setting);
 }
 
-static void _on_mem_section_expanded(GObject *expander, GParamSpec *pspec, gpointer user_data)
+/* A section of the memory view, kept by its key from one refresh to the next: its title, its bar
+ * and its legend's texts, what it folds, and its list once it has one. */
+typedef struct _mem_section_t
 {
-  gchar *key = _mem_conf_key((const char *)g_object_get_data(expander, "section"), "folded");
-  dt_conf_set_bool(key, !gtk_expander_get_expanded(GTK_EXPANDER(expander)));
-  g_free(key);
-  g_idle_add(_rebuild_memory_idle, NULL);
+  GtkWidget *hdr;     // the title, on the expander
+  GtkWidget *bar;     // NULL: a section without a bar
+  GPtrArray *legend;  // the legend's text labels
+  GtkWidget *body;    // what it folds, hidden while folded
+  GtkWidget *list;    // the box its rows go in, NULL until it has a list
+} _mem_section_t;
+
+static void _mem_section_free(gpointer p)
+{
+  _mem_section_t *s = (_mem_section_t *)p;
+  g_ptr_array_free(s->legend, TRUE);
+  dt_free(s);
 }
 
-/* A section of the memory view, packed in `parent`: its title -- `title` in bold, then what its
- * bar's owner holds over its total -- with its bar and its legend under it, and what it folds: a list
- * or the sections of what the memory it shows holds, indented under it. A section without a bar is
- * named by its title alone. The expander holds the title only and folds nothing itself: holding the
- * bar too, it centred its arrow on the bar. The view is rebuilt at every refresh, so which sections
- * are folded is kept by `key`, in the conf so that it outlasts the window, not by their widgets,
- * and what a folded section folds is not built at all: returns the box it goes in, NULL when
- * folded. */
+/* A section opened is refreshed at once rather than at the next refresh: what it folds is set only
+ * while it is open. */
+static void _on_mem_section_expanded(GObject *expander, GParamSpec *pspec, gpointer user_data)
+{
+  const char *section = (const char *)g_object_get_data(expander, "section");
+  const gboolean expanded = gtk_expander_get_expanded(GTK_EXPANDER(expander));
+  gchar *key = _mem_conf_key(section, "folded");
+  dt_conf_set_bool(key, !expanded);
+  g_free(key);
+  _mem_section_t *s = (_mem_section_t *)g_hash_table_lookup(_g.mem_sections, section);
+  if(s) gtk_widget_set_visible(s->body, expanded);
+  if(expanded) _rebuild_memory();
+}
+
+/* A section of the memory view, packed in `parent` the first time: its title -- `title` in bold,
+ * then what its bar's owner holds over its total -- with its bar and its legend under it, and what
+ * it folds: a list or the sections of what the memory it shows holds, indented under it. A section
+ * without a bar is named by its title alone. The expander holds the title only and folds nothing
+ * itself: holding the bar too, it centred its arrow on the bar. Which sections are folded is kept
+ * by `key` in the conf too, so that it outlasts the window, and what a folded section folds is
+ * not refreshed: returns the box it goes in, NULL when folded. */
 static GtkWidget *_add_mem_section(GtkWidget *parent, const char *key, const char *title, const _bar_t *bar)
 {
-  GtkWidget *hdr = gtk_label_new(NULL);
   const size_t held = bar ? _bar_held(bar) : 0;
   gchar *t = bar ? g_markup_printf_escaped("<b>%s</b>   %.1f / %.1f MiB (%.0f%%)", title, held / 1048576.0,
                                            bar->total / 1048576.0,
                                            bar->total ? 100.0 * (double)held / (double)bar->total : 0.0)
                  : g_markup_printf_escaped("<b>%s</b>", title);
-  gtk_label_set_markup(GTK_LABEL(hdr), t);
+
+  _mem_section_t *s = (_mem_section_t *)g_hash_table_lookup(_g.mem_sections, key);
+  if(s)
+  {
+    _set_label_markup(s->hdr, t);
+    g_free(t);
+    if(s->bar && bar) _update_bar(s->bar, s->legend, bar);
+    return gtk_widget_get_visible(s->body) ? s->body : NULL;
+  }
+
+  s = g_new0(_mem_section_t, 1);
+  s->legend = g_ptr_array_new();
+  g_hash_table_insert(_g.mem_sections, g_strdup(key), s);
+
+  s->hdr = gtk_label_new(NULL);
+  gtk_label_set_markup(GTK_LABEL(s->hdr), t);
   g_free(t);
-  gtk_label_set_xalign(GTK_LABEL(hdr), 0.0);
-  gtk_label_set_ellipsize(GTK_LABEL(hdr), PANGO_ELLIPSIZE_END);
+  gtk_label_set_xalign(GTK_LABEL(s->hdr), 0.0);
+  gtk_label_set_ellipsize(GTK_LABEL(s->hdr), PANGO_ELLIPSIZE_END);
   // Clear of the expander's arrow, which the theme packs against it.
-  gtk_widget_set_margin_start(hdr, 6);
+  gtk_widget_set_margin_start(s->hdr, 6);
 
   // Until the user folds or opens it, a top section is open and what it holds is folded.
   const gboolean top = parent == _g.mem_box;
@@ -827,11 +1029,10 @@ static GtkWidget *_add_mem_section(GtkWidget *parent, const char *key, const cha
   const gboolean expanded = dt_conf_key_exists(folded) ? !dt_conf_get_bool(folded) : top;
   g_free(folded);
   GtkWidget *expander = gtk_expander_new(NULL);
-  gtk_expander_set_label_widget(GTK_EXPANDER(expander), hdr);
+  gtk_expander_set_label_widget(GTK_EXPANDER(expander), s->hdr);
   gtk_expander_set_label_fill(GTK_EXPANDER(expander), TRUE);
   gtk_expander_set_expanded(GTK_EXPANDER(expander), expanded);
   g_object_set_data_full(G_OBJECT(expander), "section", g_strdup(key), g_free);
-  g_signal_connect(expander, "notify::expanded", G_CALLBACK(_on_mem_section_expanded), NULL);
 
   GtkWidget *section = gtk_box_new(GTK_ORIENTATION_VERTICAL, 2);
   gtk_widget_set_margin_top(section, top ? 8 : 6);
@@ -844,58 +1045,68 @@ static GtkWidget *_add_mem_section(GtkWidget *parent, const char *key, const cha
      * spacing, as wide as the theme makes them, and the label's own margin comes on top. A hidden
      * widget asks nothing, and the theme reaches them once they are in the window. */
     gtk_widget_show(expander);
-    gtk_widget_show(hdr);
+    gtk_widget_show(s->hdr);
     int expander_width = 0, label_width = 0;
     gtk_widget_get_preferred_width(expander, NULL, &expander_width);
-    gtk_widget_get_preferred_width(hdr, NULL, &label_width);
+    gtk_widget_get_preferred_width(s->hdr, NULL, &label_width);
     GtkWidget *bar_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 2);
-    gtk_widget_set_margin_start(bar_box, MAX(expander_width - label_width, 0) + gtk_widget_get_margin_start(hdr));
-    _add_bar(bar_box, bar);
+    gtk_widget_set_margin_start(bar_box, MAX(expander_width - label_width, 0) + gtk_widget_get_margin_start(s->hdr));
+    s->bar = _add_bar(bar_box, bar, s->legend);
     gtk_box_pack_start(GTK_BOX(section), bar_box, FALSE, FALSE, 0);
   }
-  if(!expanded) return NULL;
 
-  GtkWidget *body = gtk_box_new(GTK_ORIENTATION_VERTICAL, 2);
-  gtk_box_pack_start(GTK_BOX(section), body, FALSE, FALSE, 0);
-  return body;
+  // Shown by the expander alone: a show_all() over the window would open every folded section.
+  s->body = gtk_box_new(GTK_ORIENTATION_VERTICAL, 2);
+  gtk_widget_set_no_show_all(s->body, TRUE);
+  gtk_box_pack_start(GTK_BOX(section), s->body, FALSE, FALSE, 0);
+  gtk_widget_show_all(section);
+  gtk_widget_set_visible(s->body, expanded);
+  // Connected once the expander is set, so that setting it does not refresh the view.
+  g_signal_connect(expander, "notify::expanded", G_CALLBACK(_on_mem_section_expanded), NULL);
+  return expanded ? s->body : NULL;
 }
 
 /* A section's list: a recessed area of a fixed height, which the user changes by the grip on its
  * bottom edge, kept in the conf. Fitted to its rows, a list first seen empty stayed one row tall
- * as it filled. The view is rebuilt at every refresh, but not the area: kept by its section,
- * unpacked before the rebuild and packed again around new rows, it keeps its height and where it
- * was scrolled. Its rows are swapped between two allocations, so its scroll position is never
- * clamped to an empty list. Returns the box the rows go in, emptied. */
+ * as it filled. Built once in the section's `body`, with the section, it keeps its height and where
+ * it was scrolled. Returns the box the rows go in, which `_set_mem_item()` refreshes row by row. */
 static GtkWidget *_mem_list(GtkWidget *body, const char *section)
 {
-  GtkWidget *area = (GtkWidget *)g_hash_table_lookup(_g.mem_lists, section);
-  if(IS_NULL_PTR(area))
+  _mem_section_t *s = (_mem_section_t *)g_hash_table_lookup(_g.mem_sections, section);
+  if(s->list) return s->list;
+
+  GtkWidget *list = gtk_box_new(GTK_ORIENTATION_VERTICAL, 2);
+  g_object_set_data_full(G_OBJECT(list), "rows", g_ptr_array_new_with_free_func(_mem_row_free),
+                         (GDestroyNotify)g_ptr_array_unref);
+  gchar *key = _mem_conf_key(section, "height");
+  /* Until the grip sets it, MEMORY_LIST_ROWS rows. The list may be empty yet, so a row is measured
+   * on a probe built like one, in the window, where the theme reaches it. */
+  if(!dt_conf_key_exists(key))
   {
-    GtkWidget *list = gtk_box_new(GTK_ORIENTATION_VERTICAL, 2);
-    gchar *key = _mem_conf_key(section, "height");
-    /* Until the grip sets it, MEMORY_LIST_ROWS rows. The list may be empty yet, so a row is measured
-     * on a probe built like one, in the window, where the theme reaches it. */
-    if(!dt_conf_key_exists(key))
-    {
-      GtkWidget *probe = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
-      gtk_box_pack_start(GTK_BOX(body), probe, FALSE, FALSE, 0);
-      _add_mem_item(probe, "<a href=\"0\"><tt>0x0</tt></a>  <i>0</i>", "<tt>0</tt>", FALSE);
-      // A hidden widget asks for nothing.
-      gtk_widget_show_all(probe);
-      int row = 0;
-      gtk_widget_get_preferred_height(probe, NULL, &row);
-      gtk_widget_destroy(probe);
-      if(row > 0) dt_conf_set_int(key, MEMORY_LIST_ROWS * (row + gtk_box_get_spacing(GTK_BOX(list))));
-    }
-    area = dt_ui_scroll_wrap(list, 20, key, DT_UI_RESIZE_STATIC);
-    g_free(key);
-    dt_gui_add_class(dt_ui_scroll_wrap_get_scrolled_window(area), "dt_recessed_scroll");
-    g_object_set_data(G_OBJECT(area), "list", list);
-    g_hash_table_insert(_g.mem_lists, g_strdup(section), g_object_ref_sink(area));
+    GtkWidget *probe = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+    gtk_box_pack_start(GTK_BOX(body), probe, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(probe), _new_mem_item("<a href=\"0\"><tt>0x0</tt></a>  <i>0</i>", "<tt>0</tt>", NULL, NULL),
+                       FALSE, FALSE, 0);
+    // A hidden widget asks for nothing.
+    gtk_widget_show_all(probe);
+    int row = 0;
+    gtk_widget_get_preferred_height(probe, NULL, &row);
+    gtk_widget_destroy(probe);
+    if(row > 0) dt_conf_set_int(key, MEMORY_LIST_ROWS * (row + gtk_box_get_spacing(GTK_BOX(list))));
   }
-  GtkWidget *list = (GtkWidget *)g_object_get_data(G_OBJECT(area), "list");
-  _clear_list(list);
+  GtkWidget *area = dt_ui_scroll_wrap(list, 20, key, DT_UI_RESIZE_STATIC);
+  g_free(key);
+  GtkWidget *sw = dt_ui_scroll_wrap_get_scrolled_window(area);
+  dt_gui_add_class(sw, "dt_recessed_scroll");
+  /* Scrolled, or resized by its grip: "changed" is its page size, and its rows' height once they are
+   * laid out. */
+  GtkAdjustment *adj = gtk_scrolled_window_get_vadjustment(GTK_SCROLLED_WINDOW(sw));
+  g_object_set_data(G_OBJECT(list), "vadjustment", adj);
+  g_signal_connect_object(adj, "value-changed", G_CALLBACK(_mem_list_apply_sight), list, 0);
+  g_signal_connect_object(adj, "changed", G_CALLBACK(_mem_list_apply_sight), list, 0);
   gtk_box_pack_start(GTK_BOX(body), area, FALSE, FALSE, 0);
+  gtk_widget_show_all(area);
+  s->list = list;
   return list;
 }
 
@@ -967,29 +1178,20 @@ static void _add_device_section(GArray *pe, const int devid)
     gchar *m = g_strdup_printf("<a href=\"%s\"><tt>%s</tt></a>  refs=%d hits=%d  <i>%s</i>", hx, hx, e->refcount,
                                e->hits, ename);
     gchar *column = g_strdup_printf("<tt>%8.2f MiB %2d buf</tt>", d->cl_bytes / 1048576.0, d->cl_count);
-    _add_mem_item(list, m, column, e->refcount == 0);
+    _set_mem_item(list, shown, m, column, e->refcount == 0);
     g_free(hx);
     g_free(ename);
     g_free(m);
     g_free(column);
     shown++;
   }
+  _trim_mem_list(list, shown);
   g_free(key);
 }
 
 static void _rebuild_memory(void)
 {
   if(!_g.mem_box) return;
-  // Out of the sections first: destroying a container destroys its children, referenced or not.
-  GHashTableIter it;
-  gpointer area = NULL;
-  g_hash_table_iter_init(&it, _g.mem_lists);
-  while(g_hash_table_iter_next(&it, NULL, &area))
-  {
-    GtkWidget *parent = gtk_widget_get_parent(GTK_WIDGET(area));
-    if(parent) gtk_container_remove(GTK_CONTAINER(parent), GTK_WIDGET(area));
-  }
-  _clear_list(_g.mem_box);
 
   // Pipeline cache
   size_t cur = 0, max = 0;
@@ -1081,7 +1283,7 @@ static void _rebuild_memory(void)
         // Named after where it was allocated; its hash is its address, which no event names.
         gchar *m = g_strdup_printf("<span foreground=\"%s\">■</span> %s  <i>%s</i>", COLOR_ALLOCATIONS,
                                    _("allocation"), name);
-        _add_mem_item(list, m, column, FALSE);
+        _set_mem_item(list, shown, m, column, FALSE);
         g_free(m);
       }
       else
@@ -1092,7 +1294,7 @@ static void _rebuild_memory(void)
                                    COLOR_PIPELINE, hx, hx, e->refcount, e->hits, name);
         /* A line nobody holds is what the LRU, the pressure valve and the flushes may free. They
          * also skip a line someone has locked, but whoever writes or reads a line holds it too. */
-        _add_mem_item(list, m, column, e->refcount == 0);
+        _set_mem_item(list, shown, m, column, e->refcount == 0);
         g_free(hx);
         g_free(m);
       }
@@ -1100,6 +1302,7 @@ static void _rebuild_memory(void)
       g_free(column);
       shown++;
     }
+    _trim_mem_list(list, shown);
   }
 
   // Mipmap cache
@@ -1115,16 +1318,18 @@ static void _rebuild_memory(void)
   g_free(mtitle);
   GtkWidget *mlist = mbody ? _mem_list(mbody, "ram/mipmap") : NULL;
   if(mlist) g_array_sort(me, _cmp_mip_size);
+  guint mshown = 0;
   for(guint i = 0; mlist && i < me->len && i < MEMORY_MAX_ROWS; i++)
   {
     const dt_mipmap_cache_stats_entry_t *e = &g_array_index(me, dt_mipmap_cache_stats_entry_t, i);
     gchar *hx = _hashhex(dt_supervisor_mipmap_key(e->imgid, e->mip));
     gchar *m = g_strdup_printf("<a href=\"%s\">image #%d · mip %d</a>  %.2f MiB", hx, e->imgid, e->mip,
                                e->size / 1048576.0);
-    _add_mem_item(mlist, m, NULL, FALSE);
+    _set_mem_item(mlist, mshown++, m, NULL, FALSE);
     g_free(hx);
     g_free(m);
   }
+  if(mlist) _trim_mem_list(mlist, mshown);
   g_array_free(me, TRUE);
 
   // Image cache
@@ -1142,24 +1347,24 @@ static void _rebuild_memory(void)
   g_free(ititle);
   GtkWidget *ilist = ibody ? _mem_list(ibody, "ram/image") : NULL;
   if(ilist) g_array_sort(ie, _cmp_image_imgid);
+  guint ishown = 0;
   for(guint i = 0; ilist && i < ie->len && i < MEMORY_MAX_ROWS; i++)
   {
     const dt_image_cache_stats_entry_t *e = &g_array_index(ie, dt_image_cache_stats_entry_t, i);
     gchar *hx = _hashhex(dt_supervisor_image_key(e->imgid));
     gchar *fn = g_markup_escape_text(e->filename[0] ? e->filename : "-", -1);
     gchar *m = g_strdup_printf("<a href=\"%s\">image #%d</a>  <i>%s</i>", hx, e->imgid, fn);
-    _add_mem_item(ilist, m, NULL, FALSE);
+    _set_mem_item(ilist, ishown++, m, NULL, FALSE);
     g_free(hx);
     g_free(fn);
     g_free(m);
   }
+  if(ilist) _trim_mem_list(ilist, ishown);
   g_array_free(ie, TRUE);
 
   if(gpu)
     for(int devid = 0; devid < dt_opencl_get_num_devices(); devid++) _add_device_section(pe, devid);
   g_array_free(pe, TRUE);
-
-  gtk_widget_show_all(_g.mem_box);
 }
 
 // ---- Search ------------------------------------------------------------------
@@ -1241,8 +1446,8 @@ static gboolean _scroll_bottom_idle(gpointer u)
   return G_SOURCE_REMOVE;
 }
 
-/* A mouse button held over the window: a drag in progress, maybe on a list's grip, which a rebuild
- * of the memory view would cut short by unpacking the grip under the pointer. */
+/* A mouse button held over the window: a click in progress, maybe on an item's link, which a refresh
+ * of the memory view would lose by setting another item's text in that row before the release. */
 static gboolean _pointer_button_down(void)
 {
   GdkWindow *window = gtk_widget_get_window(_g.window);
@@ -1451,7 +1656,7 @@ static void _on_destroy(GtkWidget *w, gpointer u)
   dt_supervisor_set_recording(FALSE); // stop capturing once the viewer is gone
   if(_g.decl_map) g_hash_table_destroy(_g.decl_map);
   if(_g.group_map) g_hash_table_destroy(_g.group_map);
-  if(_g.mem_lists) g_hash_table_destroy(_g.mem_lists);
+  if(_g.mem_sections) g_hash_table_destroy(_g.mem_sections);
   g_free(_g.scroll_target);
   memset(&_g, 0, sizeof(_g));
 }
@@ -1466,7 +1671,7 @@ void dt_gui_supervisor_window_show(void)
 
   _g.decl_map = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, NULL);
   _g.group_map = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, _group_free);
-  _g.mem_lists = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, g_object_unref);
+  _g.mem_sections = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, _mem_section_free);
 
   _g.window = gtk_window_new(GTK_WINDOW_TOPLEVEL);
   gtk_window_set_title(GTK_WINDOW(_g.window), _("Event supervisor"));
