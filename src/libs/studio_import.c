@@ -548,7 +548,7 @@ void gui_cleanup(dt_lib_module_t *self)
   self->data = NULL;
 }
 
-void *get_params(dt_lib_module_t *self, int *size)
+void *get_params(__attribute__((unused)) dt_lib_module_t *self, int *size)
 {
   const dt_lib_studio_import_params_t fixed = {
     .copy = dt_conf_get_bool("studio_capture/copy"),

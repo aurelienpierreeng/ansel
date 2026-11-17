@@ -175,11 +175,10 @@ gboolean _copy_file(const char *filename, const char *dest_file_path)
 /**
  * @brief Add an image entry in the database and returns its imgID
  *
- * @param data informations from the import module
  * @param img_path_to_db the file path to import
  * @return const int32_t
  */
-const int32_t _import_job(dt_control_import_t *data, gchar *img_path_to_db)
+const int32_t _import_job(gchar *img_path_to_db)
 {
   gchar *dirname = g_strdup(dt_util_path_get_dirname(img_path_to_db));
 
@@ -427,7 +426,7 @@ int32_t _import_image(const GList *img, dt_control_import_t *data, const char *f
     return UNKNOWN_IMAGE;
   }
 
-  const int32_t imgid = _import_job(data, img_path_to_db);
+  const int32_t imgid = _import_job(img_path_to_db);
   if(imgid <= 0)
   {
     dt_control_alert(_("Import problem"), _("Error importing file in collection"), img_path_to_db);
@@ -438,19 +437,17 @@ int32_t _import_image(const GList *img, dt_control_import_t *data, const char *f
   dt_print(DT_DEBUG_IMPORT, "[Import] Found and imported %i XMP for %s.\n", *xmps, img_path_to_db);
   dt_print(DT_DEBUG_IMPORT, "[Import] successfully imported %s in DB at imgid %i\n", img_path_to_db, imgid);
 
-  if(!IS_NULL_PTR(data->styles))
+  dt_hm_batch_state_t batch = { 0 };
+  for(GList *s = data->styles; s; s = g_list_next(s))
   {
-    dt_hm_batch_state_t batch = { 0 };
-    for(GList *s = data->styles; s; s = g_list_next(s))
-    {
-      const char *style_name = (const char *)s->data;
-      const int32_t style_id = dt_styles_get_id_by_name(style_name);
-      if(style_id <= 0) continue;
-      dt_styles_apply_to_image_merge(style_name, style_id, imgid, DT_HISTORY_MERGE_APPEND, &batch);
-    }
-    dt_hm_batch_state_cleanup(&batch);
-    dt_image_history_changed(imgid, TRUE);
+    const char *style_name = (const char *)s->data;
+    const int32_t style_id = dt_styles_get_id_by_name(style_name);
+    if(style_id <= 0) continue;
+    dt_styles_apply_to_image_merge(style_name, style_id, imgid, DT_HISTORY_MERGE_APPEND, &batch);
   }
+  dt_hm_batch_state_cleanup(&batch);
+  // Not for an import without styles: the filmstrip refresh would run once per imported image.
+  if(!IS_NULL_PTR(data->styles)) dt_image_history_changed(imgid, TRUE);
 
   if(data->folder_survey) dt_image_notify_imported(imgid);
 
