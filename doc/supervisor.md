@@ -220,6 +220,10 @@ its own position nor the right to set it, the size only (as the masks panel,
   clicking jumps to that object's event in the timeline (a pipeline item to its
   cacheline `create`, a mipmap item to its `mipmap` object event — whose detail
   shows the `dt_image_t` properties — via the synthetic `(imgid, mip)` key).
+  An object whose `create` event the timeline does not hold -- made before
+  **Record** was on, or trimmed -- has nowhere to jump to, and the click does
+  nothing: 15 of 17 clicks on 2026-11-17, `_g.decl_map` holding 0, then 238 to 277
+  objects, with the pipeline cache's lines made before.
   Every section has a title on a `GtkExpander` -- a top section
   (**RAM**, each **vRAM** device) open by default, a section under one folded --
   with its bar and
@@ -236,28 +240,47 @@ its own position nor the right to set it, the size only (as the masks panel,
   pipeline cache, mipmap cache and image cache sections indented under its bar;
   then each **vRAM** device, with under its bar a *Pipeline cache* section (no bar
   of its own: its size is the device bar's first segment) holding the device's
-  list. The view is rebuilt at every refresh, so which sections are folded is not
-  widget state but the conf, by section key: `ui/supervisor/memory/<key>/folded`
-  (`ram`, `ram/pipeline`, `ram/mipmap`, `ram/image`, `vram-0`, `vram-0/pipeline`,
-  …), so it outlasts the window and the session. What a folded section folds is
-  not built, and folding or opening one rebuilds the view from an idle source,
-  not from the expander's own signal, since the rebuild destroys that expander.
+  list. Which sections are folded is kept in the conf too, by section key:
+  `ui/supervisor/memory/<key>/folded` (`ram`, `ram/pipeline`, `ram/mipmap`,
+  `ram/image`, `vram-0`, `vram-0/pipeline`, …), so it outlasts the window and the
+  session. What a folded section folds is hidden and not refreshed; opening one
+  refreshes the view at once.
+  The view is refreshed in place, never rebuilt: `_g.mem_sections` keeps each
+  section by key -- its title, its bar and legend texts, its folded body, its list
+  -- and a refresh sets only the texts that changed (`gtk_label_set_markup()` lays
+  a label out again even for the same text). A list's rows are kept too, reused by
+  position: a refresh sets row *i* to item *i*, creates rows past the end and
+  destroys those past the new count. A row only stores what it should show; its
+  labels get it when the row is in sight of its scrolled area, or four rows past
+  either edge, tested on its own allocation (rows of different fonts differ in
+  height, so an index would drift down a 500-row list); the others get it when
+  scrolling, the grip or a layout brings them in sight (the area's vadjustment
+  `value-changed` and `changed`). A row not laid out yet counts as in sight.
+  Measured 2026-11-17 against `dec7043977`, whose `supervisor_window.c` is
+  master's `5c05c61c73`, with a watchdog shim that samples the GUI thread's stack
+  when its main loop has not ticked for 60 ms, and a shim counting
+  `gtk_label_set_markup()` and `pango_layout_copy()` per 100 ms: rebuilt at every
+  refresh, the view held the GUI thread about 450 ms every 1.2 s (160--195 ms
+  destroying and building widgets, then 250--280 ms of GTK layout), which showed
+  as a periodic hitch in the darkroom whenever something moved there -- a shape
+  following the pointer, a zoom. Kept, with every changed text set, 160--280 ms
+  during a zoom: each zoom step adds pipeline cache lines, and 300 to 730 labels
+  changed text at every refresh, each laid out again (about 0.4 ms apiece, the
+  layout copies matching the texts set one for one), in sight or not. Set in sight
+  only, 19 to 70 layouts per 100 ms and hitches of 66--165 ms during a zoom, part
+  of them the darkroom's own drawing.
   Each list sits in a recessed `dt_ui_scroll_wrap()` area with a grip on its
   bottom edge, of a fixed height (`DT_UI_RESIZE_STATIC`) whatever it holds:
   `ui/supervisor/memory/<key>/height`, which, until the grip writes it, is set
   once to 20 rows (`MEMORY_LIST_ROWS` times the height of a probe row built like
   the real ones, in the window so the theme reaches it, then destroyed: the list
   may still be empty). Fitted to its rows (`DT_UI_RESIZE_DYNAMIC`), a list first
-  seen with one row stayed that tall as it filled (2026-10-19). The areas are
-  not rebuilt with the view: `_g.mem_lists` keeps each by section key, the rebuild
-  unpacks them before destroying the sections (destroying a container destroys its
-  children, referenced or not) and packs them again around new rows. The rows are
-  swapped between two allocations, so the area keeps its height and its scroll
-  position: rebuilt with the view, a list would go back to its top at every
-  refresh. A refresh is also skipped while a mouse button is held over the window
-  (`gdk_window_get_device_position()`): a drag on a grip would be cut short by the
-  grip being unpacked under the pointer.
-  Refreshed when shown and throttled (~1 s) while visible.
+  seen with one row stayed that tall as it filled (2026-10-19). Built once with
+  its section, an area keeps its height and its scroll position. A refresh is
+  skipped while a mouse button is held over the window
+  (`gdk_window_get_device_position()`): a click on an item's link would be lost to
+  the row's text being set between the press and the release.
+  Refreshed when shown and every fourth 300 ms poll (1.2 s) while visible.
   Introspection comes from `dt_dev_pixelpipe_cache_get_{usage,entries_stats}()`
   and `dt_mipmap_cache_get_{usage,entries_stats}()`.
 - **Search** — query events by hash *or* free text. Type into the global search
