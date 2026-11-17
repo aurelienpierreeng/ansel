@@ -47,6 +47,7 @@
 #include "develop/imageop.h"
 #include "develop/imageop_math.h"
 #include "develop/imageop_gui.h"
+#include "develop/iop_profile.h"
 #include "math/openmp_maths.h"
 
 #include "gui/presets.h"
@@ -58,6 +59,7 @@
 #include <stdlib.h>
 #include "widgets/label.h"
 #include "widgets/notebook.h"
+#include "widgets/togglebutton.h"
 
 /** DOCUMENTATION
  *
@@ -107,7 +109,8 @@ typedef struct dt_iop_negadoctor_params_t
                                                $MIN: 0.05 $MAX: 2 $DEFAULT: 1.0 */
   float D_max;                              /* max density of film
                                                $MIN: 0.1 $MAX: 6 $DEFAULT: 2.046 */
-  float offset;                             /* inversion offset
+  float offset;                             /* inversion offset in v1; in v2, which has no use for it, the saturation of
+                                               the print relative to the paper grade
                                                $MIN: -1.0 $MAX: 1.0 $DEFAULT: 0.0 $DESCRIPTION: "film exposure bias" */
   float black;                              /* display black level
                                                $MIN: -0.5 $MAX: 0.5 $DEFAULT: 0.0755 $DESCRIPTION: "paper black (density correction)" */
@@ -131,6 +134,7 @@ typedef struct dt_iop_negadoctor_data_t
   dt_aligned_pixel_t offset;              // inversion offset
   float black;                            // display black level
   float gamma;                            // display gamma
+  float color_gamma;                      // power of the channels' ratios to the luminance, gamma unless v2 saturates
   float soft_clip;                        // highlights roll-off
   float soft_clip_comp;                   // 1 - softclip, complement to 1
   float exposure;                         // extra exposure
@@ -148,7 +152,7 @@ typedef struct dt_iop_negadoctor_gui_data_t
   GtkWidget *version;
   GtkWidget *D_max;
   GtkWidget *offset;
-  GtkWidget *black, *gamma, *soft_clip, *exposure;
+  GtkWidget *black, *gamma, *saturation, *soft_clip, *exposure, *auto_print;
   GtkWidget *Dmin_picker, *Dmin_sampler;
   GtkWidget *WB_high_picker, *WB_high_norm, *WB_high_sampler;
   GtkWidget *WB_low_picker, *WB_low_norm, *WB_low_sampler, *WB_low_row, *WB_low_section;
@@ -305,6 +309,20 @@ static void _data_from_params(const dt_iop_negadoctor_params_t *const p, dt_iop_
   // copy
   d->exposure = p->exposure;
   d->gamma = p->gamma;
+
+  // v2 keeps its saturation in the field v1 uses for the bias: 0 raises the channels' ratios to the grade, as
+  // v1 always does, -1 drops them, +1 doubles their power
+  d->color_gamma = (p->version == DT_NEGADOCTOR_V2) ? p->gamma * (1.0f + p->offset) : p->gamma;
+}
+
+// The luminance weights of the pipe's working RGB, Rec. 2020's when it is not a matrix profile
+static void _working_luminance(const dt_dev_pixelpipe_t *const pipe, dt_aligned_pixel_t luminance)
+{
+  const dt_iop_order_iccprofile_info_t *const work_profile = dt_ioppr_get_pipe_work_profile_info(pipe);
+  const gboolean matrix = !IS_NULL_PTR(work_profile) && !isnan(work_profile->matrix_in[0][0]);
+  const dt_aligned_pixel_t rec2020 = { 0.2627002f, 0.6779981f, 0.0593017f, 0.0f };
+  for(int c = 0; c < 3; c++) luminance[c] = matrix ? work_profile->matrix_in[1][c] : rec2020[c];
+  luminance[3] = 0.0f;
 }
 
 // The corrected density process() gives value v in channel c
@@ -329,18 +347,24 @@ int process(struct dt_iop_module_t *const self, const dt_dev_pixelpipe_t *const 
   const dt_iop_negadoctor_data_t *const d = piece->data;
   const float *const restrict in = (float *)ivoid;
   float *const restrict out = (float *)ovoid;
-  __OMP_FOR_SIMD__(aligned(in, out:64) collapse(2))
+  // The paper grade raises the luminance of the print to its power, and the ratios of the channels to the
+  // luminance to color_gamma: at color_gamma = gamma this is each channel raised to gamma.
+  const gboolean saturate = (d->color_gamma != d->gamma);
+  dt_aligned_pixel_t luminance;
+  _working_luminance(pipe, luminance);
+
+  __OMP_FOR_SIMD__(aligned(in, out:64))
   for(size_t k = 0; k < (size_t)roi_out->height * roi_out->width * 4; k += 4)
   {
+    const float *const restrict pix_in = in + k;
+    float *const restrict pix_out = out + k;
+    const float *const restrict Dmin = __builtin_assume_aligned(d->Dmin, 16);
+    const float *const restrict wb_high = __builtin_assume_aligned(d->wb_high, 16);
+    const float *const restrict offset = __builtin_assume_aligned(d->offset, 16);
+
+    dt_aligned_pixel_t print_linear;
     for(size_t c = 0; c < 4; c++)
     {
-      // Unpack vectors one by one with extra pragmas to be sure the compiler understands they can be vectorized
-      const float *const restrict pix_in = in + k;
-      float *const restrict pix_out = out + k;
-      const float *const restrict Dmin = __builtin_assume_aligned(d->Dmin, 16);
-      const float *const restrict wb_high = __builtin_assume_aligned(d->wb_high, 16);
-      const float *const restrict offset = __builtin_assume_aligned(d->offset, 16);
-
       // Convert transmission to density using Dmin as a fulcrum
       const float density = - log10f(Dmin[c] / fmaxf(pix_in[c], THRESHOLD)); // threshold to -32 EV
 
@@ -348,8 +372,18 @@ int process(struct dt_iop_module_t *const self, const dt_dev_pixelpipe_t *const 
       const float corrected_de = wb_high[c] * density + offset[c];
 
       // Print density on paper : ((1 - 10^corrected_de + black) * exposure)^gamma rewritten for FMA
-      const float print_linear = -(d->exposure * fast_exp10f(corrected_de) + d->black);
-      const float print_gamma = powf(fmaxf(print_linear, 0.0f), d->gamma); // note : this is always > 0
+      print_linear[c] = fmaxf(-(d->exposure * fast_exp10f(corrected_de) + d->black), 0.0f);
+    }
+
+    const float grey = luminance[0] * print_linear[0] + luminance[1] * print_linear[1] + luminance[2] * print_linear[2];
+    const float grey_gamma = powf(grey, d->gamma);
+
+    for(size_t c = 0; c < 4; c++)
+    {
+      // note : this is always >= 0
+      const float print_gamma = !saturate ? powf(print_linear[c], d->gamma)
+                                : (grey > 0.0f) ? grey_gamma * powf(print_linear[c] / grey, d->color_gamma)
+                                                : 0.0f;
 
       // Compress highlights. from https://lists.gnu.org/archive/html/openexr-devel/2005-03/msg00009.html
       pix_out[c] =  (print_gamma > d->soft_clip) ? d->soft_clip + (1.0f - fast_expf(-(print_gamma - d->soft_clip) / d->soft_clip_comp)) * d->soft_clip_comp
@@ -378,6 +412,8 @@ int process_cl(struct dt_iop_module_t *const self, const dt_dev_pixelpipe_t *con
   const int height = roi_in->height;
 
   size_t sizes[] = { ROUNDUPDWD(width, devid), ROUNDUPDHT(height, devid), 1 };
+  dt_aligned_pixel_t luminance;
+  _working_luminance(pipe, luminance);
 
   dt_opencl_set_kernel_arg(devid, gd->kernel_negadoctor, 0, sizeof(cl_mem), (void *)&dev_in);
   dt_opencl_set_kernel_arg(devid, gd->kernel_negadoctor, 1, sizeof(cl_mem), (void *)&dev_out);
@@ -391,6 +427,8 @@ int process_cl(struct dt_iop_module_t *const self, const dt_dev_pixelpipe_t *con
   dt_opencl_set_kernel_arg(devid, gd->kernel_negadoctor, 9, sizeof(float), (void *)&d->gamma);
   dt_opencl_set_kernel_arg(devid, gd->kernel_negadoctor, 10, sizeof(float), (void *)&d->soft_clip);
   dt_opencl_set_kernel_arg(devid, gd->kernel_negadoctor, 11, sizeof(float), (void *)&d->soft_clip_comp);
+  dt_opencl_set_kernel_arg(devid, gd->kernel_negadoctor, 12, 4 * sizeof(float), (void *)&luminance);
+  dt_opencl_set_kernel_arg(devid, gd->kernel_negadoctor, 13, sizeof(float), (void *)&d->color_gamma);
 
   err = dt_opencl_enqueue_kernel_2d(devid, gd->kernel_negadoctor, sizes);
   if(err != CL_SUCCESS) goto error;
@@ -566,6 +604,7 @@ static void _black_point_sliders_set(dt_iop_negadoctor_gui_data_t *const g, cons
 {
   dt_gui_freeze_begin();
   dt_bauhaus_slider_set(g->offset, p->offset);
+  dt_bauhaus_slider_set(g->saturation, p->offset);
   dt_bauhaus_slider_set(g->wb_low_R, p->wb_low[0]);
   dt_bauhaus_slider_set(g->wb_low_G, p->wb_low[1]);
   dt_bauhaus_slider_set(g->wb_low_B, p->wb_low[2]);
@@ -969,12 +1008,11 @@ static void apply_auto_exposure(dt_iop_module_t *self)
   dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
 }
 
-// Kodak's Cineon aims, as densities above the blacks: mid grey at code 470 (18 % reflectance),
-// diffuse white at code 685 (90 %).
-#define NEGADOCTOR_GREY_DENSITY 0.75f
+// Kodak's Cineon aims: mid grey at code 470 prints at 18 % reflectance, diffuse white at code 685 at 90 %,
+// 215 codes of 0.002 D above it.
 #define NEGADOCTOR_GREY_PRINT 0.18f
-#define NEGADOCTOR_WHITE_DENSITY 1.18f
 #define NEGADOCTOR_WHITE_PRINT 0.90f
+#define NEGADOCTOR_WHITE_ABOVE_GREY 0.43f
 
 // The print value before the paper gloss that the gloss turns into `print`, which must be below 1.
 static inline float _unglossed(const float print, const float soft_clip)
@@ -983,28 +1021,37 @@ static inline float _unglossed(const float print, const float soft_clip)
                              : print;
 }
 
-// Mean over RGB of log(1 + black - 10^corrected) for a neutral `density` above the blacks: the log of the
-// print before exposure and grade, in geometric mean.
-static inline float _mean_log_print(const dt_iop_negadoctor_params_t *const p, const float black, const float density)
+// Mean over RGB of log(1 + black - 10^corrected) for the film transmittance `value`, made `denser` D denser in
+// every channel: the log of the print before exposure and grade, in geometric mean.
+static inline float _mean_log_print(const dt_iop_negadoctor_params_t *const p, const dt_iop_negadoctor_data_t *const d,
+                                    const dt_aligned_pixel_t value, const float denser)
 {
   float mean = 0.0f;
-  for(int c = 0; c < 3; c++) mean += logf(1.0f + black - fast_exp10f(-p->wb_high[c] * density / p->D_max)) / 3.0f;
+  for(int c = 0; c < 3; c++)
+    mean += logf(1.0f + p->black - fast_exp10f(_corrected_density(d, c, value[c]) - d->wb_high[c] * denser)) / 3.0f;
   return mean;
 }
 
-// Set print exposure and paper grade from the film settings and the paper black as they stand, so that
-// mid grey and diffuse white print at their Cineon reflectances, in geometric mean over RGB.
-static void _auto_print_callback(GtkWidget *widget, dt_iop_module_t *self)
+// Set print exposure and paper grade from the film settings and the paper black as they stand, so that the
+// mean of the picked area prints as mid grey and a density 0.43 D above it as diffuse white, at their Cineon
+// reflectances, in geometric mean over RGB; in v2, set the saturation so that the colors keep the scene's
+// ratio between them too.
+// The mean is that of the transmittance, the large-area integrated density by which printers set their
+// exposure frame by frame (Evans' integration to grey): Cineon's grey sits at a fixed density, which only a
+// normally exposed negative reaches, so an underexposed frame printed from it comes out dark.
+static void apply_auto_print(dt_iop_module_t *self)
 {
   if(dt_gui_widgets_suppressed()) return;
   dt_iop_negadoctor_gui_data_t *g = (dt_iop_negadoctor_gui_data_t *)dt_iop_gui_data(self);
   dt_iop_negadoctor_params_t *p = (dt_iop_negadoctor_params_t *)self->params;
+  dt_iop_negadoctor_data_t d;
+  _data_from_params(p, &d);
 
   // (exposure · print)^grade = aim at grey and white: two equations, linear in grade and log(exposure).
   const float log_grey = logf(_unglossed(NEGADOCTOR_GREY_PRINT, p->soft_clip));
   const float log_white = logf(_unglossed(NEGADOCTOR_WHITE_PRINT, p->soft_clip));
-  const float print_grey = _mean_log_print(p, p->black, NEGADOCTOR_GREY_DENSITY);
-  const float print_white = _mean_log_print(p, p->black, NEGADOCTOR_WHITE_DENSITY);
+  const float print_grey = _mean_log_print(p, &d, self->picked_color, 0.0f);
+  const float print_white = _mean_log_print(p, &d, self->picked_color, NEGADOCTOR_WHITE_ABOVE_GREY);
 
   // A white balance that leaves white no lighter than grey, or a paper black so low that grey prints at
   // zero or below in some channel (grey prints darker than white, so it reaches zero first), has no solution: keep exposure and grade.
@@ -1015,11 +1062,18 @@ static void _auto_print_callback(GtkWidget *widget, dt_iop_module_t *self)
     // Once the grade is clamped, the white misses its aim and the grey keeps it.
     p->exposure = CLAMPF(expf(log_grey / p->gamma - print_grey), powf(2.0f, dt_bauhaus_slider_get_hard_min(g->exposure)),
                          powf(2.0f, dt_bauhaus_slider_get_hard_max(g->exposure)));
+
+    // v2: the colors reproduce the scene's ratio between grey and white, 0.90 / 0.18, one to one, as the tones
+    // do, but without the compensation for the paper gloss that the grade takes to reach the white aim.
+    if(p->version == DT_NEGADOCTOR_V2)
+      p->offset = CLAMPF(logf(NEGADOCTOR_WHITE_PRINT / NEGADOCTOR_GREY_PRINT) / (print_white - print_grey) / p->gamma - 1.0f,
+                         dt_bauhaus_slider_get_hard_min(g->saturation), dt_bauhaus_slider_get_hard_max(g->saturation));
   }
 
   dt_gui_freeze_begin();
   dt_bauhaus_slider_set(g->exposure, log2f(p->exposure));
   dt_bauhaus_slider_set(g->gamma, p->gamma);
+  dt_bauhaus_slider_set(g->saturation, p->offset);
   dt_gui_freeze_end();
 
   dt_control_queue_redraw_widget(self->gui->widget);
@@ -1050,6 +1104,8 @@ void color_picker_apply(dt_iop_module_t *self, GtkWidget *picker, dt_dev_pixelpi
     apply_auto_exposure(self);
   else if(picker == g->black)
     apply_auto_black(self);
+  else if(picker == g->auto_print)
+    apply_auto_print(self);
   else
     fprintf(stderr, "[negadoctor] unknown color picker\n");
 }
@@ -1284,6 +1340,17 @@ void gui_init(dt_iop_module_t *self)
                                           "equivalent to applying a gamma. It compensates the film D max\n"
                                           "and recovers the contrast. Use a high grade for high D max."));
 
+  // v2: the saturation, kept in the field v1 uses for the bias
+  g->saturation = dt_bauhaus_slider_from_params(self, "offset");
+  dt_bauhaus_widget_set_label(g->saturation, N_("paper saturation"));
+  dt_bauhaus_slider_set_factor(g->saturation, 100.0f);
+  dt_bauhaus_slider_set_digits(g->saturation, 1);
+  dt_bauhaus_slider_set_format(g->saturation, "%");
+  gtk_widget_set_tooltip_text(g->saturation, _("The paper grade raises the colors with the contrast.\n"
+                                               "At 0 %, they follow the grade, as in v1.\n"
+                                               "Lower it to raise the grade without saturating the colors,\n"
+                                               "-100 % prints in grey. The neutrals do not change."));
+
   g->soft_clip = dt_bauhaus_slider_from_params(self, "soft_clip");
   dt_bauhaus_slider_set_factor(g->soft_clip, 100);
   dt_bauhaus_slider_set_digits(g->soft_clip, 4);
@@ -1301,12 +1368,27 @@ void gui_init(dt_iop_module_t *self)
   dt_bauhaus_slider_set_default(g->exposure, 0.0);
   dt_bauhaus_slider_set_format(g->exposure, _(" EV"));
   gtk_widget_set_tooltip_text(g->exposure, _("Correct the printing exposure after inversion to adjust\n"
-                                             "the global contrast and avoid clipping highlights."));
+                                             "the global contrast and avoid clipping highlights.\n"
+                                             "The picker brings the brightest point of the area just below white:\n"
+                                             "pick a very bright part that should keep its detail,\n"
+                                             "not a light source, a specular reflection or dust."));
 
-  dt_iop_button_new(self, N_("Set the grade and print exposure from the film settings and the paper black:\n"
-                             "a mid grey 0.75 D above the blacks prints at 18 %\n"
-                             "and a white 1.18 D above them at 90 %, as in the Cineon aims."),
-                    G_CALLBACK(_auto_print_callback), FALSE, 0, 0, dtgtk_cairo_paint_wand, 0, page3);
+  GtkWidget *auto_print_row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
+  GtkWidget *auto_print_label = gtk_label_new(_("grade and exposure from the area"));
+  gtk_label_set_xalign(GTK_LABEL(auto_print_label), 0.0f);
+  gtk_label_set_ellipsize(GTK_LABEL(auto_print_label), PANGO_ELLIPSIZE_END);
+  gtk_box_pack_start(GTK_BOX(auto_print_row), auto_print_label, TRUE, TRUE, 0);
+  g->auto_print = dt_color_picker_new(self, DT_COLOR_PICKER_AREA, auto_print_row);
+  dtgtk_togglebutton_set_paint(DTGTK_TOGGLEBUTTON(g->auto_print), dtgtk_cairo_paint_wand, 0, NULL);
+  const char *const auto_print_tooltip = _("Set the grade and print exposure from the film settings and the paper black:\n"
+                                          "the mean of the area prints as a mid grey at 18 %\n"
+                                          "and a density 0.43 D above it as a white at 90 %, as in the Cineon aims.\n"
+                                          "Pick the whole frame, as a printer integrates it, or the subject.\n"
+                                          "In v2, also set the paper saturation so that the colors keep\n"
+                                          "the same ratio to the scene as grey and white, without the gloss.");
+  gtk_widget_set_tooltip_text(g->auto_print, auto_print_tooltip);
+  gtk_widget_set_tooltip_text(auto_print_label, auto_print_tooltip);
+  gtk_box_pack_start(GTK_BOX(page3), auto_print_row, FALSE, FALSE, 0);
 
   // start building top level widget
   self->gui->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
@@ -1370,6 +1452,8 @@ void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
     if(p->version == DT_NEGADOCTOR_V2)
     {
       for(int c = 0; c < 3; c++) p->black_point[c] = p->offset * p->wb_low[c];
+      // in v2 the bias field holds the saturation, which starts as v1 renders
+      p->offset = 0.0f;
     }
     else
     {
@@ -1392,9 +1476,10 @@ void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
     const gboolean v1 = (p->version == DT_NEGADOCTOR_V1);
     GtkWidget *const v1_widgets[6] = { g->offset, g->WB_low_section, g->WB_low_row,
                                        g->wb_low_R, g->wb_low_G, g->wb_low_B };
-    GtkWidget *const v2_widgets[4] = { g->black_point_row, g->black_point_R, g->black_point_G, g->black_point_B };
+    GtkWidget *const v2_widgets[5] = { g->black_point_row, g->black_point_R, g->black_point_G, g->black_point_B,
+                                       g->saturation };
     for(int k = 0; k < 6; k++) gtk_widget_set_visible(v1_widgets[k], v1);
-    for(int k = 0; k < 4; k++) gtk_widget_set_visible(v2_widgets[k], !v1);
+    for(int k = 0; k < 5; k++) gtk_widget_set_visible(v2_widgets[k], !v1);
   }
 
   if(IS_NULL_PTR(w) || w == g->D_max) _density_sliders_update(g, p);

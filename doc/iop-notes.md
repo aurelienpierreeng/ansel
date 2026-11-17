@@ -119,7 +119,7 @@ mishandles the warm cropped→uncropped geometry change.
 
 ## negadoctor: the shadows color cast scales the bias in v1; v2 has one black point per channel
 
-*Found on top of `6a9005ef9c`, 2026-11-13; v2's black points on top of the same commit, 2026-11-14; the black point picker's pixel on top of `8e77b45cff`, 2026-11-14; what the black points and the illuminant gain do to each tone on top of `8e77b45cff`, 2026-11-15.*
+*Found on top of `6a9005ef9c`, 2026-11-13; v2's black points on top of the same commit, 2026-11-14; the black point picker's pixel on top of `8e77b45cff`, 2026-11-14; what the black points and the illuminant gain do to each tone on top of `8e77b45cff`, 2026-11-15; v2's saturation on top of `b13472e7f4`, 2026-11-16.*
 
 `process()` prints `exposure · (1 + black) − exposure · 10^(wb_high[c] · (B[c] − D[c] / D_max))`,
 `D[c]` being the density above the film base. The density printed at the paper black
@@ -211,25 +211,70 @@ black point farthest from the base as the bias and divides the others by it, whi
 except where v1 cannot hold it: black points of opposite signs, all at zero but one, or ratios outside
 `wb_low`'s 0.05–2. v1 keeps its own sliders, swatch, normalize and shadows picker, hidden in v2.
 
+The paper grade raises the colors with the contrast: `process()` used to raise each channel of the print to
+`gamma`, so the ratios between channels, the saturation, grew as fast as the tones. Replayed on the module
+input of 20261114_0007_01 (51150, the Agfa HDC 200 tree, with its own input profile) with the wall kept at
+the same print value, the 95th percentile of the reds' chroma went from 103 to 110 and 121 at grades 4.5, 6
+and 8.47, and the reds outside sRGB from 30 % to 42 % and 56 %. v2 prints `Y^gamma · (RGB / Y)^color_gamma`
+instead, `Y` being the luminance of the print in the working RGB (`_working_luminance()`), and
+`color_gamma = gamma · (1 + saturation)`. A neutral has `RGB = Y` and prints as before at any saturation; at
+0 the expression is each channel raised to `gamma`, and `process()` takes that path, so that a v2 edit at 0
+renders bit for bit as before (measured with `ansel-cli` on 51150, both builds). At grade 8.47 with the colors
+kept at grade 4.5 (saturation −47 %), the replay gave a chroma of 55 and 31 % of the reds outside sRGB, and
+the same tones as grade 8.47 (L 0 / 72 at the 10th and 90th percentiles). A saturation of −100 % is not a
+neutral rendering of the scene but a grey print: at an exponent of 1, the reds fell to a chroma of 9, since
+the grade is what gives the negative its colors.
+
+The saturation is stored in `offset`, which v2 does not use: params keep their size, and v2 edits, all at
+`offset` 0 when this was written (24 of them in the library this was measured on), keep their render. The
+field keeps its name and description, so whatever shows params by their introspection names shows a change of
+the v2 saturation as one of "film exposure bias". Switching from v1 to v2 sets it to 0 after building the
+black points from it; switching back rebuilds it from the black points. Its slider is a second
+`dt_bauhaus_slider_from_params()` on the same field, relabelled and shown in v2 only.
+
+In v2 the wand sets the saturation too, from the same aims: the colors keep the scene's ratio between
+grey and white, 0.90 / 0.18, one to one, as the tones do, so `color_gamma = log(0.90 / 0.18) / (print_white −
+print_grey)`, the grade the wand would take without the paper gloss. Grade 4, the module's default, comes with
+no source and was not used. The aims say nothing about the colors themselves, so the rule
+is an extension of them, not a quote: what it takes away is only the gloss's share of the grade. With the
+gloss at 0.75 that is about −5 %; on 51150 with the gloss at 0 and the paper black at 0.1017, the wand's grade
+is 12.92 and the saturation −34 %, replayed in Python on top of `b13472e7f4`, 2026-11-16. It does not remove
+what makes saturated reds stand out on 51150: their green and blue sit 0.26 and 0.15 D above the blacks, where
+the print curve's log slope times the grade is 8.8 and 14.4 per D, against 2.3 at Cineon's absolute grey (0.75 D) and 2.4 for
+their red. That is the shape of the print curve in the shadows, which no single exponent corrects.
+
 Units: a density is the log10 of a transmission ratio, so 1 D = 10 dB = 3.32 EV; D max and the bias
 used to be labelled " dB", ten times off. `offset` and `black_point` are stored as fractions of
 D max and shown as densities through the bauhaus factor, which is not a param: whatever sets D max
 without its slider callback (its picker, under `dt_gui_freeze_begin()`) calls
 `_density_sliders_update()` itself.
 
-The wand button of print properties sets print exposure and grade from the film settings and the paper
-black as it stands, which it leaves alone. They print Cineon's mid grey (code 470, 0.75 D above the
-blacks) at 18 % and diffuse white (code 685, 1.18 D) at 90 %, in geometric mean over RGB: two equations
-linear in grade and `log(exposure)`. A paper black low enough to print grey at zero or below in some
-channel leaves its log mean infinite or NaN, and the wand then keeps exposure and grade. Replayed in
-Python with paper black 0.1, which the black picker gives on blacks at the black point's density:
-grade 7.70 and +0.26 EV at D max 2.046, 9.03 and +0.12 EV at 1.60,
-10.10 at 1.40 and 12.02 at 1.18 D, the white's own density, below which the white aim leaves the film;
-a lower gloss or a stronger illuminant balance asks more (14.06 at 1.18 D with gloss 0.5, 14.93 with
-`wb_high` 1/1.2/1.4), which the grade's 20 maximum covers. These aims crush the shadows,
-0.30 D above the blacks printing at 0.001 to 0.003 against 0.033 on the Cineon line: the print curve,
-`log(output)` against density, is concave whatever its parameters, so no grade, exposure and black fit
-grey, white and a shadow point of that line together.
+The wand of print properties is an area picker ("grade and exposure from the area", whole frame by
+default). It sets print exposure and grade from the film settings and the paper black as they stand, which
+it leaves alone: the area's mean prints at 18 % and a density 0.43 D above it at 90 %, Cineon's mid grey
+(code 470) and diffuse white (code 685) 215 codes of 0.002 D apart, in geometric mean over RGB: two equations
+linear in grade and `log(exposure)`. The mean is that of the transmittance, the large-area integrated density
+by which printers set their exposure frame by frame (Evans' integration to grey). A paper black low enough to
+print the grey at zero or below in some channel leaves its log mean infinite or NaN, and the wand then keeps
+exposure and grade.
+
+It used to anchor the grey and white at Cineon's absolute densities, 0.75 and 1.18 D above the blacks, and
+printed underexposed frames dark. Measured on two Agfa HDC 200 frames, 51150 and 51154, replayed in Python
+from `ansel-cli` float exports with negadoctor off: their integrated densities are 0.41 and 0.26 D and their
+diffuse white (a white dog) about 0.6 D, while the roll's fogged leader reads 1.96 D above the base on the
+D max picker, against 1.86 D for Cineon's code 1023: the film fills Cineon's scale, so the frames sit 0.35
+to 0.6 D under a normal exposure. The absolute aims gave grades 8.99 and 9.86, the dog at L* 45 and 32 and
+12 % and 36 % of black pixels; anchored on the frame they give 4.31 and 3.58, the dog at L* 87 and 93 with the
+shadows open. In the GUI on 51150, with D max 1.99 and the paper black at 0.10, the picker gave grade 4.29 and
++0.39 EV, the dog at L* 90 on the screenshot. Anchoring the grey on D max instead (D max − 1.106 D, Cineon's
+1023 − 470) puts it at 0.85 D with the leader's value, grades 11.3 and 12.2, the dog at L* 32 and 20: a roll
+constant cannot follow the exposure of each frame, which is what the printer's exposure is for. Measured on
+top of `b13472e7f4`, 2026-11-16.
+
+The aims crush the shadows wherever they sit: the print curve, `log(output)` against density, is concave
+whatever its parameters, so no grade, exposure and black fit grey, white and a shadow point of Cineon's
+line together. With the absolute aims, 0.30 D above the blacks printed at 0.001 to 0.003 against 0.033 on
+that line.
 
 ## retouch: what a shape costs per frame is its geometry, and most of it is ROI planning
 
