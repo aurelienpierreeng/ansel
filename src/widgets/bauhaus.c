@@ -3067,6 +3067,13 @@ void dt_bauhaus_show_popup(GtkWidget *widget)
     return;
   }
 
+  // gdk_window_move_to_rect() slides the window back on screen using its current GdkWindow size,
+  // not the size requested above: gtk_window_resize() only takes effect when the window is shown.
+  // Without this, a popup opened for the first time is placed as if it were 30 px high (the
+  // default size) and a long combobox list runs off the bottom of the screen; reopened, it slides
+  // correctly because the window kept the size of the previous popup.
+  gdk_window_resize(window, width, height);
+
   // For Wayland (and supposed to work on X11 too) and Gtk 3.24 this is how you do it
   gdk_window_move_to_rect(GDK_WINDOW(window), &anchor, GDK_GRAVITY_STATIC, GDK_GRAVITY_STATIC,
                           GDK_ANCHOR_SLIDE, 0, 0);

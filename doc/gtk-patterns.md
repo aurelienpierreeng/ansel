@@ -265,6 +265,25 @@ The hint costs nothing for a panel shown and hidden repeatedly: GTK consults it 
 mapping only, so a window the user has dragged elsewhere keeps the place they gave it across
 later hide/show cycles.
 
+## `gdk_window_move_to_rect()` slides by the window's current size, not the requested one
+
+*Found 2026-11-17, on top of `18f54f2a37`. GTK 3.24.41, X11.*
+
+`GDK_ANCHOR_SLIDE` keeps the window on screen using the size the GdkWindow has *now*.
+`gtk_window_resize()` on a hidden window only records a pending size, applied when the window is
+shown, so a slide computed right after it uses the size of the previous mapping, or the default
+size on the first one. The bauhaus popup (`dt_bauhaus_show_popup()`) therefore ran a long combobox
+list off the bottom of the screen the first time it opened and slid it correctly from the second
+time on. Measured with a standalone GTK program on Xephyr (1024×768), a `GTK_WINDOW_POPUP` of
+900 px anchored at y = 500: the GdkWindow height is 30 before the first `move_to_rect()` and the
+popup maps at y = 500; reopened, the height is 900 and it maps at y = 0.
+
+`gdk_window_resize()` to the wanted size just before `gdk_window_move_to_rect()` fixes the
+first mapping (y = 0), confirmed in Ansel on a long combobox. The height read back on the hidden
+window is the new one at once, as expected from GDK's X11 backend: an override-redirect window
+(which a `GTK_WINDOW_POPUP` is) takes its new size without waiting for ConfigureNotify. That last
+part comes from reading the source, not from a measurement, and Wayland was not tested.
+
 ## A window a toggle button opens has exactly one state: the button's
 
 *Found `4793b08e64`, 2026-09-01.*
