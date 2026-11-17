@@ -125,18 +125,20 @@ gboolean dt_iop_color_picker_kind_takes_area(const dt_iop_color_picker_kind_t ki
 // FIXME: should this be here or perhaps lib.c?
 gboolean dt_iop_color_picker_is_visible(const dt_develop_t *dev)
 {
+  if(IS_NULL_PTR(dev)) return FALSE;
+
   /* A picker the modifier turned on gives the image back the instant the modifier is up,
    * whether or not its sample has landed. Waiting for the sample here would have the picker
    * take the click that follows -- the first dab of a brush, for the user who picked a colour
    * to paint with it -- for as long as the pipeline takes to recompute. */
-  if(dev && _gesture_is_winding_down(dev)) return FALSE;
+  if(_gesture_is_winding_down(dev)) return FALSE;
 
   const gboolean module_picker = dev->gui_module
     && dev->gui_module->enabled
     && dev->color_picker.enabled
     && dev->color_picker.module == dev->gui_module;
 
-  const gboolean primary_picker = dev && dev->color_picker.enabled && !dev->color_picker.module;
+  const gboolean primary_picker = dev->color_picker.enabled && !dev->color_picker.module;
 
   return module_picker || primary_picker;
 }
@@ -1025,7 +1027,8 @@ dt_iop_color_picker_pointer_t dt_iop_color_picker_pointer_pressed(const float im
   else if(!takes_point)
   {
     /* An area and nothing else: a click that never travels still has to leave one, so the
-     * press drops a small square -- 1 % of the image width -- for the drag to stretch. */
+     * press drops a small square -- 1 % of the image width either side of it, 2 % across --
+     * for the drag to stretch. */
     const dt_dev_image_geometry_t geometry = dt_dev_geometry_snapshot(dev);
     const float half_x = 0.01f;
     const float half_y = (geometry.processed_width > 0 && geometry.processed_height > 0)
