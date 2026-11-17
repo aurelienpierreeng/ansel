@@ -20,7 +20,8 @@ name: Nightly Flatpak PKG
 on:
   schedule:
     # An hour after the AppImage nightly, so the two do not compete for runners.
-    - cron: "0 6 * * *"
+    # Off the hour: GitHub starts top-of-the-hour schedules the latest (doc/nightly-distribution.md).
+    - cron: "17 6 * * *"
   workflow_dispatch:
 
 jobs:

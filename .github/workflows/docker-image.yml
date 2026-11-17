@@ -29,7 +29,8 @@ name: Build and Push Docker Image
 on:
   workflow_dispatch:
   schedule:
-    - cron: "0 5 * * *"
+    # Off the hour: GitHub starts top-of-the-hour schedules the latest (doc/nightly-distribution.md).
+    - cron: "29 5 * * *"
 
 permissions:
   contents: write   # the image is also attached to the monthly nightly release

@@ -22,7 +22,8 @@ name: Nightly prune
 
 on:
   schedule:
-    - cron: "30 4 1 * *"
+    # Off the hour: GitHub starts top-of-the-hour schedules the latest (doc/nightly-distribution.md).
+    - cron: "43 4 1 * *"
   workflow_dispatch:
     inputs:
       months:

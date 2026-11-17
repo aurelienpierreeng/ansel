@@ -402,6 +402,44 @@ hands the kegs to `mac-brew-cache.yml` (see above) and the next one builds Intel
 a run does not even need a quiet master: from 2026-10-09 to 10-14 GitHub started none of the
 scheduled nightlies — Windows, Linux, Docker and macOS alike have no run on those days.
 
+## GitHub starts a scheduled run hours after its cron
+
+*Measured 2026-11-17 on top of `bbdfcc53ac`, from the `created_at` of every `schedule` run the
+Actions API lists (up to 100 per workflow) against the time its cron names. `created_at` is when
+GitHub queued the run, before any job, so the whole delay is GitHub's.*
+
+Median delay, in hours, of the crons as they stood then — all on the hour:
+
+| workflow (cron, UTC) | Jul | Aug | Sep | Oct | Nov |
+|---|---|---|---|---|---|
+| Nightly Linux PKG (05:00) | 2.6 | 1.1 | 4.7 | 5.6 | 7.8 |
+| Build and Push Docker Image (05:00) | 2.6 | 1.1 | 4.7 | 5.6 | 7.9 |
+| Docs building (Sunday 00:00) | 1.4 | 0.7 | 1.9 | 4.1 | 5.6 |
+| `LensSerious` Lens database (03:00) | – | 6.4 | 5.3 | 6.3 | 7.5 |
+
+Every cron drifts the same way whatever its hour, and `LensSerious` — another repository of the
+organisation, **not** a fork — drifts with them, so the delay is neither the workflow files nor
+`ansel` being a fork. `ansel-website`, on a 4-hour cron, ran about 3.4 times a day in November
+instead of 6: a run that arrives as late as the next slot seems to take its place. Whether
+GitHub delays its whole platform this much or only this organisation (free plan) was not
+measured; it would take a repository of another owner.
+
+GitHub documents that `schedule` events are delayed under load, and the start of an hour is the
+busiest slot. Every cron therefore sits on an odd minute (`7 5`, `11 5`, `17 5`, `29 5`, `17 6`,
+`41 0`, `43 4`), keeping its hour and the order between them. Whether this buys back hours rather
+than minutes is **not yet measured** — re-run the table above a few weeks after the change. A
+build that must start at a fixed time can only come from outside: a `workflow_dispatch` through
+the API is queued at once, like a push.
+
+**Re-enabling a fork does not restore its crons.** When GitHub disabled Actions on this fork
+(2026-11-06, about 14:07 UTC) and the banner of the Actions tab re-enabled them (first run
+2026-11-09 00:46 UTC), push and pull-request runs resumed, but no `schedule` run was created for
+any of the seven workflows that have a cron: the last nightly stayed `3ce1ec6716` of 11-06, and
+`docs.yml`, untouched, missed Sunday 11-15. The API reported every workflow `active` meanwhile.
+On 2026-11-17 each of them was disabled and enabled again (`gh workflow disable` / `enable`);
+whether that alone restored the crons is the next night's run to read:
+`gh api "repos/aurelienpierreeng/ansel/actions/runs?event=schedule&per_page=5"`.
+
 ## Secrets and settings to create
 
 All on the `ansel` repository. Every one is optional in the sense that its step is

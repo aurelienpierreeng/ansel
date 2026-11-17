@@ -29,7 +29,8 @@ name: Nightly Linux PKG
 
 on:
   schedule:
-    - cron: "0 5 * * *"
+    # Off the hour: GitHub starts top-of-the-hour schedules the latest (doc/nightly-distribution.md).
+    - cron: "17 5 * * *"
   workflow_dispatch:
 
 jobs:

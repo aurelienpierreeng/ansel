@@ -27,7 +27,8 @@ name: Docs building
 
 on:
   schedule:
-    - cron: "0 0 * * SUN"
+    # Off the hour: GitHub starts top-of-the-hour schedules the latest (doc/nightly-distribution.md).
+    - cron: "41 0 * * SUN"
   workflow_dispatch:
 
 
