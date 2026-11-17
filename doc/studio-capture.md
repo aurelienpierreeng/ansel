@@ -164,14 +164,23 @@ in `libs/studio_import.c`) store every setting of the module except the project
 date, which changes with every shoot: source folder, scan frequency, add vs
 copy, delete-after-verify, on conflict, jobcode, base directory and the two
 naming patterns. The blob is a fixed head of the four numeric settings followed
-by the five strings, each NUL-terminated. A preset is refused while a session
-runs, since the source folder and the scan frequency are locked then; the
-refusal is an alert and `set_params()` still returns 0, because
-`dt_lib_presets_apply()` (`libs/lib.c`) deletes, as obsolete, the preset of a
-module whose `set_params()` fails. Applying one writes the conf keys, then
-sets the widgets: their own callbacks write back the same values, except the
-two folder choosers, which emit nothing when set from code. (Established on
-top of `ba3c893c31`, 2026-11-17, and checked on a running session.)
+by the five strings, each NUL-terminated, in the order of their enum. A preset
+whose source folder or base directory is empty — stored before one was ever
+chosen — leaves the current one in place. Applying one writes the conf keys,
+then sets the widgets: their own callbacks write back the same values, except
+the two folder choosers, which emit nothing when set from code.
+
+The presets button is insensitive while a session runs, since a preset carries
+the source folder and the scan frequency, which the session locks. It is not
+left active with a refusal in `set_params()`: `dt_lib_presets_apply()`
+(`libs/lib.c`) records the preset as the last applied whatever `set_params()`
+returns, and the menu would then offer "update preset" on it, overwriting it
+with the running session's settings — and a failing `set_params()` makes it
+delete the preset as obsolete. The button only exists once the module header
+is built, after `gui_init()`, so its sensitivity follows
+`DT_SIGNAL_FOLDER_SURVEY_CHANGED` and `view_enter()`. (Established on top of
+`ee1acf28de`, 2026-11-17, by reading `dt_lib_presets_apply()` and the presets
+menu.)
 
 The **Base directory of all projects** setting has its own conf key
 (`studio_capture/base_directory_pattern`), independent from the regular
