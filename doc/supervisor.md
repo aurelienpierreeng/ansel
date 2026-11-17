@@ -245,7 +245,7 @@ its own position nor the right to set it, the size only (as the masks panel,
   `ram/image`, `vram-0`, `vram-0/pipeline`, …), so it outlasts the window and the
   session. What a folded section folds is hidden and not refreshed; opening one
   refreshes the view at once.
-  The view is refreshed in place, never rebuilt: `_g.mem_sections` keeps each
+  The view is refreshed in place: `_g.mem_sections` keeps each
   section by key -- its title, its bar and legend texts, its folded body, its list
   -- and a refresh sets only the texts that changed (`gtk_label_set_markup()` lays
   a label out again even for the same text). A list's rows are kept too, reused by
@@ -256,6 +256,9 @@ its own position nor the right to set it, the size only (as the masks panel,
   height, so an index would drift down a 500-row list); the others get it when
   scrolling, the grip or a layout brings them in sight (the area's vadjustment
   `value-changed` and `changed`). A row not laid out yet counts as in sight.
+  It is built anew only when OpenCL went on or off since the last refresh (the
+  preference is read again at every pipe run, and errors turn it off): that
+  changes the pipeline bar's segments, hence its legend, and the vRAM sections.
   Measured 2026-11-17 against `dec7043977`, whose `supervisor_window.c` is
   master's `5c05c61c73`, with a watchdog shim that samples the GUI thread's stack
   when its main loop has not ticked for 60 ms, and a shim counting
