@@ -156,8 +156,19 @@ typedef struct dt_iop_negadoctor_gui_data_t
   GtkWidget *offset;
   GtkWidget *black, *gamma, *saturation, *soft_clip, *exposure, *auto_print;
   GtkWidget *Dmin_picker, *Dmin_sampler;
-  GtkWidget *WB_high_picker, *WB_high_norm, *WB_high_sampler;
+  GtkWidget *WB_high_picker, *WB_high_norm, *WB_high_sampler, *WB_high_row;
   GtkWidget *WB_low_picker, *WB_low_norm, *WB_low_sampler, *WB_low_row, *WB_low_section;
+  // v2: the two neutrals the contrast of the layers is measured between, then the one that sets the color alone
+  GtkWidget *neutral_sampler[3], *neutral_row[3];
+  // what each of the two picked last, until the other is picked too
+  dt_aligned_pixel_t neutral[2];
+  gboolean neutral_picked[2];
+  // under the two neutrals: which one is still to pick, how far apart they are, or why they cannot be used
+  GtkWidget *neutrals_status;
+  // after the black point picker: the densities above the film base of the pixel it took
+  GtkWidget *black_point_density;
+  dt_aligned_pixel_t black_point_pixel;
+  gboolean black_point_picked;
 } dt_iop_negadoctor_gui_data_t;
 
 
@@ -637,11 +648,33 @@ static void _density_sliders_update(dt_iop_negadoctor_gui_data_t *const g, const
   }
 }
 
+// The densities above the film base of the pixel the black point picker took, in the unit of the black points.
+// The pixel is kept rather than its densities, so a film base picked afterwards changes them.
+static void _black_point_density_update(dt_iop_negadoctor_gui_data_t *const g, const dt_iop_negadoctor_params_t *const p)
+{
+  if(!g->black_point_picked)
+  {
+    gtk_label_set_text(GTK_LABEL(g->black_point_density), "");
+    return;
+  }
+
+  const gboolean points = !g_strcmp0(dt_conf_get_string_const("plugins/darkroom/negadoctor/density_unit"), "printer points");
+  dt_aligned_pixel_t D;
+  for(int c = 0; c < 3; c++)
+    D[c] = log10f(p->Dmin[c] / fmaxf(g->black_point_pixel[c], THRESHOLD)) * (points ? 40.0f : 1.0f);
+
+  gchar *text = points ? g_strdup_printf(_("%.1f / %.1f / %.1f pt"), D[0], D[1], D[2])
+                             : g_strdup_printf(_("%.3f / %.3f / %.3f D"), D[0], D[1], D[2]);
+  gtk_label_set_text(GTK_LABEL(g->black_point_density), text);
+  dt_free(text);
+}
+
 static void _density_unit_callback(GtkWidget *widget, dt_iop_module_t *self)
 {
   dt_iop_negadoctor_gui_data_t *const g = (dt_iop_negadoctor_gui_data_t *)dt_iop_gui_data(self);
   const dt_iop_negadoctor_params_t *const p = (const dt_iop_negadoctor_params_t *)self->params;
   _density_sliders_update(g, p);
+  _black_point_density_update(g, p);
 }
 
 static void WB_low_picker_update(dt_iop_module_t *self)
@@ -793,28 +826,25 @@ static void apply_auto_Dmin(dt_iop_module_t *self)
   dt_gui_freeze_end();
 
   Dmin_picker_update(self);
+  _black_point_density_update(g, p);
   dt_control_queue_redraw_widget(self->gui->widget);
   dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
 }
 
 // The scale on which the black point and paper black pickers look for the pixel high in all three channels,
-// a channel's score being gain · log10(pixel) + bias. The black point picker compares the densities above
-// the film base, negated, so the winner is the pixel clear on the film in all channels; the paper black
-// picker compares the corrected density process() prints, so the winner is the pixel the print makes dark
-// in all channels.
+// a channel's score being gain · log10(pixel) + bias: the corrected density process() prints, so the winner
+// is the pixel the print makes dark in all channels.
 static void _picker_channel_scale(const dt_iop_module_t *self, GtkWidget *picker, dt_aligned_pixel_t gain,
                                   dt_aligned_pixel_t bias)
 {
-  const dt_iop_negadoctor_gui_data_t *const g = (const dt_iop_negadoctor_gui_data_t *)dt_iop_gui_data(self);
   dt_iop_negadoctor_data_t d;
   _data_from_params((const dt_iop_negadoctor_params_t *)self->params, &d);
 
-  const gboolean printed = (picker == g->black);
   for(int c = 0; c < 3; c++)
   {
-    // -log10(Dmin / pixel) = log10(pixel) - log10(Dmin), then as _corrected_density() for the print
-    gain[c] = printed ? d.wb_high[c] : 1.0f;
-    bias[c] = (printed ? d.offset[c] : 0.0f) - gain[c] * log10f(d.Dmin[c]);
+    // -log10(Dmin / pixel) = log10(pixel) - log10(Dmin), then as _corrected_density()
+    gain[c] = d.wb_high[c];
+    bias[c] = d.offset[c] - gain[c] * log10f(d.Dmin[c]);
   }
 }
 
@@ -883,10 +913,9 @@ static void apply_auto_offset(dt_iop_module_t *self)
   dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
 }
 
-// v2: the pixel of the area whose densest channel is the least dense above the film base, that is the
-// pixel clear in all three channels, gives the black point of all three channels, so that it prints
-// neutral at the paper black. The clearest pixel of one channel can be a saturated colour instead: a red
-// object is clear in blue and green on the film but dense in red.
+// v2: the level of the black points, which keeps the layer contrasts and the color the neutrals set. The pixel
+// is the one the print makes dark in all three channels: the darkest print of one channel can be a saturated
+// color instead, a red object being clear in blue and green on the film but dense in red.
 static void apply_auto_black_point(dt_iop_module_t *self)
 {
   if(dt_gui_widgets_suppressed()) return;
@@ -895,19 +924,25 @@ static void apply_auto_black_point(dt_iop_module_t *self)
   dt_iop_negadoctor_data_t d;
   _data_from_params(p, &d);
 
-  // without the pixel itself, keep the blacks neutral at the clearest channel's density, as the bias picker
-  dt_aligned_pixel_t RGB;
-  for(int c = 0; c < 3; c++)
-    RGB[c] = log10f(d.Dmin[c] / fmaxf(self->picked_color_max[c], THRESHOLD)) / p->D_max;
+  // The level of the blacks alone: the pixel the print makes dark in all channels prints at the paper black in
+  // the mean of its channels, and the three black points move by the same corrected density, so a neutral stays
+  // neutral. Without the pixel itself, each channel's darkest print stands in for it.
   dt_aligned_pixel_t pixel;
   const gboolean located
       = !dt_iop_color_picker_get_extreme_pixel(self, DT_COLOR_PICKER_EXTREMES_MAX_OF_MIN, 0, pixel);
+  float corrected = 0.0f;
   for(int c = 0; c < 3; c++)
   {
-    const float density = located ? log10f(d.Dmin[c] / fmaxf(pixel[c], THRESHOLD)) / p->D_max : v_minf(RGB);
-    p->black_point[c] = CLAMP(density, dt_bauhaus_slider_get_hard_min(g->black_point_R),
-                              dt_bauhaus_slider_get_hard_max(g->black_point_R));
+    g->black_point_pixel[c] = located ? pixel[c] : self->picked_color_max[c];
+    corrected += _corrected_density(&d, c, g->black_point_pixel[c]) / 3.0f;
   }
+  g->black_point_picked = TRUE;
+  _black_point_density_update(g, p);
+
+  for(int c = 0; c < 3; c++)
+    p->black_point[c] = CLAMPF(p->black_point[c] - corrected / p->wb_high[c],
+                               dt_bauhaus_slider_get_hard_min(g->black_point_R),
+                               dt_bauhaus_slider_get_hard_max(g->black_point_R));
 
   _black_point_sliders_set(g, p);
 
@@ -955,6 +990,113 @@ static void apply_auto_WB_high(dt_iop_module_t *self)
 
   const float RGB_v_min = v_minf(RGB_min); // warning : must be positive
   for(int c = 0; c < 3; c++) p->wb_high[c] = RGB_min[c] / RGB_v_min;
+
+  dt_gui_freeze_begin();
+  dt_bauhaus_slider_set(g->wb_high_R, p->wb_high[0]);
+  dt_bauhaus_slider_set(g->wb_high_G, p->wb_high[1]);
+  dt_bauhaus_slider_set(g->wb_high_B, p->wb_high[2]);
+  dt_gui_freeze_end();
+
+  WB_high_picker_update(self);
+  dt_control_queue_redraw_widget(self->gui->widget);
+  dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
+}
+
+// The two neutrals must be this far apart in density above the film base, in every channel, to measure a slope
+#define NEGADOCTOR_NEUTRALS_MIN_SPAN 0.05f
+
+// The line under the two neutral pickers, shown only when it says something, and with the pickers
+static void _neutrals_status_show(dt_iop_negadoctor_gui_data_t *const g)
+{
+  const char *const text = gtk_label_get_text(GTK_LABEL(g->neutrals_status));
+  gtk_widget_set_visible(g->neutrals_status, text[0] != '\0' && gtk_widget_get_visible(g->neutral_row[0]));
+}
+
+static void _neutrals_status_set(dt_iop_negadoctor_gui_data_t *const g, const char *const text)
+{
+  gtk_label_set_text(GTK_LABEL(g->neutrals_status), text);
+  _neutrals_status_show(g);
+}
+
+// v2: the white balance of the frame, the color of the black points from one neutral, which keeps the layer
+// contrasts and, in every pixel, the mean over the channels of the corrected density, so the level of the
+// blacks: each black point moves by δ[c] with the mean of wb_high[c] · δ[c] at zero, and this is what the
+// neutral's own mean does. The neutral of densities D[c] above the film base then prints at that mean in every
+// channel: wb_high[c] · (black_point[c] − D[c] / D_max) = corrected.
+static void apply_auto_neutral(dt_iop_module_t *self)
+{
+  if(dt_gui_widgets_suppressed()) return;
+  dt_iop_negadoctor_gui_data_t *g = (dt_iop_negadoctor_gui_data_t *)dt_iop_gui_data(self);
+  dt_iop_negadoctor_params_t *p = (dt_iop_negadoctor_params_t *)self->params;
+  dt_iop_negadoctor_data_t d;
+  _data_from_params(p, &d);
+
+  float corrected = 0.0f;
+  for(int c = 0; c < 3; c++) corrected += _corrected_density(&d, c, self->picked_color[c]) / 3.0f;
+  for(int c = 0; c < 3; c++)
+    p->black_point[c] = CLAMPF(log10f(d.Dmin[c] / fmaxf(self->picked_color[c], THRESHOLD)) / p->D_max
+                                   + corrected / p->wb_high[c],
+                               dt_bauhaus_slider_get_hard_min(g->black_point_R),
+                               dt_bauhaus_slider_get_hard_max(g->black_point_R));
+
+  _black_point_sliders_set(g, p);
+  dt_control_queue_redraw_widget(self->gui->widget);
+  dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
+}
+
+// v2: from two neutrals of different tones, the contrast of each layer, and nothing else. A cast of the scene's
+// light adds the same density to both in a channel, so it cancels in their difference, which leaves the slope
+// of the layer: a property of the film, its development and the scan. The black points are the frame's: the
+// gains pivot on them, so a frame shows the cast of its light until the white balance picker takes it out.
+static void apply_auto_neutrals(dt_iop_module_t *self, const int which)
+{
+  if(dt_gui_widgets_suppressed()) return;
+  dt_iop_negadoctor_gui_data_t *g = (dt_iop_negadoctor_gui_data_t *)dt_iop_gui_data(self);
+  dt_iop_negadoctor_params_t *p = (dt_iop_negadoctor_params_t *)self->params;
+
+  for(int c = 0; c < 4; c++) g->neutral[which][c] = self->picked_color[c];
+  g->neutral_picked[which] = TRUE;
+  if(!g->neutral_picked[1 - which])
+  {
+    _neutrals_status_set(g, which == 0 ? _("now pick the lighter neutral") : _("now pick the darker neutral"));
+    return;
+  }
+
+  dt_iop_negadoctor_data_t d;
+  _data_from_params(p, &d);
+
+  // densities above the film base, the clearer neutral first
+  dt_aligned_pixel_t D[2];
+  for(int k = 0; k < 2; k++)
+    for(int c = 0; c < 3; c++) D[k][c] = log10f(d.Dmin[c] / fmaxf(g->neutral[k][c], THRESHOLD));
+  const int clear = (D[0][0] + D[0][1] + D[0][2] <= D[1][0] + D[1][1] + D[1][2]) ? 0 : 1;
+  const float *const D_clear = D[clear];
+  const float *const D_dense = D[1 - clear];
+
+  dt_aligned_pixel_t span = { 0.0f };
+  for(int c = 0; c < 3; c++) span[c] = D_dense[c] - D_clear[c];
+  const char *const channels[3] = { _("red"), _("green"), _("blue") };
+  int closest = 0;
+  for(int c = 1; c < 3; c++)
+    if(span[c] < span[closest]) closest = c;
+  if(span[closest] < NEGADOCTOR_NEUTRALS_MIN_SPAN)
+  {
+    gchar *text = g_strdup_printf(_("the two neutrals are too close in density to measure the contrast "
+                                          "of the layers: %.3f D apart in %s, at least %.2f D needed"),
+                                        span[closest], channels[closest], NEGADOCTOR_NEUTRALS_MIN_SPAN);
+    _neutrals_status_set(g, text);
+    dt_free(text);
+    return;
+  }
+
+  gchar *text = g_strdup_printf(_("the neutrals are %.3f / %.3f / %.3f D apart"), span[0], span[1], span[2]);
+  _neutrals_status_set(g, text);
+  dt_free(text);
+
+  const float span_max = v_maxf(span);
+  for(int c = 0; c < 3; c++)
+    p->wb_high[c] = CLAMPF(span_max / span[c], dt_bauhaus_slider_get_hard_min(g->wb_high_R),
+                           dt_bauhaus_slider_get_hard_max(g->wb_high_R));
 
   dt_gui_freeze_begin();
   dt_bauhaus_slider_set(g->wb_high_R, p->wb_high[0]);
@@ -1111,6 +1253,12 @@ void color_picker_apply(dt_iop_module_t *self, GtkWidget *picker, dt_dev_pixelpi
     apply_auto_Dmin(self);
   else if(picker == g->WB_high_sampler)
     apply_auto_WB_high(self);
+  else if(picker == g->neutral_sampler[2])
+    apply_auto_neutral(self);
+  else if(picker == g->neutral_sampler[0])
+    apply_auto_neutrals(self, 0);
+  else if(picker == g->neutral_sampler[1])
+    apply_auto_neutrals(self, 1);
   else if(picker == g->offset)
     apply_auto_offset(self);
   else if(picker == g->black_point_sampler)
@@ -1199,6 +1347,77 @@ void gui_init(dt_iop_module_t *self)
   gtk_widget_set_tooltip_text(g->D_max, _("Maximum density of the film, corresponding to white after inversion.\n"
                                           "This value depends on the film specifications, the developing process,\n"
                                           "the dynamic range of the scene and the scanner exposure settings."));
+  // The calibration of the layers, their contrast: a property of the film, its development and the scan, not of the scene
+  gtk_box_pack_start(GTK_BOX(page1), dt_ui_section_label_new(_("layer calibration")), FALSE, FALSE, 0);
+
+  // v2: measured between two neutrals
+  const char *const neutral_labels[2] = { N_("darker neutral"), N_("lighter neutral") };
+  const char *const neutral_tooltips[2] = {
+    _("Pick a neutral area below the mid tones, such as the second darkest grey\n"
+      "of a chart, but not its black: in the deep shadows the film flattens the colors.\n"
+      "With the lighter neutral, it measures the contrast of each layer, a property\n"
+      "of the film, its development and the scan: set it once for a roll.\n"
+      "Two greys well apart, but both clear of the black and the white,\n"
+      "keep the most tones neutral.\n"
+      "The black points stay: the white balance and the black point\n"
+      "of each frame are set on the corrections page."),
+    _("Pick a neutral area above the mid tones, such as the second lightest grey\n"
+      "of a chart, rather than its white.\n"
+      "With the darker neutral, it measures the contrast of each layer, a property\n"
+      "of the film, its development and the scan: set it once for a roll.\n"
+      "Two greys well apart, but both clear of the black and the white,\n"
+      "keep the most tones neutral.\n"
+      "The black points stay: the white balance and the black point\n"
+      "of each frame are set on the corrections page.")
+  };
+  for(int k = 0; k < 2; k++)
+  {
+    g->neutral_row[k] = GTK_WIDGET(gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING));
+    gtk_box_pack_start(GTK_BOX(g->neutral_row[k]), dt_ui_label_new(_(neutral_labels[k])), TRUE, TRUE, 0);
+    g->neutral_sampler[k] = dt_color_picker_new(self, DT_COLOR_PICKER_AREA, g->neutral_row[k]);
+    gtk_widget_set_tooltip_text(g->neutral_sampler[k], neutral_tooltips[k]);
+    gtk_box_pack_start(GTK_BOX(page1), g->neutral_row[k], FALSE, FALSE, 0);
+  }
+  g->neutrals_status = dt_ui_label_new("");
+  gtk_label_set_line_wrap(GTK_LABEL(g->neutrals_status), TRUE);
+  gtk_label_set_ellipsize(GTK_LABEL(g->neutrals_status), PANGO_ELLIPSIZE_NONE);
+  gtk_widget_set_no_show_all(g->neutrals_status, TRUE);
+  gtk_box_pack_start(GTK_BOX(page1), g->neutrals_status, FALSE, FALSE, 0);
+
+  // v1: a swatch, and a picker that neutralizes one area against the black points
+  GtkWidget *row2 = g->WB_high_row = GTK_WIDGET(gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING));
+
+  g->WB_high_picker = gtk_color_button_new();
+  gtk_color_chooser_set_use_alpha(GTK_COLOR_CHOOSER(g->WB_high_picker), FALSE);
+  gtk_color_button_set_title(GTK_COLOR_BUTTON(g->WB_high_picker), _("select color of illuminant from a swatch"));
+  gtk_box_pack_start(GTK_BOX(row2), GTK_WIDGET(g->WB_high_picker), TRUE, TRUE, 0);
+  g_signal_connect(G_OBJECT(g->WB_high_picker), "color-set", G_CALLBACK(WB_high_picker_callback), self);
+
+  g->WB_high_norm = dt_action_button_new((dt_lib_module_t *)self, N_("normalize"), Wb_high_norm_callback, self, _("normalize highlight white balance settings"), 0, 0);
+  gtk_box_pack_start(GTK_BOX(row2), GTK_WIDGET(g->WB_high_norm), FALSE, FALSE, 0);
+
+  g->WB_high_sampler = dt_color_picker_new(self, DT_COLOR_PICKER_AREA, row2);
+  gtk_widget_set_tooltip_text(g->WB_high_sampler , _("Pick illuminant color from image"));
+
+  gtk_box_pack_start(GTK_BOX(page1), GTK_WIDGET(row2), FALSE, FALSE, 0);
+
+  g->wb_high_R = dt_bauhaus_slider_from_params(self, "wb_high[0]");
+  dt_bauhaus_widget_set_label(g->wb_high_R, N_("red layer contrast"));
+  g->wb_high_G = dt_bauhaus_slider_from_params(self, "wb_high[1]");
+  dt_bauhaus_widget_set_label(g->wb_high_G, N_("green layer contrast"));
+  g->wb_high_B = dt_bauhaus_slider_from_params(self, "wb_high[2]");
+  dt_bauhaus_widget_set_label(g->wb_high_B, N_("blue layer contrast"));
+
+  const char *const wb_high_tooltip
+      = _("Contrast of this layer of the film against the others, as the scan sees it:\n"
+          "it multiplies the density of the channel above its black point,\n"
+          "so the black point and the paper white keep their color.\n"
+          "It depends on the film, its development and the scan, not on the scene:\n"
+          "set it once for a roll, from two neutrals, and copy it to its other frames.\n"
+          "The color cast of the light belongs to each frame: the white balance\n"
+          "picker of the corrections page puts it into the black points.");
+  GtkWidget *const wb_highs[3] = { g->wb_high_R, g->wb_high_G, g->wb_high_B };
+  for(int c = 0; c < 3; c++) gtk_widget_set_tooltip_text(wb_highs[c], wb_high_tooltip);
 
   // Page CORRECTIONS
   GtkWidget *page2 = self->gui->widget = dt_ui_notebook_page(g->notebook, N_("corrections"), NULL);
@@ -1228,11 +1447,28 @@ void gui_init(dt_iop_module_t *self)
   g->black_point_sampler = dt_color_picker_new(self, DT_COLOR_PICKER_AREA, g->black_point_row);
   dt_color_picker_set_extremes(g->black_point_sampler, DT_COLOR_PICKER_EXTREMES_MAX_OF_MIN);
   dt_color_picker_set_channel_scale(g->black_point_sampler, _picker_channel_scale);
+  g->black_point_density = dt_ui_label_new("");
+  gtk_widget_set_tooltip_text(g->black_point_density,
+                              _("Densities above the film base, in red, green and blue,\n"
+                                "of the pixel the black point picker took."));
+  gtk_box_pack_start(GTK_BOX(g->black_point_row), g->black_point_density, FALSE, FALSE, 0);
   gtk_widget_set_tooltip_text(g->black_point_sampler,
-                              _("Pick the blacks from the image: the pixel of the area that is clear\n"
-                                "on the film in all three channels gives the black point of all three\n"
-                                "channels, so that it prints neutral at the paper black."));
+                              _("Pick the blacks from the image to set their level alone:\n"
+                                "the three black points move together, so that the pixel the print\n"
+                                "makes dark in all three channels prints at the paper black.\n"
+                                "The contrast of the layers and the white balance stay."));
   gtk_box_pack_start(GTK_BOX(page2), g->black_point_row, FALSE, FALSE, 0);
+
+  // v2: the white balance of the frame, the color of the black points from one neutral, which keeps their level
+  g->neutral_row[2] = GTK_WIDGET(gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING));
+  gtk_box_pack_start(GTK_BOX(g->neutral_row[2]), dt_ui_label_new(_("white balance")), TRUE, TRUE, 0);
+  g->neutral_sampler[2] = dt_color_picker_new(self, DT_COLOR_PICKER_AREA, g->neutral_row[2]);
+  gtk_widget_set_tooltip_text(g->neutral_sampler[2],
+                              _("Pick a neutral area of the frame to remove the color cast of the light:\n"
+                                "the black points get the color that prints it neutral.\n"
+                                "A mid grey is safer than a black, where the film flattens the colors.\n"
+                                "The contrast of the layers and the level of the blacks stay."));
+  gtk_box_pack_start(GTK_BOX(page2), g->neutral_row[2], FALSE, FALSE, 0);
 
   g->black_point_R = dt_bauhaus_slider_from_params(self, "black_point[0]");
   dt_bauhaus_widget_set_label(g->black_point_R, N_("black point red"));
@@ -1295,46 +1531,6 @@ void gui_init(dt_iop_module_t *self)
                                              "truly achromatic. Setting this value before\n"
                                              "the highlights illuminant white balance will help\n"
                                              "recovering the global white balance in difficult cases."));
-
-  // WB highlights
-  gtk_box_pack_start(GTK_BOX(page2), dt_ui_section_label_new(_("highlights white balance")), FALSE, FALSE, 0);
-
-  GtkWidget *row2 = GTK_WIDGET(gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING));
-
-  g->WB_high_picker = gtk_color_button_new();
-  gtk_color_chooser_set_use_alpha(GTK_COLOR_CHOOSER(g->WB_high_picker), FALSE);
-  gtk_color_button_set_title(GTK_COLOR_BUTTON(g->WB_high_picker), _("select color of illuminant from a swatch"));
-  gtk_box_pack_start(GTK_BOX(row2), GTK_WIDGET(g->WB_high_picker), TRUE, TRUE, 0);
-  g_signal_connect(G_OBJECT(g->WB_high_picker), "color-set", G_CALLBACK(WB_high_picker_callback), self);
-
-  g->WB_high_norm = dt_action_button_new((dt_lib_module_t *)self, N_("normalize"), Wb_high_norm_callback, self, _("normalize highlight white balance settings"), 0, 0);
-  gtk_box_pack_start(GTK_BOX(row2), GTK_WIDGET(g->WB_high_norm), FALSE, FALSE, 0);
-
-  g->WB_high_sampler = dt_color_picker_new(self, DT_COLOR_PICKER_AREA, row2);
-  gtk_widget_set_tooltip_text(g->WB_high_sampler , _("Pick illuminant color from image"));
-
-  gtk_box_pack_start(GTK_BOX(page2), GTK_WIDGET(row2), FALSE, FALSE, 0);
-
-  g->wb_high_R = dt_bauhaus_slider_from_params(self, "wb_high[0]");
-  dt_bauhaus_widget_set_label(g->wb_high_R, N_("illuminant red gain"));
-  gtk_widget_set_tooltip_text(g->wb_high_R, _("Correct the color of the illuminant so whites are\n"
-                                              "truly achromatic. Setting this value after\n"
-                                              "the shadows color cast will help\n"
-                                              "recovering the global white balance in difficult cases."));
-
-  g->wb_high_G = dt_bauhaus_slider_from_params(self, "wb_high[1]");
-  dt_bauhaus_widget_set_label(g->wb_high_G, N_("illuminant green gain"));
-  gtk_widget_set_tooltip_text(g->wb_high_G, _("Correct the color of the illuminant so whites are\n"
-                                              "truly achromatic. Setting this value after\n"
-                                              "the shadows color cast will help\n"
-                                              "recovering the global white balance in difficult cases."));
-
-  g->wb_high_B = dt_bauhaus_slider_from_params(self, "wb_high[2]");
-  dt_bauhaus_widget_set_label(g->wb_high_B, N_("illuminant blue gain"));
-  gtk_widget_set_tooltip_text(g->wb_high_B, _("Correct the color of the illuminant so whites are\n"
-                                              "truly achromatic. Setting this value after\n"
-                                              "the shadows color cast will help\n"
-                                              "recovering the global white balance in difficult cases."));
 
   // Page PRINT PROPERTIES
   GtkWidget *page3 = self->gui->widget = dt_ui_notebook_page(g->notebook, N_("print properties"), NULL);
@@ -1492,13 +1688,17 @@ void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
   if(IS_NULL_PTR(w) || w == g->version)
   {
     const gboolean v1 = (p->version == DT_NEGADOCTOR_V1);
-    GtkWidget *const v1_widgets[6] = { g->offset, g->WB_low_section, g->WB_low_row,
-                                       g->wb_low_R, g->wb_low_G, g->wb_low_B };
-    GtkWidget *const v2_widgets[5] = { g->black_point_row, g->black_point_R, g->black_point_G, g->black_point_B,
-                                       g->saturation };
-    for(int k = 0; k < 6; k++) gtk_widget_set_visible(v1_widgets[k], v1);
-    for(int k = 0; k < 5; k++) gtk_widget_set_visible(v2_widgets[k], !v1);
+    GtkWidget *const v1_widgets[7] = { g->offset, g->WB_low_section, g->WB_low_row,
+                                       g->wb_low_R, g->wb_low_G, g->wb_low_B, g->WB_high_row };
+    GtkWidget *const v2_widgets[8] = { g->black_point_row, g->black_point_R, g->black_point_G, g->black_point_B,
+                                       g->saturation, g->neutral_row[0], g->neutral_row[1], g->neutral_row[2] };
+    for(int k = 0; k < 7; k++) gtk_widget_set_visible(v1_widgets[k], v1);
+    for(int k = 0; k < 8; k++) gtk_widget_set_visible(v2_widgets[k], !v1);
+    _neutrals_status_show(g);
   }
+
+  // a film base picked or typed since moves the densities of the pixel the black point picker took
+  if(IS_NULL_PTR(w) || w == g->Dmin_R || w == g->Dmin_G || w == g->Dmin_B) _black_point_density_update(g, p);
 
   if(IS_NULL_PTR(w) || w == g->D_max) _density_sliders_update(g, p);
 
@@ -1517,6 +1717,10 @@ void gui_update(dt_iop_module_t *const self)
 
   dt_iop_color_picker_reset(self, TRUE);
 
+  // a neutral picked on another image, or before an undo, is not one of this image's
+  for(int k = 0; k < 2; k++) g->neutral_picked[k] = FALSE;
+  _neutrals_status_set(g, "");
+  g->black_point_picked = FALSE;
 
   dt_bauhaus_slider_set(g->exposure, log2f(p->exposure));     // warning: GUI is in EV
 

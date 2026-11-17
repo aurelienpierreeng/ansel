@@ -119,7 +119,7 @@ mishandles the warm cropped→uncropped geometry change.
 
 ## negadoctor: the shadows color cast scales the bias in v1; v2 has one black point per channel
 
-*Found on top of `6a9005ef9c`, 2026-11-13; v2's black points on top of the same commit, 2026-11-14; the black point picker's pixel on top of `8e77b45cff`, 2026-11-14; what the black points and the illuminant gain do to each tone on top of `8e77b45cff`, 2026-11-15; v2's saturation on top of `b13472e7f4`, 2026-11-16.*
+*Found on top of `6a9005ef9c`, 2026-11-13; v2's black points on top of the same commit, 2026-11-14; the black point picker's pixel on top of `8e77b45cff`, 2026-11-14; what the black points and the illuminant gain do to each tone on top of `8e77b45cff`, 2026-11-15; v2's saturation, the layer contrast pickers and the split of the black points' color and level on top of `b13472e7f4`, 2026-11-16; the labels by the neutral and black point pickers, and the pair setting the gains alone, on top of `218e6d865f`, 2026-11-17.*
 
 `process()` prints `exposure · (1 + black) − exposure · 10^(wb_high[c] · (B[c] − D[c] / D_max))`,
 `D[c]` being the density above the film base. The density printed at the paper black
@@ -173,11 +173,74 @@ is the same at the black point and at the paper white (10 D above the blacks), a
 higher at 0.30, 0.75 and 2.05 D. A tint would scale every value alike, white included; a preflash, a uniform
 exposure, is in this model a paper black per channel.
 
-The black point picker takes the pixel of the
-area whose densest channel is the least dense above the film base, the pixel clear in all three
-channels (`DT_COLOR_PICKER_EXTREMES_MAX_OF_MIN` on `log10(pixel / Dmin)`, see
-[`color-picker.md`](color-picker.md)), and gives its three densities to the three black points, so
-that it prints neutral at the paper black.
+So the gain belongs to the film, its development and the scan, and the light of the scene to the black
+points: a cast multiplies the exposure of a layer, which on the straight part of the film's curve adds the same
+density to every tone of that channel, and `wb_high[c] · (B[c] − (D[c] + ΔD) / D_max)` is exactly the image of
+a black point lowered by `ΔD / D_max`. The gain sliders ("red layer contrast", …) are on the film properties page, under "layer
+calibration". In v2 two pickers, "darker neutral" and "lighter neutral", measure them between two neutrals
+of different tones: `wb_high[c] ∝ 1 / (D_dense[c] − D_clear[c])`, the two sorted by density whichever picker took
+them, normalized so that the smallest is 1, in which a cast cancels. The pair fits a straight line through two
+points of each layer's curve, and the line that keeps a whole range closest to a curved one goes through two points
+inside it, not through its ends; the tooltips ask for two greys well apart, clear of the black and the white, as
+the measurement below found. They set the gains and nothing
+else: the gains pivot on the black points, so the frame then shows the cast of its light, which the "white
+balance" picker of the corrections page takes out. They first set, in the same gesture, the black points that
+print both neutral, `black_point[c] = D_clear[c] / D_max + K / wb_high[c]` with `K` the mean corrected density
+of the clearer neutral: the same black points as the white balance picker on it, but it put a property of the frame
+into the calibration of the film and did twice what the corrections page does. The first pick is
+kept in the GUI data until the second, and forgotten by `gui_update()`. A line under the two pickers says which
+one is still to pick, then how far apart the two are in each channel; under 0.05 D in one channel the pair
+measures no slope, the parameters stay, and the line names that channel instead. v1 keeps the picker that neutralizes
+one area against the black points, `wb_high[c] ∝ 1 / (D[c] − B[c] · D_max)`; it is the same measurement with
+the black point as the lower neutral, right only when the black points come from a neutral of the same frame.
+
+Replayed in Python on a synthetic film (layer slopes 0.55 / 0.62 / 0.70, D75 against D55, D max 2.05, paper
+black 0.0755, grade 4), on top of `b13472e7f4`, 2026-11-16: on a straight-line film, grey at 18 % and white
+at 90 % give gains 1.2727 / 1.129 / 1, the slopes' ratios to four digits, and every neutral from 1 % to 90 %
+prints neutral. With a toe (a softplus 0.4 log exposure wide), the gains are off by 0.3 % and the neutrals
+from 9 % up within 0.006 EV, the 3 % one 0.08 EV off; the v1 picker, with the black points on the 1 % neutral
+in the toe, gives 1.2961 / 1.1437 / 1 and a grey 0.03 EV blue, because the toe takes less of the cast.
+
+In v2 the black points hold two things, which two pickers on the corrections page set apart, each keeping
+what the other and the pair of neutrals set, the pair keeping the black points in turn: their color (two degrees of freedom, the cast of the light) and
+their level (one). The "white balance" picker sets the color from one neutral area, any tone, with the gains kept:
+`black_point[c] = D[c] / D_max + K / wb_high[c]`, `K` the mean over the channels of the
+corrected density the area printed with. Every black point moves by `δ[c]`, every pixel's corrected density
+in channel c by `wb_high[c] · δ[c]`, whose mean over the channels is 0, so the mean corrected density of every
+pixel, the level of the blacks, stays. The black point picker sets the level: all three black points move by
+`−K / wb_high[c]`, the same corrected density in every channel, so a neutral stays neutral, `K` being the mean
+over the channels of the corrected density of the pixel the print makes dark in all three channels
+(`DT_COLOR_PICKER_EXTREMES_MAX_OF_MIN` on the corrected density, see [`color-picker.md`](color-picker.md)),
+which then prints at the paper black in the mean of its channels; the label after it gives that pixel's
+densities above the film base, in the unit of the black points, from the film base current when it is drawn.
+Taking the mean rather than its darkest
+channel is what makes the two commute; the paper black picker keeps that channel above the paper.
+
+The black point picker used to give the pixel's three densities to the three black points, so that it
+printed neutral at the paper black: the color and the level at once, from a black. Picked after the pair of
+neutrals, it undid their color. Measured on top of `b13472e7f4`, 2026-11-16, by replaying `process()` on the
+grey ramp of a SpyderCheckr on Portra 400 (image 20261113_0007, D max 1.545, module input exported by
+`ansel-cli` with negadoctor off): the pair on the 4th grey and the white gave black points 0.160 / 0.018 /
+−0.006 D and the ramp neutral within 0.012 EV between them; the black point picker then set 0.034 / 0.036 /
+0.016 D, and the ramp printed red, R/G +0.20 EV on the white, +0.46 on the 4th grey, +0.90 on the black.
+A black lies in the toe, where the red layer is flatter than the line through the two neutrals predicts.
+With the split, on the same ramp, the black point picker after the pair keeps the white and the 4th grey
+neutral to 0.000 EV, and "white balance" then black point gives the same black points as the reverse order to
+1e-6 D. With the pair's gains on default black points, "white balance" on the 4th grey gives back the
+result of the pair when it set the black points too, which is why it no longer does, and on the black patch +0.08 to +0.19 EV of red over the ramp: a mid grey is the safer neutral.
+
+Which pair calibrates matters on a real film, because its curve is not straight below the mid tones.
+Measured on top of `218e6d865f`, 2026-11-17, on the same chart in the GUI (D max 2.046, paper black +22 %,
+grade 7.49), the black point picker on the room's shadows (0.021 / 0.035 / 0.017 D), then the print replayed
+in Python on the right-hand grey ramp, saturation left out. Gains between the 4th grey and the white,
+1.10 / 1.12 / 1, with the white balance on the 4th grey: white to 4th grey within 0.03 EV, then the 5th grey
+R/G −0.28 and B/G −0.21 EV, the black −0.91 / −0.77 EV, green; with the white balance on the 5th grey
+instead, the error moves into the light tones, +0.10 to +0.19 EV magenta, the black still −0.43 / −0.41 EV.
+Gains between the 5th and the 2nd grey, 1.07 / 1.17 / 1 (the GUI line read 0.531 / 0.484 / 0.567 D apart,
+the replay 0.531 / 0.484 / 0.568), with the white balance on the 5th grey: the whole ramp from the white
+to the 5th grey within 0.09 EV, the black −0.16 / −0.26 EV, and the room's shadows still at the paper black
+(mean corrected density −0.0015 D), the pair having left the black points alone. Two neutrals inside the ramp, both clear of its
+ends, make the safer pair.
 
 It first took the clearest pixel of the clearest channel, the channel the bias picker keeps, which is
 wrong on a saturated color: a red object is clear on the film in blue and green but dense in red.
@@ -198,9 +261,10 @@ pixel the print makes dark in all three channels, `DT_COLOR_PICKER_EXTREMES_MAX_
 density `_corrected_density()` gives, and evaluates the three channels of that pixel. Measured on top of
 `8e77b45cff`, 2026-11-14, on 300 random boxes of the module input of 51159 with the black points picked
 as above (`wb_high` 1.461 / 1.085 / 1): the old rule set `black` higher by 0.013 in median, 0.092 at the
-95th percentile and 0.214 at most. The black point picker's scale, `1 / Dmin` alone, is not the print's:
+95th percentile and 0.214 at most. The black point picker's scale was then `1 / Dmin` alone, not the print's:
 `wb_high` and the black points differ between channels, and that pixel's `black` was off from the exact
-one by 0.037 at the 95th percentile and 0.136 at most. Both pickers ask negadoctor for their scale
+one by 0.037 at the 95th percentile and 0.136 at most. Both pickers now look on the print's scale, and ask
+negadoctor for it
 (`_picker_channel_scale()`) at each sample. The helper's C finds the same pixel as the exact rule in
 float64 Python on all 1,200 boxes tried (300 per picker, on 51159 and 20250921_0007).
 
