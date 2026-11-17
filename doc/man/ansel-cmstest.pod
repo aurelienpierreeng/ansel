@@ -5,7 +5,7 @@ ansel-cmstest - test if the color management subsystem of your computer is corre
 
 =head1 SYNOPSIS
 
-    ansel-cmstest
+    ansel-cmstest [--wayland | --x11]
 
 =head1 DESCRIPTION
 
@@ -13,6 +13,26 @@ B<ansel> is a digital photography workflow application for B<Linux>, B<Mac OS X>
 It's described further in L<ansel(1)|ansel(1)>.
 
 B<ansel-cmstest> investigates if the color management subsystem of your computer is correctly configured and it displays some useful information about the installed monitor profile(s).
+
+It examines the windowing system B<ansel> itself would run on: the Wayland compositor when one answers, the X11 display otherwise, and whatever B<GDK_BACKEND> names first when that variable is set.
+
+On X11, it lists for each monitor the profile found in the B<_ICC_PROFILE> atom and the one B<colord> holds, and says whether the two agree.
+
+On Wayland, it lists for each monitor how the compositor describes its color, when the compositor manages color at all, and the profile B<colord> holds. It then says which of the two B<ansel> uses, and warns when a monitor has a profile in B<colord> while the compositor already converts to it, since color is then corrected twice.
+
+=head1 OPTIONS
+
+=over
+
+=item B<--wayland>
+
+Examine the Wayland compositor.
+
+=item B<--x11>
+
+Examine the X11 display. Under a Wayland session this is what an application started with B<GDK_BACKEND=x11> sees.
+
+=back
 
 =head1 SEE ALSO
 

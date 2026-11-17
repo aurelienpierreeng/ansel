@@ -788,6 +788,10 @@ if(USE_WAYLAND_COLOR)
     # Listing the header among the sources is what makes it exist before anything is compiled.
     list(APPEND SOURCES "gui/wayland_color.c" ${WAYLAND_COLOR_CODE} ${WAYLAND_COLOR_HEADER})
 
+    # A target in another directory cannot name these two files as its own sources' rule: it
+    # hangs on this target instead, as with generate_version (ansel-cmstest does).
+    add_custom_target(generate_wayland_color_protocol DEPENDS ${WAYLAND_COLOR_HEADER} ${WAYLAND_COLOR_CODE})
+
     # libgdk-3 links libwayland-client too, but a library that calls wl_* itself has to say so.
     target_link_libraries(ansel_deps INTERFACE PkgConfig::WaylandClient)
     add_definitions("-DHAVE_WAYLAND_COLOR")
@@ -899,6 +903,9 @@ add_dependencies(lib_ansel generate_conf)
 add_dependencies(lib_ansel generate_version)
 add_dependencies(lib_ansel generate_preferences)
 add_dependencies(lib_ansel generate_authors_h)
+if(USE_WAYLAND_COLOR)
+  add_dependencies(lib_ansel generate_wayland_color_protocol)
+endif()
 
 if(APPLE)
   set_target_properties(lib_ansel PROPERTIES MACOSX_RPATH TRUE)

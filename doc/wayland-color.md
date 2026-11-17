@@ -179,6 +179,27 @@ Weston, see above. A seventh, the CIE XYZ "primaries", is refused before anythin
 The arbitration with colord was compiled and read, not exercised end to end — the client above
 replaces `colorprofiles/`.
 
+## Checking a system: `ansel-cmstest`
+
+`ansel-cmstest` now examines the windowing system ansel would run on, and on Wayland prints, per
+output, the compositor's description and colord's profile, and which of the two ansel uses under
+`all`. It opens no window, so it cannot ask what the compositor prefers *for a window*: it asks
+for the description of each output (`wp_color_manager_v1.get_output`), which is what a compositor
+prefers for a window shown on it.
+
+It warns about one arrangement nothing else reports: **a profile in colord for an output the
+compositor does not describe as sRGB.** ansel then renders for colord's profile in windows it
+does not declare, the compositor reads those as sRGB and converts them to the output, and colour
+is corrected twice. An output is taken as sRGB when its primaries are sRGB's (by name, or within
+0.002 in xy) and its curve is `gamma22`, `srgb` or a 2.2 power: only then does an undeclared
+window pass through untouched, which is what makes colord's profile the right one.
+
+Run on 2026-11-17: private Weston 15.0.1 (default, ICC output, no colour management, two
+outputs), private KWin 6.8.2 and the live KWin session, where it reports what `wayland-info`
+does. The colord branches were reached with a stand-in for the colord lookup, no monitor here
+having a profile in colord. Its X11 report, moved to a file of its own, prints the same thing
+as before on the same display.
+
 ## What the first version did
 
 Recorded because each one looked reasonable. PR #1389 put the client in
