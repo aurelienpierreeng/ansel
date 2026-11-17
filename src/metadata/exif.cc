@@ -2159,7 +2159,7 @@ static bool _exif_decode_exif_data(dt_image_t *img, Exiv2::ExifData &exifData, c
 }
 
 // TODO: can this blob also contain xmp and iptc data?
-int dt_exif_read_from_blob(dt_image_t *img, uint8_t *blob, const int size)
+int dt_exif_read_from_blob(dt_image_t *img, const uint8_t *blob, const int size)
 {
   try
   {

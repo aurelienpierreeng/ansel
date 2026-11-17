@@ -112,7 +112,7 @@ dt_exif_read_result_t dt_exif_read_persisted_with_tags(dt_image_t *img, const ch
                                                         gboolean *tags_changed);
 
 /** read exif data to image struct from given data blob, wherever you got it from. */
-int dt_exif_read_from_blob(dt_image_t *img, uint8_t *blob, const int size);
+int dt_exif_read_from_blob(dt_image_t *img, const uint8_t *blob, const int size);
 
 /** Reads exif tags that are not cached in the database */
 void dt_exif_img_check_additional_tags(dt_image_t *img, const char *filename);
