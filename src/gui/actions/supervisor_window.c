@@ -588,9 +588,9 @@ static gboolean _mem_row_in_sight(GtkWidget *list, const _mem_row_t *r)
 }
 
 // The list scrolled, resized by its grip or laid out: the texts of the rows now in sight set.
-static void _mem_list_apply_sight(GtkAdjustment *adj, gpointer list)
+static void _mem_list_apply_sight(GtkAdjustment *adj __attribute__((unused)), gpointer list)
 {
-  GPtrArray *rows = (GPtrArray *)g_object_get_data(G_OBJECT(list), "rows");
+  const GPtrArray *rows = (const GPtrArray *)g_object_get_data(G_OBJECT(list), "rows");
   for(guint i = 0; i < rows->len; i++)
   {
     _mem_row_t *r = (_mem_row_t *)g_ptr_array_index(rows, i);
@@ -934,7 +934,7 @@ static GtkWidget *_add_bar(GtkWidget *box, const _bar_t *bar, GPtrArray *texts)
 }
 
 // A bar and its legend's texts, set to what `bar` counts now.
-static void _update_bar(GtkWidget *area, GPtrArray *texts, const _bar_t *bar)
+static void _update_bar(GtkWidget *area, const GPtrArray *texts, const _bar_t *bar)
 {
   *(_bar_t *)g_object_get_data(G_OBJECT(area), "bar") = *bar;
   gtk_widget_queue_draw(area);
