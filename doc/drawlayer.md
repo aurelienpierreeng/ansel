@@ -656,9 +656,11 @@ The setter is `dt_drawlayer_widgets_set_picker_srgb()` now, and the chooser's pa
 `srgb`. **What was not measured:** the drag on the build before the fix (the displacement is
 known as triples, not as pixels), and anything on a LUT-based monitor profile.
 
-**Not changed, and worth knowing:** the chooser paints its sRGB triples to the screen
-unmanaged. On a wide-gamut monitor the map therefore looks more saturated than the colour a
-click on it picks; the history strip and the cursor stamp show the colour picked.
+**Not changed, and worth knowing:** the chooser paints its sRGB triples into its cairo surface
+as they are (`dt_drawlayer_widgets_draw_picker()`), with no conversion to the monitor profile,
+while the history strip and the cursor stamp are converted. Read from the code, not seen: on a
+monitor whose profile is wider than sRGB the map should look more saturated than the colour a
+click on it picks, unless the display server colour-manages the window itself.
 
 **And one thing this section had let be assumed:** the twin is the colour converted to the
 display profile, not the colour as the image will show it. The module sits before filmic in
