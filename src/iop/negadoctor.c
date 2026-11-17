@@ -51,6 +51,7 @@
 #include "math/openmp_maths.h"
 
 #include "gui/presets.h"
+#include "gui/bauhaus_conf.h"
 #include "gui/color_picker_proxy.h"
 #include "iop/iop_api.h"
 
@@ -149,6 +150,7 @@ typedef struct dt_iop_negadoctor_gui_data_t
   GtkWidget *wb_high_R, *wb_high_G, *wb_high_B;
   GtkWidget *wb_low_R, *wb_low_G, *wb_low_B;
   GtkWidget *black_point_R, *black_point_G, *black_point_B, *black_point_row, *black_point_sampler;
+  GtkWidget *density_unit;
   GtkWidget *version;
   GtkWidget *D_max;
   GtkWidget *offset;
@@ -614,15 +616,32 @@ static void _black_point_sliders_set(dt_iop_negadoctor_gui_data_t *const g, cons
   dt_gui_freeze_end();
 }
 
-// The bias and the v2 black points are stored as fractions of D max, and their sliders show densities
+// The bias and the v2 black points are stored as fractions of D max, and their sliders show densities in the
+// unit the user chose: D, or printer points (0.025 log exposure). process() multiplies the light through the
+// negative by 10^(black point in D), as a printer's lamp does, so a black point is a printing log exposure.
 static void _density_sliders_update(dt_iop_negadoctor_gui_data_t *const g, const dt_iop_negadoctor_params_t *const p)
 {
+  static const float factors[2] = { 1.0f, 40.0f };
+  static const int digits[2] = { 3, 1 };
+  static const char *const formats[2] = { " D", N_(" pt") };
+
+  const int u = !g_strcmp0(dt_conf_get_string_const("plugins/darkroom/negadoctor/density_unit"), "printer points");
+
   GtkWidget *const sliders[4] = { g->offset, g->black_point_R, g->black_point_G, g->black_point_B };
   for(int k = 0; k < 4; k++)
   {
-    dt_bauhaus_slider_set_factor(sliders[k], p->D_max);
+    dt_bauhaus_slider_set_factor(sliders[k], p->D_max * factors[u]);
+    dt_bauhaus_slider_set_digits(sliders[k], digits[u]);
+    dt_bauhaus_slider_set_format(sliders[k], _(formats[u]));
     gtk_widget_queue_draw(sliders[k]);
   }
+}
+
+static void _density_unit_callback(GtkWidget *widget, dt_iop_module_t *self)
+{
+  dt_iop_negadoctor_gui_data_t *const g = (dt_iop_negadoctor_gui_data_t *)dt_iop_gui_data(self);
+  const dt_iop_negadoctor_params_t *const p = (const dt_iop_negadoctor_params_t *)self->params;
+  _density_sliders_update(g, p);
 }
 
 static void WB_low_picker_update(dt_iop_module_t *self)
@@ -1187,11 +1206,15 @@ void gui_init(dt_iop_module_t *self)
   // the black point, which the shadows color cast then corrects
   gtk_box_pack_start(GTK_BOX(page2), dt_ui_section_label_new(_("exposure of the film")), FALSE, FALSE, 0);
 
+  g->density_unit = dt_bauhaus_combobox_from_conf(dt_bauhaus_get_global(), DT_GUI_MODULE(self),
+                                                  "plugins/darkroom/negadoctor/density_unit");
+  gtk_box_pack_start(GTK_BOX(page2), g->density_unit, FALSE, FALSE, 0);
+  g_signal_connect(G_OBJECT(g->density_unit), "value-changed", G_CALLBACK(_density_unit_callback), self);
+
   // v1: the bias
 
   g->offset = dt_color_picker_new(self, DT_COLOR_PICKER_AREA, dt_bauhaus_slider_from_params(self, "offset"));
   dt_color_picker_set_extremes(g->offset, DT_COLOR_PICKER_EXTREMES_MAX);
-  dt_bauhaus_slider_set_format(g->offset, " D");
   gtk_widget_set_tooltip_text(g->offset, _("This is the density of the blacks above the film base,\n"
                                            "which is printed at the paper black.\n"
                                            "Correct the exposure error of the image on the film, made when shooting,\n"
@@ -1230,12 +1253,7 @@ void gui_init(dt_iop_module_t *self)
       "which is printed at the paper black. Raising it darkens\n"
       "the blue of the print, so the blacks get more yellow.")
   };
-  for(int c = 0; c < 3; c++)
-  {
-    dt_bauhaus_slider_set_digits(black_points[c], 3);
-    dt_bauhaus_slider_set_format(black_points[c], " D");
-    gtk_widget_set_tooltip_text(black_points[c], black_point_tooltips[c]);
-  }
+  for(int c = 0; c < 3; c++) gtk_widget_set_tooltip_text(black_points[c], black_point_tooltips[c]);
 
   // v1: the shadows color cast, which scales the bias
   g->WB_low_section = dt_ui_section_label_new(_("shadows color cast"));

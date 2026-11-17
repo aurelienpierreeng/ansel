@@ -245,7 +245,16 @@ their red. That is the shape of the print curve in the shadows, which no single 
 
 Units: a density is the log10 of a transmission ratio, so 1 D = 10 dB = 3.32 EV; D max and the bias
 used to be labelled " dB", ten times off. `offset` and `black_point` are stored as fractions of
-D max and shown as densities through the bauhaus factor, which is not a param: whatever sets D max
+D max and shown as densities through the bauhaus factor, in D or in printer points (0.025 log exposure, so
+40 to the density unit), as `plugins/darkroom/negadoctor/density_unit` says. Both are true units of what the
+sliders hold: `process()` takes `10^corrected = (10^(B[c] · D_max) · 10^(−D[c]))^(wb_high[c] / D_max)`, so the
+black point multiplies the light through the negative as a printer's lamp does, and in D it is that
+printing log exposure. CC (Kodak color compensating filters, 0.01 D) was offered too and was removed: it
+counts the density of a colored filter, whereas the bias is the same in all channels (a neutral filter is
+counted in D, as ND) and a black point reads with the sign opposite to the filter it stands for, raising it
+being removing filtration. The channels are those of the working RGB, which negadoctor processes in after
+the input profile, not Kodak printing density: a value in points is a lab printer's only as far as these
+channels are the print stock's sensitivities. Neither the factor nor the unit is a param: whatever sets D max
 without its slider callback (its picker, under `dt_gui_freeze_begin()`) calls
 `_density_sliders_update()` itself.
 
