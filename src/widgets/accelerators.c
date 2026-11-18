@@ -155,34 +155,17 @@ static gboolean _accels_tooltip_query_hook(GSignalInvocationHint *hint, guint n_
   if(!gtk_widget_get_has_tooltip(widget)) return TRUE;
   if(g_object_get_data(G_OBJECT(widget), DT_ACCELS_WIDGET_TOOLTIP_DISABLED_KEY)) return TRUE;
 
+  // The base is the widget's own tooltip, to which the shortcut is appended. GTK 3 keeps a tooltip set as text
+  // as escaped markup, so the markup holds either. What the widget holds is the base unless it is what this
+  // hook set last time: a tooltip its owner set since, after the first query or between two, is the new base,
+  // which a base read once would hide behind the old one forever.
+  gchar *current = gtk_widget_get_tooltip_markup(widget);
+  const char *shown = g_object_get_data(G_OBJECT(widget), "dt-accel-tooltip-shown");
+  if(IS_NULL_PTR(shown) || g_strcmp0(current, shown))
+    g_object_set_data_full(G_OBJECT(widget), "dt-accel-tooltip-base-markup",
+                           (current && current[0]) ? g_strdup(current) : NULL, g_free);
+  dt_free(current);
   const char *base_markup = g_object_get_data(G_OBJECT(widget), "dt-accel-tooltip-base-markup");
-  const char *base_text = base_markup ? NULL : g_object_get_data(G_OBJECT(widget), "dt-accel-tooltip-base-text");
-  const gboolean base_none = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(widget), "dt-accel-tooltip-base-none"));
-
-  if(IS_NULL_PTR(base_markup) && IS_NULL_PTR(base_text) && !base_none)
-  {
-    gchar *current_markup = gtk_widget_get_tooltip_markup(widget);
-    if(current_markup && current_markup[0])
-    {
-      g_object_set_data_full(G_OBJECT(widget), "dt-accel-tooltip-base-markup", current_markup, g_free);
-      base_markup = current_markup;
-    }
-    else
-    {
-      dt_free(current_markup);
-      gchar *current_text = gtk_widget_get_tooltip_text(widget);
-      if(current_text && current_text[0])
-      {
-        g_object_set_data_full(G_OBJECT(widget), "dt-accel-tooltip-base-text", current_text, g_free);
-        base_text = current_text;
-      }
-      else
-      {
-        dt_free(current_text);
-        g_object_set_data(G_OBJECT(widget), "dt-accel-tooltip-base-none", GINT_TO_POINTER(1));
-      }
-    }
-  }
 
   dt_shortcut_t *shortcut = g_object_get_data(G_OBJECT(widget), DT_ACCELS_WIDGET_SHORTCUT_KEY);
   if(IS_NULL_PTR(shortcut))
@@ -197,47 +180,27 @@ static gboolean _accels_tooltip_query_hook(GSignalInvocationHint *hint, guint n_
     }
   }
 
-  if(IS_NULL_PTR(shortcut) || shortcut->key == 0)
-  {
-    if(base_markup)
-      gtk_widget_set_tooltip_markup(widget, base_markup);
-    else if(base_text)
-      gtk_widget_set_tooltip_text(widget, base_text);
-    return TRUE;
-  }
+  gchar *shortcut_label = (IS_NULL_PTR(shortcut) || shortcut->key == 0)
+                              ? NULL
+                              : gtk_accelerator_get_label(shortcut->key, dt_accels_display_mods(shortcut->mods));
 
-  gchar *shortcut_label = gtk_accelerator_get_label(shortcut->key, dt_accels_display_mods(shortcut->mods));
+  // the base alone without a shortcut, else the base and the shortcut under it, else the shortcut alone
+  gchar *new_markup = NULL;
   if(IS_NULL_PTR(shortcut_label) || !shortcut_label[0])
-  {
-    dt_free(shortcut_label);
-    return TRUE;
-  }
-
-  const char *shortcut_desc = (shortcut->description && shortcut->description[0]) ? shortcut->description : _("Shortcut");
-  if(base_markup && base_markup[0])
-  {
-    gchar *esc_label = g_markup_escape_text(shortcut_label, -1);
-    gchar *esc_desc = g_markup_escape_text(shortcut_desc, -1);
-    gchar *new_markup = g_strdup_printf("%s\n<small>%s: %s</small>", base_markup, esc_desc, esc_label);
-    gtk_widget_set_tooltip_markup(widget, new_markup);
-    dt_free(new_markup);
-    dt_free(esc_label);
-    dt_free(esc_desc);
-  }
-  else if(base_text && base_text[0])
-  {
-    gchar *new_text = g_strdup_printf("%s\n%s: %s", base_text, shortcut_desc, shortcut_label);
-    gtk_widget_set_tooltip_text(widget, new_text);
-    dt_free(new_text);
-  }
+    new_markup = g_strdup(base_markup);
   else
   {
-    gchar *new_text = g_strdup_printf("%s: %s", shortcut_desc, shortcut_label);
-    gtk_widget_set_tooltip_text(widget, new_text);
-    dt_free(new_text);
+    const char *shortcut_desc = (shortcut->description && shortcut->description[0]) ? shortcut->description : _("Shortcut");
+    gchar *line = g_markup_printf_escaped("%s: %s", shortcut_desc, shortcut_label);
+    new_markup = (base_markup && base_markup[0]) ? g_strdup_printf("%s\n<small>%s</small>", base_markup, line)
+                                                 : g_strdup(line);
+    dt_free(line);
   }
-
   dt_free(shortcut_label);
+
+  // a widget with neither keeps no tooltip, and setting NULL would turn its tooltip off for good
+  if(new_markup) gtk_widget_set_tooltip_markup(widget, new_markup);
+  g_object_set_data_full(G_OBJECT(widget), "dt-accel-tooltip-shown", new_markup, g_free);
 
   return TRUE;
 }
