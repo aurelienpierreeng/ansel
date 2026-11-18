@@ -376,7 +376,7 @@ that each of 1, 2 and 5 × 10ⁿ for n from −6 to 6, given as `raw`, comes bac
 
 ## A tooltip set after the first hover shows, with the shortcut under it
 
-*Established on top of `f4aeed644a`, 2026-11-18.*
+*Established on top of `cdfa91b84f`, 2026-11-18.*
 
 `_accels_tooltip_query_hook()` (`widgets/accelerators.c`) runs on every `query-tooltip` and appends the
 widget's shortcut to its tooltip, which it does by setting the tooltip itself. It must therefore tell the

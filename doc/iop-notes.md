@@ -119,7 +119,7 @@ mishandles the warm cropped→uncropped geometry change.
 
 ## negadoctor: the shadows color cast scales the bias in v1; v2 has one black point per channel
 
-*Found on top of `6a9005ef9c`, 2026-11-13; v2's black points on top of the same commit, 2026-11-14; the black point picker's pixel on top of `8e77b45cff`, 2026-11-14; what the black points and the illuminant gain do to each tone on top of `8e77b45cff`, 2026-11-15; v2's saturation, the layer contrast pickers and the split of the black points' color and level on top of `b13472e7f4`, 2026-11-16; the labels by the neutral and black point pickers, and the pair setting the gains alone, on top of `218e6d865f`, 2026-11-17; the wand on a white, on top of `f4aeed644a`, 2026-11-18.*
+*Found on top of `6a9005ef9c`, 2026-11-13; v2's black points on top of the same commit, 2026-11-14; the black point picker's pixel on top of `8e77b45cff`, 2026-11-14; what the black points and the illuminant gain do to each tone on top of `8e77b45cff`, 2026-11-15; v2's saturation, the layer contrast pickers and the split of the black points' color and level on top of `b13472e7f4`, 2026-11-16; the labels by the neutral and black point pickers, and the pair setting the gains alone, on top of `218e6d865f`, 2026-11-17; the wand on a white, on top of `cdfa91b84f`, 2026-11-18; the saturation from the gloss alone on top of `44bb51da9f`, 2026-11-18.*
 
 `process()` prints `exposure · (1 + black) − exposure · 10^(wb_high[c] · (B[c] − D[c] / D_max))`,
 `D[c]` being the density above the film base. The density printed at the paper black
@@ -298,7 +298,12 @@ black points from it; switching back rebuilds it from the black points. Its slid
 
 In v2 the wand sets the saturation too, from the same aims: the colors keep the scene's ratio between
 grey and white, 0.90 / 0.18, one to one, as the tones do, so `color_gamma = log(0.90 / 0.18) / (print_white −
-print_grey)`, the grade the wand would take without the paper gloss. Grade 4, the module's default, comes with
+print_grey)`, the grade the wand would take without the paper gloss. Since the wand's grade is
+`log(unglossed 0.90 / unglossed 0.18) / (print_white − print_grey)`, the saturation, their quotient less one, depends
+on the gloss alone (`_saturation_without_gloss()`): −4.97 % at 0.75, −18.75 % at 0.5, −34.34 % at 0, 0 from
+0.9 up, where the gloss leaves 90 % alone. The wand button at the right of the saturation slider sets it alone,
+for the gloss as it stands, so after a grade set by hand; the wand of the grade calls the same function, and
+when it clamps the grade, the saturation keeps the gloss's rule rather than the clamped grade's. Grade 4, the module's default, comes with
 no source and was not used. The aims say nothing about the colors themselves, so the rule
 is an extension of them, not a quote: what it takes away is only the gloss's share of the grade. With the
 gloss at 0.75 that is about −5 %; on 51150 with the gloss at 0 and the paper black at 0.1017, the wand's grade
@@ -330,8 +335,8 @@ diffuse white (code 685) and mid grey (code 470) 215 codes of 0.002 D apart: two
 `DT_COLOR_PICKER_EXTREMES_MIN`, as the print exposure picker takes it, so the area must hold no light source,
 specular reflection or dust. The channel that prints it lightest sets both aims, so that no channel of the white
 passes 90 %, and the darkroom marks it with the +; a geometric mean over RGB, which the wand used before, put
-the lightest channel above 90 %. When the grade is clamped, the white keeps its aim and the grey misses it. A paper black low enough to print the grey at zero or below in some channel leaves
-its log mean infinite or NaN, and the wand then keeps exposure and grade. Like every area picker, it starts on
+the lightest channel above 90 %. When the grade is clamped, the white keeps its aim and the grey misses it. A paper black low enough to print the grey at zero or below in that channel leaves
+its log infinite or NaN, and the wand then keeps exposure and grade. Like every area picker, it starts on
 the whole image less a 64 px border (`_picker_initialize_geometry_raw()` in `gui/color_picker_proxy.c`), so its
 first result takes the image's brightest point, which is right when that point is a white with detail and not a
 light source or a reflection.

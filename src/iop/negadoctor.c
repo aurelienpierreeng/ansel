@@ -1182,6 +1182,16 @@ static inline float _unglossed(const float print, const float soft_clip)
                              : print;
 }
 
+// The saturation that takes out of the grade the share that makes up for the paper gloss, so that the colors keep
+// the scene's ratio between grey and white, 0.90 / 0.18, one to one, as the tones do. The wand's grade is
+// log(unglossed white / unglossed grey) over the print's log span between them, and its colors' power the same
+// with the glossless ratio: their quotient, which this is plus one, depends on the gloss alone.
+static inline float _saturation_without_gloss(const dt_iop_negadoctor_params_t *const p)
+{
+  const float tones = logf(_unglossed(NEGADOCTOR_WHITE_PRINT, p->soft_clip) / _unglossed(NEGADOCTOR_GREY_PRINT, p->soft_clip));
+  return logf(NEGADOCTOR_WHITE_PRINT / NEGADOCTOR_GREY_PRINT) / tones - 1.0f;
+}
+
 // log(1 + black - 10^corrected) in channel c for the film transmittance `value`, made `denser` D denser: the log
 // of the print before exposure and grade.
 static inline float _log_print(const dt_iop_negadoctor_params_t *const p, const dt_iop_negadoctor_data_t *const d,
@@ -1226,11 +1236,9 @@ static void apply_auto_print(dt_iop_module_t *self)
     p->exposure = CLAMPF(expf(log_white / p->gamma - print_white), powf(2.0f, dt_bauhaus_slider_get_hard_min(g->exposure)),
                          powf(2.0f, dt_bauhaus_slider_get_hard_max(g->exposure)));
 
-    // v2: the colors reproduce the scene's ratio between grey and white, 0.90 / 0.18, one to one, as the tones
-    // do, but without the compensation for the paper gloss that the grade takes to reach the white aim.
     if(p->version == DT_NEGADOCTOR_V2)
-      p->offset = CLAMPF(logf(NEGADOCTOR_WHITE_PRINT / NEGADOCTOR_GREY_PRINT) / (print_white - print_grey) / p->gamma - 1.0f,
-                         dt_bauhaus_slider_get_hard_min(g->saturation), dt_bauhaus_slider_get_hard_max(g->saturation));
+      p->offset = CLAMPF(_saturation_without_gloss(p), dt_bauhaus_slider_get_hard_min(g->saturation),
+                         dt_bauhaus_slider_get_hard_max(g->saturation));
   }
 
   dt_gui_freeze_begin();
@@ -1243,6 +1251,24 @@ static void apply_auto_print(dt_iop_module_t *self)
   dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
 }
 
+
+// The button of the saturation slider: the wand's saturation, which depends on the gloss alone, for
+// the gloss as it stands
+static void _auto_saturation_callback(GtkWidget *quad, dt_iop_module_t *self)
+{
+  if(dt_gui_widgets_suppressed()) return;
+  dt_iop_negadoctor_gui_data_t *g = (dt_iop_negadoctor_gui_data_t *)dt_iop_gui_data(self);
+  dt_iop_negadoctor_params_t *p = (dt_iop_negadoctor_params_t *)self->params;
+
+  p->offset = CLAMPF(_saturation_without_gloss(p), dt_bauhaus_slider_get_hard_min(g->saturation),
+                     dt_bauhaus_slider_get_hard_max(g->saturation));
+
+  dt_gui_freeze_begin();
+  dt_bauhaus_slider_set(g->saturation, p->offset);
+  dt_gui_freeze_end();
+
+  dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
+}
 
 void color_picker_apply(dt_iop_module_t *self, GtkWidget *picker, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece)
 {
@@ -1537,7 +1563,34 @@ void gui_init(dt_iop_module_t *self)
   // Page PRINT PROPERTIES
   GtkWidget *page3 = self->gui->widget = dt_ui_notebook_page(g->notebook, N_("print properties"), NULL);
 
-  // print corrections
+  // the wand sets the grade of the paper and the exposure of the print together, above both
+  GtkWidget *auto_print_row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
+  g->auto_print_label = gtk_label_new(_("grade and exposure from a white"));
+  gtk_label_set_xalign(GTK_LABEL(g->auto_print_label), 0.0f);
+  gtk_label_set_ellipsize(GTK_LABEL(g->auto_print_label), PANGO_ELLIPSIZE_END);
+  gtk_box_pack_start(GTK_BOX(auto_print_row), g->auto_print_label, TRUE, TRUE, 0);
+  g->auto_print = dt_color_picker_new(self, DT_COLOR_PICKER_AREA, auto_print_row);
+  dt_color_picker_set_extremes(g->auto_print, DT_COLOR_PICKER_EXTREMES_MIN);
+  dtgtk_togglebutton_set_paint(DTGTK_TOGGLEBUTTON(g->auto_print), dtgtk_cairo_paint_wand, 0, NULL);
+  // its tooltip depends on the version, and is set with the widgets the version shows
+  gtk_box_pack_start(GTK_BOX(page3), auto_print_row, FALSE, FALSE, 0);
+
+  // the light through the negative onto the paper, which process() applies first
+  gtk_box_pack_start(GTK_BOX(page3), dt_ui_section_label_new(_("virtual print emulation")), FALSE, FALSE, 0);
+
+  g->exposure = dt_color_picker_new(self, DT_COLOR_PICKER_AREA, dt_bauhaus_slider_from_params(self, "exposure"));
+  dt_color_picker_set_extremes(g->exposure, DT_COLOR_PICKER_EXTREMES_MIN);
+  dt_bauhaus_slider_set_soft_min(g->exposure, -1.0);
+  dt_bauhaus_slider_set_soft_max(g->exposure, 1.0);
+  dt_bauhaus_slider_set_default(g->exposure, 0.0);
+  dt_bauhaus_slider_set_format(g->exposure, _(" EV"));
+  gtk_widget_set_tooltip_text(g->exposure, _("Correct the printing exposure after inversion to adjust\n"
+                                             "the global contrast and avoid clipping highlights.\n"
+                                             "The picker brings the brightest point of the area just below white:\n"
+                                             "pick a very bright part that should keep its detail,\n"
+                                             "not a light source, a specular reflection or dust."));
+
+  // the paper's response to that light, in the order process() applies it
   gtk_box_pack_start(GTK_BOX(page3), dt_ui_section_label_new(_("virtual paper properties")), FALSE, FALSE, 0);
 
   g->black = dt_color_picker_new(self, DT_COLOR_PICKER_AREA, dt_bauhaus_slider_from_params(self, "black"));
@@ -1556,7 +1609,8 @@ void gui_init(dt_iop_module_t *self)
                                           "equivalent to applying a gamma. It compensates the film D max\n"
                                           "and recovers the contrast. Use a high grade for high D max."));
 
-  // v2: the saturation, kept in the field v1 uses for the bias
+  // v2: the saturation, kept in the field v1 uses for the bias, with the button that sets it in the
+  // slider's own icon space, where the pickers of the sliders above sit
   g->saturation = dt_bauhaus_slider_from_params(self, "offset");
   dt_bauhaus_widget_set_label(g->saturation, N_("paper saturation"));
   dt_bauhaus_slider_set_factor(g->saturation, 100.0f);
@@ -1565,7 +1619,12 @@ void gui_init(dt_iop_module_t *self)
   gtk_widget_set_tooltip_text(g->saturation, _("The paper grade raises the colors with the contrast.\n"
                                                "At 0 %, they follow the grade, as in v1.\n"
                                                "Lower it to raise the grade without saturating the colors,\n"
-                                               "-100 % prints in grey. The neutrals do not change."));
+                                               "-100 % prints in grey. The neutrals do not change.\n"
+                                               "The wand sets it as the wand of the grade does: the colors keep\n"
+                                               "the same ratio to the scene as grey and white, without the gloss."));
+  dt_bauhaus_widget_set_quad_paint(g->saturation, dtgtk_cairo_paint_wand, 0, NULL);
+  dt_bauhaus_widget_set_quad_toggle(g->saturation, FALSE);
+  g_signal_connect(G_OBJECT(g->saturation), "quad-pressed", G_CALLBACK(_auto_saturation_callback), self);
 
   g->soft_clip = dt_bauhaus_slider_from_params(self, "soft_clip");
   dt_bauhaus_slider_set_factor(g->soft_clip, 100);
@@ -1574,31 +1633,6 @@ void gui_init(dt_iop_module_t *self)
   gtk_widget_set_tooltip_text(g->soft_clip, _("Gradually compress specular highlights past this value\n"
                                               "to avoid clipping while pushing the exposure for mid-tones.\n"
                                               "This somewhat reproduces the behaviour of matte paper."));
-
-  gtk_box_pack_start(GTK_BOX(page3), dt_ui_section_label_new(_("virtual print emulation")), FALSE, FALSE, 0);
-
-  g->exposure = dt_color_picker_new(self, DT_COLOR_PICKER_AREA, dt_bauhaus_slider_from_params(self, "exposure"));
-  dt_color_picker_set_extremes(g->exposure, DT_COLOR_PICKER_EXTREMES_MIN);
-  dt_bauhaus_slider_set_soft_min(g->exposure, -1.0);
-  dt_bauhaus_slider_set_soft_max(g->exposure, 1.0);
-  dt_bauhaus_slider_set_default(g->exposure, 0.0);
-  dt_bauhaus_slider_set_format(g->exposure, _(" EV"));
-  gtk_widget_set_tooltip_text(g->exposure, _("Correct the printing exposure after inversion to adjust\n"
-                                             "the global contrast and avoid clipping highlights.\n"
-                                             "The picker brings the brightest point of the area just below white:\n"
-                                             "pick a very bright part that should keep its detail,\n"
-                                             "not a light source, a specular reflection or dust."));
-
-  GtkWidget *auto_print_row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
-  g->auto_print_label = gtk_label_new(_("grade and exposure from a white"));
-  gtk_label_set_xalign(GTK_LABEL(g->auto_print_label), 0.0f);
-  gtk_label_set_ellipsize(GTK_LABEL(g->auto_print_label), PANGO_ELLIPSIZE_END);
-  gtk_box_pack_start(GTK_BOX(auto_print_row), g->auto_print_label, TRUE, TRUE, 0);
-  g->auto_print = dt_color_picker_new(self, DT_COLOR_PICKER_AREA, auto_print_row);
-  dt_color_picker_set_extremes(g->auto_print, DT_COLOR_PICKER_EXTREMES_MIN);
-  dtgtk_togglebutton_set_paint(DTGTK_TOGGLEBUTTON(g->auto_print), dtgtk_cairo_paint_wand, 0, NULL);
-  // its tooltip depends on the version, and is set with the widgets the version shows
-  gtk_box_pack_start(GTK_BOX(page3), auto_print_row, FALSE, FALSE, 0);
 
   // start building top level widget
   self->gui->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
