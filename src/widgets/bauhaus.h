@@ -188,7 +188,8 @@ typedef struct dt_bauhaus_widget_t
   char label[256];
   // callback function to draw the quad icon
   dt_bauhaus_quad_paint_f quad_paint;
-  // minimal modifiers for paint function.
+  // minimal modifiers for paint function, and the quad's state: CPF_ACTIVE while a toggle is on or the
+  // quad is held down, CPF_PRELIGHT while the pointer is over a quad that is a button
   int quad_paint_flags;
   // data for the paint callback
   void *quad_paint_data;
@@ -196,6 +197,8 @@ typedef struct dt_bauhaus_widget_t
   int quad_toggle;
   // show quad icon or space
   gboolean show_quad;
+  // the CSS node a quad that is a button is drawn as: the other icon buttons' (bauhaus.c, _quad_style())
+  GtkStyleContext *quad_style;
 
   // horizontally expand to fit container's width. Set to TRUE by default,
   // assuming vertical columns. Manually set to FALSE if using in toolbar menu.
