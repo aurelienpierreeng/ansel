@@ -154,7 +154,7 @@ typedef struct dt_iop_negadoctor_gui_data_t
   GtkWidget *version;
   GtkWidget *D_max;
   GtkWidget *offset;
-  GtkWidget *black, *gamma, *saturation, *soft_clip, *exposure, *auto_print;
+  GtkWidget *black, *gamma, *saturation, *soft_clip, *exposure, *auto_print, *auto_print_label;
   GtkWidget *Dmin_picker, *Dmin_sampler;
   GtkWidget *WB_high_picker, *WB_high_norm, *WB_high_sampler, *WB_high_row;
   GtkWidget *WB_low_picker, *WB_low_norm, *WB_low_sampler, *WB_low_row, *WB_low_section;
@@ -1182,24 +1182,22 @@ static inline float _unglossed(const float print, const float soft_clip)
                              : print;
 }
 
-// Mean over RGB of log(1 + black - 10^corrected) for the film transmittance `value`, made `denser` D denser in
-// every channel: the log of the print before exposure and grade, in geometric mean.
-static inline float _mean_log_print(const dt_iop_negadoctor_params_t *const p, const dt_iop_negadoctor_data_t *const d,
-                                    const dt_aligned_pixel_t value, const float denser)
+// log(1 + black - 10^corrected) in channel c for the film transmittance `value`, made `denser` D denser: the log
+// of the print before exposure and grade.
+static inline float _log_print(const dt_iop_negadoctor_params_t *const p, const dt_iop_negadoctor_data_t *const d,
+                               const float value, const int c, const float denser)
 {
-  float mean = 0.0f;
-  for(int c = 0; c < 3; c++)
-    mean += logf(1.0f + p->black - fast_exp10f(_corrected_density(d, c, value[c]) - d->wb_high[c] * denser)) / 3.0f;
-  return mean;
+  return logf(1.0f + p->black - fast_exp10f(_corrected_density(d, c, value) - d->wb_high[c] * denser));
 }
 
 // Set print exposure and paper grade from the film settings and the paper black as they stand, so that the
-// mean of the picked area prints as mid grey and a density 0.43 D above it as diffuse white, at their Cineon
-// reflectances, in geometric mean over RGB; in v2, set the saturation so that the colors keep the scene's
-// ratio between them too.
-// The mean is that of the transmittance, the large-area integrated density by which printers set their
-// exposure frame by frame (Evans' integration to grey): Cineon's grey sits at a fixed density, which only a
-// normally exposed negative reaches, so an underexposed frame printed from it comes out dark.
+// brightest point of the picked area, a white that keeps its detail, prints as diffuse white and a density 0.43 D
+// clearer than it as mid grey, at their Cineon reflectances, in the channel closest to white; in v2, set the
+// saturation so that the colors keep the scene's ratio between them too.
+// The brightest point is each channel's densest value on the film, as the print exposure picker takes it, and
+// the channel that prints it lightest sets both aims, so that no channel of the white passes 90 %. The white is
+// the frame's own: Cineon's aims sit at fixed densities, which only a normally exposed negative reaches, so an
+// underexposed frame printed from them comes out dark.
 static void apply_auto_print(dt_iop_module_t *self)
 {
   if(dt_gui_widgets_suppressed()) return;
@@ -1211,17 +1209,21 @@ static void apply_auto_print(dt_iop_module_t *self)
   // (exposure · print)^grade = aim at grey and white: two equations, linear in grade and log(exposure).
   const float log_grey = logf(_unglossed(NEGADOCTOR_GREY_PRINT, p->soft_clip));
   const float log_white = logf(_unglossed(NEGADOCTOR_WHITE_PRINT, p->soft_clip));
-  const float print_grey = _mean_log_print(p, &d, self->picked_color, 0.0f);
-  const float print_white = _mean_log_print(p, &d, self->picked_color, NEGADOCTOR_WHITE_ABOVE_GREY);
+  dt_aligned_pixel_t white = { 0.0f };
+  for(int c = 0; c < 3; c++) white[c] = _log_print(p, &d, self->picked_color_min[c], c, 0.0f);
+  const int closest = _channel_of_max(white);
+  dt_iop_color_picker_set_deciding_channel(self, closest);
+  const float print_white = white[closest];
+  const float print_grey = _log_print(p, &d, self->picked_color_min[closest], closest, -NEGADOCTOR_WHITE_ABOVE_GREY);
 
-  // A white balance that leaves white no lighter than grey, or a paper black so low that grey prints at
-  // zero or below in some channel (grey prints darker than white, so it reaches zero first), has no solution: keep exposure and grade.
+  // A paper black so low that the grey prints at zero or below (it prints darker than the white, so it reaches
+  // zero first) has no solution: keep exposure and grade.
   if(isfinite(print_grey) && print_white > print_grey)
   {
     p->gamma = CLAMPF((log_white - log_grey) / (print_white - print_grey), dt_bauhaus_slider_get_hard_min(g->gamma),
                       dt_bauhaus_slider_get_hard_max(g->gamma));
-    // Once the grade is clamped, the white misses its aim and the grey keeps it.
-    p->exposure = CLAMPF(expf(log_grey / p->gamma - print_grey), powf(2.0f, dt_bauhaus_slider_get_hard_min(g->exposure)),
+    // Once the grade is clamped, the grey misses its aim and the white, which was picked, keeps it.
+    p->exposure = CLAMPF(expf(log_white / p->gamma - print_white), powf(2.0f, dt_bauhaus_slider_get_hard_min(g->exposure)),
                          powf(2.0f, dt_bauhaus_slider_get_hard_max(g->exposure)));
 
     // v2: the colors reproduce the scene's ratio between grey and white, 0.90 / 0.18, one to one, as the tones
@@ -1588,20 +1590,14 @@ void gui_init(dt_iop_module_t *self)
                                              "not a light source, a specular reflection or dust."));
 
   GtkWidget *auto_print_row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
-  GtkWidget *auto_print_label = gtk_label_new(_("grade and exposure from the area"));
-  gtk_label_set_xalign(GTK_LABEL(auto_print_label), 0.0f);
-  gtk_label_set_ellipsize(GTK_LABEL(auto_print_label), PANGO_ELLIPSIZE_END);
-  gtk_box_pack_start(GTK_BOX(auto_print_row), auto_print_label, TRUE, TRUE, 0);
+  g->auto_print_label = gtk_label_new(_("grade and exposure from a white"));
+  gtk_label_set_xalign(GTK_LABEL(g->auto_print_label), 0.0f);
+  gtk_label_set_ellipsize(GTK_LABEL(g->auto_print_label), PANGO_ELLIPSIZE_END);
+  gtk_box_pack_start(GTK_BOX(auto_print_row), g->auto_print_label, TRUE, TRUE, 0);
   g->auto_print = dt_color_picker_new(self, DT_COLOR_PICKER_AREA, auto_print_row);
+  dt_color_picker_set_extremes(g->auto_print, DT_COLOR_PICKER_EXTREMES_MIN);
   dtgtk_togglebutton_set_paint(DTGTK_TOGGLEBUTTON(g->auto_print), dtgtk_cairo_paint_wand, 0, NULL);
-  const char *const auto_print_tooltip = _("Set the grade and print exposure from the film settings and the paper black:\n"
-                                          "the mean of the area prints as a mid grey at 18 %\n"
-                                          "and a density 0.43 D above it as a white at 90 %, as in the Cineon aims.\n"
-                                          "Pick the whole frame, as a printer integrates it, or the subject.\n"
-                                          "In v2, also set the paper saturation so that the colors keep\n"
-                                          "the same ratio to the scene as grey and white, without the gloss.");
-  gtk_widget_set_tooltip_text(g->auto_print, auto_print_tooltip);
-  gtk_widget_set_tooltip_text(auto_print_label, auto_print_tooltip);
+  // its tooltip depends on the version, and is set with the widgets the version shows
   gtk_box_pack_start(GTK_BOX(page3), auto_print_row, FALSE, FALSE, 0);
 
   // start building top level widget
@@ -1630,6 +1626,25 @@ void gui_cleanup(struct dt_iop_module_t *self)
   if(!IS_NULL_PTR(g) && GTK_IS_NOTEBOOK(g->notebook))
     dt_conf_set_int("plugins/darkroom/negadoctor/gui_page", gtk_notebook_get_current_page(g->notebook));
   IOP_GUI_FREE;
+}
+
+// The wand's tooltip, which tells about the paper saturation only while its slider shows
+static void _auto_print_tooltip_update(dt_iop_negadoctor_gui_data_t *const g, const gboolean saturation_shown)
+{
+  const char *const tones = _("Set the grade and print exposure from the film settings and the paper black:\n"
+                              "pick a white that should keep its detail, as for the print exposure:\n"
+                              "the brightest point of the area prints as a white at 90 %\n"
+                              "and a density 0.43 D clearer than it as a mid grey at 18 %, as in the Cineon aims.\n"
+                              "Not a light source, a specular reflection or dust.");
+  gchar *text = saturation_shown
+                    ? g_strconcat(tones, "\n",
+                                  _("It also sets the paper saturation so that the colors keep\n"
+                                    "the same ratio to the scene as grey and white, without the gloss."),
+                                  NULL)
+                    : g_strdup(tones);
+  gtk_widget_set_tooltip_text(g->auto_print, text);
+  gtk_widget_set_tooltip_text(g->auto_print_label, text);
+  dt_free(text);
 }
 
 void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
@@ -1695,6 +1710,7 @@ void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
     for(int k = 0; k < 7; k++) gtk_widget_set_visible(v1_widgets[k], v1);
     for(int k = 0; k < 8; k++) gtk_widget_set_visible(v2_widgets[k], !v1);
     _neutrals_status_show(g);
+    _auto_print_tooltip_update(g, !v1);
   }
 
   // a film base picked or typed since moves the densities of the pixel the black point picker took

@@ -119,7 +119,7 @@ mishandles the warm cropped→uncropped geometry change.
 
 ## negadoctor: the shadows color cast scales the bias in v1; v2 has one black point per channel
 
-*Found on top of `6a9005ef9c`, 2026-11-13; v2's black points on top of the same commit, 2026-11-14; the black point picker's pixel on top of `8e77b45cff`, 2026-11-14; what the black points and the illuminant gain do to each tone on top of `8e77b45cff`, 2026-11-15; v2's saturation, the layer contrast pickers and the split of the black points' color and level on top of `b13472e7f4`, 2026-11-16; the labels by the neutral and black point pickers, and the pair setting the gains alone, on top of `218e6d865f`, 2026-11-17.*
+*Found on top of `6a9005ef9c`, 2026-11-13; v2's black points on top of the same commit, 2026-11-14; the black point picker's pixel on top of `8e77b45cff`, 2026-11-14; what the black points and the illuminant gain do to each tone on top of `8e77b45cff`, 2026-11-15; v2's saturation, the layer contrast pickers and the split of the black points' color and level on top of `b13472e7f4`, 2026-11-16; the labels by the neutral and black point pickers, and the pair setting the gains alone, on top of `218e6d865f`, 2026-11-17; the wand on a white, on top of `f4aeed644a`, 2026-11-18.*
 
 `process()` prints `exposure · (1 + black) − exposure · 10^(wb_high[c] · (B[c] − D[c] / D_max))`,
 `D[c]` being the density above the film base. The density printed at the paper black
@@ -322,14 +322,19 @@ channels are the print stock's sensitivities. Neither the factor nor the unit is
 without its slider callback (its picker, under `dt_gui_freeze_begin()`) calls
 `_density_sliders_update()` itself.
 
-The wand of print properties is an area picker ("grade and exposure from the area", whole frame by
-default). It sets print exposure and grade from the film settings and the paper black as they stand, which
-it leaves alone: the area's mean prints at 18 % and a density 0.43 D above it at 90 %, Cineon's mid grey
-(code 470) and diffuse white (code 685) 215 codes of 0.002 D apart, in geometric mean over RGB: two equations
-linear in grade and `log(exposure)`. The mean is that of the transmittance, the large-area integrated density
-by which printers set their exposure frame by frame (Evans' integration to grey). A paper black low enough to
-print the grey at zero or below in some channel leaves its log mean infinite or NaN, and the wand then keeps
-exposure and grade.
+The wand of print properties is an area picker ("grade and exposure from a white"). It sets print exposure
+and grade from the film settings and the paper black as they stand, which it leaves alone: the brightest point
+of the area, a white that keeps its detail, prints at 90 %, and a density 0.43 D clearer at 18 %, Cineon's
+diffuse white (code 685) and mid grey (code 470) 215 codes of 0.002 D apart: two equations linear in grade and
+`log(exposure)`. The brightest point is each channel's densest value on the film,
+`DT_COLOR_PICKER_EXTREMES_MIN`, as the print exposure picker takes it, so the area must hold no light source,
+specular reflection or dust. The channel that prints it lightest sets both aims, so that no channel of the white
+passes 90 %, and the darkroom marks it with the +; a geometric mean over RGB, which the wand used before, put
+the lightest channel above 90 %. When the grade is clamped, the white keeps its aim and the grey misses it. A paper black low enough to print the grey at zero or below in some channel leaves
+its log mean infinite or NaN, and the wand then keeps exposure and grade. Like every area picker, it starts on
+the whole image less a 64 px border (`_picker_initialize_geometry_raw()` in `gui/color_picker_proxy.c`), so its
+first result takes the image's brightest point, which is right when that point is a white with detail and not a
+light source or a reflection.
 
 It used to anchor the grey and white at Cineon's absolute densities, 0.75 and 1.18 D above the blacks, and
 printed underexposed frames dark. Measured on two Agfa HDC 200 frames, 51150 and 51154, replayed in Python
@@ -337,9 +342,10 @@ from `ansel-cli` float exports with negadoctor off: their integrated densities a
 diffuse white (a white dog) about 0.6 D, while the roll's fogged leader reads 1.96 D above the base on the
 D max picker, against 1.86 D for Cineon's code 1023: the film fills Cineon's scale, so the frames sit 0.35
 to 0.6 D under a normal exposure. The absolute aims gave grades 8.99 and 9.86, the dog at L* 45 and 32 and
-12 % and 36 % of black pixels; anchored on the frame they give 4.31 and 3.58, the dog at L* 87 and 93 with the
-shadows open. In the GUI on 51150, with D max 1.99 and the paper black at 0.10, the picker gave grade 4.29 and
-+0.39 EV, the dog at L* 90 on the screenshot. Anchoring the grey on D max instead (D max − 1.106 D, Cineon's
+12 % and 36 % of black pixels; with the grey on the frame's integrated density instead, which the wand did
+before it took a white, they give 4.31 and 3.58, the dog at L* 87 and 93 with the shadows open. In the GUI on
+51150, with D max 1.99 and the paper black at 0.10, that picker gave grade 4.29 and +0.39 EV, the dog at L* 90
+on the screenshot. Anchoring the grey on D max instead (D max − 1.106 D, Cineon's
 1023 − 470) puts it at 0.85 D with the leader's value, grades 11.3 and 12.2, the dog at L* 32 and 20: a roll
 constant cannot follow the exposure of each frame, which is what the printer's exposure is for. Measured on
 top of `b13472e7f4`, 2026-11-16.
