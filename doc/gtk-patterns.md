@@ -145,6 +145,38 @@ inputs and never re-derives per expose: `_lib_navigation_picture_key()` (`libs/n
 the pattern, priced in [`darkroom-redraw.md`](darkroom-redraw.md). The clip a handler receives
 does not say who asked for the redraw.
 
+## A bauhaus quad is a button when it toggles or paints an icon
+
+*Found on top of `0f56a30020`, 2026-11-18.*
+
+The quad, the square at the right end of a bauhaus slider or combobox, takes the click, the Insert
+key and the hover when `_quad_is_button()` (`widgets/bauhaus.c`) says so: it is shown, and it
+toggles (`dt_bauhaus_widget_set_quad_toggle()`) or paints an icon
+(`dt_bauhaus_widget_set_quad_paint()`). An icon makes a button even when nothing toggles: lens'
+autoscale and the deprecated clipping's aspect flip are icons with a `"quad-pressed"` handler and
+no toggle. A test on `quad_toggle` alone, in any of the three places
+that press the quad (slider press, combobox press, Insert), silently drops them: on a slider the
+click lands outside the scale and does nothing, on a combobox it opens the list. The chevron a
+combobox draws when it has no icon is no button, so a click on it opens the list, as anywhere else
+on the widget.
+
+A quad that does not toggle is drawn pressed (`CPF_ACTIVE`) from press to release. The slider's
+release handler releases it; a combobox has none, so its press releases the quad at once, as Insert
+does.
+
+The hover, `CPF_PRELIGHT` in `quad_paint_flags` next to `CPF_ACTIVE`, follows the pointer from the
+class `motion_notify_event` and the enter/leave handler. The class handler runs after the slider's
+own `"motion-notify-event"` handler, which stops the emission while it drags: the quad's hover waits
+for the drag to end.
+
+A quad button is drawn by the theme, as a CSS node of its own: `_quad_style()` appends a
+`button.dt_module_btn` to the widget's path, in a `GtkStyleContext` whose parent is the widget's,
+and `dt_bauhaus_draw_quad()` sets its state (hover, pressed, a toggle on as `:checked`) before
+`gtk_render_background()`, `gtk_render_frame()`, the colour and the padding. So whatever the theme
+says of the other icon buttons holds for the quads too, with no colour of their own to keep in
+step. The context hangs from the widget's path and theme, so `_style_updated()` drops it and the
+next draw makes it again.
+
 ## A GTK class overriding `style_updated` must chain up, or CSS opacity freezes
 
 *Found `b35c95990d`, 2026-09-16.*

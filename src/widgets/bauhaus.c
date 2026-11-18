@@ -361,6 +361,38 @@ static _bh_active_region_t _bh_get_active_region(GtkWidget *widget, double *x, d
 }
 
 /**
+ * @brief Whether the quad is a button of its own, taking clicks, the Insert key and the hover.
+ *
+ * A toggle is one, and so is any quad painting an icon: the icon names a button even when nothing
+ * toggles, as an autoscale or a wand does. What else sits there is not: the chevron a combobox
+ * draws when given no icon only says the widget opens a list, so a click on it opens the list as a
+ * click anywhere else does, and a hidden quad takes nothing.
+ */
+static gboolean _quad_is_button(const struct dt_bauhaus_widget_t *const w)
+{
+  return w->show_quad && (w->quad_toggle || w->quad_paint);
+}
+
+/**
+ * @brief Light the quad while the pointer is over it, so that a button reads as one before the
+ * click: CPF_PRELIGHT in its paint flags, next to CPF_ACTIVE. Takes the pointer coordinates of the
+ * event, which it does not modify.
+ */
+static void _quad_hover_update(GtkWidget *widget, const double x, const double y)
+{
+  struct dt_bauhaus_widget_t *const w = DT_BAUHAUS_WIDGET(widget);
+  double event_x = x;
+  double event_y = y;
+  const gboolean hovered = _quad_is_button(w)
+                           && _bh_get_active_region(widget, &event_x, &event_y, NULL, NULL) == BH_REGION_QUAD;
+  const int flags = hovered ? (w->quad_paint_flags | CPF_PRELIGHT) : (w->quad_paint_flags & ~CPF_PRELIGHT);
+  if(flags == w->quad_paint_flags) return;
+
+  w->quad_paint_flags = flags;
+  gtk_widget_queue_draw(widget);
+}
+
+/**
  * @brief Round a slider numeric value to the number of digits specified in the widget `w`.
  *
  * @param w
@@ -1049,10 +1081,12 @@ static gboolean _enter_leave(GtkWidget *widget, GdkEventCrossing *event)
   if(event->type == GDK_ENTER_NOTIFY)
   {
     gtk_widget_set_state_flags(widget, GTK_STATE_FLAG_PRELIGHT, FALSE);
+    _quad_hover_update(widget, event->x, event->y);
   }
   else
   {
     gtk_widget_unset_state_flags(widget, GTK_STATE_FLAG_PRELIGHT);
+    DT_BAUHAUS_WIDGET(widget)->quad_paint_flags &= ~CPF_PRELIGHT;
 
     // GUI refreshes can emit synthetic crossing events while the pointer never
     // physically leaves the widget. Only drop wheel capture on a real pointer
@@ -1066,6 +1100,14 @@ static gboolean _enter_leave(GtkWidget *widget, GdkEventCrossing *event)
 
   gtk_widget_queue_draw(widget);
 
+  return FALSE;
+}
+
+// The class handler runs after the slider's own motion handler, which stops the emission while it
+// drags: the quad's hover then waits for the drag to end.
+static gboolean _widget_motion_notify(GtkWidget *widget, GdkEventMotion *event)
+{
+  _quad_hover_update(widget, event->x, event->y);
   return FALSE;
 }
 
@@ -1101,6 +1143,7 @@ static void _widget_finalize(GObject *widget)
   }
   gtk_border_free(w->margin);
   gtk_border_free(w->padding);
+  g_clear_object(&w->quad_style);
 
   G_OBJECT_CLASS(dt_bh_parent_class)->finalize(widget);
 }
@@ -1122,6 +1165,7 @@ static void dt_bh_class_init(DtBauhausWidgetClass *class)
   widget_class->get_preferred_height = _get_preferred_height;
   widget_class->enter_notify_event = _enter_leave;
   widget_class->leave_notify_event = _enter_leave;
+  widget_class->motion_notify_event = _widget_motion_notify;
   widget_class->style_updated = _style_updated;
   G_OBJECT_CLASS(class)->finalize = _widget_finalize;
 }
@@ -1375,6 +1419,7 @@ static void _bauhaus_widget_init(dt_bauhaus_t *bauhaus, dt_bauhaus_widget_t *w, 
   w->quad_paint_data = NULL;
   w->quad_toggle = 0;
   w->show_quad = TRUE;
+  w->quad_style = NULL;
   w->expand = TRUE;
 
   gtk_widget_add_events(GTK_WIDGET(w), GDK_POINTER_MOTION_MASK
@@ -1649,6 +1694,8 @@ static void _style_updated(GtkWidget *widget)
 
   struct dt_bauhaus_widget_t *w = (struct dt_bauhaus_widget_t *)widget;
   _margins_retrieve(w);
+  // the quad's node hangs from the widget's path and theme, which may both have changed
+  g_clear_object(&w->quad_style);
 
   // gtk_widget_set_size_request is the minimal preferred, size.
   // it NEEDS to be defined and will be contextually adapted, possibly overriden by CSS.
@@ -2230,6 +2277,28 @@ static void dt_bauhaus_draw_indicator(struct dt_bauhaus_widget_t *w, float pos, 
   cairo_restore(cr);
 }
 
+/**
+ * @brief The CSS node a quad that is a button is drawn as: a `button.dt_module_btn` under the widget,
+ * the node of the other icon buttons, so that the theme draws it as it draws them, in every state.
+ * Made on first use, and again after the widget's style changes (_style_updated()).
+ */
+static GtkStyleContext *_quad_style(struct dt_bauhaus_widget_t *w)
+{
+  if(w->quad_style) return w->quad_style;
+
+  GtkWidget *widget = GTK_WIDGET(w);
+  GtkWidgetPath *path = gtk_widget_path_copy(gtk_widget_get_path(widget));
+  const gint node = gtk_widget_path_append_type(path, GTK_TYPE_BUTTON);
+  gtk_widget_path_iter_set_object_name(path, node, "button");
+  gtk_widget_path_iter_add_class(path, node, "dt_module_btn");
+
+  w->quad_style = gtk_style_context_new();
+  gtk_style_context_set_path(w->quad_style, path);
+  gtk_style_context_set_parent(w->quad_style, gtk_widget_get_style_context(widget));
+  gtk_widget_path_unref(path);
+  return w->quad_style;
+}
+
 static void dt_bauhaus_draw_quad(struct dt_bauhaus_widget_t *w, cairo_t *cr, const double x, const double y)
 {
   if(!w->show_quad) return;
@@ -2237,11 +2306,48 @@ static void dt_bauhaus_draw_quad(struct dt_bauhaus_widget_t *w, cairo_t *cr, con
   cairo_save(cr);
   if(w->quad_paint)
   {
-    // draw color picker
-    w->quad_paint(cr, x, y,
-                      w->bauhaus->quad_width,          // width
-                      w->bauhaus->quad_width,          // height
-                      w->quad_paint_flags, w->quad_paint_data);
+    // A quad painting an icon is a button (_quad_is_button()), drawn as the other icon buttons are:
+    // the theme's background and frame for the state of the moment, and the icon in the theme's
+    // colour inside the padding, which keeps it clear of the background's edges. The box is the
+    // quad's, a line of text high.
+    GtkStyleContext *const style = _quad_style(w);
+    GtkStateFlags state = GTK_STATE_FLAG_NORMAL;
+    int flags = w->quad_paint_flags;
+    if(!gtk_widget_is_sensitive(GTK_WIDGET(w)))
+    {
+      // an insensitive button does not light up under the pointer
+      state |= GTK_STATE_FLAG_INSENSITIVE;
+      flags &= ~CPF_PRELIGHT;
+    }
+    else
+    {
+      if(flags & CPF_PRELIGHT) state |= GTK_STATE_FLAG_PRELIGHT;
+      // a toggle that is on reads as a checked button, a button held down as a pressed one
+      if(flags & CPF_ACTIVE) state |= w->quad_toggle ? GTK_STATE_FLAG_CHECKED : GTK_STATE_FLAG_ACTIVE;
+    }
+    gtk_style_context_set_state(style, state);
+
+    // whole pixels, so that the background's edges are sharp and the icon centred in it
+    const double size = w->bauhaus->quad_width;
+    const double box_x = round(x);
+    const double box_y = round(y);
+    gtk_render_background(style, cr, box_x, box_y, size, size);
+    gtk_render_frame(style, cr, box_x, box_y, size, size);
+
+    GtkBorder padding;
+    GtkBorder border;
+    gtk_style_context_get_padding(style, state, &padding);
+    gtk_style_context_get_border(style, state, &border);
+    GdkRGBA color;
+    gtk_style_context_get_color(style, state, &color);
+    set_color(cr, color);
+
+    const int left = border.left + padding.left;
+    const int top = border.top + padding.top;
+    const int width = (int)size - left - border.right - padding.right;
+    const int height = (int)size - top - border.bottom - padding.bottom;
+    if(width > 0 && height > 0)
+      w->quad_paint(cr, (int)box_x + left, (int)box_y + top, width, height, flags, w->quad_paint_data);
   }
   else if(w->type == DT_BAUHAUS_COMBOBOX)
   {
@@ -2860,14 +2966,8 @@ static gboolean _widget_draw(GtkWidget *widget, cairo_t *crf)
       dt_bauhaus_draw_baseline(w, cr, available_width);
       cairo_restore(cr);
 
-      // Paint the non-active quad icon with some transparency, because
-      // icons are bolder than the neighbouring text and appear brighter.
-      cairo_save(cr);
-      if(!(w->quad_paint_flags & CPF_ACTIVE))
-        cairo_set_source_rgba(cr, text_color->red, text_color->green, text_color->blue, text_color->alpha * 0.7);
-
+      // the quad takes its colours from the theme's buttons (dt_bauhaus_draw_quad())
       dt_bauhaus_draw_quad(w, cr, text_width + 2. * INNER_PADDING, 0.);
-      cairo_restore(cr);
 
       float value_width = 0;
       if(gtk_widget_is_sensitive(widget))
@@ -3185,7 +3285,7 @@ static gboolean _widget_key_press(GtkWidget *widget, GdkEventKey *event)
         return TRUE;
 
       case GDK_KEY_Insert:
-        if(w->quad_toggle)
+        if(_quad_is_button(w))
         {
           dt_bauhaus_widget_press_quad(widget);
           dt_bauhaus_widget_release_quad(widget);
@@ -3205,7 +3305,7 @@ static gboolean _widget_key_press(GtkWidget *widget, GdkEventKey *event)
         return TRUE;
 
       case GDK_KEY_Insert:
-        if(w->quad_toggle)
+        if(_quad_is_button(w))
         {
           dt_bauhaus_widget_press_quad(widget);
           dt_bauhaus_widget_release_quad(widget);
@@ -3239,14 +3339,17 @@ static gboolean dt_bauhaus_combobox_button_press(GtkWidget *widget, GdkEventButt
   gtk_widget_grab_focus(widget);
   dt_widget_set_scroll_focus(widget);
 
-  if(activated == BH_REGION_QUAD && w->quad_toggle)
+  if(activated == BH_REGION_QUAD && _quad_is_button(w))
   {
+    // A combobox has no release handler, so a quad that does not toggle is released at once, as
+    // the Insert key releases it: otherwise it would stay drawn pressed.
     dt_bauhaus_widget_press_quad(widget);
+    dt_bauhaus_widget_release_quad(widget);
     return TRUE;
   }
   else
   {
-    // If no quad toggle, treat the whole widget as unit pack.
+    // Off the quad button, the whole widget opens the list.
     if(event->button == 3)
     {
       w->bauhaus->mouse_x = event_x;
@@ -3650,7 +3753,7 @@ static gboolean dt_bauhaus_slider_button_press(GtkWidget *widget, GdkEventButton
   gtk_widget_grab_focus(widget);
   dt_widget_set_scroll_focus(widget);
 
-  if(activated == BH_REGION_QUAD && w->quad_toggle)
+  if(activated == BH_REGION_QUAD && _quad_is_button(w))
   {
     dt_bauhaus_widget_press_quad(widget);
     return TRUE;
