@@ -330,6 +330,9 @@ published" means:
 - **A manual dispatch skips the question and builds everything.** Windows, Linux and Flatpak
   rename `~` to `.` before `tip`, as macOS does, so a dispatched rebuild of a published commit
   replaces its package instead of failing on `422`.
+- **Only master publishes** (macOS). A dispatch on another branch builds and tests both
+  architectures and keeps the DMGs as the run's artifacts; `upload_to_release` and the Sentry
+  symbol upload are skipped, so testing a change to the mac build never replaces a nightly.
 
 Windows, Linux, Flatpak and Docker have one package each: `published` outputs `build=true|false`,
 and a skipped build skips what publishes with it — green run, nothing published, nothing
