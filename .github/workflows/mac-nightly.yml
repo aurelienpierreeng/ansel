@@ -162,8 +162,9 @@ jobs:
           cmake -E make_directory "${INSTALL_PREFIX}";
           cd ${SRC_DIR}
           .ci/ci-script-mac.sh;
+      # From master only, like the release: a branch's test build is not what users run.
       - name: Upload debug symbols to Sentry
-        if: ${{ success() }}
+        if: ${{ success() && github.ref == 'refs/heads/master' }}
         env:
           SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
         run: |
@@ -219,7 +220,10 @@ jobs:
     # Not when nothing was to be built, though: always() alone would run this on a night whose
     # packages were all already published, find no DMG and fail. Nor on a fork, where the
     # `published' job is skipped and its output is empty rather than '[]'.
-    if: ${{ always() && needs.published.result == 'success' && needs.published.outputs.builds != '[]' }}
+    #
+    # Nor from any branch but master: a dispatch on a branch is a test of the build, and its DMGs
+    # stay with the run as artifacts instead of replacing the nightly users download.
+    if: ${{ always() && github.ref == 'refs/heads/master' && needs.published.result == 'success' && needs.published.outputs.builds != '[]' }}
     env:
       REPO: "https://github.com/aurelienpierreeng/ansel"
       ROOM: "!SgRYbzspwqwwUgSQHC:matrix.org"
