@@ -162,6 +162,7 @@ remain right for what is fine to miss: progress, confirmation, a passing state.
 | [`doc/color-picker.md`](doc/color-picker.md) | what a module picker's min/max are, and where the global picker's lie on the image and the scope; click = point, drag = area; the picking modifier |
 | [`doc/drawlayer.md`](doc/drawlayer.md) | the drawlayer module in full |
 | [`doc/retouch-result-memo.md`](doc/retouch-result-memo.md) | retouch's per-shape memo |
+| [`doc/flatfield.md`](doc/flatfield.md) | the flat field module: the reference, the gain map, how pipes share it |
 | [`doc/gtk-patterns.md`](doc/gtk-patterns.md) | layout, focus, repaint and threading patterns |
 | [`doc/shutdown.md`](doc/shutdown.md) | what a quit waits for, and the window that says so |
 | [`doc/darkroom-redraw.md`](doc/darkroom-redraw.md) | the centre repaint path, priced |

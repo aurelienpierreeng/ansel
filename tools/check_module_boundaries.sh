@@ -589,7 +589,7 @@ findings=$((findings + masks_findings))
 # metric. So the property those 50 edges were standing in for gets its own gate here.
 #
 # It is a ratchet because the tranche that lowers it is the IOP operator/panel split: an IOP is
-# currently one file holding both the pixel math and its GTK panel, and 97 of src/iop's 164
+# currently one file holding both the pixel math and its GTK panel, and 98 of src/iop's 166
 # files name a toolkit type. Each split module lowers the iop count by one. src/pixel (0/39),
 # src/caches (0/11) and src/database (0/31) are already free and are pinned at zero so they
 # stay that way.
@@ -607,7 +607,9 @@ findings=$((findings + masks_findings))
 # NAMES a toolkit symbol", not "IOP objects no longer link against GTK". Both are worth having;
 # they are not the same claim.
 toolkit_develop_baseline=20
-toolkit_iop_baseline=97
+# 98 since iop/flatfield.c: a new module brings its panel, and until the API split (Phase 2 of
+# doc/gtk-decoupling.md) that panel has nowhere to live but its own file under src/iop.
+toolkit_iop_baseline=98
 toolkit_imageio_baseline=12
 toolkit_pixel_baseline=0
 toolkit_caches_baseline=0
