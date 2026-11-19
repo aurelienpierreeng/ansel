@@ -2081,6 +2081,10 @@ static void _commit_combobox_value(struct dt_bauhaus_widget_t *w)
   // style, ...): those set widget values programmatically and must not reach history.
   if(dt_gui_widgets_suppressed()) return;
 
+  // Both listeners below commit synchronously, the default callback included: what they
+  // commit is a choice between discrete states, which the history commit keeps apart.
+  dt_gui_widgets_choice_begin();
+
   if(w->use_default_callback)
   {
     if(w->bauhaus->default_value_changed_callback)
@@ -2098,6 +2102,8 @@ static void _commit_combobox_value(struct dt_bauhaus_widget_t *w)
 
   // We need te emit this signal inconditionnaly
   g_signal_emit_by_name(G_OBJECT(w), "value-changed");
+
+  dt_gui_widgets_choice_end();
 }
 
 /**

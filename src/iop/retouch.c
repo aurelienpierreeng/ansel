@@ -1936,8 +1936,7 @@ static gboolean rt_select_algorithm_callback(GtkToggleButton *togglebutton, GdkE
   // the creation session, as any edit made off the canvas does.
   if(armed)
   {
-    dt_dev_history_flush_pending_commits(self->dev);
-    dt_dev_history_commit_item_now(self->dev, self, TRUE, FALSE);
+    dt_dev_history_commit_item_from_gui(self->dev, self, TRUE);
   }
   else
     dt_dev_add_history_item(self->dev, self, TRUE, TRUE);

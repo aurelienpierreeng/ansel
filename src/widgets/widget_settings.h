@@ -1,6 +1,7 @@
 /*
  *    This file is part of Ansel,
  *    Copyright (C) 2026 Aurélien PIERRE.
+ *    Copyright (C) 2026 Guillaume Stutin.
  *
  *    Ansel is free software: you can redistribute it and/or modify
  *    it under the terms of the GNU General Public License as published by
@@ -65,6 +66,16 @@ void dt_widget_set_image_filter(cairo_filter_t filter);
  * The depth counter used to live in dt_gui_gtk_t, which meant a widget had to reach the
  * application global to find out whether it should ignore its own callback. */
 gboolean dt_gui_widgets_suppressed(void);
+
+/* A choice being announced.
+ *
+ * A widget offering discrete values (a combobox) brackets the announcement of the one the user
+ * chose with dt_gui_widgets_choice_begin()/end(), around its listeners. What a listener commits
+ * meanwhile is a choice between discrete states, which the history commit keeps apart from a
+ * drag (see dt_dev_add_history_item()). GUI thread only: elsewhere both are no-ops. */
+void dt_gui_widgets_choice_begin(void);
+void dt_gui_widgets_choice_end(void);
+gboolean dt_gui_widgets_choice_announced(void);
 
 /** Register the thread that owns widget state. Freeze/unfreeze is a deliberate no-op on any
  *  other thread -- worker-thread reload_defaults has no widgets to suppress, and a concurrent
