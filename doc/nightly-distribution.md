@@ -93,8 +93,8 @@ Self-builds and distribution packages never check: whoever built them updates th
 ## The Intel mac build cannot afford its own dependencies
 
 *Measured on the nightlies of 2026-09-10 to 2026-11-18. The prebuilt-Rust path was written on top
-of `fa3c2765ab` on 2026-11-19 and tested on Linux against a stand-in `brew`; its first run on
-`macos-15-intel` is the measurement still owed.*
+of `fa3c2765ab` on 2026-11-19, and measured on `macos-15-intel` the same day by a dispatch of the
+branch carrying it (run 44535679929, on top of `abbc37447c`).*
 
 Homebrew publishes no bottles for Intel macOS any more — `brew` says so outright, `You are
 using macOS on Intel x86_64` — so `macos-15-intel` builds a large part of the tree from
@@ -162,6 +162,21 @@ So the script builds the two formulae themselves, as homebrew-core writes them:
   dry-run plan of the whole list too, and stops if `rust` or `llvm` is in it. A failure then
   takes minutes and says why, instead of running into the ceiling six hours later.
 
+Its first run, on 2026-11-19 (run 44535679929), from the job log:
+
+| step | time |
+|---|---|
+| the toolchain: three downloads, checksums, `install.sh` | 24 s |
+| `cargo-c`, with `libssh2`, `llhttp`, `libgit2` | 13 min (its own build: 10) |
+| `librsvg`, with 24 dependencies — `glib`, `cairo`, `pango`, … | 41 min (its own build: 9) |
+| the whole dependency step | **3 h 48** |
+| the whole job, DMG included | **4 h 08** |
+
+`rust`, `llvm` and `z3` appear nowhere in the log — not installed, not fetched, not planned —
+and neither tripwire fired. The dependency step took about as long as it did with both kegs warm
+(3 h 41 on 10-29, 4 h 14 on 10-30); 77 formulae were built from source and 39 poured, the
+longest builds being `boost` (25 min), `cmake` (23) and `x265` (16).
+
 ### What it replaces: a keg cache, which a bump could outrun
 
 From 2026-09 to 2026-11-19 the Intel job instead restored `llvm` and `rust` kegs from
@@ -198,8 +213,8 @@ downloads were measured on 2026-10-02:
 **OPEN — what grows now is everything else.** With rust and llvm gone, the Intel job still builds
 every other formula from source, every night: 67 of them on 2026-10-30, a job of 4 h 40 with
 the kegs warm, of which `z3` and `cargo-c` were the part this removes. Each homebrew-core bump
-drops that formula's Intel bottle, so the share built from source only moves one way. Nothing
-has been measured on the new path yet.
+drops that formula's Intel bottle, so the share built from source only moves one way: 77 built
+against 39 poured on 2026-11-19, a job of 4 h 08 — 1 h 52 under the ceiling, on one run.
 
 **None of this is what a failing Intel job used to cost.** `upload_to_release` carried `needs:
 MacOS` over the whole matrix with no `if:`, and `fail-fast` is off — so arm64 succeeded on
