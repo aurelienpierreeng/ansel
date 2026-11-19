@@ -189,9 +189,11 @@ EOF
 
   # The plan is read before anything is built: rust or llvm in it would be a six-hour build,
   # the very thing this script exists to avoid, so it stops here and names them.
+  # A name is matched between whitespace, not at line start: the Homebrew of 2026-11-19 prints
+  # one formula per line, name first, but older ones listed a plan's names on one line.
   plan="$(brew install --dry-run --formula "${tap}/${formula}" 2>&1)"
   echo "${plan}"
-  if grep -qE '^(rust|llvm|llvm@[0-9]+)([[:space:]]|$)' <<< "${plan}"; then
+  if grep -qE '(^|[[:space:]])(rust|llvm|llvm@[0-9]+)([[:space:]]|$)' <<< "${plan}"; then
     echo "${formula}: Homebrew still plans rust or llvm (above) -- refusing to build it." >&2
     exit 1
   fi
