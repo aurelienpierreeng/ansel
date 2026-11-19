@@ -92,166 +92,114 @@ Self-builds and distribution packages never check: whoever built them updates th
 
 ## The Intel mac build cannot afford its own dependencies
 
-*Measured on the nightlies of 2026-09-10 to 2026-10-15; the keg cache hand-off checked against
-`22b2e62997` on 2026-10-15.*
+*Measured on the nightlies of 2026-09-10 to 2026-11-18. The prebuilt-Rust path was written on top
+of `fa3c2765ab` on 2026-11-19 and tested on Linux against a stand-in `brew`; its first run on
+`macos-15-intel` is the measurement still owed.*
 
 Homebrew publishes no bottles for Intel macOS any more — `brew` says so outright, `You are
 using macOS on Intel x86_64` — so `macos-15-intel` builds a large part of the tree from
-source. Two formulae dominate it, measured on the nightlies of 2026-09-10 to 09-14 against
-GitHub's 6-hour job ceiling:
+source. Two formulae dominate it, against GitHub's 6-hour job ceiling:
 
-| formula | size | build | whose |
-|---|---|---|---|
-| `llvm` | 1.7 GB | 3 h 43 | ours, for `TESTBUILD_OPENCL_PROGRAMS` |
-| `llvm@22` | 1.6 GB | 4 h 04 – **over 4 h 54** | `librsvg`'s, through `rust` |
-| `rust` | 438 MB | 1 h 05 – 1 h 29 | `librsvg`'s — it is written in Rust |
-| everything else together | — | ~50 min | |
+| formula | build | whose |
+|---|---|---|
+| `llvm` | 3 h 43 (09-10) · 4 h 11 (11-17) · **over 4 h 12, unfinished** (11-18) | ours, for `TESTBUILD_OPENCL_PROGRAMS`; and `rust`'s, since rust 1.99.0 |
+| `llvm`'s own dependencies (`cmake`, `z3`, `python@3.15`, `openssl@4`, …) | 1 h 02 (11-17) · 1 h 40 (11-18) | `llvm`'s |
+| `rust` | 1 h 05 – 1 h 29 (September) · 1 h 41 (11-17), 3 h 02 with its own dependencies | `librsvg`'s — it is written in Rust |
 
-Four nightlies in a row were killed at the wall, on 09-10 with the dependency step alone at
-5 h 52. The same step takes **1 min 17 s** on arm64, which pours 53 bottles and builds nothing.
+The same dependency step takes **1 min 17 s** on arm64, which pours bottles and builds nothing.
+Runners differ by half: on 11-18 the same `cmake` took 36 min against 21 the day before, `z3`
+30 against 20.
 
-**Both llvms were scheduled on every one of those runs, and no run ever got through more than
-one** — `Would install 1 dependency for llvm: z3` for ours, and `llvm@22` inside
-`Would install 12 dependencies for librsvg`. That is about eight hours of llvm against a
-six-hour ceiling, and it is why reading the wall as one slow formula is wrong.
+Two measures keep both out of the Intel build:
 
-Two measures, and only together do they fit:
-
-- **`install-deps-macos.sh` skips `llvm` on Intel**, and `mac-nightly.yml` passes
+- **`install-deps-macos.sh` skips our `llvm` on Intel**, and `mac-nightly.yml` passes
   `-DTESTBUILD_OPENCL_PROGRAMS=OFF` there to say so rather than lean on CMake's absent-LLVM
   fallback. All that option buys is test-compiling the OpenCL kernels at build time, which the
-  arm64 CI does on every commit. Worth ~4 h.
-- **The kegs `librsvg` pulls in are cached**, because they cannot be dropped: `llvm@22` and
-  `rust`. Without the cache, those two plus the ~50 min of everything else still come to about
-  6 h 23 — over the ceiling on their own. This is the load-bearing half.
+  arm64 CI does on every commit.
+- **`librsvg` and `cargo-c` are built against the Rust project's prebuilt toolchain**, by
+  `tools/brew_install_without_rust.sh`, before anything else is installed. With them installed,
+  nothing in the tree schedules `rust`, so nothing schedules `llvm` or `z3` either.
 
-So the Intel job restores those kegs from a cache. **`mac-brew-cache.yml` is the only workflow
-that writes it; the nightly only reads it.** `tools/brew_cache_key.sh` owns the keys, and both
-workflows call it — the entry one saves must be the entry the other looks for. Three things
-about that cache are not obvious:
+### Why installing two formulae removes rust from every plan
 
-- **A keg is cacheable without relocation** because a given architecture's prefix is identical
-  on every runner (`/usr/local` on Intel, `/opt/homebrew` on arm64), so a restored keg sits at
-  the paths it was built for. `brew` decides a formula is installed by reading
-  `INSTALL_RECEIPT.json` inside the keg, and that file travels with it.
-- **The key carries the version brew WOULD install**, never the installed one: `brew info
-  --json=v2` reports both, and keying on the latter restores a keg a formula bump has already
-  made useless — wasting the quota and hiding the bump. Each formula gets its own entry, so a
-  bump in one does not discard the others.
-- **`brew link --overwrite` after the restore, and never `--force`.** A restored keg carries
-  its own `opt` link, which is all a keg-only formula needs, but `rust` also publishes `cargo`
-  and `rustc` into the prefix's `bin`, and those symlinks live outside the cached paths.
-  `link` refuses on a keg-only formula, which is the right answer there. `--force` would put
-  `llvm`'s clang in the prefix's `bin` ahead of Xcode's, and the nightly compiles with `CC=cc`.
+Read in Homebrew's `FormulaInstaller#expand_dependencies_for_formula_once` on 2026-11-19: a
+build dependency is **pruned, with everything below it, once the formula that needs it is
+installed at its current version**. `adwaita-icon-theme` needs `librsvg`; once `librsvg` is
+installed at the version homebrew-core wants, its build dependencies `rust` and `cargo-c` are
+dropped from `adwaita-icon-theme`'s plan, and `rust`'s `llvm` with them. The nightly of
+2026-10-30 shows what it replaces: `Installing dependencies for adwaita-icon-theme: …, z3,
+cargo-c and librsvg`, `z3` alone 26 min, with the rust and llvm kegs already warm.
 
-**A keg is banked as soon as it exists, not at the end of the job.** `actions/cache`'s own
-save is a post-step, and a job cancelled at the 6-hour ceiling never reaches it — visible in a
-killed run's step list as `Post Restore the rust keg`, still pending. On 2026-09-10 the
-dependency step *succeeded* at 5 h 52 and the budget then ran out during the build, so the four
-hours just spent on llvm went with the job. `mac-brew-cache.yml` therefore uses
-`actions/cache/restore` and an explicit `actions/cache/save` placed right after the build step,
-so a run that gets that far keeps its keg even when it dies afterwards.
+**A rust keg merely present does not do it**, though it looks like the obvious move. An
+installed dependency is *skipped*, not pruned, and `Dependency.expand` still walks a skipped
+dependency's own dependencies — `rust`'s include `llvm`, which would then be built.
 
-**llvm@22's build time is not a constant, and that is the margin the warm-up lives on.** The
-nightly of 2026-09-15 — the first with our own llvm dropped, so llvm@22 had the step almost to
-itself — sat **4 h 54 inside a single `cmake --build .`** and was still there when the run was
-cancelled, having completed only `openssl@3`, `xz`, `libssh2` and `pkgconf` (about 14 min) beside
-it. llvm 23.1.3 did no better on the nightly of 2026-10-15 (run 38713852826): its
-`cmake --build` ran from 11:18 until the ceiling killed the job at 15:34, 4 h 16, unfinished.
-`mac-brew-cache.yml` therefore runs at `timeout-minutes: 355`, nearly the whole ceiling, and
-a dispatch that still runs out is retried rather than reasoned about.
+So the script builds the two formulae themselves, as homebrew-core writes them:
 
-**A cold keg is handed off, never built by the nightly**, because it does not fit beside the
-rest. With both kegs restored, the dependency step alone took **1 h 48, 2 h 09, 2 h 28 and
-3 h 36** on 2026-10-03, 04, 05 and 07; rust adds 1 h 05 – 1 h 29 to that, llvm over 4 h. So when
-either key misses, the nightly's Intel job dispatches `mac-brew-cache.yml` with the cold
-formulae, in dependency order (`llvm rust`, or one of them), and fails within minutes with an
-error naming them. The next nightly finds the kegs warm and builds Intel, because the Intel DMG
-is still missing for the commit (see below). An llvm bump costs one night of Intel package and
-nobody's attention.
+- **The toolchain** is `rustc`, `cargo` and `rust-std` for `x86_64-apple-darwin` from
+  `static.rust-lang.org`, at the version homebrew-core's `rust` formula is at, each checked
+  against its published sha256 and installed with its own `install.sh`.
+- **It lives under `$(brew --prefix)/var/ansel`, not under `$HOME`.** Homebrew builds in a
+  sandbox that denies reading the home directory (`Sandbox#deny_read_home`); the prefix, the
+  cache and the runner's workspace are readable. A formula's `fetch` (`cargo fetch`, with the
+  network) and its `install` (offline) each run in such a sandbox. The same goes for the runner
+  image's own rustup in `~/.cargo`, which is why it is not used.
+- **The formula is homebrew-core's own source** (`brew cat`), with `depends_on "rust" => :build`
+  and the `bottle` block removed and the toolchain prepended to `PATH` in `fetch` and `install` —
+  needed because superenv rebuilds `PATH` from the dependencies' `opt/bin` alone. It goes into
+  a local tap, `ansel/prebuilt-rust`, because Homebrew refuses to load a formula from a file
+  outside a tap, and the tap is `brew trust`ed, because a local tap is refused as untrusted
+  otherwise — both measured on the mac CI of 2026-10-02, with the same mechanism, in an earlier
+  script. The keg has the name and version homebrew-core expects, which is what the pruning
+  above looks at.
+- **The tap stays.** The kegs record it as their origin. One consequence, from Homebrew's
+  `install/check.rb`: an explicit `brew install librsvg` then refuses — *Formulae with the same
+  name from different taps cannot be installed at the same time* — so `install-deps-macos.sh`
+  takes `librsvg` off its list on Intel. A formula that merely depends on it is unaffected.
+- **Two tripwires stop a 4-hour build before it starts.** The script refuses a source that no
+  longer has exactly one `depends_on "rust" => :build`, and refuses to install a formula whose
+  `brew install --dry-run` plan still names `rust` or `llvm`. `install-deps-macos.sh` reads the
+  dry-run plan of the whole list too, and stops if `rust` or `llvm` is in it. A failure then
+  takes minutes and says why, instead of running into the ceiling six hours later.
 
-`mac-brew-cache.yml` builds **one formula per run**: the first one requested whose key missed.
-It saves that keg, then dispatches itself for the formulae after it on the same branch — llvm
-and rust together do not fit under one timeout, and the rust run restores llvm from the cache
-instead of building it again. A formula it has no restore and save steps for is refused rather
-than built and never saved. The rest of what makes it work:
+### What it replaces: a keg cache, which a bump could outrun
 
-- **It runs on the default branch.** The nightly calls `gh workflow run` without `--ref`, which
-  targets the default branch, and a cache saved there is visible to every branch; one saved on
-  another branch is visible to that branch alone.
-- **One run at a time**, through a concurrency group: two runs asked for the same cold llvm
-  would each spend four hours on it, for one save. A request arriving meanwhile waits, then
-  finds the keg saved and has nothing to build. GitHub keeps one pending run per group and
-  cancels an older pending one, which the newer request covers.
-- **The nightly's token can dispatch it** because the repository's default workflow permissions
-  are `write` (`default_workflow_permissions`, read 2026-10-15) and `mac-nightly.yml` sets no
-  `permissions:` of its own. `mac-brew-cache.yml` does set them, so it asks for
-  `actions: write` explicitly. A `workflow_dispatch` sent with `GITHUB_TOKEN` is one of the two
-  events GitHub lets that token start a run with.
+From 2026-09 to 2026-11-19 the Intel job instead restored `llvm` and `rust` kegs from
+`actions/cache`, and a separate workflow, `mac-brew-cache.yml`, built a cold one, one formula per
+run with nearly the whole 6 hours each. It failed on its own terms:
 
-**OPEN — what grows now is everything else.** The ~50 min of "everything else" measured in
-September is no longer true: with both kegs restored, the Intel job still built **46 formulae
-from source on 2026-10-03 and 50 on 10-07**, every night, since nothing but llvm and rust is
-cached. Summing brew's own `built in …` lines (rounded by brew) gives about **100 min on 10-03
-and 199 min on 10-07** for nearly the same set: the same formulae took twice as long on the
-second runner (x265 10 → 19 min, openssl@3 5 → 12 min), and cmake, rebuilt only on 10-07 as an
-upgrade of the runner image's copy, added 28 min. The whole job ran about 4 h 05 on 10-07 against
-the 6-hour ceiling. Each homebrew-core bump drops that formula's Intel bottle, so the share
-built from source only moves one way, and a slow runner on a heavy night has under two hours of
-margin left. Caching more kegs the same way would not do it — `brew install` upgrades every
-outdated dependency, so only a keg at exactly the current version helps — and nothing has been
-measured beyond this.
+- **Every version bump was a cold key.** homebrew-core went from llvm `23.1.5_1` to `23.1.6_0`
+  between 2026-11-17 and 18: two llvm builds in two days.
+- **llvm no longer fitted in one run.** The warm-up of 2026-11-18 (run 44317497594) spent 1 h 40
+  on llvm's own dependencies, which nothing cached, then was killed at its 355-minute timeout
+  4 h 12 into llvm's `cmake --build`. On a good runner the day before, the same run took 5 h 11:
+  45 minutes of margin.
+- **The nightly still built llvm's dependencies.** With both kegs warm, `z3` (26 min),
+  `cargo-c` (12 min) and their own were rebuilt every night, because `rust` still pulled in
+  `llvm`, and an installed `llvm` still pulled in its dependencies.
 
-**The cached llvm is now `llvm`, not `llvm@22`** (2026-10-02, against `a4eac9fe11`). homebrew-core
-bumped `rust` to 1.99.0 on 2026-10-01, three days after "rust: do not hardcode LLVM version": it
-now `depends_on "llvm"` (23.1.2). The nightly of 10-02 restored `llvm@22` from the cache and then
-scheduled `llvm` beside it — `Installing librsvg dependency: llvm`, then `rust`, which died on
-`/usr/local/opt/llvm not present or broken`. `llvm@22` left the tree; the keys and the cache
-steps name `llvm`, and the skip in `install-deps-macos.sh` saves nothing while rust shares it.
-An llvm bump now usually moves rust's revision with it: on 2026-10-15 homebrew-core wanted
-llvm `23.1.3_1` and rust `1.99.0_1` against the cached `23.1.2_0` and `1.99.0_0`, so both keys
-missed at once.
-
-**Homebrew builds with network access denied, so a download that failed the prefetch is lost.**
-`brew install` fetches everything first (`Fetching downloads for: …`), then builds each formula
-in a sandbox; homebrew-core added `deny_network_access!` to `llvm` on 2026-09-21. Anything not
-fetched up front is retried inside the build, where DNS does not resolve. Measured on the nightly
-of 10-02: exactly two downloads were attempted after the prefetch, and they were exactly the two
-the prefetch had marked `✘` — both then failed on DNS (`Could not resolve host: github.com`,
-`nodename nor servname provided`), while every prefetched one worked. The two causes:
+Two lessons from that period are still true. **A job killed at the ceiling never runs
+`actions/cache`'s post-step save**, so whatever it built is lost. And **Homebrew builds with the
+network denied**, so a download that failed the up-front fetch fails again in the sandbox, on
+DNS (`Could not resolve host: github.com`), which reads like an outage and is not one. Two such
+downloads were measured on 2026-10-02:
 
 - **netpbm is fetched with `svn`**, and `svn` did not exist yet at prefetch time (`You must: brew
   install svn`). It is in the tree because `libsoup` 3.8.0 has no Intel bottle, so its build
-  dependency `vala` brings `graphviz` → `netpbm`: osm-gps-map's plan went from 23 dependencies on
-  09-30 to 40 on 10-01. This alone killed 10-01. `install-deps-macos.sh` now installs
-  `subversion` on its own first, on Intel.
-- **`llvm` 23.1.2 carries a patch whose checksum no longer matches** (`Patch reports different
-  checksum: f6dafd76…`, the `compare/1381ad49…40a8c7c0.diff` from GitHub — a generated diff, not
-  a stable file). **The content did not change, only the abbreviation**: GitHub now writes the
-  blob hashes on its `index` lines with 14 characters instead of 13. Measured 2026-10-02: the
-  diff as served hashes to `fa40bc0a…`, and the same diff with those hashes truncated to 13
-  characters hashes to exactly `f6dafd76…`. `?full_index=1` has no effect on a compare `.diff`,
-  and the compare `.patch` form is a different file altogether (15-character hashes, other blobs).
-  Homebrew closed the only report of the symptom (homebrew-core #314418, 2026-09-30) as an
-  unsupported configuration, without the cause. `tools/brew_seed_patches.sh` works around it:
-  it downloads each external patch outside the sandbox and, when the checksum differs, writes
-  the shorter-abbreviation form at the patch's cached location — but only when it reproduces
-  the formula's own sha256, which brew then verifies itself. `install-deps-macos.sh` (Intel)
-  and `mac-brew-cache.yml` run it for `llvm` before installing. Tested 2026-10-02 against the
-  real patch, outside brew. Its first run on a Mac (mac-brew-cache run 37020674433, 2026-10-02,
-  `d4a2120092`) seeded nothing: brew refuses to load a formula from a file outside a tap
-  (`Homebrew requires formulae to be in a tap, rejecting: …/llvm.rb`), so the script reported
-  `could not list its patches` and the build failed on the same checksum. The source now goes
-  into a throwaway local tap (`ansel/brew-seed`, removed on exit). Its run (37025480414,
-  `9dea2adcc3`) got past that and was refused at the next guard: `Refusing to load formula
-  ansel/brew-seed/llvm from untrusted tap`. The script now runs `brew trust` on the tap, and
-  `brew untrust` on exit. That version (run 37028120640, `ae160c645b`) worked: the log shows
-  `served with 15-character index hashes; the 13-character form matches the formula -- seeded
-  at …`, then `✔︎ Patch 1381ad49…40a8c7c0.diff`, the patch applied, and llvm 23.1.2 built in
-  3 h 31. The step still exited 1, because openssl@3, rebuilt as a dependency, could not link
-  over the runner image's `openssl@1.1` (`Could not symlink bin/openssl`); the save steps were
-  skipped and the keg was lost. The build step now judges by the Cellar, not by brew's status,
-  as `install-deps-macos.sh` already did.
+  dependency `vala` brings `graphviz` → `netpbm`. `install-deps-macos.sh` installs `subversion`
+  on its own first, on Intel.
+- **A GitHub compare diff changed checksum without changing content.** llvm 23.1.2 patched itself
+  from `compare/1381ad49…40a8c7c0.diff`; GitHub had started writing the blob hashes on its
+  `index` lines with 14 characters instead of 13, and truncating them back reproduced the
+  formula's sha256 exactly. A compare diff is generated, not stored, so this can happen to any
+  formula patching from one. The workaround, `tools/brew_seed_patches.sh`, went with the keg
+  cache, since llvm is no longer built on Intel.
+
+**OPEN — what grows now is everything else.** With rust and llvm gone, the Intel job still builds
+every other formula from source, every night: 67 of them on 2026-10-30, a job of 4 h 40 with
+the kegs warm, of which `z3` and `cargo-c` were the part this removes. Each homebrew-core bump
+drops that formula's Intel bottle, so the share built from source only moves one way. Nothing
+has been measured on the new path yet.
 
 **None of this is what a failing Intel job used to cost.** `upload_to_release` carried `needs:
 MacOS` over the whole matrix with no `if:`, and `fail-fast` is off — so arm64 succeeded on
@@ -264,7 +212,7 @@ that a hand-cancelled run also publishes what it had. A check between the downlo
 release refuses to publish nothing, since with both downloads allowed to fail an empty workspace
 would otherwise reach `tip` as an empty file list and pass.
 
-So the Intel measures below decide whether an Intel DMG exists, and no longer whether a macOS
+So the Intel measures above decide whether an Intel DMG exists, and no longer whether a macOS
 nightly exists at all.
 
 **Each package is published by its own step, and the release is then asked what arrived.**
@@ -396,11 +344,8 @@ DMG. The Matrix message names only the packages the release check found there, a
 whenever there is at least one: a package that arrived is announced even when the other did not,
 while the job still fails for the missing one.
 
-**One cost:** the Intel job is also what keeps its Homebrew kegs warm, and GitHub evicts a cache
-entry not read for 7 days. A week without a commit leaves the next Intel build cold: that night
-hands the kegs to `mac-brew-cache.yml` (see above) and the next one builds Intel. A week without
-a run does not even need a quiet master: from 2026-10-09 to 10-14 GitHub started none of the
-scheduled nightlies — Windows, Linux, Docker and macOS alike have no run on those days.
+GitHub can also not start a scheduled nightly at all: from 2026-10-09 to 10-14 it started none —
+Windows, Linux, Docker and macOS alike have no run on those days.
 
 ## GitHub starts a scheduled run hours after its cron
 
@@ -545,18 +490,16 @@ every nightly, and that file drives the website buttons, the in-app check
 script's `FORMATS` and in `dt_updates_runtime_format()` must agree. `doc/nightly-distribution.md`
 is the manual: secrets, retention, R2, signing costs, GHCR for later.
 
-Homebrew ships no bottles for Intel macOS any more, so `macos-15-intel` builds from source and
-four nightlies in a row died at GitHub's 6-hour ceiling — the same dependency step takes 77 s on
-arm64. **Two llvms were scheduled on every one of them**, four hours and more each — and not a stable
-four: `llvm@22` sat 4 h 54 in one `cmake --build .` on 2026-09-15 without finishing. One is ours,
-for `TESTBUILD_OPENCL_PROGRAMS`; the other is `llvm@22`, which `librsvg` pulls in through `rust`. So two
-measures, and only together do they fit — `install-deps-macos.sh` skips ours on Intel (with
-`-DTESTBUILD_OPENCL_PROGRAMS=OFF` to say so), and `librsvg`'s two, which cannot be dropped, are
-cached. `tools/brew_cache_key.sh` owns the keys for both workflows that touch them, and
-`mac-brew-cache.yml` exists because `actions/cache` saves only on success: a cold cache cannot
-warm itself from the job the builds are killing. The traps — why a keg needs no relocation, why
-the key must carry the version brew *would* install, and why `brew link` must never be given
-`--force` — are in `doc/nightly-distribution.md`. That file also carries the other half: an
+Homebrew ships no bottles for Intel macOS any more, so `macos-15-intel` builds from source, and
+the same dependency step that takes 77 s on arm64 ran into GitHub's 6-hour ceiling there. Two
+formulae made the difference, `llvm` (over four hours) and `rust` (up to two), both rebuilt at
+every homebrew-core bump. `install-deps-macos.sh` skips our `llvm` on Intel (with
+`-DTESTBUILD_OPENCL_PROGRAMS=OFF` to say so), and builds `librsvg` and `cargo-c` — the only
+formulae needing `rust` — against the Rust project's prebuilt toolchain, through
+`tools/brew_install_without_rust.sh`; once those two are installed, Homebrew prunes `rust`, and
+with it `llvm`, from every other plan. Why a `rust` keg merely present would not do it, why the
+toolchain may not live under `$HOME`, and why `brew install librsvg` must then not be called on
+Intel are in `doc/nightly-distribution.md`. That file also carries the other half: an
 Intel failure used to discard the arm64 DMG too, `upload_to_release` having `needs: MacOS` over
 the whole matrix with no `if:`, which cost five good Apple Silicon packages in five nights. It
 publishes per architecture now, so the Intel measures decide whether an Intel DMG exists and no

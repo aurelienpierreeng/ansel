@@ -68,37 +68,49 @@ HB_PACKAGES=(
 )
 
 # llvm comes as a bottle on arm64 (seconds) and is built from source on Intel macOS, where
-# Homebrew publishes no bottles any more: about four hours, of a CI job's six. All it buys is
+# Homebrew publishes no bottles any more: over four hours, of a CI job's six. All it buys is
 # test-compilation of the OpenCL kernels at build time -- CMakeLists.txt's
 # TESTBUILD_OPENCL_PROGRAMS, which turns itself off with a warning when LLVM is absent -- and
 # the arm64 CI does that on every commit. So Intel does without it, and mac-nightly.yml passes
 # -DTESTBUILD_OPENCL_PROGRAMS=OFF there to say so rather than lean on the fallback.
 #
-# Since rust 1.99.0 (homebrew-core, 2026-10-01) this skip saves nothing: rust now builds
-# against this same llvm instead of llvm@22, and librsvg pulls rust in, so llvm is installed
-# anyway -- from the keg cache, which is the load-bearing fix. The skip stays only so that the
-# day rust moves to a versioned llvm again, ours is not built on top of it.
-# See doc/nightly-distribution.md.
+# librsvg is the other way llvm got in: it is written in Rust, Homebrew's rust depends on llvm,
+# and on Intel both are source builds -- rust 1 h 41, llvm over 4 h, measured 2026-11-17 and 18. So
+# on Intel, cargo-c and librsvg are installed first, against the Rust project's prebuilt
+# toolchain, by tools/brew_install_without_rust.sh. Once they are installed at the version
+# homebrew-core wants, Homebrew prunes their build dependencies from every other formula's plan,
+# so nothing below schedules rust or llvm. librsvg then comes off the list below: it is
+# installed from that script's tap, and Homebrew refuses an explicit install of the
+# homebrew-core formula of the same name. See doc/nightly-distribution.md.
 #
 # subversion is installed first, on its own. Homebrew fetches every download before building
 # anything, and builds with network access denied; netpbm (graphviz -> vala -> libsoup, which
 # has no Intel bottle since 3.8.0) is fetched with svn, so a fetch attempted before svn exists
 # is deferred into the sandboxed build and fails there on DNS. Nightlies of 2026-10-01 and 02.
-#
-# Then llvm's patches are seeded into brew's download cache: one of them is a GitHub compare diff
-# that GitHub now serves with a checksum the formula rejects, which the same sandbox turns into a
-# DNS failure. tools/brew_seed_patches.sh has the measurement and the reasoning.
 if [ "$(uname -s)" = "Darwin" ] && [ "$(uname -m)" = "x86_64" ]; then
   brew install subversion
-  "$(dirname "$0")/../tools/brew_seed_patches.sh" llvm
-  echo "Intel macOS: skipping llvm, a ~4 h source build here. It only enables OpenCL kernel"
+  "$(dirname "$0")/../tools/brew_install_without_rust.sh" cargo-c librsvg
+  echo "Intel macOS: skipping llvm, a 4 h source build here. It only enables OpenCL kernel"
   echo "test-compilation, which the arm64 CI performs on every commit."
   _kept=()
   for _pkg in "${HB_PACKAGES[@]}"; do
-    [ "${_pkg}" = "llvm" ] || _kept+=("${_pkg}")
+    case "${_pkg}" in
+      llvm|librsvg) ;;
+      *) _kept+=("${_pkg}") ;;
+    esac
   done
   HB_PACKAGES=("${_kept[@]}")
   unset _kept _pkg
+
+  # Read before anything is built: rust or llvm in this plan is a build of four hours or more
+  # that the job cannot finish, so it stops here, naming them, instead of at the 6-hour ceiling.
+  _plan="$(brew install --dry-run "${HB_PACKAGES[@]}" 2>&1)"
+  if grep -qE '^(rust|llvm|llvm@[0-9]+)([[:space:]]|$)' <<< "${_plan}"; then
+    echo "${_plan}"
+    echo "Intel macOS: Homebrew still plans rust or llvm (above) -- refusing to start." >&2
+    exit 1
+  fi
+  unset _plan
 fi
 
 brew_install_status=0

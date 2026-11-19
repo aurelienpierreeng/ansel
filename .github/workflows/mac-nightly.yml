@@ -74,7 +74,7 @@ jobs:
         run: |
           # arm64: AppleClang 17.
           # intel64: TESTBUILD_OPENCL_PROGRAMS needs llvm, which install-deps-macos.sh skips
-          # there: Homebrew has no Intel bottle for it any more and it is a ~4 h source build,
+          # there: Homebrew has no Intel bottle for it any more and it is a 4 h source build,
           # for a check the arm64 CI performs on every commit. Stated rather than left to
           # CMake's absent-LLVM fallback, which reaches the same result through warnings.
           all='[
@@ -145,102 +145,10 @@ jobs:
           submodules: true
           fetch-tags: true
           path: ${{ env.SRC_DIR }}
-      # Homebrew publishes no bottles for Intel macOS any more, so a large part of the tree
-      # is built from source there, and two formulae eat the job's 6-hour budget: llvm
-      # (3h43 to over 4h54, measured as llvm@22) and rust (1h05 to 1h29). Both are librsvg's --
-      # it is written in Rust, and since rust 1.99.0 rust builds against the unversioned llvm
-      # rather than llvm@22 -- so neither can be dropped. Their kegs are cached between
-      # runs; tools/brew_cache_key.sh carries the reasoning and owns the keys. arm64 pours
-      # bottles in 77 seconds and needs none of it, so the cache steps are Intel-only and the
-      # quota is left to the architecture that cannot do without it.
-      #
-      # Each formula gets its own entry, keyed on its own version, so a bump in one does not
-      # discard the other.
-      #
-      # This job only READS that cache. mac-brew-cache.yml is the one writer: a cold keg is
-      # handed to it below and this job stops, rather than building it here.
-      - name: Resolve the Homebrew keg cache keys
-        id: brewcache
-        if: ${{ runner.arch == 'X64' }}
-        run: |
-          brew update
-          "${SRC_DIR}/tools/brew_cache_key.sh" llvm rust
-          {
-            echo "cellar=$(brew --cellar)"
-            echo "opt=$(brew --prefix)/opt"
-          } >> "$GITHUB_OUTPUT"
-      - name: Restore the llvm keg
-        id: keg-llvm
-        if: ${{ runner.arch == 'X64' }}
-        uses: actions/cache/restore@v4
-        with:
-          path: |
-            ${{ steps.brewcache.outputs.cellar }}/llvm
-            ${{ steps.brewcache.outputs.opt }}/llvm
-          key: ${{ steps.brewcache.outputs.llvm_key }}
-      - name: Restore the rust keg
-        id: keg-rust
-        if: ${{ runner.arch == 'X64' }}
-        uses: actions/cache/restore@v4
-        with:
-          path: |
-            ${{ steps.brewcache.outputs.cellar }}/rust
-            ${{ steps.brewcache.outputs.opt }}/rust
-          key: ${{ steps.brewcache.outputs.rust_key }}
-      # A cold keg does not fit in this job, and building it here only burns the job. On
-      # 2026-10-15 homebrew-core had moved to llvm 23.1.3_1 and rust 1.99.0_1, both keys missed,
-      # and llvm's `cmake --build' ran from 11:18 until the 6-hour ceiling killed the job at 15:34
-      # without finishing -- after 1h41 of other formulae. Even with both kegs warm the dependency
-      # step took 1h48 to 3h36 on 2026-10-03 to 07, so neither fits beside the rest.
-      #
-      # So a miss dispatches mac-brew-cache.yml for the cold kegs, in dependency order -- it
-      # builds one per run and chains to the next -- and this job fails within minutes, saying
-      # so. The next nightly finds the kegs warm and builds Intel, since its DMG is still
-      # missing for the commit. That workflow runs on the default branch, which `gh workflow
-      # run' targets when no ref is given: only a cache saved there is visible to every branch.
-      - name: Hand the cold kegs to the keg cache workflow
-        if: ${{ runner.arch == 'X64' && (steps.keg-llvm.outputs.cache-hit != 'true' || steps.keg-rust.outputs.cache-hit != 'true') }}
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GH_REPO: ${{ github.repository }}
-          LLVM_HIT: ${{ steps.keg-llvm.outputs.cache-hit }}
-          RUST_HIT: ${{ steps.keg-rust.outputs.cache-hit }}
-          LLVM_KEY: ${{ steps.brewcache.outputs.llvm_key }}
-          RUST_KEY: ${{ steps.brewcache.outputs.rust_key }}
-        run: |
-          cold=""
-          [ "${LLVM_HIT}" = "true" ] || { cold="llvm"; echo "not cached: ${LLVM_KEY}"; }
-          [ "${RUST_HIT}" = "true" ] || { cold="${cold:+${cold} }rust"; echo "not cached: ${RUST_KEY}"; }
-          gh workflow run mac-brew-cache.yml -f formulae="${cold}"
-          echo "::error title=Homebrew kegs not cached::${cold} not in the keg cache; mac-brew-cache.yml was dispatched to build them, and the next nightly builds the Intel package."
-          exit 1
-      # Two different situations used to collapse into one tolerated `brew link' failure, and
-      # both printed `Error:' lines that read like a broken step: a keg that was never restored
-      # (a cache miss, the ordinary cold case) and a keg-only formula, which needs no link at
-      # all because its opt link travelled inside the cached keg. llvm is keg-only, so even a
-      # cache HIT produced an error. Each case is now asked about before brew is called, so the
-      # log says what happened and a genuine link failure is a genuine failure of the step.
-      #
-      # NEVER add --force. llvm is keg-only on purpose: forcing it would put its clang in the
-      # prefix's bin ahead of Xcode's, and this build compiles with CC=cc.
-      - name: Relink the restored kegs
-        if: ${{ runner.arch == 'X64' }}
-        run: |
-          cellar="$(brew --cellar)"
-          for f in llvm rust; do
-            if [ ! -d "${cellar}/${f}" ]; then
-              echo "${f}: not in the cache -- it will be built"
-              continue
-            fi
-            keg_only="$(brew info --json=v2 --formula "${f}" \
-              | python3 -c 'import json,sys; print("yes" if json.load(sys.stdin)["formulae"][0]["keg_only"] else "no")')"
-            if [ "${keg_only}" = "yes" ]; then
-              echo "${f}: restored, keg-only -- its opt link came with the keg"
-              continue
-            fi
-            brew link --overwrite "${f}"
-            echo "${f}: restored and linked"
-          done
+      # Homebrew publishes no bottles for Intel macOS any more, so a large part of the tree is
+      # built from source there. install-deps-macos.sh keeps rust and llvm out of it -- librsvg
+      # is built against the Rust project's prebuilt toolchain -- which is what lets the Intel
+      # job fit under GitHub's 6-hour ceiling. See doc/nightly-distribution.md.
       - name: Install Base Dependencies
         run: |
           "${SRC_DIR}/packaging/install-deps-macos.sh"
