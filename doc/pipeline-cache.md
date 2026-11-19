@@ -55,7 +55,8 @@ output's pinned OpenCL image.
 
 **Reusing in place forgets the previous state.** That is right for a slider drag or a pan, whose
 previous states do not come back, and wrong for a module toggle, an undo, a jump in history or a
-keyboard edit (a slider step with the arrow keys), after which going back is the likely next step. Those raise `DT_DEV_PIPE_SWITCHED`, which sets
+keyboard edit (a slider step with the arrow keys) or a choice in a combobox or a check box, after
+which going back is the likely next step. Those raise `DT_DEV_PIPE_SWITCHED`, which sets
 `pipe->keep_outputs` for the run that renders the new state: it writes every output into a new
 cacheline, so the outputs of the state just left are still there, and switching back is a chain of
 exact hits. The flag drops when that run completes. Only the source of a change knows it is a
@@ -1345,7 +1346,8 @@ later one is a chain of exact hits, 1-28 ms on the CPU and 3-24 ms with OpenCL. 
 by `dt_dev_history_commit_item_now()` when `add_new_pipe_node` (the module's first history entry,
 or an entry enabled differently from its last one -- the top item rewritten in place included),
 and by `dt_dev_history_pixelpipe_update()`, which every wholesale history replacement goes through.
-It is also raised for an edit made from the keyboard, see the next section.
+It is also raised for an edit made from the keyboard, see the next section, and for a choice in a
+combobox or a check box, see the one after.
 
 Two things a reviewer would otherwise simplify:
 
@@ -1407,6 +1409,70 @@ press is switched, held ones included.
 The test compares event times, which are the server's and stay spaced by the repeat period however
 late the application reads them. A shim that stamps presses when it dispatches them sees a busy
 main loop as gaps, and marks repeats switched: stamp a simulated hold on its schedule.
+
+### A choice in a combobox or a check box finds the state it left
+
+*Found on top of `5c05c61c73`, 2026-11-17; retouch measured on top of `bbdfcc53ac`, same day.*
+
+Switching filmic's colour science between two entries with the mouse recomputed filmic and every
+module after it on every switch, back and forth. A combobox choice and a check box click reached
+the pipe as `TOP_CHANGED`, not as a switch, so each one rekeyed the outputs of the state it left.
+They are the A/B comparison by nature: a discrete state the user is likely to pick again.
+
+`_queue_pending_commit()` (`develop/dev_history_gui.c`) now marks them `switched` as it does key
+presses, from two sources, since neither alone sees both:
+
+- **A combobox**, through `dt_gui_widgets_choice_announced()`: TRUE while
+  `_commit_combobox_value()` (`widgets/bauhaus.c`) runs its listeners, between
+  `dt_gui_widgets_choice_begin()` and `_end()`. The depth lives in `widgets/widget_settings.c`,
+  next to the freeze depth, since `src/widgets` keeps state in no other file
+  (`tools/check_statelessness.sh`). It covers the default
+  `from_params` callback and `"value-changed"` alike. Every way of choosing goes through it -- the
+  popup, a scroll, the keys, a `dt_bauhaus_combobox_set*()` call -- and the listener commits
+  synchronously, so the flag is up when the request is queued. Nothing in the current event says
+  "combobox": a choice in the popup arrives as a button event on the popup's own drawing area.
+- **A check box or toggle button**, through the current event: a button press or release whose
+  widget (`gtk_get_event_widget()`) is a `GtkToggleButton`. Check boxes are plain GTK widgets that
+  modules build themselves (`dt_bauhaus_toggle_from_params()`, and others in channelmixerrgb,
+  splittoningrgb, colorzones, blend_gui), so no emitter is common to them all; the event is.
+  `dtgtk_togglebutton` derives from `GtkToggleButton` and is covered too.
+
+Some GUI edits cannot be queued: `dt_dev_add_history_item()` ends the shape creation session they
+belong to, so they flush the queue and commit at once. The two that are choices changing the
+render go through `dt_dev_history_commit_item_from_gui()`, which applies the same rule
+(`_request_is_switch()`, shared with the queue): retouch's heal algorithm combobox (a shape tool
+setting, `imageop_gui.c`) and its algorithm buttons while a shape tool is armed (`retouch.c`). The
+other two keep `switched = FALSE`, written out: the creation of a shape (`masks_gui.c`) and the
+throttled commit of mask edits (`darkroom.c`). A shape drawn or edited on the canvas is not a
+choice, even when a key ends it: Enter closes a polygon inside a key press, which the shared rule
+would mark switched.
+
+The held-key rule applies to every choice with one clock: a choice less than the user's timeout
+after the previous one is not switched, which is what a scroll through a combobox's entries is. A
+choice made outside any event (a combobox set by code, from an idle) has no stream to follow and
+is switched.
+
+Measured in the darkroom with `--disable-opencl` and `-d perf -d dev -d pipecache`, on a 552x828 px
+preview of a NEF with filmic in its history, one change every 12 s from a shim; the counts are the
+modules run in the preview pipe at each step.
+
+| Sequence | Before | `-d nocache_reuse` | After |
+|---|---|---|---|
+| colour science extra bleach / v7, then no bleach / v7, set by value | filmic, colorout, dither every step | only the first visit of each state | only the first visit of each state |
+| `custom_grey` check box, 8 clicks through `gtk_main_do_event()` | the same 3 every click | -- | none from the third click on |
+| colour science, 8 single scroll notches up and down | the same 3 every notch | -- | none from the third notch on |
+| retouch heal algorithm, 8 scroll notches 15 s apart, scan with 16 heal shapes | retouch and the 6 modules after it every notch | -- | none from the second notch on |
+
+The second click lands on a new history hash, not the one loaded from the XMP: the first click
+appended a history item, as the exposure step above does. A burst of 16 notches 60 ms apart is
+one switched commit, the first; the pipe then writes 4 new cachelines, not 16, for the runs the
+burst abandons, since `keep_outputs` drops only when a run completes. Retouch is at the top of
+that scan's history, so its second notch returns to the state loaded from the XMP and finds it.
+
+A shim scrolling a combobox needs the module in the visible tab (`plugins/darkroom/moduletab=0`
+lists the active ones) and `dt_widget_set_scroll_focus()` on the widget, which a hover gives in
+the GUI: without a window manager, `gtk_widget_grab_focus()` does not always take, and
+`_widget_scroll()` then ignores the event.
 
 ### An export reads the cache and keeps nothing of its own
 

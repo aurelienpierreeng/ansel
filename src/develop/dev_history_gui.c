@@ -156,8 +156,11 @@ void dt_dev_history_gui_update(dt_develop_t *dev)
  *
  * A request queued while GTK dispatches a key press -- a slider step, a typed value, a shortcut --
  * is `switched`: the pipes keep the outputs it replaces (dt_dev_pixelpipe_t.keep_outputs), since
- * going back is the likely next keystroke. A held key (a press less than the user's timeout after
- * the previous one), a drag or a click is not. See doc/pipeline-cache.md.
+ * going back is the likely next keystroke. So is a choice between discrete states: a request
+ * queued while a combobox announces its value (dt_gui_widgets_choice_announced(), whether
+ * from its popup, a scroll or a key), or while GTK dispatches a click on a check box or a toggle
+ * button. A choice less than the user's timeout after the previous one (a held key, a scroll
+ * through a combobox) is not, nor is a slider drag or click. See doc/pipeline-cache.md.
  *
  * dt_dev_add_history_item_ext() is NOT throttled and never was. Anything that must land
  * before the next statement (bulk history loads, style application, image duplication)
@@ -177,7 +180,7 @@ typedef struct dt_dev_pending_commit_t
 
 static GQueue _pending_commits = G_QUEUE_INIT;
 static guint _pending_commit_source = 0;
-static guint32 _last_key_press_time = 0;
+static guint32 _last_choice_time = 0;
 
 
 static gboolean _drain_pending_commits(gpointer user_data)
@@ -204,19 +207,31 @@ static gboolean _drain_pending_commits(gpointer user_data)
   return G_SOURCE_REMOVE;
 }
 
+// Whether the commit requested now is `switched` (see above): a key press, a combobox choice or
+// a click on a check box or toggle button, unless it follows the previous one too closely. A
+// choice made outside any event (a combobox set by code) has no stream to follow. Event times
+// are in ms and wrap, hence the unsigned difference. Records the choice's time: call it once
+// per request.
+static gboolean _request_is_switch(void)
+{
+  GdkEvent *event = gtk_get_current_event();
+  const GdkEventType type = IS_NULL_PTR(event) ? GDK_NOTHING : gdk_event_get_event_type(event);
+  const gboolean toggle_click = (type == GDK_BUTTON_PRESS || type == GDK_BUTTON_RELEASE)
+                                && GTK_IS_TOGGLE_BUTTON(gtk_get_event_widget(event));
+  const gboolean choice = type == GDK_KEY_PRESS || toggle_click || dt_gui_widgets_choice_announced();
+  const guint32 choice_time = IS_NULL_PTR(event) ? 0 : gdk_event_get_time(event);
+  g_clear_pointer(&event, gdk_event_free);
+  const gboolean switched = choice
+                            && (type == GDK_NOTHING
+                                || choice_time - _last_choice_time >= dt_gui_throttle_get_user_timeout_ms());
+  if(choice && type != GDK_NOTHING) _last_choice_time = choice_time;
+  return switched;
+}
+
 static void _queue_pending_commit(dt_develop_t *dev, dt_iop_module_t *module, const gboolean enable)
 {
   const guint timeout_ms = dt_gui_throttle_get_timeout_ms();
-
-  // A key press, unless it repeats the previous one (see above). Event times are in ms and
-  // wrap, hence the unsigned difference.
-  GdkEvent *event = gtk_get_current_event();
-  const gboolean key_press = !IS_NULL_PTR(event) && gdk_event_get_event_type(event) == GDK_KEY_PRESS;
-  const guint32 key_time = key_press ? gdk_event_get_time(event) : 0;
-  g_clear_pointer(&event, gdk_event_free);
-  const gboolean switched = key_press
-                            && key_time - _last_key_press_time >= dt_gui_throttle_get_user_timeout_ms();
-  if(key_press) _last_key_press_time = key_time;
+  const gboolean switched = _request_is_switch();
 
   // A zero timeout means the user turned throttling off in the preferences (and is also what
   // a headless run gets, since nothing ever sets one there). Same call, same place, just now.
@@ -250,6 +265,13 @@ static void _queue_pending_commit(dt_develop_t *dev, dt_iop_module_t *module, co
 
   if(!_pending_commit_source)
     _pending_commit_source = g_timeout_add(timeout_ms, _drain_pending_commits, NULL);
+}
+
+void dt_dev_history_commit_item_from_gui(dt_develop_t *dev, dt_iop_module_t *module, const gboolean enable)
+{
+  // The edits queued before this one land first, in their order.
+  dt_dev_history_flush_pending_commits(dev);
+  dt_dev_history_commit_item_now(dev, module, enable, _request_is_switch());
 }
 
 void dt_dev_history_flush_pending_commits(dt_develop_t *dev)

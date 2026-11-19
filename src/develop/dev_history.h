@@ -350,6 +350,20 @@ void dt_dev_add_history_item_real(struct dt_develop_t *dev, struct dt_iop_module
 void dt_dev_history_flush_pending_commits(struct dt_develop_t *dev);
 
 /**
+ * @brief Commit one history item from a GUI control now, after the commits queued before it.
+ *
+ * For a choice made in a GUI control that must land before the next statement, where
+ * dt_dev_add_history_item() would be wrong (it ends the shape creation session the edit belongs
+ * to): a shape tool setting. A shape drawn or edited on the canvas is not a choice and commits
+ * with dt_dev_history_commit_item_now(..., FALSE), even when a key ends it. It flushes the
+ * pending commits, so the edits queued before it keep their order, then commits with the
+ * `switched` rule of the queue: a key press, a combobox choice or a check box click keeps the
+ * outputs of the state it replaces (see dt_dev_history_commit_item_now()). GUI thread only.
+ */
+void dt_dev_history_commit_item_from_gui(struct dt_develop_t *dev, struct dt_iop_module_t *module,
+                                         gboolean enable);
+
+/**
  * @brief Discard every history commit still queued for @p dev, without running it.
  *
  * Last-resort counterpart to dt_dev_history_flush_pending_commits(), for a @p dev already
@@ -400,7 +414,8 @@ void dt_dev_history_gui_update(struct dt_develop_t *dev);
  * into this. Call it directly only where queueing would be wrong.
  *
  * @param switched TRUE for an edit the user is likely to take back next (one made from the
- * keyboard): the pipes keep the outputs it replaces, as for a module switched on or off.
+ * keyboard, a combobox choice, a check box click): the pipes keep the outputs it replaces, as
+ * for a module switched on or off.
  */
 void dt_dev_history_commit_item_now(struct dt_develop_t *dev, struct dt_iop_module_t *module, gboolean enable,
                                     gboolean switched);

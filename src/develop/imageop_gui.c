@@ -2042,8 +2042,7 @@ void dt_iop_gui_changed(dt_iop_module_t *action, GtkWidget *widget, gpointer dat
   // session, which such a setting keeps armed.
   if(!IS_NULL_PTR(widget) && g_object_get_data(G_OBJECT(widget), "dt-masks-tool-setting"))
   {
-    dt_dev_history_flush_pending_commits(module->dev);
-    dt_dev_history_commit_item_now(module->dev, module, TRUE, FALSE);
+    dt_dev_history_commit_item_from_gui(module->dev, module, TRUE);
   }
   else
     dt_dev_add_history_item(module->dev, module, TRUE, TRUE);
