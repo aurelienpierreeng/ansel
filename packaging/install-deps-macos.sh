@@ -104,8 +104,9 @@ if [ "$(uname -s)" = "Darwin" ] && [ "$(uname -m)" = "x86_64" ]; then
 
   # Read before anything is built: rust or llvm in this plan is a build of four hours or more
   # that the job cannot finish, so it stops here, naming them, instead of at the 6-hour ceiling.
+  # Matched between whitespace, as in brew_install_without_rust.sh, whatever the plan's layout.
   _plan="$(brew install --dry-run "${HB_PACKAGES[@]}" 2>&1)"
-  if grep -qE '^(rust|llvm|llvm@[0-9]+)([[:space:]]|$)' <<< "${_plan}"; then
+  if grep -qE '(^|[[:space:]])(rust|llvm|llvm@[0-9]+)([[:space:]]|$)' <<< "${_plan}"; then
     echo "${_plan}"
     echo "Intel macOS: Homebrew still plans rust or llvm (above) -- refusing to start." >&2
     exit 1
