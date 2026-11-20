@@ -1,6 +1,7 @@
 /*
     This file is part of Ansel,
     Copyright (C) 2026 Aurélien PIERRE.
+    Copyright (C) 2026 Sergio Schvezov.
 
     Ansel is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -142,6 +143,10 @@ typedef struct dt_thumbtable_layout_ops_t
 
   // Nullable. Select the image about to be opened by a Return/activate key (grid only).
   void (*pre_activate)(dt_thumbtable_t *table, int32_t imgid);
+
+  // Nullable. Update the selection after an arrow/Page/Home/End move has put the keyboard
+  // cursor on `imgid` at `rowid`; `event` carries the modifiers (grid only).
+  void (*on_keyboard_move)(dt_thumbtable_t *table, const GdkEventKey *event, int rowid, int32_t imgid);
 } dt_thumbtable_layout_ops_t;
 
 
