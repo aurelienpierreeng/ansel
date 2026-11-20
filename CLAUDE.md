@@ -141,6 +141,7 @@ remain right for what is fine to miss: progress, confirmation, a passing state.
 | [`doc/colorprofiles.md`](doc/colorprofiles.md) | profile roles, locks, the derived-profile memo |
 | [`src/colorprofiles/README.md`](src/colorprofiles/README.md) | the module's own map |
 | [`doc/color.md`](doc/color.md) | colour spaces and the working space |
+| [`doc/wayland-color.md`](doc/wayland-color.md) | the Wayland colour-management client: what a window may declare, colord's last word, what GDK owns |
 | [`doc/highlights-reconstruction.md`](doc/highlights-reconstruction.md) | harmonic highlight reconstruction |
 | [`doc/interpolation.md`](doc/interpolation.md) | which resampling kernel, and why |
 

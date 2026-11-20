@@ -69,6 +69,7 @@ set(LIB_ANSEL_UNIT_TESTS
   test_drawlayer_batch_raster
   test_interpolation_resample_window
   test_import_jobs
+  test_display_profile_build
 )
 
 foreach(test ${LIB_ANSEL_UNIT_TESTS})

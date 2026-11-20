@@ -117,6 +117,34 @@ extern "C" {
 
 
 /**
+ * @brief Who handed over the monitor profile that is installed.
+ */
+typedef enum dt_colorspaces_display_source_t
+{
+  DT_DISPLAY_SOURCE_NONE = 0,   /**< nothing was read: the DISPLAY entry is still the built-in sRGB */
+  DT_DISPLAY_SOURCE_SYSTEM,     /**< the platform's profile store: X atom, Windows, macOS */
+  DT_DISPLAY_SOURCE_COLORD,     /**< colord, i.e. a profile measured or assigned for this monitor */
+  DT_DISPLAY_SOURCE_COMPOSITOR  /**< the colour description a Wayland compositor prefers */
+} dt_colorspaces_display_source_t;
+
+/**
+ * @brief A monitor described by numbers, for a windowing system that hands over no ICC file.
+ *
+ * @details Chromaticities are CIE 1931 xy. The tone curve is a pure power law of exponent
+ * `gamma`, or the IEC 61966-2-1 piecewise curve when `srgb_curve` is set (`gamma` is then
+ * ignored).
+ */
+typedef struct dt_colorspaces_display_description_t
+{
+  double red[2];
+  double green[2];
+  double blue[2];
+  double white[2];
+  double gamma;
+  gboolean srgb_curve;
+} dt_colorspaces_display_description_t;
+
+/**
  * @brief The module's private state. Declared here for the module's own .c files only.
  *
  * @details Nothing outside `src/colorprofiles/` names this type, and the single instance
@@ -153,6 +181,22 @@ typedef struct dt_colorspaces_t
    * when the bytes actually differ. */
   uint8_t *xprofile_data;
   int xprofile_size;
+  /** Who handed `xprofile_data` over. It decides whether the GUI may tell a Wayland
+   * compositor what the windows are encoded in: only when the bytes came from that
+   * compositor do the two describe the same thing. */
+  dt_colorspaces_display_source_t display_source;
+  /** The profile a Wayland compositor last asked this client to render in, kept whether or
+   * not it is the one installed: colord answers later than the compositor does, and a
+   * profile that had to wait for that answer is installed from here. */
+  uint8_t *compositor_profile_data;
+  int compositor_profile_size;
+  /** colord queries sent and not answered yet. While one is in flight nobody knows whether
+   * colord has a profile for this monitor, so the compositor's profile waits. */
+  int colord_pending;
+  /** colord has been asked at least once. A compositor describes its window as soon as the
+   * window is mapped, which is before the first probe of the monitor: until then "colord has
+   * nothing" would be a guess, and the guess would be undone a moment later. */
+  gboolean colord_asked;
 
   /** @name Settings group
    *  The seven fields the GUI writes and the pipeline reads. Read them through
@@ -890,6 +934,54 @@ void dt_colorspaces_set_profile_changed_handler(dt_colorspaces_profile_changed_h
  */
 void dt_colorspaces_set_display_profile(const dt_colorspaces_color_profile_type_t profile_type,
                                        GtkWidget *widget);
+
+/**
+ * @brief Build the ICC profile of a monitor described by chromaticities and a tone curve.
+ *
+ * @details The same description always gives the same bytes: lcms2 stamps the creation time
+ * into the header, and that field is overwritten here. The display profile is replaced when
+ * its bytes differ, so a profile that changed with the clock would be a new monitor every
+ * second.
+ *
+ * @param description what the windowing system reported.
+ * @param[out] size length of the returned buffer; 0 on failure.
+ * @return the serialised profile, freed by the caller with dt_free(); NULL when the
+ * description is not a usable RGB space -- primaries without area, a coordinate off the
+ * diagram, an exponent outside [1, 10] -- which lcms2 would otherwise accept and turn into a
+ * profile that maps every colour to white.
+ */
+uint8_t *dt_colorspaces_build_display_profile(const dt_colorspaces_display_description_t *description,
+                                              size_t *size);
+
+/**
+ * @brief Offer the profile a Wayland compositor asks this client to render in.
+ *
+ * @details The offer is kept, and installed as the display profile when the user's
+ * `ui_last/display_profile_source` choice and colord leave room for it: under `all`, colord
+ * wins whenever it has a profile for the monitor, because it holds the monitor's measured
+ * response while the compositor only says which space it composites in. An offer that has
+ * to wait for colord's answer is installed when that answer comes back empty.
+ *
+ * Installing fires the changed handler, like any other display profile change. Whether the
+ * offer is the installed profile afterwards is what dt_colorspaces_display_follows_compositor()
+ * answers.
+ *
+ * @param data the ICC profile; copied. Ignored when lcms2 cannot use it as an RGB output.
+ * @param size its length in bytes.
+ * @note GUI thread. Takes `_transforms_lock` for writing and waits for it: this runs once
+ * per change of the compositor's description, not on every window event.
+ */
+void dt_colorspaces_offer_compositor_display_profile(const uint8_t *data, size_t size);
+
+/**
+ * @brief Are the pixels sent to the screen encoded for the profile the compositor offered?
+ *
+ * @return TRUE when the installed monitor profile is the compositor's offer AND the user's
+ * display profile choice is the system one. Only then may a window be declared to the
+ * compositor as being in that description; in every other case the window is left
+ * undeclared, which a compositor reads as sRGB.
+ */
+gboolean dt_colorspaces_display_follows_compositor(void);
 
 /**
  * @brief Resolve a profile identity to its registered entry.

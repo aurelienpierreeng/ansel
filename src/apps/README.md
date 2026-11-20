@@ -26,6 +26,11 @@ includes `darktable.h` and calls into the library; nothing depends on `apps/`.
 **`main.c` only.** A program's entry point sets up arguments and calls the library. Anything
 with logic worth testing belongs in a subsystem, not here.
 
+`ansel-cmstest` is the exception, and has always been: it links no part of ansel, so that it
+can be compiled on its own and say what the *system* knows whatever state ansel is in. It has
+one file per windowing system (`x11.c`, `wayland.c`), each built only where its libraries were
+found, and `main.c` for what they share.
+
 **`src/darktable.{c,h}` is NOT an app.** It is the orchestrator *library* that every one of
 these executables links, and it lives at `src/`. `apps/ansel/main.c` is only the entry point
 that calls `dt_init()`.
