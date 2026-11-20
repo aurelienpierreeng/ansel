@@ -54,6 +54,7 @@
 #include "widgets/paint.h"
 #include "widgets/draw.h"
 #include <math.h>
+#include <pango/pangocairo.h>
 
 #ifndef M_PI
 #define M_PI 3.141592654
@@ -2393,8 +2394,102 @@ void dtgtk_cairo_paint_help(cairo_t *cr, gint x, gint y, gint w, gint h, gint fl
   FINISH
 }
 
+gboolean dtgtk_grouping_badge_label(const guint group_members, char label[4])
+{
+  if(group_members < 2)
+  {
+    label[0] = '\0';
+    return FALSE;
+  }
+
+  if(group_members > 99)
+    g_strlcpy(label, "99+", 4);
+  else
+    g_snprintf(label, 4, "%u", group_members);
+  return TRUE;
+}
+
+/** @brief Paint a filled leader stack or outlined member stack, optionally with a count.
+ * @details The card uses the caller's theme foreground. Text chooses whichever neutral has
+ * the higher relative-luminance contrast ratio; it never punches transparent holes through the card.
+ */
 void dtgtk_cairo_paint_grouping(cairo_t *cr, gint x, gint y, gint w, gint h, gint flags, void *data)
 {
+  if(flags & (CPF_GROUPING_THUMBNAIL | CPF_GROUPING_BADGE))
+  {
+    char label[4] = { 0 };
+    const gboolean show_count = (flags & CPF_GROUPING_BADGE) && !IS_NULL_PTR(data);
+    if(show_count && !dtgtk_grouping_badge_label(*(const guint *)data, label)) return;
+
+    cairo_save(cr);
+    double red = 0.0;
+    double green = 0.0;
+    double blue = 0.0;
+    double alpha = 1.0;
+    cairo_pattern_get_rgba(cairo_get_source(cr), &red, &green, &blue, &alpha);
+    cairo_set_source_rgba(cr, red, green, blue, 1.0);
+    const double line = fmax(1.0, h * 0.05);
+    cairo_set_line_width(cr, line);
+    cairo_set_line_join(cr, CAIRO_LINE_JOIN_ROUND);
+    cairo_set_line_cap(cr, CAIRO_LINE_CAP_ROUND);
+    cairo_move_to(cr, x + w * 0.22, y + h * 0.07);
+    cairo_line_to(cr, x + w * 0.96, y + h * 0.07);
+    cairo_line_to(cr, x + w * 0.96, y + h * 0.70);
+    cairo_move_to(cr, x + w * 0.12, y + h * 0.18);
+    cairo_line_to(cr, x + w * 0.88, y + h * 0.18);
+    cairo_line_to(cr, x + w * 0.88, y + h * 0.80);
+    cairo_stroke(cr);
+
+    const double left = x + w * 0.02;
+    const double right = x + w * 0.80;
+    const double top = y + h * 0.28;
+    const double bottom = y + h * 0.98;
+    const double radius = h * 0.10;
+    cairo_new_sub_path(cr);
+    cairo_arc(cr, right - radius, top + radius, radius, -M_PI / 2, 0);
+    cairo_arc(cr, right - radius, bottom - radius, radius, 0, M_PI / 2);
+    cairo_arc(cr, left + radius, bottom - radius, radius, M_PI / 2, M_PI);
+    cairo_arc(cr, left + radius, top + radius, radius, M_PI, 3 * M_PI / 2);
+    cairo_close_path(cr);
+    if((flags & CPF_ACTIVE) || show_count)
+      cairo_fill(cr);
+    else
+      cairo_stroke(cr);
+
+    if(!show_count)
+    {
+      cairo_restore(cr);
+      return;
+    }
+
+    PangoLayout *layout = pango_cairo_create_layout(cr);
+    PangoFontDescription *font = pango_font_description_new();
+    pango_font_description_set_family(font, "sans");
+    pango_font_description_set_weight(font, PANGO_WEIGHT_BOLD);
+    pango_font_description_set_absolute_size(font, h * 0.56 * PANGO_SCALE);
+    pango_layout_set_font_description(layout, font);
+    pango_layout_set_text(layout, label, -1);
+    PangoRectangle ink;
+    pango_layout_get_pixel_extents(layout, &ink, NULL);
+    const double scale = fmin(1.0, (right - left - 2 * radius) / MAX(1, ink.width));
+    cairo_translate(cr, (left + right - scale * ink.width) / 2.0 - scale * ink.x,
+                     (top + bottom - scale * ink.height) / 2.0 - scale * ink.y);
+    cairo_scale(cr, scale, scale);
+    double linear[3] = { red, green, blue };
+    for(int channel = 0; channel < 3; channel++)
+      linear[channel] = linear[channel] <= 0.04045 ? linear[channel] / 12.92
+                                                 : pow((linear[channel] + 0.055) / 1.055, 2.4);
+    const double luminance = 0.2126 * linear[0] + 0.7152 * linear[1] + 0.0722 * linear[2];
+    const double contrast = (luminance + 0.05) / 0.05 >= 1.05 / (luminance + 0.05) ? 0.0 : 1.0;
+    cairo_set_source_rgb(cr, contrast, contrast, contrast);
+    cairo_move_to(cr, 0, 0);
+    pango_cairo_show_layout(cr, layout);
+    pango_font_description_free(font);
+    g_object_unref(layout);
+    cairo_restore(cr);
+    return;
+  }
+
   PREAMBLE(1.15, 1, 0, 0)
 
   cairo_move_to(cr, 0.30, 0.15);
