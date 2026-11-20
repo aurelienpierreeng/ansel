@@ -3477,18 +3477,35 @@ float dt_bauhaus_slider_get_step(GtkWidget *widget)
 
   if(step == 0.f)
   {
-    const float min = d->soft_min;
-    const float max = d->soft_max;
+    const float lo = d->soft_min;
+    const float hi = d->soft_max;
+    const float scale = fabsf(d->factor);
 
-    // Derive the automatic keyboard/wheel step from the internal slider domain.
-    // Display formatting may rescale that domain (for example "%" multiplies by 100),
-    // but interaction needs to stay in the unformatted value space to avoid jumping
-    // across the whole range in a single step for small-percent sliders.
-    const float top = fminf(max-min, fmaxf(fabsf(min), fabsf(max)));
-    if(top >= 100.f)
-      step = 1.f;
-    else
-      step = top / 100.f;
+    // The automatic keyboard/wheel step is 1 % of the soft range's span, or of its largest bound
+    // when that is smaller, rounded down to 1, 2 or 5 times a power of ten. The rounding is done on
+    // the displayed value, so the step reads round whatever the factor ("%" multiplies by 100).
+    // The result then goes back to the internal value, which is what _slider_add_step() moves:
+    // forgetting that division makes a 0-1 "%" slider cross its whole range in one step.
+    const float extent = fminf(hi - lo, fmaxf(fabsf(lo), fabsf(hi)));
+    const float shown = extent * scale / 100.f;
+    if(shown > 0.f && isfinite(shown))
+    {
+      // The power of ten at or below the step, with a tenth of a decade of slack so that a step a
+      // hair under a power of ten (0.099) is read as that power (0.1).
+      const float decade = powf(10.f, floorf(log10f(shown) + 0.1f));
+      // The thresholds give way by 0.1 %: a quotient of floats that should be exactly 2 or 5 can
+      // land an ulp below it, and a range starting a hair above 0 ([0.1, 500]) steps like the
+      // round one ([0, 500]) instead of falling to the multiple below.
+      const float mantissa = shown / decade;
+      float multiple = 1.f;
+      if(mantissa >= 5.f * 0.999f)
+        multiple = 5.f;
+      else if(mantissa >= 2.f * 0.999f)
+        multiple = 2.f;
+      step = multiple * decade / scale;
+    }
+    // An empty soft range leaves step at 0: _slider_add_step() then moves by the smallest
+    // displayed digit.
   }
 
   return copysignf(step, d->factor);
