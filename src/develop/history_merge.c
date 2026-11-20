@@ -1,6 +1,7 @@
 /*
     This file is part of Ansel,
     Copyright (C) 2026 Aurélien PIERRE.
+    Copyright (C) 2026 Guillaume Stutin.
 
     Ansel is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -86,6 +87,7 @@
 #include "develop/dev_history.h"
 #include "develop/develop.h"
 #include "develop/imageop.h"
+#include "develop/masks/masks_history.h"
 #include <glib.h>
 #include <limits.h>
 #include <stdlib.h>
@@ -1773,6 +1775,7 @@ int dt_history_merge(dt_develop_t *dev_dest, dt_develop_t *dev_src, const int32_
   GHashTable *src_last_by_id = NULL;
   GHashTable *dst_last_before_by_id = NULL;
   _hm_dest_backup_t backup = { 0 };
+  GList *dest_forms_before = NULL;
   const char *cleanup_reason = NULL;
   int cleanup_line = 0;
 
@@ -1814,6 +1817,10 @@ int dt_history_merge(dt_develop_t *dev_dest, dt_develop_t *dev_src, const int32_
   // If the destination history has an undo/redo tail (history_end < length), any new merge must invalidate
   // the redo part, like a regular edit does.
   _hm_truncate_dest_redo_tail(dev_dest);
+
+  // Whatever dev_dest->forms holds beyond this once the modules are copied came with them, the
+  // topological solve included: it copies the contents of the instances it creates.
+  dest_forms_before = dt_masks_snapshot_current_forms(dev_dest, FALSE);
 
   // Always run a topological solve so we can insert missing source instances into the destination pipeline.
   // The difference between merge_iop_order modes is which source edges we import (see
@@ -1900,7 +1907,12 @@ int dt_history_merge(dt_develop_t *dev_dest, dt_develop_t *dev_src, const int32_
   if(strategy == DT_HISTORY_MERGE_APPEND)
     dev_dest->history = g_list_concat(dev_dest->history, temp_history);
   else // DT_HISTORY_MERGE_PREPEND
+  {
+    // dev->forms is rebuilt from the last forms snapshot of the history, which is now one the
+    // destination took before the pasted forms existed.
+    dt_masks_history_carry_new_forms(dev_dest, dest_forms_before, dev_dest->history);
     dev_dest->history = g_list_concat(temp_history, dev_dest->history);
+  }
 
   // Don't g_list_free(temp_history), it belongs to dev_dst->history now
 
@@ -1953,6 +1965,7 @@ cleanup:
   if(src_last_by_id) g_hash_table_destroy(src_last_by_id);
   if(dst_last_before_by_id) g_hash_table_destroy(dst_last_before_by_id);
   if(mod_list_ids) g_hash_table_destroy(mod_list_ids);
+  dt_masks_forms_snapshot_release(&dest_forms_before);
   _hm_backup_cleanup(&backup);
   return rc;
 }
