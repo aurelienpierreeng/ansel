@@ -112,7 +112,7 @@ void dt_tag_rename(const guint tagid, const gchar *new_tagname);
 gboolean dt_tag_exists(const char *name, guint *tagid);
 
 /** attach a tag on images list. tagid id of tag to attach. img the list of image
- * id to attach tag to */
+ * id to attach tag to. `undo_on` requires no active database transaction on this thread. */
 gboolean dt_tag_attach_images(const guint tagid, const GList *img, const gboolean undo_on);
 /** attach a tag on images. tagid id of tag to attach. imgid the image
  * id to attach tag to, if < 0 images to act on are used. */
@@ -123,16 +123,18 @@ gboolean dt_is_tag_attached(const guint tagid, const int32_t imgid);
 
 /** attach a list of tags on selected images. \param[in] tags a list of ids of tags. \param[in] imgid the
  * image id to attach tag to, if < 0 selected images are used. \note If tag not exists it's created
- * if clear_on TRUE the image tags are cleared before attaching the new ones*/
+ * if clear_on TRUE the image tags are cleared before attaching the new ones. `undo_on` requires
+ * no active database transaction on this thread. */
 gboolean dt_tag_set_tags(const GList *tags, const GList *img, const gboolean ignore_dt_tags,
                          const gboolean clear_on, const gboolean undo_on);
 
 /** attach a list of tags on list of images. \param[in] tags a comma separated string of tags. \param[in]
- * img the list of images to attach tag to. \note If tag does not exist, it's created.*/
+ * img the list of images to attach tag to. \note If tag does not exist, it's created. `undo_on`
+ * requires no active database transaction on this thread. */
 gboolean dt_tag_attach_string_list(const gchar *tags, const GList *img, const gboolean undo_on);
 
 /** detach tag from images. \param[in] tagid of tag to detach. \param[in] img the list of image id to detach
- * tag from */
+ * tag from. `undo_on` requires no active database transaction on this thread. */
 gboolean dt_tag_detach_images(const guint tagid, const GList *img, const gboolean undo_on);
 /** detach tag from images. \param[in] tagid of tag to detach. \param[in] imgid the image id to detach
  * tag from, if < 0 images to act on are used. */

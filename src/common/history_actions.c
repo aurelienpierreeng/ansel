@@ -17,6 +17,7 @@
 */
 
 #include "common/history_actions.h"
+#include "metadata/notify.h"
 #include "history/notify.h"
 
 #include "common/collection.h"
@@ -31,6 +32,7 @@
 #include "develop/dev_history.h"
 #include "develop/develop.h"
 #include "develop/imageop.h"
+#include "database/history_snapshot_repository.h"
 
 #ifdef GDK_WINDOWING_QUARTZ
 #include "osx/osx.h"
@@ -334,6 +336,8 @@ typedef struct dt_history_load_params_t
 {
   gchar *filename;
   int history_only;
+  const int64_t *write_timestamp;
+  dt_xmp_import_result_t result;
 } dt_history_load_params_t;
 
 static gboolean _history_load_and_apply_apply(const int32_t imgid, void *user_data)
@@ -346,12 +350,29 @@ static gboolean _history_load_and_apply_apply(const int32_t imgid, void *user_da
   hist->imgid = imgid;
   dt_history_snapshot_undo_create(hist->imgid, &hist->before, &hist->before_history_end);
 
-  if(dt_exif_xmp_read(img, params->filename, params->history_only))
+  gboolean tags_changed = FALSE;
+  gboolean development_changed = FALSE;
+  const dt_xmp_import_result_t import_result = dt_exif_xmp_read_with_result(
+      img, params->filename, params->history_only, params->write_timestamp, &tags_changed,
+      &development_changed);
+  params->result = import_result;
+  if(import_result == DT_XMP_IMPORT_READ_ERROR || import_result == DT_XMP_IMPORT_PERSIST_ERROR)
   {
     dt_image_cache_write_release(img,
                                  // ugly but if not history_only => called from crawler - do not write the xmp
-                                 params->history_only ? DT_IMAGE_CACHE_SAFE : DT_IMAGE_CACHE_RELAXED);
+                                  params->history_only ? DT_IMAGE_CACHE_SAFE : DT_IMAGE_CACHE_RELAXED);
+    dt_history_snapshot_repository_clear(hist->before, hist->imgid);
+    dt_free(hist);
     return FALSE;
+  }
+
+  if(import_result == DT_XMP_IMPORT_PARTIAL && !development_changed)
+  {
+    dt_image_cache_write_release(img, params->history_only ? DT_IMAGE_CACHE_SAFE : DT_IMAGE_CACHE_RELAXED);
+    dt_history_snapshot_repository_clear(hist->before, hist->imgid);
+    dt_free(hist);
+    if(tags_changed) dt_metadata_tags_changed();
+    return TRUE;
   }
 
   dt_history_snapshot_undo_create(hist->imgid, &hist->after, &hist->after_history_end);
@@ -369,24 +390,32 @@ static gboolean _history_load_and_apply_apply(const int32_t imgid, void *user_da
   // raised in _history_action_finalize_list(), but the pixels are not: reload metadata, invalidate
   // the mipmap and refresh the thumbnail (lighttable context, so refresh the filmstrip too).
   dt_image_history_changed(imgid, TRUE);
+  if(tags_changed) dt_metadata_tags_changed();
 
   return TRUE;
 }
 
 int dt_history_load_and_apply(const int32_t imgid, gchar *filename, int history_only)
 {
-  dt_history_load_params_t params = { .filename = filename, .history_only = history_only };
+  dt_history_load_params_t params = { .filename = filename, .history_only = history_only, .write_timestamp = NULL,
+                                      .result = DT_XMP_IMPORT_READ_ERROR };
   return _history_load_and_apply_apply(imgid, &params) ? 0 : 1;
 }
 
-int dt_history_load_and_apply_on_image(int32_t imgid, gchar *filename, int history_only)
+dt_xmp_import_result_t dt_history_load_and_apply_on_image(int32_t imgid, gchar *filename, int history_only,
+                                                           const int64_t *write_timestamp)
 {
-  return dt_history_load_and_apply(imgid, filename, history_only);
+  dt_history_load_params_t params = { .filename = filename, .history_only = history_only,
+                                       .write_timestamp = write_timestamp,
+                                       .result = DT_XMP_IMPORT_READ_ERROR };
+  _history_load_and_apply_apply(imgid, &params);
+  return params.result;
 }
 
 int dt_history_load_and_apply_on_list(gchar *filename, const GList *list)
 {
-  dt_history_load_params_t params = { .filename = filename, .history_only = 1 };
+  dt_history_load_params_t params = { .filename = filename, .history_only = 1, .write_timestamp = NULL,
+                                      .result = DT_XMP_IMPORT_READ_ERROR };
   const gboolean changed = _history_action_on_list(list, _history_load_and_apply_apply, &params);
   return changed ? 0 : 1;
 }
@@ -403,6 +432,9 @@ static gboolean _history_delete_apply(const int32_t imgid, void *user_data)
   const dt_history_delete_params_t *params = (dt_history_delete_params_t *)user_data;
   const gboolean undo = params ? params->undo : TRUE;
 
+  dt_image_t *image = dt_image_cache_get(imgid, 'w');
+  if(IS_NULL_PTR(image)) return FALSE;
+
   dt_undo_lt_history_t *hist = NULL;
   if(undo)
   {
@@ -411,7 +443,17 @@ static gboolean _history_delete_apply(const int32_t imgid, void *user_data)
     dt_history_snapshot_undo_create(hist->imgid, &hist->before, &hist->before_history_end);
   }
 
-  dt_history_delete_on_image_ext(imgid, FALSE);
+  const gboolean deleted = dt_history_delete_on_image_ext(image, FALSE);
+  dt_image_cache_write_release(image, DT_IMAGE_CACHE_SAFE);
+  if(!deleted)
+  {
+    if(!IS_NULL_PTR(hist))
+    {
+      dt_history_snapshot_repository_clear(hist->before, imgid);
+      dt_free(hist);
+    }
+    return FALSE;
+  }
 
   if(undo)
   {

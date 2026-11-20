@@ -398,9 +398,9 @@ uint32_t dt_tag_repository_count_distinct_images(const guint tagid)
   return count;
 }
 
-void dt_tag_repository_detach_batch(const int32_t imgid, const char *tagid_list)
+gboolean dt_tag_repository_detach_batch(const int32_t imgid, const char *tagid_list)
 {
-  if(imgid <= 0 || IS_NULL_PTR(tagid_list)) return;
+  if(imgid <= 0 || IS_NULL_PTR(tagid_list)) return TRUE;
 
   sqlite3_stmt *stmt = NULL;
   // clang-format off
@@ -408,14 +408,20 @@ void dt_tag_repository_detach_batch(const int32_t imgid, const char *tagid_list)
                                  imgid, tagid_list);
   // clang-format on
   DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(), query, -1, &stmt, NULL);
-  sqlite3_step(stmt);
+  if(IS_NULL_PTR(stmt))
+  {
+    dt_free(query);
+    return FALSE;
+  }
+  const gboolean ok = sqlite3_step(stmt) == SQLITE_DONE;
   sqlite3_finalize(stmt);
   dt_free(query);
+  return ok;
 }
 
-void dt_tag_repository_attach_batch(const char *values)
+gboolean dt_tag_repository_attach_batch(const char *values)
 {
-  if(IS_NULL_PTR(values)) return;
+  if(IS_NULL_PTR(values)) return TRUE;
 
   sqlite3_stmt *stmt = NULL;
   // clang-format off
@@ -423,9 +429,15 @@ void dt_tag_repository_attach_batch(const char *values)
                                  values);
   // clang-format on
   DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(), query, -1, &stmt, NULL);
-  sqlite3_step(stmt);
+  if(IS_NULL_PTR(stmt))
+  {
+    dt_free(query);
+    return FALSE;
+  }
+  const gboolean ok = sqlite3_step(stmt) == SQLITE_DONE;
   sqlite3_finalize(stmt);
   dt_free(query);
+  return ok;
 }
 
 

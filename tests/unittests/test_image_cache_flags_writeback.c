@@ -33,6 +33,7 @@
 
 #include "caches/image_cache.h"
 #include "common/conf.h"
+#include "common/datetime.h"
 #include "common/image.h"
 #include "control/crawler.h"
 #include "darktable.h"
@@ -55,8 +56,10 @@ static char *_rcfile = NULL;
 
 static int cache_setup(void **state)
 {
+  if(IS_NULL_PTR(dt_datetime_origin())) dt_datetime_init();
   const int rc = testdb_setup(state);
   if(rc) return rc;
+  darktable.datadir = g_strdup(g_get_tmp_dir());
 
   /* Populating a cache entry reads conf: dt_image_repository_load() derives the film-roll
    * name, and dt_image_film_roll_name() asks for `show_folder_levels'. Same fixture as
@@ -81,6 +84,8 @@ static int cache_teardown(void **state)
   g_remove(_rcfile);
   g_free(_rcfile);
   _rcfile = NULL;
+  dt_free(darktable.datadir);
+  darktable.datadir = NULL;
 
   return testdb_teardown(state);
 }
