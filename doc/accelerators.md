@@ -315,4 +315,63 @@ Moving the rule changes no path that was valid before. A label that held a "/" r
 shortcut under a new path, so a key bound to the old one is orphaned once, as described above for
 a translation that moves.
 
+## A slider's arrow-key step is 1 % of its range, rounded down on the displayed value
+
+*Established on top of `9f5530e1be`, 2026-11-20.*
+
+Left and Right on a focused bauhaus slider, and the wheel on it, go through `_slider_add_step()`
+(`widgets/bauhaus.c`). It takes `dt_bauhaus_slider_get_step()`, divides it by 5 with the primary
+modifier or multiplies it by 5 with Shift, and raises the result to one unit of the last displayed
+digit, `1 / (|factor| × 10^digits)`. The step is added to the current value, which is not moved
+onto a multiple of it first: a temperature at 5003 K goes to 5203 K.
+
+A slider created with a step keeps it, and integer parameters get 1 from
+`dt_bauhaus_slider_from_params()`. Float parameters get 0, which `get_step()` replaces by an
+automatic step:
+
+1. `top = min(soft_max − soft_min, max(|soft_min|, |soft_max|))`: the span, or the largest bound
+   when that is smaller, so a range centred on 0 is stepped by its half-width;
+2. `raw = top × |factor| / 100`, 1 % of `top` **as displayed**;
+3. `raw` is rounded down to 1, 2 or 5 × 10ⁿ. A tenth of a decade of slack reads 0.099 as 0.1,
+   and the thresholds at 2 and 5 give way by 0.1 %, so that a range starting just above 0
+   (`[0.1, 500]`) steps like the round one (`[0, 500]`) and a float quotient an ulp under 2 or 5
+   is not taken for the multiple below;
+4. the result is divided by `|factor|` again, since the step moves the internal value.
+
+darktable computes its step from the same `top`, on the displayed value too
+(`src/bauhaus/bauhaus.c` on its master `dc00f87aa5`), but rounds to 1 or 5 × 10ⁿ only, going to 5
+once the mantissa passes √10, and its modifiers are a configurable ×0.1 / ×10 instead of ×5.
+For the white balance temperature that is 100 K where Ansel gives 200 K.
+
+Each step of the rule answers a way the step went wrong in this tree's history:
+
+| Rule | Without it |
+|---|---|
+| rounding (step 3) | a white-balance tint on [0.135, 2.326] moved by 0.02191, shown as +0.022, and Shift by +0.110; it now moves by 0.02, 0.004 and 0.1 |
+| no ceiling | `top >= 100` used to set the step to 1, so the temperature, on [1901, 25000] K, moved by 1 K, and Ctrl by 1 K too (0.2 is raised to the 0-digit display's 1) |
+| rounding on the displayed value (2, 4) | rounding the internal value gives round displayed steps only when `factor` is a power of ten |
+| dividing back by `factor` (4) | a "%" slider on [0, 1] moves by its whole range in one step |
+
+Removing the ceiling changes every float slider with an automatic step whose `top` passes 100. A
+static survey of `src/iop`, `src/libs`, `src/views` and `src/gui` (constant `$MIN/$MAX`,
+`new_with_range` bounds and soft ranges; about 90 of some 460 slider creations were out of its
+reach) found 32, each of which went from 1 / 1 or 0.2 / 5 (step / primary / Shift) to:
+
+| `top` | Sliders | Step / primary / Shift |
+|---|---|---|
+| 127.5–180 | angles on ±180, Lab C, channelmixerrgb `chroma_spot`, defringe `thresh` | 1 / 0.2 / 5 |
+| ~200–360 | ranges of 200 (filmic saturations, colorzones `strength`, vignette, retouch `blur_radius`, colorchecker `scale_L`), Lab a/b on ±256, hues on 360 | 2 / 0.4 / 10 |
+| ~500 | censorize, lowpass and shadhi radii | 5 / 1 / 25 |
+| ~1000 | colorreconstruction `spatial`, ashift `f_length` | 10 / 2 / 50 |
+| 23099 | white balance temperature | 200 / 40 / 1000 |
+
+The channelmixerrgb and splittoningrgb temperatures, whose soft range of 3000–7000 K would give
+20 K, are given 200 K with `dt_bauhaus_slider_set_step()`, so that every temperature slider steps
+like the white balance one.
+
+The 56 sliders whose `top` is exactly 100, and "%" sliders on round internal ranges (`[0, 1]`,
+`[-0.5, 0.5]`), keep the step they had. The values come from `get_step()` and `_slider_add_step()`
+compiled alone and run in `float` over these ranges, not from the GUI; the same program checked
+that each of 1, 2 and 5 × 10ⁿ for n from −6 to 6, given as `raw`, comes back unchanged.
+
 ---

@@ -1,6 +1,7 @@
 /*
   This file is part of the Ansel project.
   Copyright (C) 2026 Aurélien PIERRE.
+  Copyright (C) 2026 Guillaume Stutin.
 
   Ansel is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -1511,6 +1512,8 @@ void gui_init(struct dt_iop_module_t *self)
         = dt_bauhaus_slider_new_with_range(dt_bauhaus_get_global(), DT_GUI_MODULE(self), 1667.f, 25000.f, 0, 5003.f, 0);
     dt_bauhaus_widget_set_label(g->point[point].temperature, N_("temperature"));
     dt_bauhaus_slider_set_soft_range(g->point[point].temperature, 3000.f, 7000.f);
+    // the automatic step of this soft range would be 20 K: step like the white balance module
+    dt_bauhaus_slider_set_step(g->point[point].temperature, 200.f);
     dt_bauhaus_slider_set_format(g->point[point].temperature, " K");
     _tag_widget(g->point[point].temperature, point);
     g_signal_connect(G_OBJECT(g->point[point].temperature), "value-changed", G_CALLBACK(_general_callback), self);
