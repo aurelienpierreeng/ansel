@@ -866,10 +866,17 @@ dt_imageio_retval_t dt_imageio_export_with_flags(const int32_t imgid, const char
   // set at every `goto error`, so the caller learns which step failed
   dt_imageio_retval_t status = DT_IMAGEIO_OK;
 
-  // Get the history, aka sequence of editing changes
+  // Get the history, aka sequence of editing changes. When the image cannot be loaded, nothing of it
+  // is read, and a pipe would run on no input format and no history: the read that failed says why.
   dt_develop_t dev;
   dt_dev_init(&dev, 0);
-  dt_dev_load_image(&dev, imgid);
+  if(dt_dev_load_image(&dev, imgid, &status))
+  {
+    // the image's record could not be read: no loader has a reason to give
+    if(status == DT_IMAGEIO_OK) status = DT_IMAGEIO_LOAD_FAILED;
+    dt_dev_cleanup(&dev);
+    return status;
+  }
   dt_ioppr_resync_modules_order(&dev);
 
   // The pipe syncs its nodes from the history up to history_end only, so at 0 every node gets

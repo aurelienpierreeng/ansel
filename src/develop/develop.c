@@ -954,12 +954,15 @@ void dt_dev_start_all_pipelines(dt_develop_t *dev)
   dev->pipelines_started = TRUE;
 }
 
-static gboolean _dt_dev_mipmap_prefetch_full(dt_develop_t *dev, const int32_t imgid)
+static dt_imageio_retval_t _dt_dev_mipmap_prefetch_full(dt_develop_t *dev, const int32_t imgid)
 {
   dt_mipmap_buffer_t buf;
   dt_mipmap_cache_get(&buf, imgid, DT_MIPMAP_FULL, DT_MIPMAP_BLOCKING, 'r');
 
   const gboolean ok = (!IS_NULL_PTR(buf.buf)) && buf.width != 0 && buf.height != 0;
+  // the cache's reason, which a caller hands on; a buffer with no pixels is not read, whatever it says
+  dt_imageio_retval_t status = ok ? DT_IMAGEIO_OK : buf.status;
+  if(!ok && status == DT_IMAGEIO_OK) status = DT_IMAGEIO_LOAD_FAILED;
 
   // dt_dev_geometry_raw_width(dev)/height are the raw image's own pixel dimensions -- an objective fact
   // about the loaded buffer, not GUI viewport state -- and must be set for every dev, not just
@@ -994,7 +997,7 @@ static gboolean _dt_dev_mipmap_prefetch_full(dt_develop_t *dev, const int32_t im
 
   dt_mipmap_cache_release(&buf);
 
-  return ok;
+  return status;
 }
 
 static gboolean _dt_dev_refresh_image_storage(dt_develop_t *dev, const int32_t imgid)
@@ -1007,12 +1010,15 @@ static gboolean _dt_dev_refresh_image_storage(dt_develop_t *dev, const int32_t i
   return TRUE;
 }
 
-dt_dev_image_storage_t dt_dev_ensure_image_storage(dt_develop_t *dev, const int32_t imgid)
+dt_dev_image_storage_t dt_dev_ensure_image_storage(dt_develop_t *dev, const int32_t imgid,
+                                                   dt_imageio_retval_t *read_status)
 {
   if(IS_NULL_PTR(dev) || imgid <= 0 || !dt_image_cache_is_ready())
     return DT_DEV_IMAGE_STORAGE_DB_NOT_READ;
 
-  if(!_dt_dev_mipmap_prefetch_full(dev, imgid))
+  const dt_imageio_retval_t status = _dt_dev_mipmap_prefetch_full(dev, imgid);
+  if(!IS_NULL_PTR(read_status)) *read_status = status;
+  if(status != DT_IMAGEIO_OK)
     return DT_DEV_IMAGE_STORAGE_MIPMAP_NOT_FOUND;
 
   if(!_dt_dev_refresh_image_storage(dev, imgid)) 
@@ -1022,7 +1028,8 @@ dt_dev_image_storage_t dt_dev_ensure_image_storage(dt_develop_t *dev, const int3
 }
 
 // load the raw and get the new image struct, blocking in gui thread
-static inline dt_dev_image_storage_t _dt_dev_load_raw(dt_develop_t *dev, const int32_t imgid)
+static inline dt_dev_image_storage_t _dt_dev_load_raw(dt_develop_t *dev, const int32_t imgid,
+                                                      dt_imageio_retval_t *read_status)
 {
   // then load the raw
   dt_times_t start;
@@ -1030,7 +1037,7 @@ static inline dt_dev_image_storage_t _dt_dev_load_raw(dt_develop_t *dev, const i
 
   // Test we got images. Also that populates the cache for later.
   // Refresh our private copy in case raw loading updated image metadata
-  const dt_dev_image_storage_t storage_status = dt_dev_ensure_image_storage(dev, imgid);
+  const dt_dev_image_storage_t storage_status = dt_dev_ensure_image_storage(dev, imgid, read_status);
   if(storage_status) 
     return storage_status;
   
@@ -1051,9 +1058,9 @@ float dt_dev_get_zoom_scale(const dt_develop_t *dev, const gboolean preview)
   return fminf(dt_dev_viewport_box_width(dev) / w, dt_dev_viewport_box_height(dev) / h);
 }
 
-dt_dev_image_storage_t dt_dev_load_image(dt_develop_t *dev, const int32_t imgid)
+dt_dev_image_storage_t dt_dev_load_image(dt_develop_t *dev, const int32_t imgid, dt_imageio_retval_t *read_status)
 {
-  const dt_dev_image_storage_t ret = _dt_dev_load_raw(dev, imgid);
+  const dt_dev_image_storage_t ret = _dt_dev_load_raw(dev, imgid, read_status);
   if(ret) return ret;
 
   // we need a global lock as the dev->iop set must not be changed until read history is terminated
