@@ -52,7 +52,6 @@ void dt_grouping_add_to_group(const int32_t group_id, const int32_t image_id)
 int dt_grouping_remove_from_group(const int32_t image_id)
 {
   int new_group_id = -1;
-  GList *imgs = NULL;
 
   const dt_image_t *img = dt_image_cache_get(image_id, 'r');
   if(IS_NULL_PTR(img)) return -1;
@@ -71,7 +70,6 @@ int dt_grouping_remove_from_group(const int32_t image_id)
       if(new_group_id == -1) new_group_id = other_id;
       other_img->group_id = new_group_id;
       dt_image_cache_write_release(other_img, DT_IMAGE_CACHE_SAFE);
-      imgs = g_list_prepend(imgs, GINT_TO_POINTER(other_id));
     }
     g_list_free(others);
 
@@ -81,7 +79,7 @@ int dt_grouping_remove_from_group(const int32_t image_id)
     }
     else
     {
-      // no change was made, no point in raising signal, bailing early
+      // no change was made
       return -1;
     }
   }
@@ -93,9 +91,6 @@ int dt_grouping_remove_from_group(const int32_t image_id)
     new_group_id = wimg->group_id;
     wimg->group_id = image_id;
     dt_image_cache_write_release(wimg, DT_IMAGE_CACHE_SAFE);
-    imgs = g_list_prepend(imgs, GINT_TO_POINTER(image_id));
-    // refresh also the group leader which may be alone now
-    imgs = g_list_prepend(imgs, GINT_TO_POINTER(img_group_id));
   }
 
   return new_group_id;
@@ -109,7 +104,6 @@ int dt_grouping_change_representative(const int32_t image_id)
   const int group_id = img->group_id;
   dt_image_cache_read_release(img);
 
-  GList *imgs = NULL;
   GList *members = dt_image_repository_get_group_members(group_id, -1);
   for(GList *m = members; m; m = g_list_next(m))
   {
@@ -119,7 +113,6 @@ int dt_grouping_change_representative(const int32_t image_id)
     if(IS_NULL_PTR(other_img)) continue;
     other_img->group_id = image_id;
     dt_image_cache_write_release(other_img, DT_IMAGE_CACHE_SAFE);
-    imgs = g_list_prepend(imgs, GINT_TO_POINTER(other_id));
   }
   g_list_free(members);
   dt_image_repository_reassign_group(group_id, image_id, -1);
