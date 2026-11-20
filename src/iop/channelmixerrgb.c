@@ -5295,6 +5295,8 @@ void gui_init(struct dt_iop_module_t *self)
   gtk_box_pack_start(GTK_BOX(self->gui->widget), GTK_WIDGET(g->illum_y), FALSE, FALSE, 0);
 
   dt_bauhaus_slider_set_soft_range(g->temperature, 3000., 7000.);
+  // the automatic step of this soft range would be 20 K: step like the white balance module
+  dt_bauhaus_slider_set_step(g->temperature, 200.f);
   dt_bauhaus_slider_set_digits(g->temperature, 0);
   dt_bauhaus_slider_set_format(g->temperature, " K");
 
