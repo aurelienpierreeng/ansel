@@ -1,6 +1,7 @@
 /*
     This file is part of Ansel,
     Copyright (C) 2026 Aurélien PIERRE.
+    Copyright (C) 2026 Guillaume Stutin.
 
     Ansel is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -174,7 +175,7 @@ float dt_colorrings_curve_periodic_sample(const dt_colorrings_node_t *curve, con
 gboolean dt_colorrings_apply_rgb_lut(const dt_aligned_pixel_t input_rgb, const float white_level,
                                      const dt_iop_order_iccprofile_info_t *work_profile,
                                      const dt_iop_order_iccprofile_info_t *lut_profile, const float *clut,
-                                     const uint16_t clut_level, dt_pthread_rwlock_t *clut_lock,
+                                     const uint16_t clut_level,
                                      const dt_lut3d_interpolation_t interpolation, dt_aligned_pixel_t output_rgb)
 {
   if(IS_NULL_PTR(output_rgb)) return FALSE;
@@ -191,9 +192,7 @@ gboolean dt_colorrings_apply_rgb_lut(const dt_aligned_pixel_t input_rgb, const f
 
   dt_ioppr_transform_image_colorspace_rgb((float *)output_rgb, (float *)output_rgb, 1, 1, work_profile, lut_profile,
                                           "colorrings swatch work to HLG Rec2020");
-  if(clut_lock) dt_pthread_rwlock_rdlock(clut_lock);
   dt_lut3d_apply((float *)output_rgb, (float *)output_rgb, 1, clut, clut_level, 1.f, interpolation);
-  if(clut_lock) dt_pthread_rwlock_unlock(clut_lock);
   dt_ioppr_transform_image_colorspace_rgb((float *)output_rgb, (float *)output_rgb, 1, 1, lut_profile, work_profile,
                                           "colorrings swatch HLG Rec2020 to work");
 
