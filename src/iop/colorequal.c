@@ -1,6 +1,7 @@
 /*
     This file is part of Ansel,
     Copyright (C) 2022-2026 Aurélien PIERRE.
+    Copyright (C) 2026 Guillaume Stutin.
 
     Ansel is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -2093,7 +2094,7 @@ static gboolean _refresh_preview_cursor_sample(dt_iop_module_t *self)
   const dt_iop_order_iccprofile_info_t *const lut_profile = g->viewer_lut.lut_profile;
   dt_aligned_pixel_t output_rgb = { input_rgb[0], input_rgb[1], input_rgb[2], 0.f };
   dt_colorrings_apply_rgb_lut(input_rgb, exp2f(g->gui_params.white_level), work_profile, lut_profile,
-                              g->viewer_lut.clut, g->viewer_lut.clut_level, NULL,
+                              g->viewer_lut.clut, g->viewer_lut.clut_level,
                               (dt_lut3d_interpolation_t)g->gui_params.interpolation, output_rgb);
 
   dt_aligned_pixel_t projected_rgb = { 0.f };

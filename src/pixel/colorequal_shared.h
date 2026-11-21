@@ -1,6 +1,7 @@
 /*
     This file is part of Ansel,
     Copyright (C) 2026 Aurélien PIERRE.
+    Copyright (C) 2026 Guillaume Stutin.
 
     Ansel is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -19,7 +20,6 @@
 #ifndef DT_PIXEL_COLOREQUAL_SHARED_H
 #define DT_PIXEL_COLOREQUAL_SHARED_H
 
-#include "system/dtpthread.h"
 #include "colorprofiles/iop_profile.h"
 #include "pixel/lut3d.h"
 
@@ -72,7 +72,7 @@ float dt_colorrings_curve_periodic_sample(const dt_colorrings_node_t *curve, int
 gboolean dt_colorrings_apply_rgb_lut(const dt_aligned_pixel_t input_rgb, float white_level,
                                      const dt_iop_order_iccprofile_info_t *work_profile,
                                      const dt_iop_order_iccprofile_info_t *lut_profile, const float *clut,
-                                     uint16_t clut_level, dt_pthread_rwlock_t *clut_lock,
+                                     uint16_t clut_level,
                                      dt_lut3d_interpolation_t interpolation, dt_aligned_pixel_t output_rgb);
 
 void dt_colorrings_hsb_to_profile_rgb(const dt_aligned_pixel_t HSB, float white,
