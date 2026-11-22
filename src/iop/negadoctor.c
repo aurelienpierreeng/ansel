@@ -58,6 +58,7 @@
 #include <glib.h>
 #include <math.h>
 #include <stdlib.h>
+#include "widgets/collapsible_section.h"
 #include "widgets/label.h"
 #include "widgets/notebook.h"
 #include "widgets/togglebutton.h"
@@ -158,6 +159,8 @@ typedef struct dt_iop_negadoctor_gui_data_t
   GtkWidget *Dmin_picker, *Dmin_sampler;
   GtkWidget *WB_high_picker, *WB_high_norm, *WB_high_sampler, *WB_high_row;
   GtkWidget *WB_low_picker, *WB_low_norm, *WB_low_sampler, *WB_low_row, *WB_low_section;
+  // the layer calibration, which folds away: the two neutrals, the v1 picker and the contrast of the layers
+  dt_gui_collapsible_section_t layers;
   // v2: the two neutrals the contrast of the layers is measured between, then the one that sets the color alone
   GtkWidget *neutral_sampler[3], *neutral_row[3];
   // what each of the two picked last, until the other is picked too
@@ -1305,6 +1308,18 @@ void color_picker_apply(dt_iop_module_t *self, GtkWidget *picker, dt_dev_pixelpi
     fprintf(stderr, "[negadoctor] unknown color picker\n");
 }
 
+// Folding the layer calibration away turns off its picker that is on, as leaving a page does: it would go on
+// sampling for a button the user can no longer see
+static void _layers_toggled(GtkToggleButton *toggle, dt_iop_module_t *self)
+{
+  const dt_iop_negadoctor_gui_data_t *const g = (const dt_iop_negadoctor_gui_data_t *)dt_iop_gui_data(self);
+  if(gtk_toggle_button_get_active(toggle)) return;
+  if(gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(g->neutral_sampler[0]))
+     || gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(g->neutral_sampler[1]))
+     || gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(g->WB_high_sampler)))
+    dt_iop_color_picker_reset(self, FALSE);
+}
+
 void gui_init(dt_iop_module_t *self)
 {
   dt_iop_negadoctor_gui_data_t *g = IOP_GUI_ALLOC(negadoctor);
@@ -1375,8 +1390,11 @@ void gui_init(dt_iop_module_t *self)
   gtk_widget_set_tooltip_text(g->D_max, _("Maximum density of the film, corresponding to white after inversion.\n"
                                           "This value depends on the film specifications, the developing process,\n"
                                           "the dynamic range of the scene and the scanner exposure settings."));
-  // The calibration of the layers, their contrast: a property of the film, its development and the scan, not of the scene
-  gtk_box_pack_start(GTK_BOX(page1), dt_ui_section_label_new(_("layer calibration")), FALSE, FALSE, 0);
+  // The calibration of the layers, their contrast: a property of the film, its development and the scan, not of the
+  // scene. Set once for a roll, it folds away, and the sliders made from params below go into it.
+  dt_gui_new_collapsible_section(&g->layers, "plugins/darkroom/negadoctor/expand_layers", _("layer calibration"),
+                                 GTK_BOX(page1), GTK_PACK_START);
+  GtkWidget *const layers = self->gui->widget = GTK_WIDGET(g->layers.container);
 
   // v2: measured between two neutrals
   const char *const neutral_labels[2] = { N_("darker neutral"), N_("lighter neutral") };
@@ -1404,13 +1422,13 @@ void gui_init(dt_iop_module_t *self)
     gtk_box_pack_start(GTK_BOX(g->neutral_row[k]), dt_ui_label_new(_(neutral_labels[k])), TRUE, TRUE, 0);
     g->neutral_sampler[k] = dt_color_picker_new(self, DT_COLOR_PICKER_AREA, g->neutral_row[k]);
     gtk_widget_set_tooltip_text(g->neutral_sampler[k], neutral_tooltips[k]);
-    gtk_box_pack_start(GTK_BOX(page1), g->neutral_row[k], FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(layers), g->neutral_row[k], FALSE, FALSE, 0);
   }
   g->neutrals_status = dt_ui_label_new("");
   gtk_label_set_line_wrap(GTK_LABEL(g->neutrals_status), TRUE);
   gtk_label_set_ellipsize(GTK_LABEL(g->neutrals_status), PANGO_ELLIPSIZE_NONE);
   gtk_widget_set_no_show_all(g->neutrals_status, TRUE);
-  gtk_box_pack_start(GTK_BOX(page1), g->neutrals_status, FALSE, FALSE, 0);
+  gtk_box_pack_start(GTK_BOX(layers), g->neutrals_status, FALSE, FALSE, 0);
 
   // v1: a swatch, and a picker that neutralizes one area against the black points
   GtkWidget *row2 = g->WB_high_row = GTK_WIDGET(gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING));
@@ -1427,7 +1445,7 @@ void gui_init(dt_iop_module_t *self)
   g->WB_high_sampler = dt_color_picker_new(self, DT_COLOR_PICKER_AREA, row2);
   gtk_widget_set_tooltip_text(g->WB_high_sampler , _("Pick illuminant color from image"));
 
-  gtk_box_pack_start(GTK_BOX(page1), GTK_WIDGET(row2), FALSE, FALSE, 0);
+  gtk_box_pack_start(GTK_BOX(layers), GTK_WIDGET(row2), FALSE, FALSE, 0);
 
   g->wb_high_R = dt_bauhaus_slider_from_params(self, "wb_high[0]");
   dt_bauhaus_widget_set_label(g->wb_high_R, N_("red layer contrast"));
@@ -1446,6 +1464,7 @@ void gui_init(dt_iop_module_t *self)
           "picker of the corrections page puts it into the black points.");
   GtkWidget *const wb_highs[3] = { g->wb_high_R, g->wb_high_G, g->wb_high_B };
   for(int c = 0; c < 3; c++) gtk_widget_set_tooltip_text(wb_highs[c], wb_high_tooltip);
+  g_signal_connect(G_OBJECT(g->layers.toggle), "toggled", G_CALLBACK(_layers_toggled), self);
 
   // Page CORRECTIONS
   GtkWidget *page2 = self->gui->widget = dt_ui_notebook_page(g->notebook, N_("corrections"), NULL);
@@ -1773,6 +1792,8 @@ void gui_update(dt_iop_module_t *const self)
   g->black_point_picked = FALSE;
 
   dt_bauhaus_slider_set(g->exposure, log2f(p->exposure));     // warning: GUI is in EV
+
+  dt_gui_update_collapsible_section(&g->layers);
 
   // Update custom stuff
   gui_changed(self, NULL, NULL);
