@@ -368,6 +368,59 @@ whatever its parameters, so no grade, exposure and black fit grey, white and a s
 line together. With the absolute aims, 0.30 D above the blacks printed at 0.001 to 0.003 against 0.033 on
 that line.
 
+## negadoctor: how far a scan reads densities, measured on a step wedge
+
+*Measured on top of `908083de2b`, 2026-11-18 and 2026-11-19: three shots of the same wedge, the last with
+a mask around it.*
+
+The D min, D max and black point pickers take densities from the scan, so they are only as good as the
+chain that made it. That chain (a Nikon Z6 over an LED backlight, with an input profile built for that
+light) was measured on a Stouffer T2115, a 21-step silver wedge from 0.07 to 2.98 D, against the
+densities a lab measured on it. Method: `ansel-cli` float exports (`--icc-type LIN_REC2020
+--apply-custom-presets false --core`) with the input profile and negadoctor, crop and exposure off; each
+step's central 60 % divided by a shot of the bare light at the same pixels (a flat field); density
+`−log10` of that ratio against step 1's; slopes fitted through the origin on steps 2–13, against the lab's
+densities above step 1.
+
+- **Green and blue read the lab's densities to about 2 %, up to 2.9 D above the base.** Slopes 1.024 and
+  1.015 on the masked shot; green within 0.011 D of that slope up to step 20 (2.75 D above step 1), and
+  −0.019 D at step 21. The two unmasked shots gave 1.004 / 0.999 and 1.014 / 1.007: shots differ by 1–2 %,
+  in part through the rows measured (below).
+- **The mask is what makes the dense steps right.** Unmasked, stray light cost −0.03 D at 2.31 D above
+  step 1, −0.10 at 2.61 and −0.28 at 2.91; it reached 0.10–0.12 % of step 1's light at step 21, and 56 % of
+  the light in the frame came from the wedge's clear numbers and edges, next to the dense steps, not from
+  the printed masks the first analysis had blamed without measuring. Masked: 0.005 % at step 21.
+- **The exposure module's default black, −0.000244, flattens the dense end.** It removes a constant
+  from every pixel before negadoctor, which costs −0.011 D at 1.89 D above step 1, −0.019 at 2.16 and
+  −0.060 at 2.91 on one shot, −0.116 at step 21 on another: a constant weighs more where the raw
+  signal is smaller. Without it, Ansel's green and the raw agree within 0.005 D. Scans of negatives
+  should set that black to 0.
+- **Without the flat field**, the unevenness of the light and the vignetting cost up to −0.05 D in the
+  middle of the wedge.
+- **Near the edges of the slit, the wedge reads denser, in proportion to its density**: +0.01 D at step 2
+  and +0.06–0.07 D at steps 14–20, 70–110 px from the centre of a 260 px band, so the slope goes from
+  1.024 at the centre to 1.06–1.07 near the edges. The bare light is flat across the slit to 0.001 D, so
+  it is the wedge, not the light: most likely the silver scatters light, and a point near an edge has
+  fewer lit neighbours to receive it from. Not verified by a separate shot. Measure in the centre of a
+  wide slit.
+- **Red reads 3.1–4.1 % denser than green on every shot**, slope 1.061 on the masked one, and in the raw
+  as much (1.031–1.041 R/G across the shots), so not Ansel. Inside each step the red excess does not
+  move with position (+0.000 ± 0.001 D per 1000 px, against −0.016 to −0.020 from one step to the next),
+  so it follows density, not light; a linear chain cannot make a neutral absorber denser in one channel,
+  so the wedge's silver is denser at 665 nm than at 525 and 455 nm, which a lab sheet giving one density
+  per step cannot show. It does not carry over to a colour negative, which holds dyes, not silver, and
+  the layer calibration absorbs any per-channel density factor.
+- **Step 1 reads 0.066–0.091 D from the bare light**, against 0.07 on the lab sheet. Not explained.
+
+What this does not establish: the wedge is neutral silver, so it shows that the chain measures light
+correctly in each channel, not that the camera's channels see a negative's dyes as a densitometer's
+Status M filters do. D max values published in Status M, or Cineon's limits, therefore do not land
+exactly on what the picker reads. Manufacturers publish curves, not a D max per stock, and Cineon's
+figures are encoding limits: 1.856 D above the base (code 1023 − 95) and 2.046 D with the base, the
+default of `D_max`, while the D max picker measures above the base. The only list of D max values that
+holds is one measured on one's own chain, roll by roll, which a preset of the module already keeps with
+D min and the layer calibration.
+
 ## retouch: what a shape costs per frame is its geometry, and most of it is ROI planning
 
 *Found `1019fcd2e0`, 2026-09-24.*
