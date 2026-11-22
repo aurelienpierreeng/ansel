@@ -119,7 +119,7 @@ mishandles the warm cropped→uncropped geometry change.
 
 ## negadoctor: the shadows color cast scales the bias in v1; v2 has one black point per channel
 
-*Found on top of `6a9005ef9c`, 2026-11-13; v2's black points on top of the same commit, 2026-11-14; the black point picker's pixel on top of `8e77b45cff`, 2026-11-14; what the black points and the illuminant gain do to each tone on top of `8e77b45cff`, 2026-11-15; v2's saturation, the layer contrast pickers and the split of the black points' color and level on top of `b13472e7f4`, 2026-11-16; the labels by the neutral and black point pickers, and the pair setting the gains alone, on top of `218e6d865f`, 2026-11-17; the wand on a white, on top of `cdfa91b84f`, 2026-11-18; the saturation from the gloss alone on top of `44bb51da9f`, 2026-11-18.*
+*Found on top of `6a9005ef9c`, 2026-11-13; v2's black points on top of the same commit, 2026-11-14; the black point picker's pixel on top of `8e77b45cff`, 2026-11-14; what the black points and the illuminant gain do to each tone on top of `8e77b45cff`, 2026-11-15; v2's saturation, the layer contrast pickers and the split of the black points' color and level on top of `b13472e7f4`, 2026-11-16; the labels by the neutral and black point pickers, and the pair setting the gains alone, on top of `218e6d865f`, 2026-11-17; the wand on a white, on top of `cdfa91b84f`, 2026-11-18; the saturation from the gloss alone on top of `44bb51da9f`, 2026-11-18; the wand's paper black on top of `ca95c58d7e`, 2026-11-18.*
 
 `process()` prints `exposure · (1 + black) − exposure · 10^(wb_high[c] · (B[c] − D[c] / D_max))`,
 `D[c]` being the density above the film base. The density printed at the paper black
@@ -327,18 +327,26 @@ channels are the print stock's sensitivities. Neither the factor nor the unit is
 without its slider callback (its picker, under `dt_gui_freeze_begin()`) calls
 `_density_sliders_update()` itself.
 
-The wand of print properties is an area picker ("grade and exposure from a white"). It sets print exposure
-and grade from the film settings and the paper black as they stand, which it leaves alone: the brightest point
-of the area, a white that keeps its detail, prints at 90 %, and a density 0.43 D clearer at 18 %, Cineon's
-diffuse white (code 685) and mid grey (code 470) 215 codes of 0.002 D apart: two equations linear in grade and
-`log(exposure)`. The brightest point is each channel's densest value on the film,
-`DT_COLOR_PICKER_EXTREMES_MIN`, as the print exposure picker takes it, so the area must hold no light source,
-specular reflection or dust. The channel that prints it lightest sets both aims, so that no channel of the white
-passes 90 %, and the darkroom marks it with the +; a geometric mean over RGB, which the wand used before, put
-the lightest channel above 90 %. When the grade is clamped, the white keeps its aim and the grey misses it. A paper black low enough to print the grey at zero or below in that channel leaves
-its log infinite or NaN, and the wand then keeps exposure and grade. Like every area picker, it starts on
-the whole image less a 64 px border (`_picker_initialize_geometry_raw()` in `gui/color_picker_proxy.c`), so its
-first result takes the image's brightest point, which is right when that point is a white with detail and not a
+The wand of print properties is an area picker ("Auto tune print"). It first sets the paper black as the paper
+black picker would, in that picker's area, the one it last had or the image less a 64 px border until it had
+one, which is not shown (`dt_iop_color_picker_measure_max_of_min()`, see
+[`color-picker.md`](color-picker.md)); if that area cannot be read, the black stays as it is. The black comes
+first because the white and the grey print on it, and it does not depend on what the wand sets next, so a
+second pick of a white finds the same black. Measured in the GUI on top of `ca95c58d7e`, 2026-11-18, with
+`-d dev`: once the paper black picker had sampled a 7 × 8 px area of the preview, maximum 0.402525 / 0.16448 /
+0.205041, each of the wand's next three picks found that same pixel there; before that picker had an area,
+every pick took the default box and found one same pixel. Then it sets print exposure and grade from the film
+settings and that black: the brightest point of the area, a white that keeps its detail, prints at 90 %, and a
+density 0.43 D clearer at 18 %, Cineon's diffuse white (code 685) and mid grey (code 470) 215 codes of 0.002 D
+apart: two equations linear in grade and `log(exposure)`. The brightest point is each channel's densest value
+on the film, `DT_COLOR_PICKER_EXTREMES_MIN`, as the print exposure picker takes it, so the area must hold no
+light source, specular reflection or dust. The channel that prints it lightest sets both aims, so that no
+channel of the white passes 90 %, and the darkroom marks it with the +; a geometric mean over RGB, which the
+wand used before, put the lightest channel above 90 %. When the grade is clamped, the white keeps its aim and
+the grey misses it. A paper black low enough to print the grey at zero or below in that channel leaves its log
+infinite or NaN, and the wand then keeps exposure and grade. Like every area picker, it starts on the whole
+image less a 64 px border (`_picker_initialize_geometry_raw()` in `gui/color_picker_proxy.c`), so its first
+result takes the image's brightest point, which is right when that point is a white with detail and not a
 light source or a reflection.
 
 It used to anchor the grey and white at Cineon's absolute densities, 0.75 and 1.18 D above the blacks, and

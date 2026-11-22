@@ -1112,8 +1112,16 @@ static void apply_auto_neutrals(dt_iop_module_t *self, const int which)
   dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
 }
 
-// from Dmax, offset and both white balances, compute the print black adjustment
-// such that the printed values range from 0 to + infinity
+// The print black adjustment, from Dmax, offset and both white balances, such that the printed values of
+// `pixel` range from 0 to + infinity
+static inline float _paper_black(const dt_iop_negadoctor_data_t *const d, const dt_aligned_pixel_t pixel)
+{
+  dt_aligned_pixel_t RGB;
+  // actually, remap between -3.32 EV and infinity for safety because gamma comes later
+  for(int c = 0; c < 3; c++) RGB[c] = 0.1f - (1.0f - fast_exp10f(_corrected_density(d, c, pixel[c])));
+  return v_maxf(RGB);
+}
+
 static void apply_auto_black(dt_iop_module_t *self)
 {
   if(dt_gui_widgets_suppressed()) return;
@@ -1128,14 +1136,7 @@ static void apply_auto_black(dt_iop_module_t *self)
   dt_aligned_pixel_t pixel;
   if(dt_iop_color_picker_get_extreme_pixel(self, DT_COLOR_PICKER_EXTREMES_MAX_OF_MIN, 0, pixel))
     for(int c = 0; c < 4; c++) pixel[c] = self->picked_color_max[c];
-
-  dt_aligned_pixel_t RGB;
-  for(int c = 0; c < 3; c++)
-  {
-    // actually, remap between -3.32 EV and infinity for safety because gamma comes later
-    RGB[c] = 0.1f - (1.0f - fast_exp10f(_corrected_density(&d, c, pixel[c])));
-  }
-  p->black = v_maxf(RGB);
+  p->black = _paper_black(&d, pixel);
 
   dt_gui_freeze_begin();
   dt_bauhaus_slider_set(g->black, p->black);
@@ -1203,10 +1204,10 @@ static inline float _log_print(const dt_iop_negadoctor_params_t *const p, const 
   return logf(1.0f + p->black - fast_exp10f(_corrected_density(d, c, value) - d->wb_high[c] * denser));
 }
 
-// Set print exposure and paper grade from the film settings and the paper black as they stand, so that the
-// brightest point of the picked area, a white that keeps its detail, prints as diffuse white and a density 0.43 D
-// clearer than it as mid grey, at their Cineon reflectances, in the channel closest to white; in v2, set the
-// saturation so that the colors keep the scene's ratio between them too.
+// Set the paper black as its own picker would in that picker's area, then print exposure and paper grade from the
+// film settings and that black, so that the brightest point of the picked area, a white that keeps its detail,
+// prints as diffuse white and a density 0.43 D clearer than it as mid grey, at their Cineon reflectances, in the
+// channel closest to white; in v2, set the saturation so that the colors keep the scene's ratio between them too.
 // The brightest point is each channel's densest value on the film, as the print exposure picker takes it, and
 // the channel that prints it lightest sets both aims, so that no channel of the white passes 90 %. The white is
 // the frame's own: Cineon's aims sit at fixed densities, which only a normally exposed negative reaches, so an
@@ -1218,6 +1219,11 @@ static void apply_auto_print(dt_iop_module_t *self)
   dt_iop_negadoctor_params_t *p = (dt_iop_negadoctor_params_t *)self->params;
   dt_iop_negadoctor_data_t d;
   _data_from_params(p, &d);
+
+  // The white and the grey print on the paper black: it comes first. Its area is that picker's, which is not
+  // shown: the one it last had or, until it had one, the one it starts with. If it cannot be read, the black stays.
+  dt_aligned_pixel_t darkest;
+  if(!dt_iop_color_picker_measure_max_of_min(g->black, darkest)) p->black = _paper_black(&d, darkest);
 
   // (exposure · print)^grade = aim at grey and white: two equations, linear in grade and log(exposure).
   const float log_grey = logf(_unglossed(NEGADOCTOR_GREY_PRINT, p->soft_clip));
@@ -1245,6 +1251,7 @@ static void apply_auto_print(dt_iop_module_t *self)
   }
 
   dt_gui_freeze_begin();
+  dt_bauhaus_slider_set(g->black, p->black);
   dt_bauhaus_slider_set(g->exposure, log2f(p->exposure));
   dt_bauhaus_slider_set(g->gamma, p->gamma);
   dt_bauhaus_slider_set(g->saturation, p->offset);
@@ -1582,9 +1589,9 @@ void gui_init(dt_iop_module_t *self)
   // Page PRINT PROPERTIES
   GtkWidget *page3 = self->gui->widget = dt_ui_notebook_page(g->notebook, N_("print properties"), NULL);
 
-  // the wand sets the grade of the paper and the exposure of the print together, above both
+  // the wand sets the paper black, then the grade of the paper and the exposure of the print, above all three
   GtkWidget *auto_print_row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
-  g->auto_print_label = gtk_label_new(_("grade and exposure from a white"));
+  g->auto_print_label = gtk_label_new(_("Auto tune print"));
   gtk_label_set_xalign(GTK_LABEL(g->auto_print_label), 0.0f);
   gtk_label_set_ellipsize(GTK_LABEL(g->auto_print_label), PANGO_ELLIPSIZE_END);
   gtk_box_pack_start(GTK_BOX(auto_print_row), g->auto_print_label, TRUE, TRUE, 0);
@@ -1684,8 +1691,10 @@ void gui_cleanup(struct dt_iop_module_t *self)
 // The wand's tooltip, which tells about the paper saturation only while its slider shows
 static void _auto_print_tooltip_update(dt_iop_negadoctor_gui_data_t *const g, const gboolean saturation_shown)
 {
-  const char *const tones = _("Set the grade and print exposure from the film settings and the paper black:\n"
-                              "pick a white that should keep its detail, as for the print exposure:\n"
+  const char *const tones = _("Set the paper black, then the grade and print exposure from the film settings:\n"
+                              "the paper black as its own picker sets it, in that picker's area,\n"
+                              "the whole image if it was never used;\n"
+                              "then pick a white that should keep its detail, as for the print exposure:\n"
                               "the brightest point of the area prints as a white at 90 %\n"
                               "and a density 0.43 D clearer than it as a mid grey at 18 %, as in the Cineon aims.\n"
                               "Not a light source, a specular reflection or dust.");
