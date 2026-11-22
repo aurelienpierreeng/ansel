@@ -1749,10 +1749,10 @@ void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
     else
     {
       // the bias is the black point farthest from the film base, which the others scale down from
-      int far = 0;
+      int farthest = 0;
       for(int c = 1; c < 3; c++)
-        if(fabsf(p->black_point[c]) > fabsf(p->black_point[far])) far = c;
-      p->offset = p->black_point[far];
+        if(fabsf(p->black_point[c]) > fabsf(p->black_point[farthest])) farthest = c;
+      p->offset = p->black_point[farthest];
       for(int c = 0; c < 3; c++)
         p->wb_low[c] = isnormal(p->offset) ? CLAMP(p->black_point[c] / p->offset,
                                                    dt_bauhaus_slider_get_hard_min(g->wb_low_R),
