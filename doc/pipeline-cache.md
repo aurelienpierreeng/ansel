@@ -1394,7 +1394,7 @@ exposure down in the preview pipe. With `-d nocache_reuse` (no rekeying), none r
 first return to 0.7 EV loaded from history: it landed on another history hash and ran all 8. After
 the change, every press is switched and no return runs any module, including 0.7 EV and two steps
 back. The same presses emitted on the widget outside a GTK dispatch (no current event) still
-rekeyed, as a drag did then; they are now switched after a pause like any other request.
+rekey: a request made outside any event is not switched.
 
 **A held key is a stream, like a drag.** It repeats every 30 to 40 ms, and its states come back no
 more than a drag's. With every press switched, each commit of a hold kept its outputs. Measured
@@ -1404,8 +1404,8 @@ stayed there after the release. A press less than the user's timeout after the p
 therefore not switched. In the same hold, 1 commit of 142 is switched (the first press), and vRAM
 peaks at 1421 MiB. The test reads the user's timeout (`dt_gui_throttle_get_user_timeout_ms()`),
 not the batching window: `dt_gui_throttle_get_timeout_ms()` shortens the window to the average
-redraw time, which on a fast pipe falls below the repeat period. With the timeout set to 0, every
-request is switched, held keys and drags included.
+redraw time, which on a fast pipe falls below the repeat period. A timeout set to 0 turns batching
+off, not the pause between two states: the pause is then the preference's default, 200 ms.
 
 Between two requests made from events, the test compares event times, which are the server's and
 stay spaced by the repeat period however late the application reads them. A shim that stamps
@@ -1460,33 +1460,39 @@ entries is a stream whatever widget it runs on. The two sections above recognise
 one, and every source they left out kept rekeying: one notch of the wheel on exposure, then one
 back, ran exposure and every module after it each time.
 
-`_request_is_switch()` (`develop/dev_history_gui.c`) decides by time alone: a request made at least
-the user's timeout (`processing/timeout`, 200 ms by default) after the previous one is `switched`,
-whatever made it. The state it replaces stayed on screen. A stream's requests follow each other
-more closely, so only the state the stream started from is kept, which is the held-key rule above
-applied to every source; a drag the pointer rests on for longer than the timeout keeps the state
-it rested on. One clock serves every request, from any module. Two requests made from events are
-timed by the events (`gdk_event_get_time()`), which stay spaced by a key's repeat period however
-late the main loop reads them (see the held key above); a pair with a request made outside any
-event (from an idle, a timer, a picker) is timed by `g_get_monotonic_time()`. The two clocks are
-never compared with each other.
+`_request_is_switch()` (`develop/dev_history_gui.c`) decides by the user's pace alone: a request
+made from a user event at least the user's timeout (`processing/timeout`, 200 ms by default) after
+the previous one is `switched`, whatever the event. The state it replaces stayed on screen. A
+stream's requests follow each other more closely, so only the state the stream started from is
+kept, which is the held-key rule above applied to every source; a drag the pointer rests on for
+longer than the timeout keeps the state it rested on. One clock serves every request, from any
+module: the events' own times (`gdk_event_get_time()`), which stay spaced by a key's repeat period
+however late the main loop reads them (see the held key above).
+
+A request made outside any event (from a timer, an idle, a picker applying what the pipe measured)
+is not switched, and leaves the clock alone. It carries no pace of the user's: the time between two
+timer callbacks is the throttle's or the pipe's, and on a slow pipe a continuous edit committed
+from a timer would read as a series of pauses. A combobox set by code is therefore not switched
+any more, nor is a picker's apply.
+
+A timeout of 0 turns batching off, not the pause between two states: the pause is then the
+preference's default (`dt_confgen_get_int("processing/timeout", DT_DEFAULT)`). Comparing with 0
+would switch every request, the steps of a drag included, and each would keep its outputs: what the
+held key above cost with every press switched, about 80 MiB/s of vRAM.
 
 Every GUI history commit goes through it: the queue behind `dt_dev_add_history_item()`, and
 `dt_dev_history_commit_item_from_gui()` for the four edits that cannot be queued because queueing
 ends the shape creation session they belong to -- retouch's heal algorithm combobox and its
 algorithm buttons while a shape tool is armed, the creation of a shape (`masks_gui.c`) and the
-throttled commit of a mask edit (`views/darkroom.c`). Nothing recognises a source any more: the
-combobox's `dt_gui_widgets_choice_begin()/end()/announced()` and the `GtkToggleButton` test on
-the current event are gone.
+throttled commit of a mask edit (`views/darkroom.c`). That last one runs from a throttle callback,
+outside any event, so it is never switched. Nothing recognises a source any more: the combobox's
+`dt_gui_widgets_choice_begin()/end()/announced()` and the `GtkToggleButton` test on the current
+event are gone.
 
-What the rule does not reach, read from the code and not measured:
-
-- **The state before a mask drag.** While a shape is dragged, `_publish_mask_edit_transient()`
-  (`views/darkroom.c`) feeds the pipe through the transient slot, and those runs rekey. The state
-  before the drag is gone before the commit that ends it arrives; that commit is switched, but
-  what it keeps is the drag's last render.
-- **A timeout of 0.** Every request is then switched, the steps of a drag included, and each keeps
-  its outputs: what the held key above cost with every press switched, about 80 MiB/s of vRAM.
+What the rule does not reach, read from the code and not measured: **the state before a mask
+edit.** While a shape is dragged or scrolled, `_publish_mask_edit_transient()` (`views/darkroom.c`)
+feeds the pipe through the transient slot, and those runs rekey. The state before the edit is gone
+before the commit that ends it arrives, and that commit, made from a timer, is not switched.
 
 Measured in the darkroom with `--disable-opencl` and `-d perf -d dev -d pipecache`, on a 602x402 px
 preview of a Sony ARW (6048x4024) opened without history, exposure edited by hand with real mouse

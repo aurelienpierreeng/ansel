@@ -356,8 +356,8 @@ void dt_dev_history_flush_pending_commits(struct dt_develop_t *dev);
  * be wrong (it ends the shape creation session the edit belongs to): a shape tool setting, a
  * shape created or edited on the canvas. It flushes the pending commits, so the edits queued
  * before it keep their order, then commits with the `switched` rule of the queue: an edit made
- * at least the user's timeout after the previous one keeps the outputs of the state it replaces
- * (see dt_dev_history_commit_item_now()). GUI thread only.
+ * from a user event at least the user's timeout after the previous one keeps the outputs of the
+ * state it replaces (see dt_dev_history_commit_item_now()). GUI thread only.
  */
 void dt_dev_history_commit_item_from_gui(struct dt_develop_t *dev, struct dt_iop_module_t *module,
                                          gboolean enable);
