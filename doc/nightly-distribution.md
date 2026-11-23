@@ -273,7 +273,8 @@ the very mix (libsoup 2 and 3 in one process) its header explains aborts at the 
 
 Fixed in three places:
 
-- `install-deps-macos.sh` reads `osmgpsmap-1.0.pc` and links the libsoup it names.
+- `install-deps-macos.sh` read `osmgpsmap-1.0.pc` and linked the libsoup it named. It now installs
+  and links libsoup 3 only, see the next paragraph.
 - `FindLibSoup.cmake` no longer falls back to libsoup 2 when libsoup 3 is required; when
   osm-gps-map is what requires it, configure stops with a message naming `brew link libsoup` and
   `-DUSE_MAP=OFF`.
@@ -292,6 +293,23 @@ Tested 2026-11-13 by configuring `FindLibSoup.cmake` alone against fake `.pc` tr
 | no map | libsoup 3 |
 
 The Homebrew side is untested outside CI: there is no Mac here.
+
+### Homebrew installs no libsoup 2 any more
+
+*Seen in the arm64 CI on 2026-11-22 and 23, against `9f5530e1be`.*
+
+Between those two days Homebrew turned a warning into a refusal. On 2026-11-22 the step warned
+`libsoup@2 has been deprecated because it is not supported upstream! It was disabled on
+2026-09-05.` and still poured `libsoup@2` 2.74.3_1. On 2026-11-23 the same line read `has been
+disabled` and came as an error: Homebrew installed everything else, and `install-deps-macos.sh`
+stopped on `Missing Homebrew packages after install: libsoup@2`. The other two macOS jobs were then
+cancelled by the matrix, on a branch whose diff touches no build file.
+
+Nothing needed libsoup 2 any more: Homebrew's `osm-gps-map` requires `libsoup-3.0` since 1.2.2, and
+`FindLibSoup.cmake` follows osm-gps-map. The script now lists `libsoup` (3) instead, and unlinks a
+`libsoup@2` an image may still carry before linking libsoup 3. The `opt/libsoup@2` entry of
+`CMAKE_PREFIX_PATH` in `CMakeLists.txt` stays: it names a directory that is absent on a fresh
+Homebrew, and still serves a local build whose osm-gps-map predates 1.2.2.
 
 ## A commit already published is not built again
 
