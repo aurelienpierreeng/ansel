@@ -1346,8 +1346,8 @@ later one is a chain of exact hits, 1-28 ms on the CPU and 3-24 ms with OpenCL. 
 by `dt_dev_history_commit_item_now()` when `add_new_pipe_node` (the module's first history entry,
 or an entry enabled differently from its last one -- the top item rewritten in place included),
 and by `dt_dev_history_pixelpipe_update()`, which every wholesale history replacement goes through.
-It is also raised for every GUI edit made at least the user's timeout after the previous one, see
-"An edit after a pause keeps the state it leaves, whatever made it" below.
+It is also raised for every GUI edit made from a user event at least the user's timeout after the
+previous one, see "An edit after a pause keeps the state it leaves, whatever the gesture" below.
 
 Two things a reviewer would otherwise simplify:
 
@@ -1372,10 +1372,10 @@ on a masked module), not as a switch. Every module downstream therefore rekeyed 
 the new state, and stepping back found nothing. `_queue_pending_commit()`
 (`develop/dev_history_gui.c`) marks the request `switched`, and `dt_dev_history_commit_item_now()`
 raises `DT_DEV_PIPE_SWITCHED` for it, as it does for a toggle. This section's measurements were
-taken when only a key press was marked; which requests are marked is now decided by time alone, see
-"An edit after a pause keeps the state it leaves, whatever made it" below. A press that follows the
-previous one by less than the user's timeout (`processing/timeout`, 200 ms by default) is not
-marked: see the held key below.
+taken when only a key press was marked; which requests are marked is now decided by the user's pace
+alone, see "An edit after a pause keeps the state it leaves, whatever the gesture" below. A press
+that follows the previous one by less than the user's timeout (`processing/timeout`, 200 ms by
+default) is not marked: see the held key below.
 
 **A step and its reverse did not land on the same float.** `dt_bauhaus_slider_set_normalized()`
 rounds the value to the displayed precision but stores a position in [0, 1].
@@ -1449,7 +1449,7 @@ lists the active ones) and `dt_widget_set_scroll_focus()` on the widget, which a
 the GUI: without a window manager, `gtk_widget_grab_focus()` does not always take, and
 `_widget_scroll()` then ignores the event.
 
-### An edit after a pause keeps the state it leaves, whatever made it
+### An edit after a pause keeps the state it leaves, whatever the gesture
 
 *Measured on top of `9f5530e1be`, 2026-11-23.*
 
