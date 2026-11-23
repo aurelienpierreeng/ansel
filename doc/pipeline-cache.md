@@ -53,10 +53,10 @@ CPU, tiled, or read its output back; every device-to-host copy clears it too. On
 reaches the raw buffer, through `dt_pixel_cache_entry_get_buffer()`, since it still backs the
 output's pinned OpenCL image.
 
-**Reusing in place forgets the previous state.** That is right for a slider drag or a pan, whose
-previous states do not come back, and wrong for a module toggle, an undo, a jump in history or a
-keyboard edit (a slider step with the arrow keys) or a choice in a combobox or a check box, after
-which going back is the likely next step. Those raise `DT_DEV_PIPE_SWITCHED`, which sets
+**Reusing in place forgets the previous state.** That is right for the steps of a drag or a pan,
+whose states do not come back, and wrong for a module toggle, an undo, a jump in history or any
+edit made after a pause (a slider step, a scroll notch, a typed value, a combobox entry, a check
+box), after which going back is the likely next step. Those raise `DT_DEV_PIPE_SWITCHED`, which sets
 `pipe->keep_outputs` for the run that renders the new state: it writes every output into a new
 cacheline, so the outputs of the state just left are still there, and switching back is a chain of
 exact hits. The flag drops when that run completes. Only the source of a change knows it is a
@@ -1346,8 +1346,8 @@ later one is a chain of exact hits, 1-28 ms on the CPU and 3-24 ms with OpenCL. 
 by `dt_dev_history_commit_item_now()` when `add_new_pipe_node` (the module's first history entry,
 or an entry enabled differently from its last one -- the top item rewritten in place included),
 and by `dt_dev_history_pixelpipe_update()`, which every wholesale history replacement goes through.
-It is also raised for an edit made from the keyboard, see the next section, and for a choice in a
-combobox or a check box, see the one after.
+It is also raised for every GUI edit made at least the user's timeout after the previous one, see
+"An edit after a pause keeps the state it leaves, whatever made it" below.
 
 Two things a reviewer would otherwise simplify:
 
@@ -1369,12 +1369,13 @@ every time. There were two causes, and either one alone was enough.
 
 **The step rekeyed the state it left.** A slider commit reaches the pipe as `TOP_CHANGED` (`SYNCH`
 on a masked module), not as a switch. Every module downstream therefore rekeyed its cacheline to
-the new state, and stepping back found nothing. The keyboard is the source that knows:
-`_queue_pending_commit()` (`develop/dev_history_gui.c`) marks a request `switched` when
-`gtk_get_current_event()` is a key press, and `dt_dev_history_commit_item_now()` raises
-`DT_DEV_PIPE_SWITCHED` for it, as it does for a toggle. A drag, a click and a scroll are not
-marked, and keep rekeying. Neither is a press that follows the previous one by less than the
-user's timeout (`processing/timeout`, 200 ms by default): see the held key below.
+the new state, and stepping back found nothing. `_queue_pending_commit()`
+(`develop/dev_history_gui.c`) marks the request `switched`, and `dt_dev_history_commit_item_now()`
+raises `DT_DEV_PIPE_SWITCHED` for it, as it does for a toggle. This section's measurements were
+taken when only a key press was marked; which requests are marked is now decided by time alone, see
+"An edit after a pause keeps the state it leaves, whatever made it" below. A press that follows the
+previous one by less than the user's timeout (`processing/timeout`, 200 ms by default) is not
+marked: see the held key below.
 
 **A step and its reverse did not land on the same float.** `dt_bauhaus_slider_set_normalized()`
 rounds the value to the displayed precision but stores a position in [0, 1].
@@ -1392,8 +1393,8 @@ focused slider. Before the change, every return to a state already rendered ran 
 exposure down in the preview pipe. With `-d nocache_reuse` (no rekeying), none ran, except the
 first return to 0.7 EV loaded from history: it landed on another history hash and ran all 8. After
 the change, every press is switched and no return runs any module, including 0.7 EV and two steps
-back. The same presses emitted on the widget outside a GTK dispatch (no current event) still rekey,
-as a drag does.
+back. The same presses emitted on the widget outside a GTK dispatch (no current event) still
+rekeyed, as a drag did then; they are now switched after a pause like any other request.
 
 **A held key is a stream, like a drag.** It repeats every 30 to 40 ms, and its states come back no
 more than a drag's. With every press switched, each commit of a hold kept its outputs. Measured
@@ -1404,11 +1405,12 @@ therefore not switched. In the same hold, 1 commit of 142 is switched (the first
 peaks at 1421 MiB. The test reads the user's timeout (`dt_gui_throttle_get_user_timeout_ms()`),
 not the batching window: `dt_gui_throttle_get_timeout_ms()` shortens the window to the average
 redraw time, which on a fast pipe falls below the repeat period. With the timeout set to 0, every
-press is switched, held ones included.
+request is switched, held keys and drags included.
 
-The test compares event times, which are the server's and stay spaced by the repeat period however
-late the application reads them. A shim that stamps presses when it dispatches them sees a busy
-main loop as gaps, and marks repeats switched: stamp a simulated hold on its schedule.
+Between two requests made from events, the test compares event times, which are the server's and
+stay spaced by the repeat period however late the application reads them. A shim that stamps
+presses when it dispatches them sees a busy main loop as gaps, and marks repeats switched: stamp a
+simulated hold on its schedule.
 
 ### A choice in a combobox or a check box finds the state it left
 
@@ -1419,38 +1421,11 @@ module after it on every switch, back and forth. A combobox choice and a check b
 the pipe as `TOP_CHANGED`, not as a switch, so each one rekeyed the outputs of the state it left.
 They are the A/B comparison by nature: a discrete state the user is likely to pick again.
 
-`_queue_pending_commit()` (`develop/dev_history_gui.c`) now marks them `switched` as it does key
-presses, from two sources, since neither alone sees both:
-
-- **A combobox**, through `dt_gui_widgets_choice_announced()`: TRUE while
-  `_commit_combobox_value()` (`widgets/bauhaus.c`) runs its listeners, between
-  `dt_gui_widgets_choice_begin()` and `_end()`. The depth lives in `widgets/widget_settings.c`,
-  next to the freeze depth, since `src/widgets` keeps state in no other file
-  (`tools/check_statelessness.sh`). It covers the default
-  `from_params` callback and `"value-changed"` alike. Every way of choosing goes through it -- the
-  popup, a scroll, the keys, a `dt_bauhaus_combobox_set*()` call -- and the listener commits
-  synchronously, so the flag is up when the request is queued. Nothing in the current event says
-  "combobox": a choice in the popup arrives as a button event on the popup's own drawing area.
-- **A check box or toggle button**, through the current event: a button press or release whose
-  widget (`gtk_get_event_widget()`) is a `GtkToggleButton`. Check boxes are plain GTK widgets that
-  modules build themselves (`dt_bauhaus_toggle_from_params()`, and others in channelmixerrgb,
-  splittoningrgb, colorzones, blend_gui), so no emitter is common to them all; the event is.
-  `dtgtk_togglebutton` derives from `GtkToggleButton` and is covered too.
-
-Some GUI edits cannot be queued: `dt_dev_add_history_item()` ends the shape creation session they
-belong to, so they flush the queue and commit at once. The two that are choices changing the
-render go through `dt_dev_history_commit_item_from_gui()`, which applies the same rule
-(`_request_is_switch()`, shared with the queue): retouch's heal algorithm combobox (a shape tool
-setting, `imageop_gui.c`) and its algorithm buttons while a shape tool is armed (`retouch.c`). The
-other two keep `switched = FALSE`, written out: the creation of a shape (`masks_gui.c`) and the
-throttled commit of mask edits (`darkroom.c`). A shape drawn or edited on the canvas is not a
-choice, even when a key ends it: Enter closes a polygon inside a key press, which the shared rule
-would mark switched.
-
-The held-key rule applies to every choice with one clock: a choice less than the user's timeout
-after the previous one is not switched, which is what a scroll through a combobox's entries is. A
-choice made outside any event (a combobox set by code, from an idle) has no stream to follow and
-is switched.
+`_queue_pending_commit()` (`develop/dev_history_gui.c`) marks them `switched`. The measurements below
+were taken when the queue recognised them by their source: a combobox announcing its value, a
+button event on a `GtkToggleButton`. That detection is gone; a choice is now switched because it
+comes after a pause, like any other edit, see the next section. A scroll through a combobox's
+entries is a stream: only its first notch is switched.
 
 Measured in the darkroom with `--disable-opencl` and `-d perf -d dev -d pipecache`, on a 552x828 px
 preview of a NEF with filmic in its history, one change every 12 s from a shim; the counts are the
@@ -1473,6 +1448,68 @@ A shim scrolling a combobox needs the module in the visible tab (`plugins/darkro
 lists the active ones) and `dt_widget_set_scroll_focus()` on the widget, which a hover gives in
 the GUI: without a window manager, `gtk_widget_grab_focus()` does not always take, and
 `_widget_scroll()` then ignores the event.
+
+### An edit after a pause keeps the state it leaves, whatever made it
+
+*Measured on top of `9f5530e1be`, 2026-11-23.*
+
+Whether the state an edit leaves will come back does not depend on what made the edit. A scroll
+notch on a slider, a click, a double-click reset or a typed value is a step the user takes back as
+often as a key press or a combobox entry, and a drag, a held key or a scroll through a combobox's
+entries is a stream whatever widget it runs on. The two sections above recognised sources one by
+one, and every source they left out kept rekeying: one notch of the wheel on exposure, then one
+back, ran exposure and every module after it each time.
+
+`_request_is_switch()` (`develop/dev_history_gui.c`) decides by time alone: a request made at least
+the user's timeout (`processing/timeout`, 200 ms by default) after the previous one is `switched`,
+whatever made it. The state it replaces stayed on screen. A stream's requests follow each other
+more closely, so only the state the stream started from is kept, which is the held-key rule above
+applied to every source; a drag the pointer rests on for longer than the timeout keeps the state
+it rested on. One clock serves every request, from any module. Two requests made from events are
+timed by the events (`gdk_event_get_time()`), which stay spaced by a key's repeat period however
+late the main loop reads them (see the held key above); a pair with a request made outside any
+event (from an idle, a timer, a picker) is timed by `g_get_monotonic_time()`. The two clocks are
+never compared with each other.
+
+Every GUI history commit goes through it: the queue behind `dt_dev_add_history_item()`, and
+`dt_dev_history_commit_item_from_gui()` for the four edits that cannot be queued because queueing
+ends the shape creation session they belong to -- retouch's heal algorithm combobox and its
+algorithm buttons while a shape tool is armed, the creation of a shape (`masks_gui.c`) and the
+throttled commit of a mask edit (`views/darkroom.c`). Nothing recognises a source any more: the
+combobox's `dt_gui_widgets_choice_begin()/end()/announced()` and the `GtkToggleButton` test on
+the current event are gone.
+
+What the rule does not reach, read from the code and not measured:
+
+- **The state before a mask drag.** While a shape is dragged, `_publish_mask_edit_transient()`
+  (`views/darkroom.c`) feeds the pipe through the transient slot, and those runs rekey. The state
+  before the drag is gone before the commit that ends it arrives; that commit is switched, but
+  what it keeps is the drag's last render.
+- **A timeout of 0.** Every request is then switched, the steps of a drag included, and each keeps
+  its outputs: what the held key above cost with every press switched, about 80 MiB/s of vRAM.
+
+Measured in the darkroom with `--disable-opencl` and `-d perf -d dev -d pipecache`, on a 602x402 px
+preview of a Sony ARW (6048x4024) opened without history, exposure edited by hand with real mouse
+and key events, one to five seconds between gestures. The counts are the modules run in the
+preview pipe per gesture; the main pipe, at fit zoom, finds the preview's outputs. The sequences
+of the two sessions were not identical, so only gestures of the same kind are compared.
+
+| Gesture | Before (`9f5530e1be`) | After |
+|---|---|---|
+| scroll notches up and down on the slider | exposure and the 5 modules after it on 7 of 8 notches | the first notch only; none on the 5 after it |
+| a click on the slider, then a double-click reset, three times | the same 6 on 5 of 7 gestures | the first click and the first reset only; none on the 4 after them |
+| a drag of about 3 s, released, then a double-click reset | -- | none for the reset |
+| a value typed in the popup, then another, twice | none once both states were rendered | none once both states were rendered |
+
+In the drag, the preview pipe took up 18 changes in 3.3 s, each as soon as the previous resync with
+history had ended, and 3 of them carried `SWITCHED`: the first, and two where the pointer rested.
+No module ran in the preview until the release, in either build: on this machine each resync with
+history of the preview took 0.15 to 0.21 s during the drag, and the next change was waiting. Both
+builds then wrote the release's 6 outputs into new cachelines, `keep_outputs` being still up:
+after, raised by the drag's last switched change; before, by a switch made ahead of the drag whose
+returns had all been exact hits, so no run had completed since (observed, mechanism not traced).
+At the end of each session the cache held 1293 MiB in 51 lines before and 1345 MiB in 64 lines
+after, for sequences that were not the same.
 
 ### An export reads the cache and keeps nothing of its own
 
