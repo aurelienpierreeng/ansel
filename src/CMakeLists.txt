@@ -96,6 +96,7 @@ FILE(GLOB SOURCE_FILES
   "common/xmp_sidecar.cc"
   "common/film.c"
   "common/file_location.c"
+  "common/file_reference.c"
   "common/folder_survey.c"
   "common/fp_mode.c"
   "pixel/gaussian.c"
