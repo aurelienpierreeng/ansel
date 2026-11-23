@@ -147,22 +147,47 @@ typedef struct dt_iop_negadoctor_gui_data_t
 {
   GtkNotebook *notebook;
   GtkWidget *film_stock;
-  GtkWidget *Dmin_R, *Dmin_G, *Dmin_B;
-  GtkWidget *wb_high_R, *wb_high_G, *wb_high_B;
-  GtkWidget *wb_low_R, *wb_low_G, *wb_low_B;
-  GtkWidget *black_point_R, *black_point_G, *black_point_B, *black_point_row, *black_point_sampler;
+  GtkWidget *Dmin_R;
+  GtkWidget *Dmin_G;
+  GtkWidget *Dmin_B;
+  GtkWidget *wb_high_R;
+  GtkWidget *wb_high_G;
+  GtkWidget *wb_high_B;
+  GtkWidget *wb_low_R;
+  GtkWidget *wb_low_G;
+  GtkWidget *wb_low_B;
+  GtkWidget *black_point_R;
+  GtkWidget *black_point_G;
+  GtkWidget *black_point_B;
+  GtkWidget *black_point_row;
+  GtkWidget *black_point_sampler;
   GtkWidget *density_unit;
   GtkWidget *version;
   GtkWidget *D_max;
   GtkWidget *offset;
-  GtkWidget *black, *gamma, *saturation, *soft_clip, *exposure, *auto_print, *auto_print_label;
-  GtkWidget *Dmin_picker, *Dmin_sampler;
-  GtkWidget *WB_high_picker, *WB_high_norm, *WB_high_sampler, *WB_high_row;
-  GtkWidget *WB_low_picker, *WB_low_norm, *WB_low_sampler, *WB_low_row, *WB_low_section;
+  GtkWidget *black;
+  GtkWidget *gamma;
+  GtkWidget *saturation;
+  GtkWidget *soft_clip;
+  GtkWidget *exposure;
+  GtkWidget *auto_print;
+  GtkWidget *auto_print_label;
+  GtkWidget *Dmin_picker;
+  GtkWidget *Dmin_sampler;
+  GtkWidget *WB_high_picker;
+  GtkWidget *WB_high_norm;
+  GtkWidget *WB_high_sampler;
+  GtkWidget *WB_high_row;
+  GtkWidget *WB_low_picker;
+  GtkWidget *WB_low_norm;
+  GtkWidget *WB_low_sampler;
+  GtkWidget *WB_low_row;
+  GtkWidget *WB_low_section;
   // the layer calibration, which folds away: the two neutrals, the v1 picker and the contrast of the layers
   dt_gui_collapsible_section_t layers;
   // v2: the two neutrals the contrast of the layers is measured between, then the one that sets the color alone
-  GtkWidget *neutral_sampler[3], *neutral_row[3];
+  GtkWidget *neutral_sampler[3];
+  GtkWidget *neutral_row[3];
   // what each of the two picked last, until the other is picked too
   dt_aligned_pixel_t neutral[2];
   gboolean neutral_picked[2];
@@ -259,7 +284,7 @@ int legacy_params(dt_iop_module_t *self, const void *const old_params, const int
       float exposure;                         // extra exposure
     } dt_iop_negadoctor_params_v1_t;
 
-    const dt_iop_negadoctor_params_v1_t *o = (dt_iop_negadoctor_params_v1_t *)old_params;
+    const dt_iop_negadoctor_params_v1_t *o = (const dt_iop_negadoctor_params_v1_t *)old_params;
 
     // WARNING: when copying the arrays in a for loop, gcc wrongly assumed
     //          that n and o were aligned and used AVX instructions for me,
@@ -397,9 +422,11 @@ int process(struct dt_iop_module_t *const self, const dt_dev_pixelpipe_t *const 
     for(size_t c = 0; c < 4; c++)
     {
       // note : this is always >= 0
-      const float print_gamma = !saturate ? powf(print_linear[c], d->gamma)
-                                : (grey > 0.0f) ? grey_gamma * powf(print_linear[c] / grey, d->color_gamma)
-                                                : 0.0f;
+      float print_gamma = 0.0f;
+      if(!saturate)
+        print_gamma = powf(print_linear[c], d->gamma);
+      else if(grey > 0.0f)
+        print_gamma = grey_gamma * powf(print_linear[c] / grey, d->color_gamma);
 
       // Compress highlights. from https://lists.gnu.org/archive/html/openexr-devel/2005-03/msg00009.html
       pix_out[c] =  (print_gamma > d->soft_clip) ? d->soft_clip + (1.0f - fast_expf(-(print_gamma - d->soft_clip) / d->soft_clip_comp)) * d->soft_clip_comp
@@ -431,20 +458,20 @@ int process_cl(struct dt_iop_module_t *const self, const dt_dev_pixelpipe_t *con
   dt_aligned_pixel_t luminance;
   _working_luminance(pipe, luminance);
 
-  dt_opencl_set_kernel_arg(devid, gd->kernel_negadoctor, 0, sizeof(cl_mem), (void *)&dev_in);
-  dt_opencl_set_kernel_arg(devid, gd->kernel_negadoctor, 1, sizeof(cl_mem), (void *)&dev_out);
-  dt_opencl_set_kernel_arg(devid, gd->kernel_negadoctor, 2, sizeof(int), (void *)&width);
-  dt_opencl_set_kernel_arg(devid, gd->kernel_negadoctor, 3, sizeof(int), (void *)&height);
-  dt_opencl_set_kernel_arg(devid, gd->kernel_negadoctor, 4, 4 * sizeof(float), (void *)&d->Dmin);
-  dt_opencl_set_kernel_arg(devid, gd->kernel_negadoctor, 5, 4 * sizeof(float), (void *)&d->wb_high);
-  dt_opencl_set_kernel_arg(devid, gd->kernel_negadoctor, 6, 4 * sizeof(float), (void *)&d->offset);
-  dt_opencl_set_kernel_arg(devid, gd->kernel_negadoctor, 7, sizeof(float), (void *)&d->exposure);
-  dt_opencl_set_kernel_arg(devid, gd->kernel_negadoctor, 8, sizeof(float), (void *)&d->black);
-  dt_opencl_set_kernel_arg(devid, gd->kernel_negadoctor, 9, sizeof(float), (void *)&d->gamma);
-  dt_opencl_set_kernel_arg(devid, gd->kernel_negadoctor, 10, sizeof(float), (void *)&d->soft_clip);
-  dt_opencl_set_kernel_arg(devid, gd->kernel_negadoctor, 11, sizeof(float), (void *)&d->soft_clip_comp);
-  dt_opencl_set_kernel_arg(devid, gd->kernel_negadoctor, 12, 4 * sizeof(float), (void *)&luminance);
-  dt_opencl_set_kernel_arg(devid, gd->kernel_negadoctor, 13, sizeof(float), (void *)&d->color_gamma);
+  dt_opencl_set_kernel_arg(devid, gd->kernel_negadoctor, 0, sizeof(cl_mem), &dev_in);
+  dt_opencl_set_kernel_arg(devid, gd->kernel_negadoctor, 1, sizeof(cl_mem), &dev_out);
+  dt_opencl_set_kernel_arg(devid, gd->kernel_negadoctor, 2, sizeof(int), &width);
+  dt_opencl_set_kernel_arg(devid, gd->kernel_negadoctor, 3, sizeof(int), &height);
+  dt_opencl_set_kernel_arg(devid, gd->kernel_negadoctor, 4, 4 * sizeof(float), &d->Dmin);
+  dt_opencl_set_kernel_arg(devid, gd->kernel_negadoctor, 5, 4 * sizeof(float), &d->wb_high);
+  dt_opencl_set_kernel_arg(devid, gd->kernel_negadoctor, 6, 4 * sizeof(float), &d->offset);
+  dt_opencl_set_kernel_arg(devid, gd->kernel_negadoctor, 7, sizeof(float), &d->exposure);
+  dt_opencl_set_kernel_arg(devid, gd->kernel_negadoctor, 8, sizeof(float), &d->black);
+  dt_opencl_set_kernel_arg(devid, gd->kernel_negadoctor, 9, sizeof(float), &d->gamma);
+  dt_opencl_set_kernel_arg(devid, gd->kernel_negadoctor, 10, sizeof(float), &d->soft_clip);
+  dt_opencl_set_kernel_arg(devid, gd->kernel_negadoctor, 11, sizeof(float), &d->soft_clip_comp);
+  dt_opencl_set_kernel_arg(devid, gd->kernel_negadoctor, 12, 4 * sizeof(float), &luminance);
+  dt_opencl_set_kernel_arg(devid, gd->kernel_negadoctor, 13, sizeof(float), &d->color_gamma);
 
   err = dt_opencl_enqueue_kernel_2d(devid, gd->kernel_negadoctor, sizes);
   if(err != CL_SUCCESS) goto error;
@@ -672,7 +699,7 @@ static void _black_point_density_update(dt_iop_negadoctor_gui_data_t *const g, c
   dt_free(text);
 }
 
-static void _density_unit_callback(GtkWidget *widget, dt_iop_module_t *self)
+static void _density_unit_callback(GtkWidget *widget __attribute__((unused)), dt_iop_module_t *self)
 {
   dt_iop_negadoctor_gui_data_t *const g = (dt_iop_negadoctor_gui_data_t *)dt_iop_gui_data(self);
   const dt_iop_negadoctor_params_t *const p = (const dt_iop_negadoctor_params_t *)self->params;
@@ -837,15 +864,15 @@ static void apply_auto_Dmin(dt_iop_module_t *self)
 // The scale on which the black point and paper black pickers look for the pixel high in all three channels,
 // a channel's score being gain · log10(pixel) + bias: the corrected density process() prints, so the winner
 // is the pixel the print makes dark in all channels.
-static void _picker_channel_scale(const dt_iop_module_t *self, GtkWidget *picker, dt_aligned_pixel_t gain,
-                                  dt_aligned_pixel_t bias)
+static void _picker_channel_scale(const dt_iop_module_t *self, GtkWidget *picker __attribute__((unused)),
+                                  dt_aligned_pixel_t gain, dt_aligned_pixel_t bias)
 {
   dt_iop_negadoctor_data_t d;
   _data_from_params((const dt_iop_negadoctor_params_t *)self->params, &d);
 
   for(int c = 0; c < 3; c++)
   {
-    // -log10(Dmin / pixel) = log10(pixel) - log10(Dmin), then as _corrected_density()
+    // the density above the film base, log10(pixel) - log10(Dmin), corrected as _corrected_density() does
     gain[c] = d.wb_high[c];
     bias[c] = d.offset[c] - gain[c] * log10f(d.Dmin[c]);
   }
@@ -854,12 +881,14 @@ static void _picker_channel_scale(const dt_iop_module_t *self, GtkWidget *picker
 // The channel v_maxf() / v_minf() return, which the darkroom marks as the one that decided.
 static inline int _channel_of_max(const dt_aligned_pixel_t RGB)
 {
-  return (RGB[0] >= RGB[1]) ? ((RGB[0] >= RGB[2]) ? 0 : 2) : ((RGB[1] >= RGB[2]) ? 1 : 2);
+  if(RGB[0] >= RGB[1] && RGB[0] >= RGB[2]) return 0;
+  return (RGB[1] >= RGB[2]) ? 1 : 2;
 }
 
 static inline int _channel_of_min(const dt_aligned_pixel_t RGB)
 {
-  return (RGB[0] <= RGB[1]) ? ((RGB[0] <= RGB[2]) ? 0 : 2) : ((RGB[1] <= RGB[2]) ? 1 : 2);
+  if(RGB[0] <= RGB[1] && RGB[0] <= RGB[2]) return 0;
+  return (RGB[1] <= RGB[2]) ? 1 : 2;
 }
 
 // from Dmin, find out the range of density values of the film and compute Dmax
@@ -1079,9 +1108,7 @@ static void apply_auto_neutrals(dt_iop_module_t *self, const int which)
   dt_aligned_pixel_t span = { 0.0f };
   for(int c = 0; c < 3; c++) span[c] = D_dense[c] - D_clear[c];
   const char *const channels[3] = { _("red"), _("green"), _("blue") };
-  int closest = 0;
-  for(int c = 1; c < 3; c++)
-    if(span[c] < span[closest]) closest = c;
+  const int closest = _channel_of_min(span);
   if(span[closest] < NEGADOCTOR_NEUTRALS_MIN_SPAN)
   {
     gchar *text = g_strdup_printf(_("the two neutrals are too close in density to measure the contrast "
@@ -1264,7 +1291,7 @@ static void apply_auto_print(dt_iop_module_t *self)
 
 // The button of the saturation slider: the wand's saturation, which depends on the gloss alone, for
 // the gloss as it stands
-static void _auto_saturation_callback(GtkWidget *quad, dt_iop_module_t *self)
+static void _auto_saturation_callback(GtkWidget *quad __attribute__((unused)), dt_iop_module_t *self)
 {
   if(dt_gui_widgets_suppressed()) return;
   dt_iop_negadoctor_gui_data_t *g = (dt_iop_negadoctor_gui_data_t *)dt_iop_gui_data(self);
@@ -1401,7 +1428,8 @@ void gui_init(dt_iop_module_t *self)
   // scene. Set once for a roll, it folds away, and the sliders made from params below go into it.
   dt_gui_new_collapsible_section(&g->layers, "plugins/darkroom/negadoctor/expand_layers", _("layer calibration"),
                                  GTK_BOX(page1), GTK_PACK_START);
-  GtkWidget *const layers = self->gui->widget = GTK_WIDGET(g->layers.container);
+  self->gui->widget = GTK_WIDGET(g->layers.container);
+  GtkWidget *const layers = self->gui->widget;
 
   // v2: measured between two neutrals
   const char *const neutral_labels[2] = { N_("darker neutral"), N_("lighter neutral") };
@@ -1438,7 +1466,8 @@ void gui_init(dt_iop_module_t *self)
   gtk_box_pack_start(GTK_BOX(layers), g->neutrals_status, FALSE, FALSE, 0);
 
   // v1: a swatch, and a picker that neutralizes one area against the black points
-  GtkWidget *row2 = g->WB_high_row = GTK_WIDGET(gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING));
+  g->WB_high_row = GTK_WIDGET(gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING));
+  GtkWidget *row2 = g->WB_high_row;
 
   g->WB_high_picker = gtk_color_button_new();
   gtk_color_chooser_set_use_alpha(GTK_COLOR_CHOOSER(g->WB_high_picker), FALSE);
@@ -1549,7 +1578,8 @@ void gui_init(dt_iop_module_t *self)
   g->WB_low_section = dt_ui_section_label_new(_("shadows color cast"));
   gtk_box_pack_start(GTK_BOX(page2), g->WB_low_section, FALSE, FALSE, 0);
 
-  GtkWidget *row3 = g->WB_low_row = GTK_WIDGET(gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING));
+  g->WB_low_row = GTK_WIDGET(gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING));
+  GtkWidget *row3 = g->WB_low_row;
 
   g->WB_low_picker = gtk_color_button_new();
   gtk_color_chooser_set_use_alpha(GTK_COLOR_CHOOSER(g->WB_low_picker), FALSE);
@@ -1749,10 +1779,9 @@ void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
     else
     {
       // the bias is the black point farthest from the film base, which the others scale down from
-      int farthest = 0;
-      for(int c = 1; c < 3; c++)
-        if(fabsf(p->black_point[c]) > fabsf(p->black_point[farthest])) farthest = c;
-      p->offset = p->black_point[farthest];
+      const dt_aligned_pixel_t distance
+          = { fabsf(p->black_point[0]), fabsf(p->black_point[1]), fabsf(p->black_point[2]), 0.0f };
+      p->offset = p->black_point[_channel_of_max(distance)];
       for(int c = 0; c < 3; c++)
         p->wb_low[c] = isnormal(p->offset) ? CLAMP(p->black_point[c] / p->offset,
                                                    dt_bauhaus_slider_get_hard_min(g->wb_low_R),

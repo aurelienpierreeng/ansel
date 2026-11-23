@@ -448,9 +448,11 @@ static gboolean _sample_picker_buffer(dt_dev_pixelpipe_t *pipe, dt_iop_module_t 
   // Only the input sample feeds the module's picker callbacks, so only it is located. A sample
   // that fails leaves no cross behind.
   dt_develop_t *const dev = dt_dev_get_global();
-  const gboolean locate = picker_source == PIXELPIPE_PICKER_INPUT && dev && dev->color_picker.picker
+  if(IS_NULL_PTR(dev)) return FALSE;
+
+  const gboolean locate = picker_source == PIXELPIPE_PICKER_INPUT && dev->color_picker.picker
                           && dev->color_picker.picker->extremes != DT_COLOR_PICKER_EXTREMES_NONE;
-  if(picker_source == PIXELPIPE_PICKER_INPUT && dev) dev->color_picker.extremes_valid = DT_COLOR_PICKER_EXTREMES_NONE;
+  if(picker_source == PIXELPIPE_PICKER_INPUT) dev->color_picker.extremes_valid = DT_COLOR_PICKER_EXTREMES_NONE;
   dt_color_picker_extremes_t extremes = { .valid = FALSE };
   // The pixel high in all channels is compared on the module's scale, asked for now so that it follows
   // the module's current params: for negadoctor, the density above the film base or the printed one.
@@ -463,12 +465,11 @@ static gboolean _sample_picker_buffer(dt_dev_pixelpipe_t *pipe, dt_iop_module_t 
       extremes.gain[k] = 1.0f;
       extremes.bias[k] = 0.0f;
     }
-    if(picker->channel_scale) picker->channel_scale(module, picker->colorpick, extremes.gain, extremes.bias);
+    if(!IS_NULL_PTR(picker->channel_scale)) picker->channel_scale(module, picker->colorpick, extremes.gain, extremes.bias);
   }
 
   int box[4];
-  if(_picker_sample_box(module, !IS_NULL_PTR(dev) ? dev->color_picker.primary_sample : NULL, roi, picker_source, box))
-    return FALSE;
+  if(_picker_sample_box(module, dev->color_picker.primary_sample, roi, picker_source, box)) return FALSE;
 
   dt_aligned_pixel_t avg = { 0.0f };
   dt_aligned_pixel_t min = { INFINITY, INFINITY, INFINITY, INFINITY };
@@ -1632,8 +1633,8 @@ void dt_color_picker_set_extremes(GtkWidget *picker, const dt_iop_color_picker_e
 
 void dt_color_picker_set_channel_scale(GtkWidget *picker, const dt_color_picker_channel_scale_t scale)
 {
-  dt_iop_color_picker_t *const color_picker = picker ? g_object_get_data(G_OBJECT(picker), "dt-iop-color-picker") : NULL;
-  if(color_picker) color_picker->channel_scale = scale;
+  dt_iop_color_picker_t *const color_picker = !IS_NULL_PTR(picker) ? g_object_get_data(G_OBJECT(picker), "dt-iop-color-picker") : NULL;
+  if(!IS_NULL_PTR(color_picker)) color_picker->channel_scale = scale;
 }
 
 int dt_iop_color_picker_get_extreme_pixel(const dt_iop_module_t *module, const dt_iop_color_picker_extremes_t which,

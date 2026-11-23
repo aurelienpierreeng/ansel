@@ -163,7 +163,7 @@ static gboolean _accels_tooltip_query_hook(GSignalInvocationHint *hint, guint n_
   const char *shown = g_object_get_data(G_OBJECT(widget), "dt-accel-tooltip-shown");
   if(IS_NULL_PTR(shown) || g_strcmp0(current, shown))
     g_object_set_data_full(G_OBJECT(widget), "dt-accel-tooltip-base-markup",
-                           (current && current[0]) ? g_strdup(current) : NULL, g_free);
+                           (!IS_NULL_PTR(current) && current[0]) ? g_strdup(current) : NULL, g_free);
   dt_free(current);
   const char *base_markup = g_object_get_data(G_OBJECT(widget), "dt-accel-tooltip-base-markup");
 
@@ -190,16 +190,16 @@ static gboolean _accels_tooltip_query_hook(GSignalInvocationHint *hint, guint n_
     new_markup = g_strdup(base_markup);
   else
   {
-    const char *shortcut_desc = (shortcut->description && shortcut->description[0]) ? shortcut->description : _("Shortcut");
+    const char *shortcut_desc = (!IS_NULL_PTR(shortcut->description) && shortcut->description[0]) ? shortcut->description : _("Shortcut");
     gchar *line = g_markup_printf_escaped("%s: %s", shortcut_desc, shortcut_label);
-    new_markup = (base_markup && base_markup[0]) ? g_strdup_printf("%s\n<small>%s</small>", base_markup, line)
-                                                 : g_strdup(line);
+    new_markup = !IS_NULL_PTR(base_markup) ? g_strdup_printf("%s\n<small>%s</small>", base_markup, line)
+                                          : g_strdup(line);
     dt_free(line);
   }
   dt_free(shortcut_label);
 
   // a widget with neither keeps no tooltip, and setting NULL would turn its tooltip off for good
-  if(new_markup) gtk_widget_set_tooltip_markup(widget, new_markup);
+  if(!IS_NULL_PTR(new_markup)) gtk_widget_set_tooltip_markup(widget, new_markup);
   g_object_set_data_full(G_OBJECT(widget), "dt-accel-tooltip-shown", new_markup, g_free);
 
   return TRUE;
