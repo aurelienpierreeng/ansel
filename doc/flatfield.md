@@ -2,10 +2,11 @@
 
 # Flat field correction (`iop/flatfield.c`)
 
-> **Written on top of `fa3c2765ab`, 2026-11-18.**
+> **Written on top of `fa3c2765ab`, 2026-11-18.** How the reference is found again: on top of
+> `0e599f0898`, 2026-11-23.
 >
-> What the module divides by, how the gain map is built and shared between pipes, and what it
-> assumes about the reference.
+> What the module divides by, how it finds its files again once they moved, how the gain map is
+> built and shared between pipes, and what it assumes about the reference.
 
 [TOC]
 
@@ -32,7 +33,8 @@ The reference is decoded at full size by `dt_imageio_open_standalone()` and must
 sensor grid: one channel, the same CFA (`filters`, and the X-Trans table), the same rawprepare
 border trim (`crop_x`, `crop_y`), and a trimmed size equal to the module's whole input
 (`piece->buf_in`). Anything else — a camera with another sensor, a JPEG, a TIFF — is refused with
-a window (`Module failed`, the path as item) and the image passes through unchanged. Only the
+a window (`Module failed`, whose item is the file and the image) and the image passes through
+unchanged. Only the
 image's *default* trim is compared: an image whose rawprepare crop was edited by hand no longer
 matches.
 
@@ -42,6 +44,73 @@ from another camera" window, whose item is the path and the reference's model �
 as for the flat. Both models must be known: a decoder that leaves `camera_model` empty (rawspeed
 fills it, libraw may not) disables the check. Two bodies of one model are not told apart; the serial
 number is not compared.
+
+## How the reference is found again
+
+*On top of `0e599f0898`, 2026-11-23.*
+
+A library moves: to another disk, to another computer, from Linux to Windows. Its images are found
+again through the library, but a path in a module's params is not, so each file of the module — the
+flat, the dark frame — is stored as three things (`dt_iop_flatfield_file_t`, filled by `_set_file()`
+when it is chosen):
+
+- its **absolute path**, as chosen;
+- its **path relative to the image's folder**, `/`-separated, with `..` for each level up, so that it
+  reads the same on both systems. There is none, and the field is empty, when nothing leads from one
+  to the other: another drive or another network share on Windows;
+- **what it is**: its size, and the SHA-256 of its bytes.
+
+Finding a file from these is the job of `common/file_reference.c`; the module only asks.
+`commit_params()` asks where each file is now, seen from the folder of the image the pipe runs on,
+and puts that path in the source, so the map is keyed on the file that is actually read. The file is
+looked for, in this order:
+
+1. **at its relative path** from the image's folder. That survives moving the whole tree, and it
+   comes first: a reference that sits at the same place relative to each image's folder is that
+   folder's own, even when the history was pasted from an image of another folder;
+2. **at its absolute path**. That survives moving the image alone, and pasting the history onto an
+   image elsewhere on the same computer;
+3. **by its name**, ignoring the case of ASCII letters: in the image's folder and the three folders
+   above it, each with the folders directly in it — no deeper, and no hidden ones — the nearest
+   first. A file of its name is taken only if it has the size and the SHA-256 of the file chosen.
+   The size, from a stat, is compared first, so a file is read whole only when it could be that one.
+
+A file found at 1 or 2 is used as it is, without looking at what it is: a reference replaced in place
+keeps being used, as it always was.
+
+What a search by name finds is kept for the session, keyed on the folder, the name, the size and the
+SHA-256, so the pipes of an image, its panel and the thumbnails of a film roll list the folders once.
+A file it found and that has gone since is looked for again. A search that found nothing is not tried
+again before the next session.
+
+When a file is not found:
+
+- **no file of its name either**: the module is not applied, under a `Module failed` window whose item
+  is the path as chosen and the image;
+- **files of its name, none of them that file**: in the darkroom, the panel asks. A question window
+  lists those files, nearest first, with *Use this file* (Enter, or a double click), *Choose another
+  file...* and *Not now*; until it is answered the module is not applied, and the darkroom's own
+  pipes open no window of their own. It is asked once per image and file, the flat before the dark
+  frame, when the image is loaded or its history changes, and only while the module is on. The
+  answer is the only thing that writes the params: finding a file again never touches the history.
+  Anywhere else — an export, a thumbnail, `ansel-cli` — no one can answer, so the module is not
+  applied, under a `Module failed` window that says to open the image in the darkroom to choose.
+
+The panel names each file where it is now, with its full path in the tooltip, and with "(not found)"
+after its name when it is not.
+
+A failure stops being true when its file is replaced — another file chosen, the question answered,
+the dark frame removed. `_set_file()` then takes back, with `dt_control_alert_withdraw()`, the line
+that file's failures put in a `Module failed` window for this image, whatever the failure was; a
+window emptied that way closes. That is why each line names the image as well as the file: a
+reference missing for a whole film roll lists the images whose thumbnails it failed on, and choosing
+the file again for one of them takes back that one's line only. A file that comes back by itself —
+copied back where it was — gets its map at the next resync, but its window stays until it is closed.
+
+**Measured** (2026-11-23, Windows 11, GLib 2.90.1 of MSYS2): GLib's SHA-256 reads 217 to 233 MB/s
+from the page cache, 0.10 s for a 23 MB CR2. Two CR2 of one camera, one shot apart, are 22 886 255
+and 23 016 125 bytes: the size alone sorts most other shots out before anything is read, but it does
+not tell two files apart for sure, and the SHA-256 does.
 
 ## How the gain map is built
 
@@ -85,8 +154,8 @@ correction there falls a little short. The larger the radius, the wider that ban
 ## How the map is shared
 
 The map lives in the shared pixelpipe cache, keyed on a hash of `dt_iop_flatfield_source_t`:
-both paths, each file's `mtime` and size, the radius, the colour switch, the input size, the
-trim and the CFA. Every pipe of an image asks for the same key; the first builds the map under the
+both paths — where the files are now, not where they were chosen — whether each was found, each
+file's `mtime` and size, the radius, the colour switch, the input size, the trim and the CFA. Every pipe of an image asks for the same key; the first builds the map under the
 entry's write lock, the others take the read lock, which waits for it (`_get_map()`), then read
 without a lock — once built, a map is never written again. Two images sharing one reference and one
 sensor grid share one map. The strength is not in the key, so its slider reuses the map.
@@ -101,9 +170,9 @@ waiting on it read its status and the last of them removes it. Each pipe also re
 failed on (`failed_hash`) and passes the image through without decoding again until the source
 changes. The window is opened once, by the pipe that tried to build.
 
-The file's `mtime` and size are read in `commit_params()`. A reference replaced in place therefore
-gets a new map at the next history resync, not before: until then the module's own output, keyed
-on its params, is still served from the cache.
+The file's `mtime` and size are read in `commit_params()`, where the file is looked for too. A
+reference replaced in place, or found again, therefore gets a new map at the next history resync,
+not before: until then the module's own output, keyed on its params, is still served from the cache.
 
 ## On the GPU
 
@@ -124,6 +193,8 @@ on a sensor taller than 16384 rows reaches.
 
 ## What is not there
 
+- **A reference renamed and moved** is not found: the search is by name, and what the file is only
+  decides between the files of that name.
 - **Interaction with highlight reconstruction.** Gains above 1 at the edges push sensels that were
   just below the white point above it, and `highlights`, downstream, takes them for clipped. The
   embedded DNG GainMap of rawprepare has the same property.

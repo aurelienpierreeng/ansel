@@ -35,6 +35,7 @@
 #endif
 #include "caches/pixelpipe_cache.h"
 #include "caches/pixelpipe_cache_alloc.h"
+#include "common/file_reference.h"
 #include "common/hash.h"
 #include "common/image.h"
 #include "common/imagebuf.h"
@@ -45,6 +46,7 @@
 #include "develop/develop.h"
 #include "develop/imageop.h"
 #include "develop/imageop_gui.h"
+#include "gui/alert.h"
 #include "gui/application.h"
 #include "imageio/imageio_core.h"
 #include "pixel/box_filters.h"
@@ -53,8 +55,11 @@
 #include "system/openmp.h"
 #include "widgets/bauhaus.h"
 #include "widgets/button.h"
+#include "widgets/dialog.h"
 #include "widgets/label.h"
 #include "widgets/paint.h"
+#include "widgets/widget_settings.h"
+#include "widgets/widget_style.h"
 
 #include "iop/iop_api.h"
 
@@ -68,10 +73,22 @@ DT_MODULE_INTROSPECTION(1, dt_iop_flatfield_params_t)
 
 #define DT_IOP_FLATFIELD_MAX_PATH 1024
 
+/**
+ * A file the user chose, kept so that it is found again once its tree moved, to another disk or to
+ * another computer: see common/file_reference.h. No padding: params are compared and hashed as bytes.
+ */
+typedef struct dt_iop_flatfield_file_t
+{
+  uint32_t size;                            // in bytes, UINT32_MAX for 4 GiB and above
+  uint8_t sha256[32];                       // of its content; zero when it could not be read
+  char path[DT_IOP_FLATFIELD_MAX_PATH];     // absolute, as chosen; empty when there is no file
+  char relative[DT_IOP_FLATFIELD_MAX_PATH]; // from the image's folder, '/'-separated; empty when none
+} dt_iop_flatfield_file_t;
+
 typedef struct dt_iop_flatfield_params_t
 {
-  char flat[DT_IOP_FLATFIELD_MAX_PATH]; // the reference raw, absolute path; empty disables the module
-  char dark[DT_IOP_FLATFIELD_MAX_PATH]; // an optional raw shot without light, absolute path
+  dt_iop_flatfield_file_t flat; // the reference raw; none disables the module
+  dt_iop_flatfield_file_t dark; // an optional raw shot without light
   float radius;   // $MIN: 0.0 $MAX: 512.0 $DEFAULT: 32.0 $DESCRIPTION: "smoothing"
   gboolean color; // $DEFAULT: TRUE $DESCRIPTION: "correct color"
   float strength; // $MIN: 0.0 $MAX: 1.0 $DEFAULT: 1.0 $DESCRIPTION: "strength"
@@ -84,10 +101,11 @@ typedef struct dt_iop_flatfield_params_t
  */
 typedef struct dt_iop_flatfield_source_t
 {
-  char flat[DT_IOP_FLATFIELD_MAX_PATH];
-  char dark[DT_IOP_FLATFIELD_MAX_PATH];
+  char flat[DT_IOP_FLATFIELD_MAX_PATH]; // where it is now, or where it was chosen when it is not found
+  char dark[DT_IOP_FLATFIELD_MAX_PATH]; // the same, empty when there is no dark frame
   int64_t flat_mtime, flat_size; // a file replaced in place under the same name is a new source
   int64_t dark_mtime, dark_size;
+  int32_t flat_found, dark_found; // dt_file_reference_status_t: a file found again is a new source
   float radius;
   int32_t color;
   int32_t width, height;         // the module's whole input: the sensor after rawprepare's border trim
@@ -104,10 +122,23 @@ typedef struct dt_iop_flatfield_data_t
   uint64_t failed_hash; // the last source this pipe could not build a map from, not decoded again
 } dt_iop_flatfield_data_t;
 
+/** The question asked in the darkroom about a file not found where it was chosen, when files of its
+ * name were found near the image instead. */
+typedef struct dt_iop_flatfield_question_t
+{
+  struct dt_iop_module_t *self;
+  dt_gui_alert_t *alert;
+  GtkTreeSelection *selection; // the file chosen among those of its name
+  int32_t imgid;               // the image it is asked for
+  int32_t dark;                // whether it is about the dark frame rather than the flat
+} dt_iop_flatfield_question_t;
+
 typedef struct dt_iop_flatfield_gui_data_t
 {
   GtkWidget *flat, *dark; // labels naming the chosen files
   GtkWidget *radius, *color, *strength;
+  dt_iop_flatfield_question_t *question; // the question open, NULL when none
+  uint64_t asked[2]; // the image and the file, flat then dark, the question was last asked for
 } dt_iop_flatfield_gui_data_t;
 
 typedef struct dt_iop_flatfield_global_data_t
@@ -122,6 +153,8 @@ typedef enum dt_iop_flatfield_status_t
   DT_FLATFIELD_MISMATCH,
   DT_FLATFIELD_BLACK,
   DT_FLATFIELD_NO_MEMORY,
+  DT_FLATFIELD_MISSING, // not where it was chosen, and no file of its name near the image
+  DT_FLATFIELD_OTHERS,  // not where it was chosen, and the files of its name near the image are others
 } dt_iop_flatfield_status_t;
 
 /** What decoding a reference file says about it, besides its sensels. */
@@ -422,6 +455,29 @@ static void _warn_other_camera(const dt_iop_flatfield_source_t *const source,
   dt_free(item);
 }
 
+/** What the `Module failed` window says of each failure: the panel takes back what it said of a file
+ * once that file is replaced. */
+static const char *const _failures[DT_FLATFIELD_OTHERS + 1] = {
+  [DT_FLATFIELD_UNREADABLE] = N_("A reference file of the flat field module could not be read, "
+                                 "so the module is not applied."),
+  [DT_FLATFIELD_MISMATCH] = N_("A reference file of the flat field module does not match the image: it must be "
+                               "a raw file from the same camera. The module is not applied."),
+  [DT_FLATFIELD_BLACK] = N_("The flat field reference is too dark to derive a correction from, "
+                            "so the module is not applied."),
+  [DT_FLATFIELD_MISSING] = N_("A reference file of the flat field module is not where it was chosen, and no "
+                              "file of its name was found near the image, so the module is not applied."),
+  [DT_FLATFIELD_OTHERS] = N_("A reference file of the flat field module is not where it was chosen, and the "
+                             "files of its name near the image are other files. Open the image in the darkroom "
+                             "to choose one: until then, the module is not applied."),
+};
+
+/** @brief The line of the `Module failed` window for the file at @p path on the image at @p image: both,
+ * so that replacing the file of one image takes back its line alone. */
+static gchar *_failure_item(const char *const path, const char *const image)
+{
+  return g_strdup_printf(_("%s, for %s"), path, image);
+}
+
 /**
  * @brief Build the whole map of @p source into @p map, and say in a window why it could not be
  * when it could not. The dark frame is read first, so the flat can be read minus it.
@@ -430,6 +486,9 @@ static void _warn_other_camera(const dt_iop_flatfield_source_t *const source,
  * used all the same, but said to be clipped: where it saturated it did not record the falloff, and
  * its gain there is wrong. The margin lets hot pixels and a few specks of light through. A reference from another camera model
  * whose sensor grid matches is used too, and said to be.
+ *
+ * A file not found, where it was chosen nor by its name, is not decoded. When files of its name were
+ * found instead, the darkroom's pipes say nothing: the module's panel asks which one to use.
  */
 static dt_iop_flatfield_status_t _build_map(const dt_dev_pixelpipe_t *pipe,
                                             const dt_iop_flatfield_source_t *const source,
@@ -440,10 +499,19 @@ static dt_iop_flatfield_status_t _build_map(const dt_dev_pixelpipe_t *pipe,
   float *const dark = source->dark[0] ? gain + sensels : NULL;
   map->has_dark = !IS_NULL_PTR(dark);
 
-  const char *path = source->dark;
+  // the dark frame is looked at first, as it is read first
+  const gboolean dark_lost = dark && source->dark_found != DT_FILE_REFERENCE_FOUND;
+  const int32_t found = dark_lost ? source->dark_found : source->flat_found;
+  const char *path = dark_lost ? source->dark : source->flat;
+  dt_iop_flatfield_status_t status = found == DT_FILE_REFERENCE_OTHERS    ? DT_FLATFIELD_OTHERS
+                                     : found == DT_FILE_REFERENCE_MISSING ? DT_FLATFIELD_MISSING
+                                                                          : DT_FLATFIELD_OK;
   dt_iop_flatfield_reference_t dark_ref = { 0 }, flat_ref = { 0 };
-  dt_iop_flatfield_status_t status = dark ? _load_reference(source->dark, source, NULL, dark, &dark_ref)
-                                          : DT_FLATFIELD_OK;
+  if(status == DT_FLATFIELD_OK && dark)
+  {
+    path = source->dark;
+    status = _load_reference(source->dark, source, NULL, dark, &dark_ref);
+  }
   if(status == DT_FLATFIELD_OK)
   {
     path = source->flat;
@@ -451,16 +519,13 @@ static dt_iop_flatfield_status_t _build_map(const dt_dev_pixelpipe_t *pipe,
   }
   if(status == DT_FLATFIELD_OK) status = _flat_to_gain(pipe, source, gain);
 
-  static const char *const messages[] = {
-    [DT_FLATFIELD_UNREADABLE] = N_("A reference file of the flat field module could not be read, "
-                                   "so the module is not applied."),
-    [DT_FLATFIELD_MISMATCH] = N_("A reference file of the flat field module does not match the image: it must be "
-                                 "a raw file from the same camera. The module is not applied."),
-    [DT_FLATFIELD_BLACK] = N_("The flat field reference is too dark to derive a correction from, "
-                              "so the module is not applied."),
-  };
-  if(status != DT_FLATFIELD_OK && status != DT_FLATFIELD_NO_MEMORY)
-    dt_control_alert(_("Module failed"), _(messages[status]), path);
+  const gboolean darkroom = pipe->type == DT_DEV_PIXELPIPE_FULL || pipe->type == DT_DEV_PIXELPIPE_PREVIEW;
+  if(status != DT_FLATFIELD_OK && status != DT_FLATFIELD_NO_MEMORY && !(darkroom && status == DT_FLATFIELD_OTHERS))
+  {
+    gchar *item = _failure_item(path, pipe->dev->image_storage.fullpath);
+    dt_control_alert(_("Module failed"), _(_failures[status]), item);
+    dt_free(item);
+  }
   if(status != DT_FLATFIELD_OK) return status;
 
   if(flat_ref.clipped > sensels / 10000)
@@ -667,6 +732,22 @@ void cleanup_global(dt_iop_module_so_t *module)
 }
 #endif
 
+/**
+ * @brief Write into @p out where @p file is now, for an image in @p folder -- or where it was chosen
+ * when it is not found, for the window that says so to name it. @p others is as for
+ * dt_file_reference_find(), and so is what this returns.
+ */
+static dt_file_reference_status_t _locate(const dt_iop_flatfield_file_t *const file, const char *const folder,
+                                          char *const out, GList **others)
+{
+  const dt_file_reference_t ref = { file->path, file->relative, file->size, file->sha256 };
+  gchar *found = NULL;
+  const dt_file_reference_status_t status = dt_file_reference_find(&ref, folder, &found, others);
+  g_strlcpy(out, IS_NULL_PTR(found) ? file->path : found, DT_IOP_FLATFIELD_MAX_PATH);
+  dt_free(found);
+  return status;
+}
+
 void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *params, dt_dev_pixelpipe_t *pipe,
                    dt_dev_pixelpipe_iop_t *piece)
 {
@@ -676,16 +757,19 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *params, dt_dev
   dt_iop_flatfield_source_t *const s = &d->source;
 
   memset(s, 0, sizeof(*s));
-  g_strlcpy(s->flat, p->flat, sizeof(s->flat));
-  g_strlcpy(s->dark, p->dark, sizeof(s->dark));
+  // where the files are now, which is not where they were chosen once their tree has moved
+  gchar *folder = g_path_get_dirname(img->fullpath);
+  if(p->flat.path[0]) s->flat_found = _locate(&p->flat, folder, s->flat, NULL);
+  if(p->dark.path[0]) s->dark_found = _locate(&p->dark, folder, s->dark, NULL);
+  dt_free(folder);
   // a file that cannot be stat'ed keeps zeroes here, and fails to decode with its own message
   GStatBuf st;
-  if(p->flat[0] && g_stat(p->flat, &st) == 0)
+  if(s->flat[0] && g_stat(s->flat, &st) == 0)
   {
     s->flat_mtime = st.st_mtime;
     s->flat_size = st.st_size;
   }
-  if(p->dark[0] && g_stat(p->dark, &st) == 0)
+  if(s->dark[0] && g_stat(s->dark, &st) == 0)
   {
     s->dark_mtime = st.st_mtime;
     s->dark_size = st.st_size;
@@ -700,7 +784,7 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *params, dt_dev
   d->strength = p->strength;
 
   // without a reference there is nothing to divide by
-  if(!p->flat[0]) piece->enabled = 0;
+  if(!p->flat.path[0]) piece->enabled = 0;
 }
 
 void init_pipe(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece)
@@ -732,12 +816,17 @@ gboolean force_enable(struct dt_iop_module_t *self, const gboolean current_state
   return current_state && _flatfield_supported(&self->dev->image_storage);
 }
 
-/** @brief Name the chosen file by its basename, its full path in the tooltip. */
-static void _show_file(GtkWidget *label, const char *const path, const char *const none)
+/** @brief Name the chosen @p file by its basename, and where it is now in the tooltip. */
+static void _show_file(GtkWidget *label, const dt_iop_flatfield_file_t *const file, const char *const folder,
+                       const char *const none)
 {
-  gchar *text = path[0] ? g_path_get_basename(path) : g_strdup(none);
+  char where[DT_IOP_FLATFIELD_MAX_PATH] = { 0 };
+  const gboolean found = file->path[0] && _locate(file, folder, where, NULL) == DT_FILE_REFERENCE_FOUND;
+  gchar *text = !file->path[0] ? g_strdup(none)
+                : found        ? g_path_get_basename(where)
+                               : g_strdup_printf(_("%s (not found)"), dt_file_reference_name(file->path));
   gtk_label_set_text(GTK_LABEL(label), text);
-  gtk_widget_set_tooltip_text(label, path[0] ? path : NULL);
+  gtk_widget_set_tooltip_text(label, where[0] ? where : NULL);
   dt_free(text);
 }
 
@@ -745,56 +834,234 @@ static void _show_files(dt_iop_module_t *self)
 {
   dt_iop_flatfield_gui_data_t *g = (dt_iop_flatfield_gui_data_t *)dt_iop_gui_data(self);
   const dt_iop_flatfield_params_t *const p = (dt_iop_flatfield_params_t *)self->params;
-  _show_file(g->flat, p->flat, _("No reference chosen"));
-  _show_file(g->dark, p->dark, _("No dark frame"));
+  gchar *folder = g_path_get_dirname(self->dev->image_storage.fullpath);
+  _show_file(g->flat, &p->flat, folder, _("No reference chosen"));
+  _show_file(g->dark, &p->dark, folder, _("No dark frame"));
+  dt_free(folder);
 }
 
-/** @brief Set @p target, one of the two paths of the params, to the empty string or to @p path. */
-static void _set_path(dt_iop_module_t *self, char *const target, const char *const path)
+/**
+ * @brief Set @p file, one of the two files of the params, to none or to the file at @p path: where it
+ * is, seen from the image's folder too, and what it is, for it to be found again once its tree moved.
+ */
+static void _set_file(dt_iop_module_t *self, dt_iop_flatfield_file_t *const file, const char *const path)
 {
+  G_STATIC_ASSERT(sizeof(file->sha256) == DT_FILE_REFERENCE_SHA256_SIZE);
+  const char *const image = self->dev->image_storage.fullpath;
+  gchar *folder = g_path_get_dirname(image);
+  // what the file it replaces failed with on this image is no longer so: its lines are taken back
+  if(file->path[0])
+  {
+    char where[DT_IOP_FLATFIELD_MAX_PATH];
+    _locate(file, folder, where, NULL);
+    gchar *item = _failure_item(where, image);
+    for(size_t k = 0; k < G_N_ELEMENTS(_failures); k++)
+      if(!IS_NULL_PTR(_failures[k])) dt_control_alert_withdraw(_("Module failed"), _(_failures[k]), item);
+    dt_free(item);
+  }
+
   // zeroed first: params are compared and hashed as bytes, and a shorter path must not keep the
   // tail of the longer one it replaces
-  memset(target, 0, DT_IOP_FLATFIELD_MAX_PATH);
-  g_strlcpy(target, path, DT_IOP_FLATFIELD_MAX_PATH);
+  memset(file, 0, sizeof(*file));
+  if(path[0])
+  {
+    g_strlcpy(file->path, path, sizeof(file->path));
+    gchar *relative = dt_file_reference_relative(folder, path);
+    if(!IS_NULL_PTR(relative)) g_strlcpy(file->relative, relative, sizeof(file->relative));
+    dt_free(relative);
+    // a file that cannot be read keeps no identity, and fails to decode with its own message
+    dt_file_reference_identify(path, &file->size, file->sha256);
+  }
+  dt_free(folder);
   _show_files(self);
   dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
 }
 
-static void _choose_file(dt_iop_module_t *self, char *const target, const char *const title)
+static void _choose_file(dt_iop_module_t *self, dt_iop_flatfield_file_t *const file, const char *const title)
 {
   GtkFileChooserNative *chooser = gtk_file_chooser_native_new(title, GTK_WINDOW(dt_gui_main_window()),
                                                               GTK_FILE_CHOOSER_ACTION_OPEN, _("_Select"),
                                                               _("_Cancel"));
-  // open where the current file is, else beside the image being edited
-  gchar *folder = g_path_get_dirname(target[0] ? target : self->dev->image_storage.fullpath);
+  // open where the current file is now, else beside the image being edited
+  gchar *image_folder = g_path_get_dirname(self->dev->image_storage.fullpath);
+  char where[DT_IOP_FLATFIELD_MAX_PATH] = { 0 };
+  const gboolean found = file->path[0] && _locate(file, image_folder, where, NULL) == DT_FILE_REFERENCE_FOUND;
+  gchar *folder = found ? g_path_get_dirname(where) : g_strdup(image_folder);
   gtk_file_chooser_set_current_folder(GTK_FILE_CHOOSER(chooser), folder);
   dt_free(folder);
+  dt_free(image_folder);
 
   if(gtk_native_dialog_run(GTK_NATIVE_DIALOG(chooser)) == GTK_RESPONSE_ACCEPT)
   {
     gchar *path = gtk_file_chooser_get_filename(GTK_FILE_CHOOSER(chooser));
-    _set_path(self, target, path);
+    _set_file(self, file, path);
     dt_free(path);
   }
   g_object_unref(chooser);
 }
 
+static void _ask(dt_iop_module_t *self);
+
+/* Close the question and give the main window the focus back. What the answer does comes after. */
+static void _question_close(dt_iop_flatfield_question_t *question)
+{
+  dt_iop_flatfield_gui_data_t *g = (dt_iop_flatfield_gui_data_t *)dt_iop_gui_data(question->self);
+  g->question = NULL;
+  dt_gui_alert_destroy(question->alert);
+  dt_free(question);
+  dt_gui_refocus_parent(GTK_WINDOW(dt_gui_main_window()));
+}
+
+static void _question_use(dt_gui_alert_t *alert __attribute__((unused)), void *data)
+{
+  dt_iop_flatfield_question_t *question = (dt_iop_flatfield_question_t *)data;
+  dt_iop_module_t *self = question->self;
+  dt_iop_flatfield_params_t *p = (dt_iop_flatfield_params_t *)self->params;
+  dt_iop_flatfield_file_t *const file = question->dark ? &p->dark : &p->flat;
+  // the window keeps the user from changing the image, not the application
+  const gboolean same_image = question->imgid == self->dev->image_storage.id;
+  GtkTreeModel *model = NULL;
+  GtkTreeIter row;
+  gchar *path = NULL;
+  if(gtk_tree_selection_get_selected(question->selection, &model, &row)) gtk_tree_model_get(model, &row, 0, &path, -1);
+  _question_close(question);
+
+  if(same_image && !IS_NULL_PTR(path)) _set_file(self, file, path);
+  dt_free(path);
+  _ask(self);
+}
+
+static void _question_browse(dt_gui_alert_t *alert __attribute__((unused)), void *data)
+{
+  dt_iop_flatfield_question_t *question = (dt_iop_flatfield_question_t *)data;
+  dt_iop_module_t *self = question->self;
+  dt_iop_flatfield_params_t *p = (dt_iop_flatfield_params_t *)self->params;
+  const int32_t dark = question->dark;
+  const gboolean same_image = question->imgid == self->dev->image_storage.id;
+  _question_close(question);
+
+  if(same_image)
+    _choose_file(self, dark ? &p->dark : &p->flat,
+                 dark ? _("Select the dark frame") : _("Select the flat field reference"));
+  _ask(self);
+}
+
+static void _question_later(dt_gui_alert_t *alert __attribute__((unused)), void *data)
+{
+  dt_iop_flatfield_question_t *question = (dt_iop_flatfield_question_t *)data;
+  dt_iop_module_t *self = question->self;
+  _question_close(question);
+  _ask(self);
+}
+
+static void _question_row_activated(GtkTreeView *view __attribute__((unused)),
+                                    GtkTreePath *path __attribute__((unused)),
+                                    GtkTreeViewColumn *column __attribute__((unused)), gpointer data)
+{
+  _question_use(NULL, data);
+}
+
+/** @brief Ask which of @p others, the files of its name, to use for the flat, or the dark frame when
+ * @p dark, of the image in the darkroom. */
+static void _question_open(dt_iop_module_t *self, const int32_t dark, GList *others)
+{
+  dt_iop_flatfield_gui_data_t *g = (dt_iop_flatfield_gui_data_t *)dt_iop_gui_data(self);
+  const dt_iop_flatfield_params_t *const p = (dt_iop_flatfield_params_t *)self->params;
+  dt_iop_flatfield_question_t *question = g_new0(dt_iop_flatfield_question_t, 1);
+  question->self = self;
+  question->imgid = self->dev->image_storage.id;
+  question->dark = dark;
+  question->alert = dt_gui_alert_new(DT_GUI_ALERT_QUESTION,
+                                     dark ? _("Dark frame not found") : _("Flat field reference not found"),
+                                     dark ? _("The dark frame of the flat field module is not where it was chosen")
+                                          : _("The reference of the flat field module is not where it was chosen"));
+  dt_gui_alert_set_cancel(question->alert, _question_later, question);
+  dt_gui_alert_add_text(question->alert, dark ? p->dark.path : p->flat.path);
+  dt_gui_alert_add_text(question->alert, _("Files of its name were found near the image, but none of them is the "
+                                           "file that was chosen. Choose the one to use: until then, the module "
+                                           "is not applied."));
+
+  GtkListStore *store = gtk_list_store_new(1, G_TYPE_STRING);
+  for(GList *other = others; !IS_NULL_PTR(other); other = g_list_next(other))
+    gtk_list_store_insert_with_values(store, NULL, -1, 0, (const char *)other->data, -1);
+  GtkWidget *view = gtk_tree_view_new_with_model(GTK_TREE_MODEL(store));
+  gtk_tree_view_set_headers_visible(GTK_TREE_VIEW(view), FALSE);
+  gtk_tree_view_append_column(GTK_TREE_VIEW(view), gtk_tree_view_column_new_with_attributes(
+                                                       NULL, gtk_cell_renderer_text_new(), "text", 0, NULL));
+  question->selection = gtk_tree_view_get_selection(GTK_TREE_VIEW(view));
+  gtk_tree_selection_set_mode(question->selection, GTK_SELECTION_BROWSE);
+  // the nearest is chosen to begin with
+  GtkTreeIter nearest;
+  if(gtk_tree_model_get_iter_first(GTK_TREE_MODEL(store), &nearest))
+    gtk_tree_selection_select_iter(question->selection, &nearest);
+  g_object_unref(store);
+  g_signal_connect(G_OBJECT(view), "row-activated", G_CALLBACK(_question_row_activated), question);
+
+  // as tall as its rows up to a point, then it scrolls, on the recessed ground of our other lists
+  GtkWidget *scroll = gtk_scrolled_window_new(NULL, NULL);
+  dt_gui_add_class(scroll, "dt_recessed_scroll");
+  gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(scroll), GTK_POLICY_AUTOMATIC, GTK_POLICY_AUTOMATIC);
+  gtk_scrolled_window_set_min_content_width(GTK_SCROLLED_WINDOW(scroll), DT_PIXEL_APPLY_DPI(480));
+  gtk_scrolled_window_set_max_content_height(GTK_SCROLLED_WINDOW(scroll), DT_PIXEL_APPLY_DPI(300));
+  gtk_scrolled_window_set_propagate_natural_height(GTK_SCROLLED_WINDOW(scroll), TRUE);
+  gtk_container_add(GTK_CONTAINER(scroll), view);
+  dt_gui_alert_add_widget(question->alert, scroll);
+
+  // using the file chosen in the list is what Enter does
+  dt_gui_alert_add_button(question->alert, _("Use this file"), _question_use, question);
+  dt_gui_alert_add_button(question->alert, _("Choose another file..."), _question_browse, question);
+  dt_gui_alert_add_button(question->alert, _("Not now"), _question_later, question);
+  g->question = question;
+  dt_gui_alert_show(question->alert);
+}
+
+/**
+ * @brief Ask which file to use for a file of the module not found where it was chosen, when files of
+ * its name were found near the image: once per image and file, the flat first, one question at a time.
+ */
+static void _ask(dt_iop_module_t *self)
+{
+  dt_iop_flatfield_gui_data_t *g = (dt_iop_flatfield_gui_data_t *)dt_iop_gui_data(self);
+  const dt_iop_flatfield_params_t *const p = (dt_iop_flatfield_params_t *)self->params;
+  // a module that is off uses no file, and an open question is answered first
+  if(!self->enabled || !IS_NULL_PTR(g->question)) return;
+
+  const int32_t imgid = self->dev->image_storage.id;
+  gchar *folder = g_path_get_dirname(self->dev->image_storage.fullpath);
+  for(int32_t dark = 0; dark < 2 && IS_NULL_PTR(g->question); dark++)
+  {
+    const dt_iop_flatfield_file_t *const file = dark ? &p->dark : &p->flat;
+    const uint64_t asked = dt_hash(dt_hash(5381, (const char *)&imgid, sizeof(imgid)), (const char *)file,
+                                   sizeof(*file));
+    char where[DT_IOP_FLATFIELD_MAX_PATH];
+    GList *others = NULL;
+    if(file->path[0] && g->asked[dark] != asked
+       && _locate(file, folder, where, &others) == DT_FILE_REFERENCE_OTHERS)
+    {
+      g->asked[dark] = asked;
+      _question_open(self, dark, others);
+    }
+    g_list_free_full(others, g_free);
+  }
+  dt_free(folder);
+}
+
 static void _flat_clicked(GtkWidget *widget, dt_iop_module_t *self)
 {
   dt_iop_flatfield_params_t *p = (dt_iop_flatfield_params_t *)self->params;
-  _choose_file(self, p->flat, _("Select the flat field reference"));
+  _choose_file(self, &p->flat, _("Select the flat field reference"));
 }
 
 static void _dark_clicked(GtkWidget *widget, dt_iop_module_t *self)
 {
   dt_iop_flatfield_params_t *p = (dt_iop_flatfield_params_t *)self->params;
-  _choose_file(self, p->dark, _("Select the dark frame"));
+  _choose_file(self, &p->dark, _("Select the dark frame"));
 }
 
 static void _dark_removed(GtkWidget *widget, dt_iop_module_t *self)
 {
   dt_iop_flatfield_params_t *p = (dt_iop_flatfield_params_t *)self->params;
-  _set_path(self, p->dark, "");
+  _set_file(self, &p->dark, "");
 }
 
 void gui_update(dt_iop_module_t *self)
@@ -806,6 +1073,7 @@ void gui_update(dt_iop_module_t *self)
   gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->color), p->color);
   self->hide_enable_button = !_flatfield_supported(&self->dev->image_storage);
   gtk_stack_set_visible_child_name(GTK_STACK(self->gui->widget), self->hide_enable_button ? "non_raw" : "raw");
+  _ask(self);
 }
 
 /** @brief One row: a button that opens the file chooser, then the label naming the file. */
