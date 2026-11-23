@@ -2652,9 +2652,8 @@ void dt_masks_gui_form_save_creation(dt_develop_t *develop, dt_iop_module_t *mod
 
     if(IS_NULL_PTR(mask_gui)) dt_iop_gui_blend_masks_update(module);
     // Committed now rather than queued: dt_dev_add_history_item() ends the creation session
-    // this shape belongs to. The flush keeps the edits queued before it in their order.
-    dt_dev_history_flush_pending_commits(develop);
-    dt_dev_history_commit_item_now(develop, module, TRUE, FALSE);
+    // this shape belongs to.
+    dt_dev_history_commit_item_from_gui(develop, module, TRUE);
   }
 
   if(!IS_NULL_PTR(mask_gui))

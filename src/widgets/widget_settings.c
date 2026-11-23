@@ -75,9 +75,6 @@ void dt_widget_set_image_filter(cairo_filter_t filter)
 // widget should not need the application global to know whether to ignore its own callback.
 static int32_t _widget_suppress_depth = 0;
 
-// Depth of choice announcements in progress, see dt_gui_widgets_choice_announced().
-static int32_t _widget_choice_depth = 0;
-
 // Which thread owns widget state, and whether it has been registered at all.
 static pthread_t _gui_thread;
 static gboolean _gui_thread_set = FALSE;
@@ -232,23 +229,6 @@ void dt_gui_freeze_end_(const char *file, int line)
 void dt_gui_freeze_reset(void)
 {
   _widget_suppress_depth = 0;
-}
-
-void dt_gui_widgets_choice_begin(void)
-{
-  if(!dt_widget_on_gui_thread()) return;
-  _widget_choice_depth++;
-}
-
-void dt_gui_widgets_choice_end(void)
-{
-  if(!dt_widget_on_gui_thread() || _widget_choice_depth <= 0) return;
-  _widget_choice_depth--;
-}
-
-gboolean dt_gui_widgets_choice_announced(void)
-{
-  return _widget_choice_depth > 0;
 }
 
 gboolean dt_gui_get_scroll_unit_deltas(const GdkEventScroll *event, int *delta_x, int *delta_y)

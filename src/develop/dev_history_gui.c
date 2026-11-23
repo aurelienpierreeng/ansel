@@ -154,13 +154,11 @@ void dt_dev_history_gui_update(dt_develop_t *dev)
  * NOT re-armed by the ones that follow, so a sustained drag keeps committing once per window
  * instead of freezing until the user stops moving.
  *
- * A request queued while GTK dispatches a key press -- a slider step, a typed value, a shortcut --
- * is `switched`: the pipes keep the outputs it replaces (dt_dev_pixelpipe_t.keep_outputs), since
- * going back is the likely next keystroke. So is a choice between discrete states: a request
- * queued while a combobox announces its value (dt_gui_widgets_choice_announced(), whether
- * from its popup, a scroll or a key), or while GTK dispatches a click on a check box or a toggle
- * button. A choice less than the user's timeout after the previous one (a held key, a scroll
- * through a combobox) is not, nor is a slider drag or click. See doc/pipeline-cache.md.
+ * A request made at least the user's timeout (processing/timeout) after the previous one is
+ * `switched`, whatever made it: the state it replaces stayed on screen, and the pipes keep its
+ * outputs (dt_dev_pixelpipe_t.keep_outputs), since going back is the likely next step. A request
+ * closer to the previous one belongs to a stream -- a drag, a held key, a scroll -- whose states
+ * do not come back: only the state the stream started from is kept. See doc/pipeline-cache.md.
  *
  * dt_dev_add_history_item_ext() is NOT throttled and never was. Anything that must land
  * before the next statement (bulk history loads, style application, image duplication)
@@ -180,7 +178,8 @@ typedef struct dt_dev_pending_commit_t
 
 static GQueue _pending_commits = G_QUEUE_INIT;
 static guint _pending_commit_source = 0;
-static guint32 _last_choice_time = 0;
+static guint32 _last_request_event_time = GDK_CURRENT_TIME;
+static gint64 _last_request_time = 0;
 
 
 static gboolean _drain_pending_commits(gpointer user_data)
@@ -207,25 +206,23 @@ static gboolean _drain_pending_commits(gpointer user_data)
   return G_SOURCE_REMOVE;
 }
 
-// Whether the commit requested now is `switched` (see above): a key press, a combobox choice or
-// a click on a check box or toggle button, unless it follows the previous one too closely. A
-// choice made outside any event (a combobox set by code) has no stream to follow. Event times
-// are in ms and wrap, hence the unsigned difference. Records the choice's time: call it once
-// per request.
+// Whether the commit requested now is `switched` (see above): it is unless it follows the previous
+// request by less than the user's timeout. Two requests made from events are timed by the events,
+// whose times stay spaced by a key's repeat period however late the main loop reads them; any
+// other pair by the monotonic clock. Event times are in ms and wrap, hence the unsigned
+// difference. Records the request's time: call it once per request.
 static gboolean _request_is_switch(void)
 {
   GdkEvent *event = gtk_get_current_event();
-  const GdkEventType type = IS_NULL_PTR(event) ? GDK_NOTHING : gdk_event_get_event_type(event);
-  const gboolean toggle_click = (type == GDK_BUTTON_PRESS || type == GDK_BUTTON_RELEASE)
-                                && GTK_IS_TOGGLE_BUTTON(gtk_get_event_widget(event));
-  const gboolean choice = type == GDK_KEY_PRESS || toggle_click || dt_gui_widgets_choice_announced();
-  const guint32 choice_time = IS_NULL_PTR(event) ? 0 : gdk_event_get_time(event);
+  const guint32 event_time = IS_NULL_PTR(event) ? GDK_CURRENT_TIME : gdk_event_get_time(event);
   g_clear_pointer(&event, gdk_event_free);
-  const gboolean switched = choice
-                            && (type == GDK_NOTHING
-                                || choice_time - _last_choice_time >= dt_gui_throttle_get_user_timeout_ms());
-  if(choice && type != GDK_NOTHING) _last_choice_time = choice_time;
-  return switched;
+  const gint64 now = g_get_monotonic_time();
+  const gint64 elapsed_ms = (event_time != GDK_CURRENT_TIME && _last_request_event_time != GDK_CURRENT_TIME)
+                                ? (gint64)(event_time - _last_request_event_time)
+                                : (now - _last_request_time) / 1000;
+  _last_request_event_time = event_time;
+  _last_request_time = now;
+  return elapsed_ms >= dt_gui_throttle_get_user_timeout_ms();
 }
 
 static void _queue_pending_commit(dt_develop_t *dev, dt_iop_module_t *module, const gboolean enable)
