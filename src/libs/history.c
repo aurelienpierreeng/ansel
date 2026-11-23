@@ -310,6 +310,10 @@ static gchar *_lib_history_change_text(dt_introspection_field_t *field, const ch
     if(*(uint8_t*)o != *(uint8_t*)p)
       return g_strdup_printf("%s\t%d\t\u2192\t%d", d, *(uint8_t*)o, *(uint8_t*)p);
     break;
+  case DT_INTROSPECTION_TYPE_UINT8:
+    if(*(uint8_t*)o != *(uint8_t*)p)
+      return g_strdup_printf("%s\t%u\t\u2192\t%u", d, (unsigned)*(uint8_t*)o, (unsigned)*(uint8_t*)p);
+    break;
   case DT_INTROSPECTION_TYPE_CHAR:
     if(*(char*)o != *(char*)p)
       return g_strdup_printf("%s\t'%c'\t\u2192\t'%c'", d, *(char *)o, *(char *)p);

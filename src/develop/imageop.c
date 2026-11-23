@@ -343,6 +343,9 @@ void dt_iop_default_init(dt_iop_module_t *module)
     case DT_INTROSPECTION_TYPE_USHORT:
       *(unsigned short*)((uint8_t *)module->default_params + i->header.offset) = i->UShort.Default;
       break;
+    case DT_INTROSPECTION_TYPE_UINT8:
+      *((uint8_t *)module->default_params + i->header.offset) = i->UInt8.Default;
+      break;
     case DT_INTROSPECTION_TYPE_ENUM:
       *(int*)((uint8_t *)module->default_params + i->header.offset) = i->Enum.Default;
       break;
@@ -1337,6 +1340,9 @@ gboolean _iop_validate_params(dt_introspection_field_t *field, gpointer params, 
     break;
   case DT_INTROSPECTION_TYPE_INT8:
     all_ok = (*(uint8_t*)p >= field->Int8.Min && *(uint8_t*)p <= field->Int8.Max);
+    break;
+  case DT_INTROSPECTION_TYPE_UINT8:
+    all_ok = (*(uint8_t*)p >= field->UInt8.Min && *(uint8_t*)p <= field->UInt8.Max);
     break;
   case DT_INTROSPECTION_TYPE_CHAR:
     all_ok = (*(char*)p >= field->Char.Min && *(char*)p <= field->Char.Max);
