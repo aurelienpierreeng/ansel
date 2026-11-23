@@ -91,12 +91,29 @@ void dt_control_alert(const char *title, const char *message, const char *item);
  * @p message. Without a GUI, printed on stderr each time, as dt_control_alert(). */
 void dt_control_alert_once(const char *title, const char *message, const char *item);
 
+/** @brief Take @p item back from the window dt_control_alert() or dt_control_alert_once() opened for
+ * @p title and @p message: what it said of that item is no longer true -- the file a module could not
+ * find has been chosen again. The window closes with its last item, and the message may then open
+ * another, even one raised `once`. Nothing happens when no window lists @p item, nor without a GUI,
+ * where what was printed stays printed. Any thread: it comes after the alerts raised before it.
+ *
+ * @param title   as given to dt_control_alert()
+ * @param message as given to dt_control_alert()
+ * @param item    as given to dt_control_alert(); not NULL */
+void dt_control_alert_withdraw(const char *title, const char *message, const char *item);
+
 /** @brief What dt_control_alert() and dt_control_alert_once() hand their finished text to, with
  * @p once non-zero for the latter. Installed once by the GUI. */
 typedef void (*dt_control_alert_handler_t)(const char *title, const char *message, const char *item, int once);
 
+/** @brief What dt_control_alert_withdraw() hands its text to. Installed once by the GUI. */
+typedef void (*dt_control_alert_withdraw_handler_t)(const char *title, const char *message, const char *item);
+
 /** @brief Install the alert handler; NULL restores the fallback to dt_control_log(). */
 void dt_control_set_alert_handler(dt_control_alert_handler_t handler);
+
+/** @brief Install the withdrawal handler; NULL makes dt_control_alert_withdraw() do nothing. */
+void dt_control_set_alert_withdraw_handler(dt_control_alert_withdraw_handler_t handler);
 
 /* Busy counters. Each enter must be matched by a leave: they are counters, not flags, so
  * nested work does not clear the indicator early. */

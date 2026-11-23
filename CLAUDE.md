@@ -104,6 +104,10 @@ titles ("Module failed", "Export failed", "Not enough memory", …) before inven
 A failure that repeats as long as its cause lasts — memory running short, where every new request
 fails again — is `dt_control_alert_once()`: the same window and list, but once it is closed it does
 not open again this session for that title and message.
+What an action of the user makes untrue again — the file a module could not find, chosen again — is
+taken back with `dt_control_alert_withdraw(title, message, item)`, with the same three strings: its
+line goes, and the window closes with its last line. An item meant to be withdrawn names everything
+it is true of — the file *and* the image — or fixing one image would take back the line of all.
 A window that needs
 more than OK — other buttons, a list of its own, a question — is a `dt_gui_alert_t` object
 (`dt_gui_alert_new()` with a kind, then `_add_text/_add_widget/_add_button/_show/_destroy`), as

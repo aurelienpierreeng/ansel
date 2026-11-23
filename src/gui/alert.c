@@ -421,6 +421,42 @@ void dt_gui_alert(const char *title, const char *message, const char *item, cons
   g_idle_add_full(G_PRIORITY_DEFAULT, _alert_show, copy, _alert_message_free);
 }
 
+static gboolean _alert_withdraw(gpointer user_data)
+{
+  const dt_alert_message_t *message = (const dt_alert_message_t *)user_data;
+  gchar *key = g_strconcat(message->title, "\n", message->message, NULL);
+  GtkWidget *block = IS_NULL_PTR(_alert_windows) ? NULL : g_hash_table_lookup(_alert_windows, key);
+  dt_free(key);
+  GHashTable *listed = IS_NULL_PTR(block) ? NULL : g_object_get_data(G_OBJECT(block), "listed");
+  if(IS_NULL_PTR(listed) || !g_hash_table_remove(listed, message->item)) return G_SOURCE_REMOVE;
+
+  // its line: each label holds the item and the line break that ends it
+  gchar *text = g_strconcat(message->item, "\n", NULL);
+  GList *labels = gtk_container_get_children(GTK_CONTAINER(g_object_get_data(G_OBJECT(block), "items")));
+  for(GList *label = labels; !IS_NULL_PTR(label); label = g_list_next(label))
+    if(!g_strcmp0(gtk_label_get_text(GTK_LABEL(label->data)), text)) gtk_widget_destroy(GTK_WIDGET(label->data));
+  g_list_free(labels);
+  dt_free(text);
+
+  // Emptied, the window has nothing left to say. It was not closed by the user, so a message raised
+  // `once` may open it again.
+  if(g_hash_table_size(listed) == 0)
+  {
+    g_object_set_data(G_OBJECT(block), "once", NULL);
+    gtk_widget_destroy(gtk_widget_get_toplevel(block));
+  }
+  return G_SOURCE_REMOVE;
+}
+
+void dt_gui_alert_withdraw(const char *title, const char *message, const char *item)
+{
+  dt_alert_message_t *copy = g_new0(dt_alert_message_t, 1);
+  copy->title = g_strdup(title);
+  copy->message = g_strdup(message);
+  copy->item = g_strdup(item);
+  g_idle_add_full(G_PRIORITY_DEFAULT, _alert_withdraw, copy, _alert_message_free);
+}
+
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py
 // vim: shiftwidth=2 expandtab tabstop=2 cindent
