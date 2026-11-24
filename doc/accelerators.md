@@ -315,4 +315,50 @@ Moving the rule changes no path that was valid before. A label that held a "/" r
 shortcut under a new path, so a key bound to the old one is orphaned once, as described above for
 a translation that moves.
 
+## A locked shortcut's keys are reserved in every group live alongside it
+
+*Found on top of `73ec46a31b`, 2026-11-02, in review of #1551.*
+
+A view declares the keys its widgets handle themselves — the lighttable grid's arrows, Space and
+their modifiers, the darkroom sliders' arrows — as **locked virtual shortcuts**
+(`dt_accels_new_virtual_shortcut()` always locks). Locking used to protect only the shortcut's
+own keys: the dialog would not edit it, `_update_shortcut_state()` reset it if `keyboardrc` said
+otherwise, and `_shortcut_edited()` refused its keys to another shortcut **of the same group**.
+Nothing stopped a shortcut of the *global* group from taking them, and the global one then
+always won: `_key_pressed()` tries the active view's group, then the global group, and skips
+virtual shortcuts in both. A user who bound "Search actions..." to Ctrl+Space lost the grid's
+toggle, with no warning from the dialog.
+
+Two groups are live at once when they are the same group or one of them is the global group,
+which is active in every view (`_groups_overlap()`). Within that overlap a locked shortcut's keys
+are now reserved, in both places keys can arrive from:
+
+- **The dialog.** After the same-group check, `_shortcut_edited()` looks for a locked rival in
+  the overlap (`_find_rivals()`) and refuses the keys with "The key combination … is reserved
+  for …" — not "Delete it first", since a locked shortcut cannot be deleted.
+- **The config, at registration.** `_insert_accel()`, once the new shortcut's keys are final,
+  unbinds the loser: a locked shortcut takes its keys from any unlocked one already holding them,
+  and an unlocked one gives up keys a locked one already holds — both orders are needed, because
+  menus and views register in no fixed order relative to each other. The loser's keys go to
+  `(0, 0)` through the accel map, so the clearing is saved, and one line goes to stderr:
+  `[shortcuts] '<path>' loses <keys>, which '<locked path>' reserves`. It is stderr rather than an
+  alert window (rule 8) because no file in `widgets/` includes `control/`, and because shortcuts
+  register throughout startup, some before the GUI installs the alert handler
+  (`dt_control_set_alert_handler()`, `gui/application.c`), where `dt_control_alert()` would only
+  print on stderr too. Which registrations come before it was not checked; a lost binding is
+  lasting state, so an alert after startup would be the better home if this ever matters.
+
+Measured on top of `73ec46a31b` with this change, RelWithDebInfo, Ubuntu 24.04 under Xvfb:
+
+- **No default shortcut collides.** With an empty config directory, startup printed no `loses`
+  line, so the rule unbinds nothing for a user who never edited a shortcut.
+- **A conflicting `keyboardrc` is cleared.** With "Search actions..." on `<Primary>space` and
+  "Import..." on `<Shift>Home`, startup printed one `loses` line for each, naming the grid's
+  "Toogle the current thumbnail from selection" and "Expand the selection to the start". Driving
+  the grid with `xdotool` afterwards, Ctrl+Space toggled the image under the cursor.
+- **The dialog's refusal was not exercised**; it is the same lookup, read from the code.
+
+Two locked shortcuts on the same keys in overlapping groups are not reported: both are virtual,
+so neither is dispatched through the group, and each widget handles its own keys when focused.
+
 ---

@@ -619,6 +619,58 @@ static void _add_generic_accel(dt_shortcut_t *shortcut, GtkAccelFlags flags)
 
 
 static void _connect_accel(dt_shortcut_t *shortcut);
+static inline guint _normalize_keyval(const guint keyval);
+
+// A locked shortcut's keys are reserved wherever it can be live: in its own group, and -- since
+// the global group is active in every view -- across the global group and any view's group.
+// Without this, a global shortcut could take keys a view had locked, and win: _key_pressed()
+// tries the global group but never a virtual shortcut. (doc/accelerators.md)
+static inline gboolean _groups_overlap(const dt_accels_t *accels, const GtkAccelGroup *a, const GtkAccelGroup *b)
+{
+  return a == b || a == accels->global_accels || b == accels->global_accels;
+}
+
+typedef struct _rival_lookup_t
+{
+  const dt_shortcut_t *self;
+  guint key;
+  GdkModifierType mods;
+  gboolean locked;   // which kind of rival to look for
+  GList *results;
+} _rival_lookup_t;
+
+static void _for_each_rival(gpointer _key, gpointer value, gpointer user_data)
+{
+  dt_shortcut_t *shortcut = (dt_shortcut_t *)value;
+  _rival_lookup_t *lookup = (_rival_lookup_t *)user_data;
+  if(shortcut != lookup->self && shortcut->locked == lookup->locked
+     && shortcut->key != 0
+     && _normalize_keyval(shortcut->key) == _normalize_keyval(lookup->key)
+     && shortcut->mods == lookup->mods
+     && _groups_overlap(shortcut->accels, shortcut->accel_group, lookup->self->accel_group))
+    lookup->results = g_list_prepend(lookup->results, shortcut);
+}
+
+// The shortcuts other than `self`, locked or not, that hold `key`+`mods` where `self` is live.
+// Caller holds accels->lock.
+static GList *_find_rivals(dt_accels_t *accels, const dt_shortcut_t *self, guint key, GdkModifierType mods,
+                           gboolean locked)
+{
+  _rival_lookup_t lookup = { .self = self, .key = key, .mods = mods, .locked = locked, .results = NULL };
+  if(key != 0) g_hash_table_foreach(accels->acceleratables, _for_each_rival, &lookup);
+  return lookup.results;
+}
+
+// Unbind a shortcut whose keys a locked one reserves. The config may have given them to it, or
+// it may have been registered before the locked one existed. Caller holds accels->lock.
+static void _unbind_reserved(dt_shortcut_t *shortcut, const dt_shortcut_t *locked)
+{
+  gchar *keys = gtk_accelerator_name(shortcut->key, shortcut->mods);
+  fprintf(stderr, "[shortcuts] '%s' loses %s, which '%s' reserves\n", shortcut->path, keys, locked->path);
+  dt_free(keys);
+  gtk_accel_map_change_entry(shortcut->path, 0, 0, TRUE);
+  _connect_accel(shortcut);
+}
 
 static void _insert_accel(dt_accels_t *accels, dt_shortcut_t *shortcut)
 {
@@ -662,6 +714,22 @@ static void _insert_accel(dt_accels_t *accels, dt_shortcut_t *shortcut)
   // caller of _connect_accel() (dt_accels_connect_accels()'s g_hash_table_foreach) already
   // holds it under.
   _connect_accel(shortcut);
+
+  // Now that its keys are final, settle any clash with a locked shortcut: a locked one takes its
+  // keys from whatever shortcut already holds them; any other gives them up to a locked one.
+  if(shortcut->locked)
+  {
+    GList *rivals = _find_rivals(accels, shortcut, shortcut->key, shortcut->mods, FALSE);
+    for(GList *rival = rivals; rival; rival = g_list_next(rival))
+      _unbind_reserved((dt_shortcut_t *)rival->data, shortcut);
+    g_list_free(rivals);
+  }
+  else
+  {
+    GList *rivals = _find_rivals(accels, shortcut, shortcut->key, shortcut->mods, TRUE);
+    if(rivals) _unbind_reserved(shortcut, (const dt_shortcut_t *)rivals->data);
+    g_list_free(rivals);
+  }
   dt_pthread_mutex_unlock(&accels->lock);
 }
 
@@ -1463,14 +1531,25 @@ static void _shortcut_edited(GtkCellRenderer *cell, const gchar *path_string, gu
     _accels_keys_decode(accels_global_ref, (GdkEvent *)&event, &keyval, &mods);
   }
 
+  const char *reserved_by = NULL;
   if(shortcut)
   {
-    // Lookup this keys combination in the current accel_group (only if key is not empty)
+    // Lookup this keys combination in the current accel_group (only if key is not empty),
+    // then among the locked shortcuts of the groups live at the same time as this one.
     if(!(keyval == 0 && mods == 0))
       shortcut_path = _find_path_for_keys(shortcut->accels, keyval, mods, shortcut->accel_group);
+    if(IS_NULL_PTR(shortcut_path) && !(keyval == 0 && mods == 0))
+    {
+      dt_pthread_mutex_lock(&shortcut->accels->lock);
+      GList *rivals = _find_rivals(shortcut->accels, shortcut, keyval, mods, TRUE);
+      if(rivals) reserved_by = ((const dt_shortcut_t *)rivals->data)->path;
+      g_list_free(rivals);
+      dt_pthread_mutex_unlock(&shortcut->accels->lock);
+    }
 
     // Try to update the GtkAccelMap with new keys
-    if(IS_NULL_PTR(shortcut_path) && gtk_accel_map_change_entry(shortcut->path, keyval, mods, FALSE))
+    if(IS_NULL_PTR(shortcut_path) && IS_NULL_PTR(reserved_by)
+       && gtk_accel_map_change_entry(shortcut->path, keyval, mods, FALSE))
     {
       // Success:
       // Resync our internal shortcut object and its GtkAccelGroup to GtkAccelMap
@@ -1498,6 +1577,18 @@ static void _shortcut_edited(GtkCellRenderer *cell, const gchar *path_string, gu
                                               _("The shortcut for"), shortcut_path,
                                               _("is already using the key combination"), new_text,
                                               _("Delete it first."));
+    gtk_dialog_run(GTK_DIALOG(dlg));
+    gtk_widget_destroy(dlg);
+    dt_free(new_text);
+  }
+  else if(reserved_by)
+  {
+    // A locked shortcut cannot be deleted, so "Delete it first" would be no help here.
+    char *new_text = gtk_accelerator_get_label(keyval, dt_accels_display_mods(mods));
+    GtkWidget *dlg
+        = gtk_message_dialog_new_with_markup(NULL, 0, GTK_MESSAGE_ERROR, GTK_BUTTONS_CLOSE, "%s <tt>%s</tt>\n%s <tt>%s</tt>.",
+                                              _("The key combination"), new_text,
+                                              _("is reserved for"), reserved_by);
     gtk_dialog_run(GTK_DIALOG(dlg));
     gtk_widget_destroy(dlg);
     dt_free(new_text);
