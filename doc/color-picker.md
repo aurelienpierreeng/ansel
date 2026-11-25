@@ -37,6 +37,46 @@ them.
 Locating costs one sequential pass over the area per sample; the statistics themselves already
 read every pixel of it.
 
+### The global picker
+
+*Established on top of `758fecc592`, 2026-11-25.*
+
+The Scopes panel's picker has no module: `libs/histogram.c` samples the scope stage's buffer itself
+(`_pixelpipe_pick_from_image()`), and shows the mean, the minimum or the maximum its statistic
+combobox selects. When that is the minimum or the maximum, in RGB, over an area, the same pass
+locates each channel's pixel holding the value shown, and the histogram stores it in
+`dev->color_picker` as the proxy does for a module: positions and whole pixels for that one side,
+no deciding channel (all three crosses drawn alike). The position goes back through the inverse of
+the histogram's own box chain — the pixel centre plus the stage ROI origin,
+`dt_dev_distort_transform_plus()` from the stage, preview-abs → image-norm → raw-norm — not the
+proxy's, which starts from image-abs and the module's ROI scale.
+
+Measured in the GUI with a temporary print of each located pixel, over 336 samples of an ARW
+(min and max, boxes drawn, moved and resized): the 1008 located pixels held exactly the value the
+label showed. 771 fell inside the box; the other 237 lay at most 0.00042 raw-norm beyond it —
+under half a preview pixel — and only past the left (58) or the top (225) edge, never the right or
+the bottom. That is the box being truncated to whole pixels: its first column and row start before
+the float edge, so their centres can lie outside it while being part of the sample.
+
+The scope marks the same pixels, over its cached surface (`_draw_picker_extremes()`), each where it
+shows that channel of it: a line at the value on the histogram, a cross at position and value on
+the waveform and in that channel's strip of the parade, a cross at the whole pixel's chromaticity
+on the vectorscope. The spatial axis takes the image-normalised position, which is how the
+restricted mode places the picker area on the same buffer; it is exact for a stage after the last
+distortion, and as approximate as the restricted mode before it. A module picker's extremes are
+not drawn there: they are values of that module's input, not of the scope's stage.
+
+- **Only the global picker writes there.** The primary sample is also sampled from the scope stage
+  while a *module* picker is on, for the panel's label; those marks are the module's, so the
+  histogram leaves them alone when `dev->color_picker.module` is set.
+- **The mean, a point, or Lab/LCh/HSL/HSV clear the marks.** The label shows the minimum or the
+  maximum only in RGB; in the other models it shows the mean, whose pixel is none of them.
+- **The checkbox still decides.** The marks show only with *Display min/max pixel* ticked, the
+  same switch as for a module. Locating does not depend on it, so ticking it needs no new sample.
+- A change of statistic or model resamples and queues a centre redraw; nothing else would repaint
+  the image for it. Every histogram update with a picker on queues a scope redraw, which repaints
+  the cached surface and the marks: the scope is only re-binned when its own cache is stale.
+
 ## Why per-channel extremes and not one pixel by luminance
 
 Measured by dumping the blurred module input of negadoctor on 20250921_0007 (preview pipe) and

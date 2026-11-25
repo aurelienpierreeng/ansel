@@ -2004,6 +2004,98 @@ gboolean _needs_recompute(dt_lib_histogram_t *d, const int width, const int heig
 }
 
 
+/**
+ * @brief Mark on the scope the pixels the global picker located for the minimum or the maximum it
+ * shows, in each RGB channel's color.
+ *
+ * Each channel's pixel is marked where the scope shows that channel of it: a line at its value on the
+ * histogram, a cross at its position and value on the waveform and in that channel's strip of the
+ * parade, a cross at its chromaticity on the vectorscope. The position is image-normalised, as the
+ * restricted mode places the picker area. Drawn over the cached scope, so that a new sample repaints
+ * the widget without binning the image again.
+ */
+static void _draw_picker_extremes(cairo_t *cr, dt_lib_histogram_t *d, const int width, const int height)
+{
+  // Extremes are only ever stored with the picker that is on, never NULL. A module picker's are
+  // values of that module's input, not of the scope's stage.
+  dt_develop_t *const dev = dt_dev_get_global();
+  const int valid = dev->color_picker.extremes_valid;
+  if(!dev->color_picker.display_extremes || !IS_NULL_PTR(dev->color_picker.module)
+     || dev->color_picker.extremes_picker != dev->color_picker.picker || valid == DT_COLOR_PICKER_EXTREMES_NONE)
+    return;
+
+  const int side = (valid & DT_COLOR_PICKER_EXTREMES_MAX) != 0;
+  // the parade draws channel c in the c-th third of its spatial axis, the waveform all in one
+  const int strips
+      = (d->scope == DT_LIB_HISTOGRAM_SCOPE_PARADE_HORIZONTAL || d->scope == DT_LIB_HISTOGRAM_SCOPE_PARADE_VERTICAL)
+            ? 3 : 1;
+  const int square = MIN(width, height);
+
+  for(int c = 0; c < 3; c++)
+  {
+    dt_aligned_pixel_t pixel = { 0.f };
+    memcpy(pixel, dev->color_picker.extreme_pixels[side][c], sizeof(dev->color_picker.extreme_pixels[side][c]));
+    const double value = CLAMP(pixel[c], 0.f, 1.f);
+    float position[2] = { dev->color_picker.extreme_points[side][c][0], dev->color_picker.extreme_points[side][c][1] };
+    dt_dev_coordinates_raw_norm_to_image_norm(dev, position, 1);
+    const double strip0 = (double)(c % strips);
+    dt_aligned_pixel_t XYZ_D50 = { 0.f };
+    dt_aligned_pixel_t xyY = { 0.f };
+    dt_aligned_pixel_t Luv = { 0.f };
+    double x = 0.;
+    double y = 0.;
+
+    switch(d->scope)
+    {
+      case DT_LIB_HISTOGRAM_SCOPE_HISTOGRAM:
+        x = value * width;
+        break;
+      case DT_LIB_HISTOGRAM_SCOPE_WAVEFORM_HORIZONTAL:
+      case DT_LIB_HISTOGRAM_SCOPE_PARADE_HORIZONTAL:
+        x = (strip0 + position[0]) * width / strips;
+        y = (1. - value) * height;
+        break;
+      case DT_LIB_HISTOGRAM_SCOPE_WAVEFORM_VERTICAL:
+      case DT_LIB_HISTOGRAM_SCOPE_PARADE_VERTICAL:
+        x = value * width;
+        y = (strip0 + position[1]) * height / strips;
+        break;
+      case DT_LIB_HISTOGRAM_SCOPE_VECTORSCOPE:
+        // the chain and the square of _process_vectorscope()
+        _scope_pixel_to_xyz(pixel, XYZ_D50, d);
+        dt_XYZ_to_xyY(XYZ_D50, xyY);
+        dt_xyY_to_Luv(xyY, Luv);
+        x = (width - square) / 2. + _Luv_to_vectorscope_coord_zoom(Luv[1], d->zoom) * square / HISTOGRAM_BINS;
+        y = (height - square) / 2.
+            + (HISTOGRAM_BINS - 1 - _Luv_to_vectorscope_coord_zoom(Luv[2], d->zoom)) * square / HISTOGRAM_BINS;
+        break;
+      default:
+        return;
+    }
+
+    if(d->scope == DT_LIB_HISTOGRAM_SCOPE_HISTOGRAM)
+    {
+      cairo_move_to(cr, x, 0.);
+      cairo_line_to(cr, x, height);
+    }
+    else
+    {
+      // arms shrinking from red to blue, as on the image, so that crosses on one spot stay distinct
+      const double arm = DT_PIXEL_APPLY_DPI(7. - 1.5 * c);
+      cairo_move_to(cr, x - arm, y - arm);
+      cairo_line_to(cr, x + arm, y + arm);
+      cairo_move_to(cr, x - arm, y + arm);
+      cairo_line_to(cr, x + arm, y - arm);
+    }
+    cairo_set_line_width(cr, DT_PIXEL_APPLY_DPI(3.));
+    cairo_set_source_rgba(cr, 0., 0., 0., 0.7);
+    cairo_stroke_preserve(cr);
+    cairo_set_line_width(cr, DT_PIXEL_APPLY_DPI(1.5));
+    set_color(cr, dt_bauhaus_get_global()->graph_colors[c]);
+    cairo_stroke(cr);
+  }
+}
+
 static gboolean _draw_callback(GtkWidget *widget, cairo_t *crf, gpointer user_data)
 {
   // Note: the draw callback is called from our own callback (mapped to "preview pipe finished recomputing" signal)
@@ -2012,6 +2104,7 @@ static gboolean _draw_callback(GtkWidget *widget, cairo_t *crf, gpointer user_da
   if(IS_NULL_PTR(d->cst)) return 1;
   cairo_set_source_surface(crf, d->cst, 0, 0);
   cairo_paint(crf);
+  _draw_picker_extremes(crf, d, gtk_widget_get_allocated_width(widget), gtk_widget_get_allocated_height(widget));
   return 0;
 }
 
@@ -2051,6 +2144,11 @@ void _get_allocation_size(dt_lib_histogram_t *d, int *width, int *height)
  * When "Display min/max pixel" is checked and a module's color picker reads the minimum or the
  * maximum of an area, a cross in each channel's color marks the pixel holding that channel's
  * extreme. The channel that decided the module's value is drawn as a +.
+ *
+ * The same crosses mark, for the color picker of this panel, the pixel holding each channel's
+ * minimum or maximum once that statistic is selected, in RGB, over an area. The scope marks them
+ * too: a line at the channel's value on the histogram, a cross on the waveform, in the channel's
+ * strip of the parade, and at the pixel's chromaticity on the vectorscope.
  */
 
 /**
@@ -2352,7 +2450,47 @@ static void _pixelpipe_pick_from_image(const dt_backbuf_t *const backbuf,
   dt_aligned_pixel_t min = { INFINITY, INFINITY, INFINITY, INFINITY };
   dt_aligned_pixel_t max = { -INFINITY, -INFINITY, -INFINITY, -INFINITY };
 
-  dt_color_picker_helper(&dsc, pixel, &roi, box, mean, min, max, dsc.cst, IOP_CS_RGB, NULL, NULL);
+  /* The global picker's area, showing the minimum or the maximum, locates for each RGB channel the
+     pixel holding the value it shows, as a module picker locates the extremes its module reads.
+     The primary sample also follows a module picker, whose extremes are the proxy's. */
+  dt_develop_t *const dev = dt_dev_get_global();
+  const gboolean global_primary
+      = sample == dev->color_picker.primary_sample && IS_NULL_PTR(dev->color_picker.module);
+  const int side = d->statistic == DT_LIB_COLORPICKER_STATISTIC_MAX;
+  const gboolean locate = global_primary && sample->size == DT_LIB_COLORPICKER_SIZE_BOX
+                          && d->model == DT_LIB_COLORPICKER_MODEL_RGB
+                          && d->statistic != DT_LIB_COLORPICKER_STATISTIC_MEAN;
+  dt_color_picker_extremes_t extremes = { .valid = FALSE };
+
+  dt_color_picker_helper(&dsc, pixel, &roi, box, mean, min, max, dsc.cst, IOP_CS_RGB, NULL,
+                         locate ? &extremes : NULL);
+
+  if(extremes.valid)
+  {
+    // Inverse of the box chain above, for each channel's pixel centre: stage, preview, raw-norm.
+    // The whole pixel is kept for the vectorscope, which marks its chromaticity.
+    int(*const at)[2] = side ? extremes.max : extremes.min;
+    dt_aligned_pixel_t *const found = side ? extremes.max_pixel : extremes.min_pixel;
+    float *const points = &dev->color_picker.extreme_points[side][0][0];
+    for(int c = 0; c < 3; c++)
+    {
+      points[2 * c] = (float)at[c][0] + 0.5f + roi.x;
+      points[2 * c + 1] = (float)at[c][1] + 0.5f + roi.y;
+      memcpy(dev->color_picker.extreme_pixels[side][c], found[c], sizeof(dev->color_picker.extreme_pixels[side][c]));
+    }
+    dt_dev_distort_transform_plus(dev->preview_pipe, iop_order, direction, points, 3);
+    dt_dev_coordinates_preview_abs_to_image_norm(dev, points, 3);
+    dt_dev_coordinates_image_norm_to_raw_norm(dev, points, 3);
+  }
+
+  if(global_primary)
+  {
+    // `side` indexes the flag as it indexes the arrays: DT_COLOR_PICKER_EXTREMES_MIN, then _MAX
+    dev->color_picker.extremes_picker = dev->color_picker.picker;
+    dev->color_picker.extremes_channel = -1;
+    dev->color_picker.extremes_valid
+        = extremes.valid ? DT_COLOR_PICKER_EXTREMES_MIN << side : DT_COLOR_PICKER_EXTREMES_NONE;
+  }
 
   for_four_channels(k)
   {
@@ -2400,12 +2538,12 @@ static void _update_everything(dt_lib_module_t *self)
 {
   dt_lib_histogram_t *d = (dt_lib_histogram_t *)self->data;
 
-  if(_trigger_recompute(d))
-  {
-    _redraw_scopes(d);
-  }
+  const gboolean recomputed = _trigger_recompute(d);
 
   _pixelpipe_pick_samples(d);
+
+  // the scope also draws the extremes of the sample just taken, over its cached surface
+  if(recomputed || dt_dev_get_global()->color_picker.picker) _redraw_scopes(d);
 
   for(GSList *samples = dt_dev_get_global()->color_picker.samples;
       samples;
@@ -2724,8 +2862,11 @@ static void _picker_button_toggled(GtkToggleButton *button, dt_lib_histogram_t *
      * preview backbuffer hash. Invalidate on both activation and deactivation
      * so the same cached pixels are rebinned for the newly selected scope. */
     _reset_cache(d);
-    if(_trigger_recompute(d)) _redraw_scopes(d);
+    _trigger_recompute(d);
   }
+
+  // the extremes the picker marks on the scope come and go with it
+  _redraw_scopes(d);
 }
 
 /* set sample area proxy impl */
@@ -2800,9 +2941,10 @@ static void _statistic_changed(GtkWidget *widget, dt_lib_module_t *self)
 {
   dt_lib_histogram_t *d = self->data;
   d->statistic = dt_bauhaus_combobox_get(widget);
-  dt_dev_get_global()->color_picker.statistic = (int)d->statistic;
   dt_conf_set_string("ui_last/colorpicker_mode", dt_lib_colorpicker_statistic_names[d->statistic]);
   _update_everything(self);
+  // the global picker marks the pixels of the statistic it shows
+  dt_control_queue_redraw_center();
 }
 
 static void _color_mode_changed(GtkWidget *widget, dt_lib_module_t *self)
@@ -2811,6 +2953,8 @@ static void _color_mode_changed(GtkWidget *widget, dt_lib_module_t *self)
   d->model = dt_bauhaus_combobox_get(widget);
   dt_conf_set_string("ui_last/colorpicker_model", dt_lib_colorpicker_model_names[d->model]);
   _update_everything(self);
+  // only RGB shows a minimum or a maximum, whose pixels the global picker marks
+  dt_control_queue_redraw_center();
 }
 
 static void _label_size_allocate_callback(GtkWidget *widget, GdkRectangle *allocation, gpointer user_data)
@@ -2986,11 +3130,12 @@ static void _display_samples_changed(GtkToggleButton *button, dt_lib_module_t *s
   dt_control_queue_redraw_center();
 }
 
-static void _display_extremes_changed(GtkToggleButton *button, dt_lib_module_t *self __attribute__((unused)))
+static void _display_extremes_changed(GtkToggleButton *button, dt_lib_module_t *self)
 {
   dt_conf_set_bool("ui_last/colorpicker_display_extremes", gtk_toggle_button_get_active(button));
   dt_dev_get_global()->color_picker.display_extremes = gtk_toggle_button_get_active(button);
   dt_control_queue_redraw_center();
+  _redraw_scopes(self->data);
 }
 
 static void _restrict_histogram_changed(GtkToggleButton *button, dt_lib_module_t *self)
@@ -3292,8 +3437,9 @@ void gui_init(dt_lib_module_t *self)
                           PANGO_ELLIPSIZE_MIDDLE);
   gtk_widget_set_tooltip_text(d->display_extremes_check_box,
                               _("mark on the image the pixel holding the minimum or the maximum\n"
-                                "of each channel that a module's color picker reads:\n"
-                                "+ marks the pixel the module takes into account,\n"
+                                "of each channel: the one this color picker shows over an area,\n"
+                                "also marked on the scope, or the one a module's color picker reads.\n"
+                                "For a module, + marks the pixel it takes into account,\n"
                                 "× the pixels of the channels it does not take into account"));
   gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(d->display_extremes_check_box),
                                dev->color_picker.display_extremes);

@@ -377,9 +377,8 @@ typedef struct dt_develop_t
     gboolean display_samples;
     gboolean live_samples_enabled;
     gboolean restrict_histogram;
-    /* draw the crosses on the pixels holding the extremes the active module picker reads */
+    /* draw the crosses on the pixels holding the extremes the active picker reads or shows */
     gboolean display_extremes;
-    int statistic;
     struct dt_lib_module_t *histogram_module;
     gboolean (*refresh_global_picker)(struct dt_lib_module_t *self);
 
@@ -394,9 +393,10 @@ typedef struct dt_develop_t
 
     /* Raw-norm positions of the module-input pixels holding each RGB channel's minimum
      * (`extreme_points[0]`) and maximum (`extreme_points[1]`) over the last input sample of
-     * `extremes_picker`. `extremes_valid` holds the dt_iop_color_picker_extremes_t flags located;
+     * `extremes_picker` -- for the global picker, the scope stage's pixels holding the statistic
+     * it shows. `extremes_valid` holds the dt_iop_color_picker_extremes_t flags located;
      * `extremes_channel` is the channel whose extreme decided the module's value, -1 when unknown.
-     * `extreme_pixels` holds all the channels of those pixels, as the module received them. */
+     * `extreme_pixels` holds all the channels of those pixels, as the module or the scope read them. */
     float extreme_points[2][3][2];
     float extreme_pixels[2][3][4];
     int extremes_valid;

@@ -159,7 +159,7 @@ remain right for what is fine to miss: progress, confirmation, a passing state.
 | Read this | For |
 |---|---|
 | [`doc/iop-notes.md`](doc/iop-notes.md) | per-module findings (ashift, retouch, toneequal, …) |
-| [`doc/color-picker.md`](doc/color-picker.md) | what a module picker's min/max are; click = point, drag = area; the picking modifier |
+| [`doc/color-picker.md`](doc/color-picker.md) | what a module picker's min/max are, and where the global picker's lie on the image and the scope; click = point, drag = area; the picking modifier |
 | [`doc/drawlayer.md`](doc/drawlayer.md) | the drawlayer module in full |
 | [`doc/retouch-result-memo.md`](doc/retouch-result-memo.md) | retouch's per-shape memo |
 | [`doc/gtk-patterns.md`](doc/gtk-patterns.md) | layout, focus, repaint and threading patterns |

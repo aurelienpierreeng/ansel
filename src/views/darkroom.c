@@ -331,8 +331,8 @@ static inline void _darkroom_sample_raw_box_to_image_norm(const dt_colorpicker_s
 }
 
 /**
- * @brief Mark, with a cross in each RGB channel's colour, the module-input pixels holding the
- * per-channel extremes the active module picker reads.
+ * @brief Mark, with a cross in each RGB channel's colour, the pixels holding the per-channel
+ * extremes the active picker reads: a module's input, or the scope stage the global picker shows.
  *
  * The channel the module kept is a +, the others smaller, dimmed diagonal crosses whose arms shrink
  * from red to blue so that crosses landing on the same pixel stay distinct.
