@@ -108,6 +108,13 @@
     <shortdescription>how many snapshots to keep</shortdescription>
     <longdescription>after successfully creating snapshot, how many older snapshots to keep (excluding mandatory version update ones). enter -1 to keep all snapshots\nkeep in mind that snapshots do take some space and you only need the most recent one for successful restore</longdescription>
   </dtconfig>
+  <dtconfig prefs="storage" section="database">
+    <name>cache_disk_backend</name>
+    <type>bool</type>
+    <default>true</default>
+    <shortdescription>enable disk backend for thumbnail cache</shortdescription>
+    <longdescription>if enabled, write thumbnails to disk (.cache/ansel/) when evicted from the memory cache. note that this can take a lot of memory (several gigabytes for 20k images) and will never delete cached thumbnails again. it's safe though to delete these manually, if you want. light table performance will be increased greatly when browsing a lot. to generate all thumbnails of your entire collection offline, run 'ansel-generate-cache'.</longdescription>
+  </dtconfig>
   <dtconfig>
     <name>min_panel_width</name>
     <type>int</type>
@@ -218,13 +225,6 @@
     <default>0</default>
     <shortdescription>Stored GUI throttle pipeline runtime (microseconds)</shortdescription>
     <longdescription>Saved app-wide average runtime of the last darkroom GUI pipeline runs, reused to seed GUI throttling on startup.</longdescription>
-  </dtconfig>
-  <dtconfig prefs="processing" section="cpugpu">
-    <name>cache_disk_backend</name>
-    <type>bool</type>
-    <default>true</default>
-    <shortdescription>enable disk backend for thumbnail cache</shortdescription>
-    <longdescription>if enabled, write thumbnails to disk (.cache/ansel/) when evicted from the memory cache. note that this can take a lot of memory (several gigabytes for 20k images) and will never delete cached thumbnails again. it's safe though to delete these manually, if you want. light table performance will be increased greatly when browsing a lot. to generate all thumbnails of your entire collection offline, run 'ansel-generate-cache'.</longdescription>
   </dtconfig>
   <dtconfig>
     <name>opencl_devid_darkroom</name>

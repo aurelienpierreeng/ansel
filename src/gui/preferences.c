@@ -631,13 +631,13 @@ void dt_gui_preferences_show()
 
         if(GTK_IS_CONTAINER(child->data))
         {
-          // Find the disk thumbnail cache row. The per-GPU OpenCL switches belong just
+          // Find the pipe recompute timeout row. The per-GPU OpenCL switches belong just
           // after it, before the remaining GPU memory/runtime preferences.
           GList *box_children = gtk_container_get_children(GTK_CONTAINER(child->data));
           for(GList *box_child = box_children; box_child; box_child = g_list_next(box_child))
           {
             const char *name = gtk_widget_get_name(GTK_WIDGET(box_child->data));
-            if(!IS_NULL_PTR(name) && strcmp(name, "cache_disk_backend") == 0)
+            if(!IS_NULL_PTR(name) && strcmp(name, "processing/timeout") == 0)
             {
               insert_line = top + height;
               break;
