@@ -1,6 +1,7 @@
 /*
     This file is part of Ansel,
     Copyright (C) 2026 Aurélien PIERRE.
+    Copyright (C) 2026 Guillaume Stutin.
 
     Ansel is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -509,14 +510,16 @@ __kernel void nn_bilerp_add(__global const float *fused, __global const float *D
   den[i] += corr;
 }
 
-/* final crop + strength blend straight into the pipeline output buffer */
+/* final crop + strength blend straight into the pipeline output buffer: the
+ * ow x oh window at (ox, oy) of the iw-wide input */
 __kernel void nn_blend_crop(__global const float *in, __global const float *den,
-                            __global float *out, const int width, const int height,
-                            const int pw, const float strength)
+                            __global float *out, const int iw, const int pw,
+                            const int ox, const int oy, const int ow, const int oh,
+                            const float strength)
 {
   const int x = get_global_id(0), y = get_global_id(1);
-  if(x >= width || y >= height) return;
-  const float orig = in[(long)y * width + x];
-  const float d = den[(long)y * pw + x];
-  out[(long)y * width + x] = orig + strength * (d - orig);
+  if(x >= ow || y >= oh) return;
+  const float orig = in[(long)(y + oy) * iw + x + ox];
+  const float d = den[(long)(y + oy) * pw + x + ox];
+  out[(long)y * ow + x] = orig + strength * (d - orig);
 }
