@@ -4,6 +4,7 @@
     Copyright (C) 2020, 2022 Pascal Obry.
     Copyright (C) 2021 Ralf Brown.
     Copyright (C) 2022 Martin Bařinka.
+    Copyright (C) 2026 Guillaume Stutin.
     
     darktable is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -37,11 +38,16 @@ typedef enum dt_heal_domain_t
   DT_HEAL_DOMAIN_SQRT = 1
 } dt_heal_domain_t;
 
-/** How the fill is solved; both settings come from the calling module. */
+/** How the fill is solved; every setting comes from the calling module. */
 typedef struct dt_heal_solver_t
 {
   int max_iter;            /**< cap on the relaxation iterations */
   dt_heal_domain_t domain; /**< space the source-to-destination difference is interpolated in */
+  /** 0 carries the whole source over. A radius carries only the source's detail finer than a box of
+   * that radius, in the domain above: the rest is the harmonic interpolation of the destination's
+   * border. That keeps the grain of the source without its shapes, which is what repairs a speck
+   * of dust best in a texture (doc/iop-notes.md, the dust measurements). */
+  int texture_radius;
 } dt_heal_solver_t;
 
 /** Heal dest_buffer using src_buffer as a reference and mask_buffer to define the area to be healed.
@@ -50,6 +56,7 @@ void dt_heal(const float *const src_buffer, float *dest_buffer, const float *con
              const int height, const int ch, const dt_heal_solver_t solver);
 
 #ifdef HAVE_OPENCL
+#include <CL/cl.h>   // cl_mem, cl_int: used below, so declared here rather than left to includers
 
 typedef struct dt_heal_cl_global_t
 {

@@ -69,6 +69,7 @@ set(LIB_ANSEL_UNIT_TESTS
   test_stroke_raster
   test_drawlayer_batch_raster
   test_interpolation_resample_window
+  test_heal_texture
   test_import_jobs
 )
 
