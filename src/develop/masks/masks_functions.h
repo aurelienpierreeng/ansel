@@ -302,7 +302,8 @@ void dt_masks_sample_grid_interpolate(const float *const points, const dt_masks_
  * @brief Ray-cast point-in-polygon over a form point stream, honouring skip ranges.
  *
  * Walks [points_start, points_count) forward, wrapping to points_start exactly once. A skip
- * range closes the contour with a chord from the point before `jump_from` to `resume_at`.
+ * range closes the contour with a chord from the point before `jump_from` to `resume_at`, or to
+ * points_start when `resume_at` is points_count: the outline's last samples are hidden.
  * A range that does not move the walk strictly forward is IGNORED AND REPORTED rather than
  * followed: a backward jump would re-walk the span just left and spin until the visit cap --
  * the silent-garbage mode both historical bugs of the in-band encoding shipped as.

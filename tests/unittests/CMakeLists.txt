@@ -65,6 +65,7 @@ set(LIB_ANSEL_UNIT_TESTS
   test_dtpthread_recursive
   test_history_snapshot
   test_masks_raster_contract
+  test_masks_point_in_form
   test_stroke_raster
   test_drawlayer_batch_raster
   test_interpolation_resample_window

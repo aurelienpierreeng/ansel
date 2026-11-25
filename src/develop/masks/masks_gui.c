@@ -5488,7 +5488,9 @@ int dt_masks_point_in_form_exact(const float *test_points, int test_point_count,
        * its resume point. Only a skip that moves the walk STRICTLY FORWARD is followed -- a
        * backward one would re-walk the span just left until the cap above fires, which is the
        * cycle the old in-band encoding actually produced once. Such a range is a producer bug:
-       * ignore it and say so. */
+       * ignore it and say so. A range that resumes at the end hides the outline's last samples,
+       * a fold or the stretch that comes back over the first ones: the chord then goes to the
+       * first sample, where the walk wraps anyway, and no other range is followed from there. */
       gboolean jumped = TRUE;
       int hops = 0;
       while(jumped && hops <= skip_count)
@@ -5497,7 +5499,9 @@ int dt_masks_point_in_form_exact(const float *test_points, int test_point_count,
         for(int s = 0; s < skip_count; s++)
         {
           if(next != skips[s].jump_from) continue;
-          if(skips[s].resume_at <= skips[s].jump_from || skips[s].resume_at >= form_points_count)
+          if(skips[s].resume_at == form_points_count)
+            next = start_index;
+          else if(skips[s].resume_at <= skips[s].jump_from || skips[s].resume_at > form_points_count)
           {
             if(!reported_bad_skip)
             {

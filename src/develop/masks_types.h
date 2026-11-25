@@ -1,6 +1,7 @@
 /*
     This file is part of Ansel,
     Copyright (C) 2026 Aurélien PIERRE.
+    Copyright (C) 2026 Guillaume Stutin.
 
     Ansel is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -220,6 +221,9 @@ typedef struct dt_masks_form_info_t
  *
  * Invariants a producer must guarantee (dt_masks_outline_boundary_skips() does):
  *   - resume_at > jump_from (every skip moves the walk strictly forward);
+ *   - resume_at <= the buffer's count: a range that resumes at the count hides the outline's
+ *     last samples, and the contour closes on its first one. Closed outlines produce it all the
+ *     time, as their last samples come back over the first ones, within the repeat distance;
  *   - ranges sorted by jump_from and pairwise disjoint (resume_at < next jump_from).
  */
 typedef struct dt_masks_skip_range_t
