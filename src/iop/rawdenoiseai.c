@@ -1,6 +1,7 @@
 /*
     This file is part of Ansel,
     Copyright (C) 2026 Aurélien PIERRE.
+    Copyright (C) 2026 Guillaume Stutin.
 
     Ansel is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -66,7 +67,6 @@
 #include <json-glib/json-glib.h>
 #include "caches/pixelpipe_cache_alloc.h"
 #include "common/file_location.h"
-#include "common/imagebuf.h"
 #include "common/nn_model.h"
 #include "common/noiseprofiles.h"
 #include "common/opencl.h"
@@ -733,6 +733,16 @@ static unsigned _align_lcm(const unsigned a, const unsigned b)
   return a / x * b;
 }
 
+/* The common period of every lattice this module lays over its input: the CFA,
+ * and for a loaded model everything dt_nn_model_alignment() owns. Tile origins
+ * (tiling_callback) and the buffer origin (modify_roi_in) are multiples of it. */
+static unsigned _lattice_period(const dt_dev_pixelpipe_iop_t *const piece)
+{
+  const dt_iop_rawdenoiseai_data_t *const d = (const dt_iop_rawdenoiseai_data_t *)piece->data;
+  const unsigned cfa = piece->dsc_in.filters == 9u ? 6u : 2u;
+  return (d && d->model) ? _align_lcm(cfa, (unsigned)dt_nn_model_alignment(d->model)) : cfa;
+}
+
 void tiling_callback(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_t *pipe,
                      const struct dt_dev_pixelpipe_iop_t *piece, struct dt_develop_tiling_t *tiling)
 {
@@ -822,7 +832,8 @@ void tiling_callback(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe
    * the coarse stage (period `bin`) and the low-band fusion pyramid (period
    * DT_NN_FUSION_COARSEST). All of them are anchored to the tile's own origin,
    * because that is the only origin process() is handed. The tiling engine
-   * places tile origins on multiples of lcm(xalign, yalign), so anything short
+   * places tile origins on multiples of lcm(xalign, yalign) from roi_in->x/y,
+   * which modify_roi_in() puts on a multiple of the same period. Anything short
    * of the full lattice period lets two different tile grids bin the same
    * sensels into differently-phased superpixels — which changes the coarse
    * guide, and with it the result, EVERYWHERE inside the tile rather than only
@@ -837,11 +848,26 @@ void tiling_callback(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe
    * lattice added to the model silently reopens this bug. Aligning to the FULL
    * value also means an interior tile needs no reflect padding at all, so no
    * mirrored data is folded into the fusion's per-tile statistics. */
-  const gboolean xtrans = piece->dsc_in.filters == 9u;
-  unsigned align = xtrans ? 6u : 2u;
-  if(d && d->model) align = _align_lcm(align, (unsigned)dt_nn_model_alignment(d->model));
+  const unsigned align = _lattice_period(piece);
   tiling->xalign = align;
   tiling->yalign = align;
+}
+
+/* The lattices above are anchored to the origin of the buffer process() is
+ * handed, so that origin must not depend on what is asked downstream: lens
+ * correction asks for an output starting at an arbitrary sensel, and a shift
+ * that is not a multiple of the lattice period re-phases every lattice and
+ * changes the denoising over the whole frame. Start the input on the multiple
+ * of the period at or before the requested output; process() drops the margin. */
+void modify_roi_in(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_t *pipe,
+                   struct dt_dev_pixelpipe_iop_t *piece, const dt_iop_roi_t *roi_out, dt_iop_roi_t *roi_in)
+{
+  const int align = (int)_lattice_period(piece);
+  *roi_in = *roi_out;
+  roi_in->x = roi_out->x / align * align;
+  roi_in->y = roi_out->y / align * align;
+  roi_in->width += roi_out->x - roi_in->x;
+  roi_in->height += roi_out->y - roi_in->y;
 }
 
 // mirror-reflect coordinate into [0, n): same row/column parity is preserved
@@ -964,19 +990,21 @@ static void _k_residual(const float *const in, const float *const head, float *c
 }
 
 /* mirrors nn_blend_crop: strength is the opacity of the correction, so the
- * output lerps between the original mosaic and the denoised one while dropping
- * the alignment padding. */
+ * output lerps between the original mosaic and the denoised one. Only the
+ * ow x oh output window at (ox, oy) of the iw-wide input is written: that drops
+ * the alignment padding and the margin modify_roi_in() added. */
 __DT_CLONE_TARGETS__
-static void _k_blend_crop(const float *const in, const float *const den, float *const out, const int width,
-                          const int height, const int pw, const float strength)
+static void _k_blend_crop(const float *const in, const float *const den, float *const out, const int iw,
+                          const int pw, const int ox, const int oy, const int ow, const int oh,
+                          const float strength)
 {
   __OMP_PARALLEL_FOR__()
-  for(int y = 0; y < height; y++)
+  for(int y = 0; y < oh; y++)
   {
-    const float *const src_in = in + (size_t)y * width;
-    const float *const src_nn = den + (size_t)y * pw;
-    float *const dst = out + (size_t)y * width;
-    for(int x = 0; x < width; x++) dst[x] = src_in[x] + strength * (src_nn[x] - src_in[x]);
+    const float *const src_in = in + (size_t)(y + oy) * iw + ox;
+    const float *const src_nn = den + (size_t)(y + oy) * pw + ox;
+    float *const dst = out + (size_t)y * ow;
+    for(int x = 0; x < ow; x++) dst[x] = src_in[x] + strength * (src_nn[x] - src_in[x]);
   }
 }
 
@@ -1296,12 +1324,16 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
   dt_nn_model_t *const model = d->model;
 
   const int width = roi->width, height = roi->height;
+  // the output window inside the input, past the margin modify_roi_in() added
+  const dt_iop_roi_t *const roi_out = &piece->roi_out;
+  const int ox = roi_out->x - roi->x, oy = roi_out->y - roi->y;
   const float *const in = (const float *)ivoid;
   float *const out = (float *)ovoid;
 
   if(!model || !(d->strength > 0.0f))
   {
-    dt_iop_image_copy_by_size(ovoid, ivoid, width, height, 1);
+    // a blend at strength 0 against the input itself: a plain copy of the window
+    _k_blend_crop(in, in, out, width, width, ox, oy, roi_out->width, roi_out->height, 0.0f);
     return 0;
   }
 
@@ -1334,7 +1366,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
   {
     dt_print(DT_DEBUG_ALWAYS, "[rawdenoiseai] region alloc failed for %dx%d tile (%.1f MB)\n", pw, ph,
              region.size / 1048576.0);
-    dt_iop_image_copy_by_size(ovoid, ivoid, width, height, 1);
+    _k_blend_crop(in, in, out, width, width, ox, oy, roi_out->width, roi_out->height, 0.0f);
     return 1;
   }
   _nn_region = &region;
@@ -1383,11 +1415,11 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
   {
     dt_print(DT_DEBUG_ALWAYS, "[rawdenoiseai] inference failed (%d) on %dx%d tile, scratch %.1f MB\n", rc, pw, ph,
              dt_nn_unet_scratch_bytes(model, pw, ph) / 1048576.0);
-    dt_iop_image_copy_by_size(ovoid, ivoid, width, height, 1);
+    _k_blend_crop(in, in, out, width, width, ox, oy, roi_out->width, roi_out->height, 0.0f);
   }
   else if(!rc)
   {
-    _k_blend_crop(in, nn_out, out, width, height, pw, d->strength);
+    _k_blend_crop(in, nn_out, out, width, pw, ox, oy, roi_out->width, roi_out->height, d->strength);
   }
 
   _nn_region = NULL;
@@ -1416,6 +1448,10 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
   _nn_pipe = pipe;
 
   const int width = roi->width, height = roi->height;
+  // the output window inside the input, past the margin modify_roi_in() added
+  const dt_iop_roi_t *const roi_out = &piece->roi_out;
+  const int ox = roi_out->x - roi->x, oy = roi_out->y - roi->y;
+  const int ow = roi_out->width, oh = roi_out->height;
   // pre-shifted for the kernel's tile-local Bayer branch, exactly as in process()
   const uint32_t filters = dt_dev_get_roi_filters(piece, roi);
   const int is_xtrans = filters == 9u;
@@ -1454,7 +1490,7 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
    * buffer->image copy of the blended result. The interior chain is untouched
    * and stays device-resident. */
   cl_mem dev_in_buf = dt_opencl_alloc_device_buffer(devid, (size_t)width * height * sizeof(float));
-  cl_mem dev_out_buf = dt_opencl_alloc_device_buffer(devid, (size_t)width * height * sizeof(float));
+  cl_mem dev_out_buf = dt_opencl_alloc_device_buffer(devid, (size_t)ow * oh * sizeof(float));
   cl_mem dev_cin = NULL, dev_chead = NULL, dev_cden = NULL;
   // M/D/V per level (16, 32, 64) then the fused ping-pong pair
   cl_mem grids[11] = { NULL };
@@ -1677,17 +1713,20 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
     dt_opencl_set_kernel_arg(devid, K, 1, sizeof(cl_mem), &dev_den);
     dt_opencl_set_kernel_arg(devid, K, 2, sizeof(cl_mem), &dev_out_buf);
     dt_opencl_set_kernel_arg(devid, K, 3, sizeof(int), &width);
-    dt_opencl_set_kernel_arg(devid, K, 4, sizeof(int), &height);
-    dt_opencl_set_kernel_arg(devid, K, 5, sizeof(int), &pw);
-    dt_opencl_set_kernel_arg(devid, K, 6, sizeof(float), &d->strength);
-    size_t sizes[3] = { ROUNDUPDWD(width, devid), ROUNDUPDHT(height, devid), 1 };
+    dt_opencl_set_kernel_arg(devid, K, 4, sizeof(int), &pw);
+    dt_opencl_set_kernel_arg(devid, K, 5, sizeof(int), &ox);
+    dt_opencl_set_kernel_arg(devid, K, 6, sizeof(int), &oy);
+    dt_opencl_set_kernel_arg(devid, K, 7, sizeof(int), &ow);
+    dt_opencl_set_kernel_arg(devid, K, 8, sizeof(int), &oh);
+    dt_opencl_set_kernel_arg(devid, K, 9, sizeof(float), &d->strength);
+    size_t sizes[3] = { ROUNDUPDWD(ow, devid), ROUNDUPDHT(oh, devid), 1 };
     err = dt_opencl_enqueue_kernel_2d(devid, K, sizes);
     if(err != CL_SUCCESS) goto cleanup;
   }
   {
     // hand the result back in the pipeline's format (see the entry copy above)
     size_t origin[3] = { 0, 0, 0 };
-    size_t region[3] = { (size_t)width, (size_t)height, 1 };
+    size_t region[3] = { (size_t)ow, (size_t)oh, 1 };
     err = dt_opencl_enqueue_copy_buffer_to_image(devid, dev_out_buf, dev_out, 0, origin, region);
     if(err != CL_SUCCESS) goto cleanup;
   }

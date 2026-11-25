@@ -79,12 +79,13 @@ as CPU-vs-GPU, the device is irrelevant and the tiling is the variable. Chasing 
 synchronisation problem instead — `dt_opencl_finish` at every plausible point, blocking readbacks
 between stages, sleeps — costs hours and moves nothing, because the arithmetic was never wrong.
 
-Two residual tile-grid dependencies in that module are known and *not* fixed: the fusion's
-per-channel mean σ² is a whole-tile reduction (the torch reference is patch-global too, so the C
-mirrors it faithfully — but at inference the "patch" is whatever tile the pipe chose), and
-`roi_in->x/y` is not itself lattice-aligned, so a non-zero ROI offset shifts every lattice
-relative to the sensor. The fully correct form is to anchor them to absolute sensor position from
-`roi_in`, the same way the CFA phase rule below does.
+This paragraph used to list two residual tile-grid dependencies in that module. **The first was
+wrong**: it said the fusion's per-channel mean σ² was a whole-tile reduction. Read against
+`21d72698da` (2026-11-25), both fusion paths read the σ² binned per cell on the same grid as
+the means (`_k_floor_fuse()`/`_k_fuse_step()` from `_k_bin16_mdv()`, and `nn_floor_fuse`/
+`nn_fuse_step` in `rawdenoiseai.cl`), and that code is already in `21ccc1b8c5`, the commit that
+introduced the module. The second, an unaligned `roi_in->x/y`, was real, and it was not a tile-grid
+dependence at all: see the next section.
 
 Note *where* a non-zero RAW-domain ROI offset can come from, because the obvious guess is wrong:
 **it is never the viewport.** `iop/initialscale.c` (iop_order 15.5) is `default_enabled` with
@@ -96,6 +97,48 @@ reaches the RAW domain only from a module *between* it and `initialscale` that g
 `roi_in` on the backward pass: in practice `iop/lens.c` (distortion, TCA, and the `scale`
 slider). So "it only misbehaves when zoomed in" is the wrong mental model for this whole class of
 bug; "it only misbehaves with lens correction enabled" is the right one.
+
+### A lattice anchored to the buffer origin follows the ROI offset, not the tiling
+
+*Measured on `21d72698da`, 2026-11-25.*
+
+`rawdenoiseai`'s lattices are anchored to the origin of the buffer `process()` is handed, i.e. to
+`roi_in->x/y`. On the same-ROI tiling path `develop/tiling.c` places tiles at
+`roi_in->x + tx * tile_wd`, so all tile decompositions stay in phase with one another: this is not
+a dependence on the tiling, and the `host_memory_limit` diagnostic above does not see it. What the
+result followed was `roi_in->x/y` modulo the lattice period, i.e. a module further up the pipe.
+
+Measured with `ansel-cli` on the CPU, untiled, model `quarter-multi-v1` at strength 1. A probe ran
+`process()` on the buffer cut by `s` columns, with `roi_in` shifted to match and everything else
+equal. The module's output was compared at matching sensels, at least 512 px from every edge, as a
+share of its own mean correction `|out - in|`. Canon EOS 600D / Sony ZV-E10, ISO 100:
+
+- `s` = 0 twice, and `s` = 64: bit-identical. `s` = 2: 11 % / 38 % of the correction, max 6e-3 /
+  1.7e-2, on 99.99 % of the sensels. `s` = 4: 6 % / 14 %. `s` = 16: 0.3 % / 0.6 %. `s` = 32 and 96
+  gave the same result.
+- With `lens` at its defaults (EXIF lens, autoscale), the module was handed `roi_in` = (9, 1) and
+  (16, 0). The ZV-E10 render was bit-identical to the probe at `s` = 16, so the probe reproduces the
+  real mechanism. On the 600D, enabling lens correction changed the denoising by 19 % of the
+  correction.
+- At full resolution (ZV-E10, `s` = 2, 16-bit PPM): 0.04 8-bit levels on average, 98 samples per
+  million at 2 levels or more, max 53 levels, mostly blue on bright pixels. At 600 px wide, at most
+  1.8 levels.
+
+`dt_nn_model_alignment()` returns 192 for this model on Bayer as well: it folds in the X-Trans
+coarse stride (`bin_xtrans << coarse.depth`) for every CFA, since a model file is CFA-agnostic. The
+shift of 64 changing nothing says the lattices that matter on Bayer repeat every 64.
+
+`modify_roi_in()` now starts the input on the multiple of the module's lattice period
+(`_lattice_period()`, the same value as `xalign`) at or before the requested output, and
+`process()`/`process_cl()` drop the margin in `nn_blend_crop`. The module therefore takes the
+tiling engine's `_roi` path whenever the request is unaligned, and that path aligns tile origins
+in absolute coordinates (`_align_close()`). Checked on the same two raws. With lens correction, the
+module's output matches the render without it bit for bit beyond 512 px from the edges, and within
+float rounding beyond 200 px (max 3.6e-7); what is left is at the edges, where the two requested
+windows differ. Without lens correction the output is bit-identical over the whole frame. Forced
+to two tiles, the CPU `_roi` path (`host_memory_limit=1500`) and the OpenCL one (a 4 GB GTX 1050 Ti
+tiles by itself) match the untiled CPU export within 1/65535 and 45/65535 (16-bit PPM, 256 px from
+the edges). The cost is at most `align - 1` extra columns and rows of input.
 
 ### RCD's own tiles need a 10-pixel border, the image edge included
 
