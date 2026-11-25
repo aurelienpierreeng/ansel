@@ -683,6 +683,24 @@ void dt_masks_gui_form_test_create(dt_masks_form_t *form, dt_masks_form_gui_t *g
  */
 void dt_masks_gui_form_save_creation(dt_develop_t *dev, struct dt_iop_module_t *module, dt_masks_form_t *form,
                                      dt_masks_form_gui_t *gui);
+
+/**
+ * @brief Add to a module's mask group a polygon traced from a closed outline, as if drawn.
+ *
+ * The nodes are smooth (their control points follow the outline) and share one fading width; the
+ * shape is saved and committed as a drawn one is, through dt_masks_gui_form_save_creation().
+ *
+ * @param dev the develop structure
+ * @param module the module owning the mask group
+ * @param points `count` (x, y) pairs in raw-normalized coordinates, in order along the outline
+ * @param count number of nodes, at least 3
+ * @param border fading width of every node, raw-normalized
+ * @param source_offset where the source lies from the outline, raw-normalized, for a clone
+ *                      polygon; NULL for one without a source
+ * @return the id of the new form, 0 if it could not be made
+ */
+int dt_masks_polygon_add(dt_develop_t *dev, struct dt_iop_module_t *module, const float *points, int count,
+                         float border, const float *source_offset);
 void dt_masks_group_ungroup(dt_develop_t *dev, dt_masks_form_t *dest_grp, dt_masks_form_t *grp);
 void dt_masks_group_update_name(dt_iop_module_t *module);
 dt_masks_form_group_t *dt_masks_group_add_form(dt_develop_t *dev, dt_masks_form_t *grp, dt_masks_form_t *form);

@@ -61,6 +61,7 @@
 #include "pixel/bilateral.h"
 #include "pixel/bilateralcl.h"
 #include "common/colorspaces_inline_conversions.h"
+#include "pixel/dust.h"
 #include "pixel/dwt.h"
 #include "pixel/gaussian.h"
 #include "pixel/heal.h"
@@ -68,6 +69,7 @@
 #include "common/opencl.h"
 #include "develop/blend.h"
 #include "develop/blend_gui.h"
+#include "develop/dev_pixelpipe.h"
 #include "develop/imageop_math.h"
 #include "develop/imageop_gui.h"
 #include "develop/masks.h"
@@ -121,7 +123,12 @@ typedef enum dt_iop_retouch_algo_type_t {
   DT_IOP_RETOUCH_CLONE = 1, // $DESCRIPTION: "Clone"
   DT_IOP_RETOUCH_HEAL = 2,  // $DESCRIPTION: "Heal"
   DT_IOP_RETOUCH_BLUR = 3,  // $DESCRIPTION: "Blur"
-  DT_IOP_RETOUCH_FILL = 4   // $DESCRIPTION: "Fill"
+  DT_IOP_RETOUCH_FILL = 4,  // $DESCRIPTION: "Fill"
+  // A heal that carries only the source's grain over the interpolation of the shape's border
+  // (dt_heal_solver_t.texture_radius), for specks of dust. It has no button nor menu entry of its
+  // own: its shapes show as Heal, with "Dust mode" checked under it, which the dust brush
+  // checks while in hand.
+  DT_IOP_RETOUCH_DUST = 5   // $DESCRIPTION: "Dust"
 } dt_iop_retouch_algo_type_t;
 
 typedef struct dt_iop_retouch_form_data_t
@@ -172,7 +179,7 @@ typedef struct dt_iop_retouch_params_t
   float fill_color[3];   // $DEFAULT: 0.0 color for fill algorithm
   float fill_brightness; // $MIN: -1.0 $MAX: 1.0 $DESCRIPTION: "Brightness" value to be added to the color
   int max_heal_iter;     // $DEFAULT: 2000 $DESCRIPTION: "Max_iter" numbe of iteration for heal algorithm
-  dt_iop_retouch_heal_algorithm_t heal_algorithm; // $DEFAULT: DT_IOP_RETOUCH_HEAL_SQRT $DESCRIPTION: "Heal algorithm"
+  dt_iop_retouch_heal_algorithm_t heal_algorithm; // $DEFAULT: DT_IOP_RETOUCH_HEAL_SQRT $DESCRIPTION: "Heal algorithm (global)"
 } dt_iop_retouch_params_t;
 
 typedef struct dt_iop_retouch_gui_data_t
@@ -189,6 +196,10 @@ typedef struct dt_iop_retouch_gui_data_t
   GtkLabel *label_form;                                                      // display number of forms
   GtkLabel *label_form_selected;                                             // display number of forms selected
   GtkWidget *bt_edit_masks, *bt_polygon, *bt_circle, *bt_ellipse, *bt_brush; // shapes
+  GtkWidget *bt_dust;                                                        // dust brush
+  GtkWidget *sl_dust_smoothing; // how far the dust brush's outlines may stray from the speck
+  GtkWidget *vbox_heal;
+  GtkWidget *cb_heal_grain; // heal keeps only the source's grain: Dust
   GtkWidget *bt_clone, *bt_heal, *bt_blur, *bt_fill;                         // algorithms
   GtkWidget *bt_showmask, *bt_suppress;                                      // suppress & show masks
 
@@ -229,6 +240,15 @@ typedef struct dt_iop_retouch_gui_data_t
   GtkWidget *sl_fill_brightness;
 
   GtkWidget *sl_mask_opacity; // draw mask opacity
+
+  // the dust brush: a stroke painted over a speck, searched for it once released
+  gboolean dust_brush;         // the brush is the tool in hand
+  gboolean dust_painting;      // a stroke is being painted
+  gboolean dust_pending;       // the stroke released waits for the module's input
+  GArray *dust_stroke;         // the stroke's points, image-normalized, x and y floats in turn
+  float dust_radius;           // the brush's radius, full-resolution image pixels
+  gboolean dust_grain_before;  // "Dust mode" before the brush checked it, given back after
+  dt_dev_pixelpipe_cache_wait_t dust_wait;
 } dt_iop_retouch_gui_data_t;
 
 typedef struct dt_iop_retouch_params_t dt_iop_retouch_data_t;
@@ -490,17 +510,28 @@ static void rt_display_selected_fill_color(dt_iop_retouch_gui_data_t *g, dt_iop_
   gtk_color_chooser_set_rgba(GTK_COLOR_CHOOSER(g->colorpick), &c);
 }
 
+/* The algorithm buttons show the algorithm for new shapes, the dust brush's included: Dust as heal,
+ * with "Dust mode" checked. The box keeps its state while another algorithm is chosen,
+ * for heal to take again. */
+static void rt_update_algorithm_buttons(const dt_iop_retouch_gui_data_t *g, const dt_iop_retouch_params_t *p)
+{
+  const gboolean heal = p->algorithm == DT_IOP_RETOUCH_HEAL || p->algorithm == DT_IOP_RETOUCH_DUST;
+  gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->bt_clone), p->algorithm == DT_IOP_RETOUCH_CLONE);
+  gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->bt_heal), heal);
+  gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->bt_blur), p->algorithm == DT_IOP_RETOUCH_BLUR);
+  gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->bt_fill), p->algorithm == DT_IOP_RETOUCH_FILL);
+  if(heal)
+    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->cb_heal_grain), p->algorithm == DT_IOP_RETOUCH_DUST);
+}
+
 static void rt_show_hide_controls(const dt_iop_module_t *self)
 {
   dt_iop_retouch_gui_data_t *g = (dt_iop_retouch_gui_data_t *)dt_iop_gui_data(self);
   dt_iop_retouch_params_t *p = (dt_iop_retouch_params_t *)self->params;
 
+  gtk_widget_set_visible(g->vbox_heal, p->algorithm == DT_IOP_RETOUCH_HEAL || p->algorithm == DT_IOP_RETOUCH_DUST);
   switch(p->algorithm)
   {
-    case DT_IOP_RETOUCH_HEAL:
-      gtk_widget_hide(GTK_WIDGET(g->vbox_blur));
-      gtk_widget_hide(GTK_WIDGET(g->vbox_fill));
-      break;
     case DT_IOP_RETOUCH_BLUR:
       gtk_widget_show(GTK_WIDGET(g->vbox_blur));
       gtk_widget_hide(GTK_WIDGET(g->vbox_fill));
@@ -513,12 +544,16 @@ static void rt_show_hide_controls(const dt_iop_module_t *self)
       else
         gtk_widget_hide(GTK_WIDGET(g->hbox_color_pick));
       break;
+    case DT_IOP_RETOUCH_HEAL:
+    case DT_IOP_RETOUCH_DUST:
     case DT_IOP_RETOUCH_CLONE:
     default:
       gtk_widget_hide(GTK_WIDGET(g->vbox_blur));
       gtk_widget_hide(GTK_WIDGET(g->vbox_fill));
       break;
   }
+  // a setting of the brush's, shown while it is in hand
+  gtk_widget_set_visible(g->sl_dust_smoothing, g->dust_brush);
 
   if(g->display_wavelet_scale)
     gtk_widget_show(GTK_WIDGET(g->vbox_preview_scale));
@@ -596,11 +631,7 @@ static void rt_load_shape_algo_in_gui(dt_iop_module_t *self, const int form_sele
     if(p->algorithm != selected_form->algorithm)
     {
       p->algorithm = selected_form->algorithm;
-
-      gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->bt_clone), (p->algorithm == DT_IOP_RETOUCH_CLONE));
-      gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->bt_heal), (p->algorithm == DT_IOP_RETOUCH_HEAL));
-      gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->bt_blur), (p->algorithm == DT_IOP_RETOUCH_BLUR));
-      gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->bt_fill), (p->algorithm == DT_IOP_RETOUCH_FILL));
+      rt_update_algorithm_buttons(g, p);
 
       selection_changed = TRUE;
     }
@@ -621,6 +652,12 @@ static void rt_load_shape_algo_in_gui(dt_iop_module_t *self, const int form_sele
 //---------------------------------------------------------------------------------
 // helpers
 //---------------------------------------------------------------------------------
+
+// The algorithms that copy from a source: their shapes are clone masks with a source position.
+static gboolean rt_algo_needs_source(const dt_iop_retouch_algo_type_t algo)
+{
+  return algo == DT_IOP_RETOUCH_HEAL || algo == DT_IOP_RETOUCH_CLONE || algo == DT_IOP_RETOUCH_DUST;
+}
 
 static void rt_masks_form_change_opacity(dt_iop_module_t *self, int formid, float opacity)
 {
@@ -1048,9 +1085,13 @@ static int rt_shape_is_being_added(dt_iop_module_t *self, const int shape_type)
   return being_added;
 }
 
+static void rt_dust_brush_stop(dt_iop_module_t *self);
+
 static gboolean rt_shape_buttons_can_start(GtkWidget *button, dt_iop_module_t *self,
                                            dt_masks_type_t type, gpointer user_data)
 {
+  rt_dust_brush_stop(self);
+
   //turn module on (else shape creation won't work)
   gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(self->gui->off), TRUE);
 
@@ -1078,7 +1119,7 @@ static gboolean rt_shape_buttons_can_start(GtkWidget *button, dt_iop_module_t *s
 static dt_masks_type_t rt_shape_buttons_form_type(dt_iop_module_t *self, dt_masks_type_t type, gpointer user_data)
 {
   dt_iop_retouch_params_t *p = (dt_iop_retouch_params_t *)self->params;
-  if(p->algorithm == DT_IOP_RETOUCH_CLONE || p->algorithm == DT_IOP_RETOUCH_HEAL)
+  if(rt_algo_needs_source(p->algorithm))
     return type | DT_MASKS_CLONE;
 
   return type | DT_MASKS_NON_CLONE;
@@ -1758,6 +1799,470 @@ static void rt_mask_opacity_callback(GtkWidget *slider, dt_iop_module_t *self)
   dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
 }
 
+//---------------------------------------------------------------------------------
+// dust brush: a zone painted over a speck of dust makes the shape that repairs it
+//---------------------------------------------------------------------------------
+
+#define RT_DUST_RADIUS_DEFAULT 20.0f // brush radius, full-resolution image pixels
+#define RT_DUST_RADIUS_MIN 2.0f
+#define RT_DUST_RADIUS_MAX 400.0f
+#define RT_DUST_MAX_AREA (512 * 512) // a zone of more buffer pixels is not searched: it would hold the GUI
+/* How far an outline may stray from the speck, full-resolution image pixels. Measured on the 20 dust
+ * brush polygons of a 35 mm scan (6064 × 4040): at 0.75 px, the pixel steps, a fibre of 155 × 62 px
+ * took 133 nodes, a fifth of them under 2 px apart; its nodes simplified again took 48 at 1.5 px,
+ * none under 2 px apart, 29 at 2 px and 23 at 4 px. 4 px is the default chosen on that scan. */
+#define RT_DUST_SMOOTHING_DEFAULT 4.0f
+#define RT_DUST_SMOOTHING_MIN 0.75f
+#define RT_DUST_SMOOTHING_MAX 8.0f
+#define RT_DUST_SMOOTHING_CONF "plugins/darkroom/retouch/dust/smoothing"
+
+static void rt_dust_wait_restart(gpointer user_data);
+
+/* "Dust mode" for the new shapes, from the brush: the box, and heal or Dust when heal is
+ * the algorithm. No shape changes, nor history: the shapes made take it when they are saved. */
+static void rt_heal_grain_set(dt_iop_module_t *self, const gboolean grain)
+{
+  dt_iop_retouch_gui_data_t *g = (dt_iop_retouch_gui_data_t *)dt_iop_gui_data(self);
+  dt_iop_retouch_params_t *p = (dt_iop_retouch_params_t *)self->params;
+  if(p->algorithm == DT_IOP_RETOUCH_HEAL || p->algorithm == DT_IOP_RETOUCH_DUST)
+    p->algorithm = grain ? DT_IOP_RETOUCH_DUST : DT_IOP_RETOUCH_HEAL;
+  dt_gui_freeze_begin();
+  gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->cb_heal_grain), grain);
+  dt_gui_freeze_end();
+}
+
+/* The brush becomes the tool in hand, as a shape button does: the module on and in focus, any
+ * shape being drawn dropped. The shapes are shown, the ones it makes as it makes them, but not
+ * editable, and the masks let the pointer go by, to this module. The algorithm buttons stay: the
+ * shapes it makes take the one selected, heal keeping only the grain until the brush is put down. */
+static void rt_dust_brush_start(dt_iop_module_t *self)
+{
+  dt_iop_retouch_gui_data_t *g = (dt_iop_retouch_gui_data_t *)dt_iop_gui_data(self);
+  if(g->dust_brush) return;
+
+  gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(self->gui->off), TRUE);
+  dt_iop_request_focus(self);
+  // none being drawn: whichever there was, the brush takes over
+  dt_masks_change_form_gui(self->dev, NULL);
+  dt_masks_shape_buttons_deactivate_all(NULL);
+
+  g->dust_brush = TRUE;
+  self->dev->darkroom_skip_mouse_events = TRUE;
+  // after the focus, which shows the shapes editable
+  dt_iop_gui_blend_data_t *bd = (dt_iop_gui_blend_data_t *)self->gui->blend_data;
+  if(bd) bd->masks_shown = DT_MASKS_EDIT_RESTRICTED;
+  rt_show_forms_for_current_scale(self);
+
+  g->dust_grain_before = gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(g->cb_heal_grain));
+  rt_heal_grain_set(self, TRUE);
+  rt_show_hide_controls(self);
+  gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->bt_dust), TRUE);
+  // as a shape tool's: the gesture the bar says, and the system cursor off over the brush's own circle
+  dt_control_hinter_message(dt_control_get_global(), _("<b>Remove a speck of dust</b>: Paint over it, "
+                                                       "<b>a scratch</b>: Paint along it, "
+                                                       "<b>Done</b>: Esc or Right-click"));
+  dt_control_set_cursor_visible(FALSE);
+  dt_control_queue_redraw_center();
+}
+
+/* Put the brush down, and a stroke still waiting for the pipe with it. The shapes it showed stay
+ * shown, and take the pointer back. */
+static void rt_dust_brush_stop(dt_iop_module_t *self)
+{
+  dt_iop_retouch_gui_data_t *g = (dt_iop_retouch_gui_data_t *)dt_iop_gui_data(self);
+  if(IS_NULL_PTR(g) || !g->dust_brush) return;
+
+  g->dust_brush = FALSE;
+  g->dust_painting = FALSE;
+  g->dust_pending = FALSE;
+  self->dev->darkroom_skip_mouse_events = FALSE;
+  dt_dev_pixelpipe_cache_wait_cleanup(&g->dust_wait, "retouch-dust-brush-stop");
+  g_array_set_size(g->dust_stroke, 0);
+  dt_iop_gui_blend_data_t *bd = (dt_iop_gui_blend_data_t *)self->gui->blend_data;
+  if(bd && bd->masks_shown == DT_MASKS_EDIT_RESTRICTED)
+  {
+    bd->masks_shown = DT_MASKS_EDIT_FULL;
+    rt_show_forms_for_current_scale(self);
+  }
+  // a heal shape drawn next is as it was before the brush
+  rt_heal_grain_set(self, g->dust_grain_before);
+  rt_show_hide_controls(self);
+  gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->bt_dust), FALSE);
+  dt_control_hinter_message(dt_control_get_global(), "");
+  dt_control_set_cursor_visible(TRUE);
+  dt_control_queue_redraw_center();
+}
+
+static void rt_dust_menu_done_callback(GtkWidget *widget, gpointer user_data)
+{
+  rt_dust_brush_stop((dt_iop_module_t *)user_data);
+}
+
+static gboolean rt_dust_brush_callback(GtkWidget *widget, GdkEventButton *event, dt_iop_module_t *self)
+{
+  if(dt_gui_widgets_suppressed() || event->button != 1) return FALSE;
+  dt_iop_retouch_gui_data_t *g = (dt_iop_retouch_gui_data_t *)dt_iop_gui_data(self);
+  if(g->dust_brush)
+    rt_dust_brush_stop(self);
+  else
+    rt_dust_brush_start(self);
+  return TRUE;
+}
+
+// a setting of the tool, kept for the next sessions: the shapes made already keep their outlines
+static void rt_dust_smoothing_callback(GtkWidget *slider, dt_iop_module_t *self)
+{
+  if(dt_gui_widgets_suppressed()) return;
+  dt_conf_set_float(RT_DUST_SMOOTHING_CONF, dt_bauhaus_slider_get(slider));
+}
+
+// a shape tool of this module is armed: a setting of it commits without ending the creation session
+static gboolean rt_shape_tool_armed(const dt_iop_module_t *self)
+{
+  return self->dev->form_gui->creation && (self->dev->form_gui->creation_module == self);
+}
+
+/* "Dust mode", from the user: heal or Dust for the new shapes, and for the heal shape
+ * selected, as the blur and fill settings apply to theirs. */
+static void rt_heal_grain_callback(GtkToggleButton *button, dt_iop_module_t *self)
+{
+  if(dt_gui_widgets_suppressed()) return;
+  dt_iop_retouch_params_t *p = (dt_iop_retouch_params_t *)self->params;
+  const dt_iop_retouch_algo_type_t algo
+      = gtk_toggle_button_get_active(button) ? DT_IOP_RETOUCH_DUST : DT_IOP_RETOUCH_HEAL;
+  if(p->algorithm == DT_IOP_RETOUCH_HEAL || p->algorithm == DT_IOP_RETOUCH_DUST) p->algorithm = algo;
+  const int index = rt_get_selected_shape_index(self->dev, p);
+  if(index >= 0
+     && (p->rt_forms[index].algorithm == DT_IOP_RETOUCH_HEAL
+         || p->rt_forms[index].algorithm == DT_IOP_RETOUCH_DUST))
+    p->rt_forms[index].algorithm = algo;
+
+  // a setting of the armed shape tool commits now, as dt_iop_gui_changed() commits the heal algorithm
+  if(rt_shape_tool_armed(self))
+    dt_dev_history_commit_item_from_gui(self->dev, self, TRUE);
+  else
+    dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
+}
+
+/* The stroke painted, as a zone of the module's input buffer: each point back through the modules
+ * after this one, then to the ROI, stamped as a disc of the brush's radius, and the segments
+ * between points stamped every third of it. The radius is taken as the same in the module's space
+ * as in the image's, which the distortions between them barely change. The points, in the buffer's
+ * pixels, go to `stroke` and the zone's, which a scratch is followed along; both are freed with
+ * dt_free_align(). NULL when the stroke misses the buffer, `stroke` too. */
+static uint8_t *rt_dust_zone(dt_iop_module_t *self, const dt_iop_roi_t *roi, dt_dust_zone_t *zone, float **stroke)
+{
+  dt_iop_retouch_gui_data_t *g = (dt_iop_retouch_gui_data_t *)dt_iop_gui_data(self);
+  *stroke = NULL;
+  const int count = (int)(g->dust_stroke->len / 2);
+  if(count == 0) return NULL;
+  float *points = dt_alloc_align_float((size_t)2 * count);
+  if(IS_NULL_PTR(points)) return NULL;
+  memcpy(points, g->dust_stroke->data, sizeof(float) * 2 * count);
+  dt_dev_coordinates_image_norm_to_image_abs(self->dev, points, count);
+  dt_dev_distort_backtransform_gui(self->dev, self->iop_order, DT_DEV_TRANSFORM_DIR_FORW_EXCL, points, count);
+
+  const float radius = fmaxf(1.0f, g->dust_radius * roi->scale);
+  float x0 = FLT_MAX, y0 = FLT_MAX, x1 = -FLT_MAX, y1 = -FLT_MAX;
+  for(int k = 0; k < count; k++)
+  {
+    points[2 * k] = points[2 * k] * roi->scale - roi->x;
+    points[2 * k + 1] = points[2 * k + 1] * roi->scale - roi->y;
+    x0 = fminf(x0, points[2 * k]);
+    x1 = fmaxf(x1, points[2 * k]);
+    y0 = fminf(y0, points[2 * k + 1]);
+    y1 = fmaxf(y1, points[2 * k + 1]);
+  }
+  zone->box_x = MAX(0, (int)floorf(x0 - radius));
+  zone->box_y = MAX(0, (int)floorf(y0 - radius));
+  zone->box_width = MIN(roi->width, (int)ceilf(x1 + radius) + 1) - zone->box_x;
+  zone->box_height = MIN(roi->height, (int)ceilf(y1 + radius) + 1) - zone->box_y;
+  uint8_t *mask = NULL;
+  if(zone->box_width > 0 && zone->box_height > 0)
+    mask = dt_calloc_align((size_t)zone->box_width * zone->box_height);
+  if(IS_NULL_PTR(mask))
+  {
+    dt_free_align(points);
+    return NULL;
+  }
+
+  const float step = fmaxf(1.0f, radius / 3.0f);
+  for(int k = 0; k < count; k++)
+  {
+    // the point, and the segment to the next one
+    const int next = MIN(k + 1, count - 1);
+    const float dx = points[2 * next] - points[2 * k];
+    const float dy = points[2 * next + 1] - points[2 * k + 1];
+    const int stamps = 1 + (int)(hypotf(dx, dy) / step);
+    for(int s = 0; s < stamps; s++)
+    {
+      const float cx = points[2 * k] + dx * s / stamps - zone->box_x;
+      const float cy = points[2 * k + 1] + dy * s / stamps - zone->box_y;
+      for(int y = MAX(0, (int)floorf(cy - radius)); y <= MIN(zone->box_height - 1, (int)ceilf(cy + radius)); y++)
+        for(int x = MAX(0, (int)floorf(cx - radius)); x <= MIN(zone->box_width - 1, (int)ceilf(cx + radius)); x++)
+          if((x - cx) * (x - cx) + (y - cy) * (y - cy) <= radius * radius)
+            mask[(size_t)y * zone->box_width + x] = 1;
+    }
+  }
+  zone->mask = mask;
+  zone->stroke = points;
+  zone->stroke_count = count;
+  *stroke = points;
+  return mask;
+}
+
+/* Find the speck in the pending stroke's zone of the module's input on the main pipe, its outline
+ * and, for an algorithm that heals from a source, a source, and add the polygon that repairs it
+ * with the algorithm selected. The main pipe, not the preview: its resolution follows the zoom,
+ * and a speck is a few pixels at full resolution. While the input is not in the cache, the wait
+ * calls this again once the pipe has published it. */
+static void rt_dust_from_stroke(dt_iop_module_t *self)
+{
+  dt_iop_retouch_gui_data_t *g = (dt_iop_retouch_gui_data_t *)dt_iop_gui_data(self);
+  const dt_iop_retouch_params_t *p = (const dt_iop_retouch_params_t *)self->params;
+  const gboolean needs_source = rt_algo_needs_source(p->algorithm);
+  dt_develop_t *dev = self->dev;
+  dt_dev_pixelpipe_t *pipe = dev->pipe;
+  const dt_dev_pixelpipe_iop_t *piece = dt_dev_pixelpipe_get_module_piece(pipe, self);
+  const dt_dev_pixelpipe_iop_t *previous = piece ? dt_dev_pixelpipe_get_prev_enabled_piece(pipe, piece) : NULL;
+  if(IS_NULL_PTR(previous) || previous->dsc_out.datatype != TYPE_FLOAT || previous->dsc_out.channels != 4)
+  {
+    g->dust_pending = FALSE;
+    g_array_set_size(g->dust_stroke, 0);
+    dt_control_queue_redraw_center();
+    return;
+  }
+
+  /* Retained: the module's input is an intermediate cacheline, at refcount 0 between renders, so the
+   * reference is taken with the lookup. From here, every exit path owes one release. */
+  void *input = NULL;
+  dt_pixel_cache_entry_t *entry = NULL;
+  dt_dev_pixelpipe_cache_wait_set_owner(&g->dust_wait, "retouch-dust-brush", self);
+  if(!dt_dev_pixelpipe_cache_peek_gui_retained(pipe, previous, &input, &entry, &g->dust_wait,
+                                               rt_dust_wait_restart, self))
+    return;
+  g->dust_pending = FALSE;
+
+  const dt_iop_roi_t roi = previous->roi_out;
+  dt_dust_zone_t zone = { 0 };
+  float *stroke = NULL;
+  uint8_t *zone_mask = rt_dust_zone(self, &roi, &zone, &stroke);
+  g_array_set_size(g->dust_stroke, 0);
+  const dt_dust_image_t image = { .rgba = (const float *)input, .width = roi.width, .height = roi.height,
+                                  .scale = roi.scale };
+
+  dt_dust_speck_t speck = { 0 };
+  float offset[2] = { 0.0f, 0.0f };
+  float *outline = NULL;
+  int count = 0;
+  dt_dust_status_t status = DT_DUST_NOT_FOUND;
+  const gboolean too_wide = zone_mask && (size_t)zone.box_width * zone.box_height > RT_DUST_MAX_AREA;
+  if(zone_mask && !too_wide)
+  {
+    dt_dev_pixelpipe_cache_rdlock_entry(TRUE, entry);
+    status = dt_dust_find_in_zone(&image, &zone, &speck);
+    if(status == DT_DUST_OK && needs_source) status = dt_dust_find_source(&image, &speck, offset);
+    const float smoothing = dt_bauhaus_slider_get(g->sl_dust_smoothing);
+    if(status == DT_DUST_OK) status = dt_dust_outline(&speck, smoothing * roi.scale, &outline, &count);
+    dt_dev_pixelpipe_cache_rdlock_entry(FALSE, entry);
+  }
+  dt_dev_pixelpipe_cache_ref_count_entry(FALSE, entry);
+  dt_dust_speck_cleanup(&speck);
+  dt_free_align(zone_mask);
+  dt_free_align(stroke);
+  dt_control_queue_redraw_center();
+
+  if(too_wide)
+    dt_control_log(_("The painted area is too wide: paint over the speck of dust alone"));
+  else if(status == DT_DUST_NOT_FOUND)
+    dt_control_log(_("No speck of dust stands out in the painted area"));
+  else if(status == DT_DUST_NO_SOURCE)
+    dt_control_log(_("No clean area around this speck to heal it from"));
+  if(status != DT_DUST_OK || too_wide)
+  {
+    dt_free_align(outline);
+    return;
+  }
+
+  // the outline, and its first node moved by the source offset, to raw-normalized coordinates: from
+  // the ROI back to full resolution, then back through the modules before this one
+  float *points = dt_alloc_align_float((size_t)2 * (count + 1));
+  if(IS_NULL_PTR(points))
+  {
+    dt_free_align(outline);
+    return;
+  }
+  for(int k = 0; k <= count; k++)
+  {
+    const int src = k < count ? k : 0;
+    const float shift_x = k < count ? 0.0f : offset[0];
+    const float shift_y = k < count ? 0.0f : offset[1];
+    points[2 * k] = (outline[2 * src] + shift_x + roi.x) / roi.scale;
+    points[2 * k + 1] = (outline[2 * src + 1] + shift_y + roi.y) / roi.scale;
+  }
+  dt_free_align(outline);
+  dt_dev_distort_backtransform_gui(dev, self->iop_order, DT_DEV_TRANSFORM_DIR_BACK_EXCL, points, count + 1);
+  dt_dev_coordinates_raw_abs_to_raw_norm(dev, points, count + 1);
+
+  // a polygon's fading is a fraction of the raw's smaller side: a pixel and a half of it
+  const dt_dev_image_geometry_t geometry = dt_dev_geometry_snapshot(dev);
+  const float border = 1.5f / (float)MAX(1, MIN(geometry.raw_width, geometry.raw_height));
+  const float source_offset[2] = { points[2 * count] - points[0], points[2 * count + 1] - points[1] };
+  // the shape takes the algorithm for new shapes: Dust for heal, the brush checking "Dust mode"
+  dt_masks_polygon_add(dev, self, points, count, border, needs_source ? source_offset : NULL);
+  dt_free_align(points);
+
+  // the shapes shown are a copy of the module's group: made again, to hold the new one
+  if(g->dust_brush) rt_show_forms_for_current_scale(self);
+}
+
+static void rt_dust_wait_restart(gpointer user_data)
+{
+  dt_iop_module_t *self = (dt_iop_module_t *)user_data;
+  dt_iop_retouch_gui_data_t *g = (dt_iop_retouch_gui_data_t *)dt_iop_gui_data(self);
+  if(IS_NULL_PTR(g) || !g->dust_pending) return;
+  rt_dust_from_stroke(self);
+}
+
+static void rt_dust_stroke_add(dt_iop_module_t *self, const double x, const double y)
+{
+  dt_iop_retouch_gui_data_t *g = (dt_iop_retouch_gui_data_t *)dt_iop_gui_data(self);
+  float point[2] = { (float)x, (float)y };
+  dt_dev_coordinates_widget_to_image_norm(self->dev, point, 1);
+  g_array_append_vals(g->dust_stroke, point, 2);
+}
+
+/* How many widget pixels the brush's radius spans at an image-normalized point. */
+static float rt_dust_widget_radius(dt_develop_t *dev, const float *center, const float radius)
+{
+  float points[4] = { center[0], center[1], center[0], center[1] };
+  dt_dev_coordinates_image_norm_to_image_abs(dev, points, 2);
+  points[2] += radius;
+  dt_dev_coordinates_image_abs_to_image_norm(dev, points, 2);
+  dt_dev_coordinates_image_norm_to_widget(dev, points, 2);
+  return hypotf(points[2] - points[0], points[3] - points[1]);
+}
+
+/* With the brush in hand, the module takes the pointer: the masks let it go by then
+ * (dt_develop_t.darkroom_skip_mouse_events). A press starts a stroke, unless one still waits for
+ * the pipe. */
+int button_pressed(struct dt_iop_module_t *self, double x, double y, double pressure, int which, int type,
+                   uint32_t state)
+{
+  dt_iop_retouch_gui_data_t *g = (dt_iop_retouch_gui_data_t *)dt_iop_gui_data(self);
+  if(IS_NULL_PTR(g) || !g->dust_brush) return 0;
+
+  // a right click offers to put the brush down, as it offers to end a shape tool's creation
+  if(which == 3 && type == GDK_BUTTON_PRESS && !g->dust_painting)
+  {
+    GtkWidget *menu = gtk_menu_new();
+    GtkWidget *item
+        = ctx_gtk_menu_item_new_with_markup(_("Done removing dust"), menu, rt_dust_menu_done_callback, self);
+    menu_item_set_fake_accel(item, GDK_KEY_Escape, 0);
+    gtk_widget_show_all(menu);
+    gtk_menu_popup_at_pointer(GTK_MENU(menu), NULL);
+    return 1;
+  }
+
+  if(which != 1 || !dt_modifier_is(state, 0)) return 0;
+  if(type != GDK_BUTTON_PRESS || g->dust_pending) return 1;
+
+  g_array_set_size(g->dust_stroke, 0);
+  g->dust_painting = TRUE;
+  // a stroke, as a mask brush's: the view does not pan under it at the edge (the release clears it)
+  dt_control_mouse_is_painting(TRUE);
+  rt_dust_stroke_add(self, x, y);
+  dt_control_queue_redraw_center();
+  return 1;
+}
+
+int button_released(struct dt_iop_module_t *self, double x, double y, int which, uint32_t state)
+{
+  dt_iop_retouch_gui_data_t *g = (dt_iop_retouch_gui_data_t *)dt_iop_gui_data(self);
+  if(IS_NULL_PTR(g) || !g->dust_brush || !g->dust_painting || which != 1) return 0;
+
+  g->dust_painting = FALSE;
+  rt_dust_stroke_add(self, x, y);
+  g->dust_pending = TRUE;
+  rt_dust_from_stroke(self);
+  return 1;
+}
+
+int mouse_moved(struct dt_iop_module_t *self, double x, double y, double pressure, int which)
+{
+  dt_iop_retouch_gui_data_t *g = (dt_iop_retouch_gui_data_t *)dt_iop_gui_data(self);
+  if(IS_NULL_PTR(g) || !g->dust_brush) return 0;
+
+  if(g->dust_painting) rt_dust_stroke_add(self, x, y);
+  // again on every move: leaving the view shows the cursor
+  dt_control_set_cursor_visible(FALSE);
+  dt_control_queue_redraw_center();
+  return 1;
+}
+
+/* Escape puts the brush down, as it ends a shape tool's creation. */
+int key_pressed(struct dt_iop_module_t *self, GdkEventKey *event)
+{
+  dt_iop_retouch_gui_data_t *g = (dt_iop_retouch_gui_data_t *)dt_iop_gui_data(self);
+  if(IS_NULL_PTR(g) || IS_NULL_PTR(event) || !g->dust_brush || event->keyval != GDK_KEY_Escape) return 0;
+  rt_dust_brush_stop(self);
+  return 1;
+}
+
+/* The wheel sizes the brush as it sizes a shape: when the user mapped it to the size. */
+int scrolled(struct dt_iop_module_t *self, double x, double y, int up, uint32_t state)
+{
+  dt_iop_retouch_gui_data_t *g = (dt_iop_retouch_gui_data_t *)dt_iop_gui_data(self);
+  if(IS_NULL_PTR(g) || !g->dust_brush || dt_masks_scroll_get_interaction(state) != DT_MASKS_INTERACTION_SIZE)
+    return 0;
+
+  const float factor = dt_mask_scroll_increases(up) ? 1.1f : 1.0f / 1.1f;
+  g->dust_radius = CLAMP(g->dust_radius * factor, RT_DUST_RADIUS_MIN, RT_DUST_RADIUS_MAX);
+  dt_control_queue_redraw_center();
+  return 1;
+}
+
+/* The stroke being painted, or waiting for the pipe, and the brush at the pointer. */
+static void rt_dust_draw(dt_iop_module_t *self, cairo_t *cr, const int32_t pointerx, const int32_t pointery)
+{
+  dt_iop_retouch_gui_data_t *g = (dt_iop_retouch_gui_data_t *)dt_iop_gui_data(self);
+  dt_develop_t *dev = self->dev;
+  cairo_save(cr);
+
+  const int count = (int)(g->dust_stroke->len / 2);
+  float *points = count ? dt_alloc_align_float((size_t)2 * count) : NULL;
+  if(points)
+  {
+    memcpy(points, g->dust_stroke->data, sizeof(float) * 2 * count);
+    const float radius = rt_dust_widget_radius(dev, points, g->dust_radius);
+    dt_dev_coordinates_image_norm_to_widget(dev, points, count);
+    cairo_set_line_cap(cr, CAIRO_LINE_CAP_ROUND);
+    cairo_set_line_join(cr, CAIRO_LINE_JOIN_ROUND);
+    cairo_set_line_width(cr, 2.0 * radius);
+    cairo_set_source_rgba(cr, 1.0, 1.0, 1.0, 0.35);
+    cairo_move_to(cr, points[0], points[1]);
+    for(int k = 0; k < count; k++) cairo_line_to(cr, points[2 * k], points[2 * k + 1]);
+    cairo_stroke(cr);
+    dt_free_align(points);
+  }
+
+  if(!g->dust_painting && pointerx >= 0 && pointery >= 0)
+  {
+    float center[2] = { (float)pointerx, (float)pointery };
+    dt_dev_coordinates_widget_to_image_norm(dev, center, 1);
+    const float radius = rt_dust_widget_radius(dev, center, g->dust_radius);
+    // dark under light, so that it shows on any tone
+    cairo_arc(cr, pointerx, pointery, fmaxf(radius, 1.0f), 0.0, 2.0 * M_PI);
+    cairo_set_source_rgba(cr, 0.0, 0.0, 0.0, 0.6);
+    cairo_set_line_width(cr, 3.0);
+    cairo_stroke_preserve(cr);
+    cairo_set_source_rgba(cr, 1.0, 1.0, 1.0, 0.9);
+    cairo_set_line_width(cr, 1.0);
+    cairo_stroke(cr);
+  }
+  cairo_restore(cr);
+}
+
 void gui_post_expose (struct dt_iop_module_t *self,
                       cairo_t *cr,
                       int32_t width,
@@ -1767,6 +2272,8 @@ void gui_post_expose (struct dt_iop_module_t *self,
 {
   dt_iop_retouch_gui_data_t *g = (dt_iop_retouch_gui_data_t *)dt_iop_gui_data(self);
   if(IS_NULL_PTR(g)) return;
+
+  if(g->dust_brush) rt_dust_draw(self, cr, pointerx, pointery);
 
   const int shape_id = rt_get_selected_shape_id(self);
 
@@ -1791,6 +2298,13 @@ static gboolean rt_edit_masks_callback(GtkWidget *widget, GdkEventButton *event,
 
   dt_iop_gui_blend_data_t *bd = (dt_iop_gui_blend_data_t *)self->gui->blend_data;
   dt_iop_retouch_gui_data_t *g = (dt_iop_retouch_gui_data_t *)dt_iop_gui_data(self);
+
+  // the brush shows the shapes, not editable: the button puts it down and makes them so
+  if(g->dust_brush)
+  {
+    if(event->button == 1) rt_dust_brush_stop(self);
+    return TRUE;
+  }
 
   //hide all shapes and free if some are in creation
   if(self->dev->form_gui->creation && self->dev->form_gui->creation_module == self)
@@ -1844,10 +2358,10 @@ static gboolean rt_edit_masks_callback(GtkWidget *widget, GdkEventButton *event,
 static gboolean rt_algo_pair_compatible(const dt_iop_retouch_algo_type_t from,
                                         const dt_iop_retouch_algo_type_t to)
 {
-  return ((from == DT_IOP_RETOUCH_CLONE && to == DT_IOP_RETOUCH_HEAL)
-          || (from == DT_IOP_RETOUCH_HEAL && to == DT_IOP_RETOUCH_CLONE)
-          || (from == DT_IOP_RETOUCH_BLUR && to == DT_IOP_RETOUCH_FILL)
-          || (from == DT_IOP_RETOUCH_FILL && to == DT_IOP_RETOUCH_BLUR));
+  // the algorithms with a source exchange their shapes, and so do the two without
+  return (rt_algo_needs_source(from) && rt_algo_needs_source(to))
+         || (from == DT_IOP_RETOUCH_BLUR && to == DT_IOP_RETOUCH_FILL)
+         || (from == DT_IOP_RETOUCH_FILL && to == DT_IOP_RETOUCH_BLUR);
 }
 
 static gboolean rt_select_algorithm_callback(GtkToggleButton *togglebutton, GdkEventButton *e,
@@ -1860,6 +2374,7 @@ static gboolean rt_select_algorithm_callback(GtkToggleButton *togglebutton, GdkE
   dt_iop_retouch_params_t *p = (dt_iop_retouch_params_t *)self->params;
   dt_iop_retouch_gui_data_t *g = (dt_iop_retouch_gui_data_t *)dt_iop_gui_data(self);
 
+  // the dust brush stays in hand: the shapes it makes take the algorithm chosen
   dt_iop_retouch_algo_type_t new_algo = DT_IOP_RETOUCH_HEAL;
 
   if(togglebutton == (GtkToggleButton *)g->bt_blur)
@@ -1867,7 +2382,9 @@ static gboolean rt_select_algorithm_callback(GtkToggleButton *togglebutton, GdkE
   else if(togglebutton == (GtkToggleButton *)g->bt_clone)
     new_algo = DT_IOP_RETOUCH_CLONE;
   else if(togglebutton == (GtkToggleButton *)g->bt_heal)
-    new_algo = DT_IOP_RETOUCH_HEAL;
+    // the heal "Dust mode" asks for, kept while another algorithm was chosen
+    new_algo = gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(g->cb_heal_grain)) ? DT_IOP_RETOUCH_DUST
+                                                                                 : DT_IOP_RETOUCH_HEAL;
   else if(togglebutton == (GtkToggleButton *)g->bt_fill)
     new_algo = DT_IOP_RETOUCH_FILL;
 
@@ -1883,10 +2400,7 @@ static gboolean rt_select_algorithm_callback(GtkToggleButton *togglebutton, GdkE
 
   if(accept) p->algorithm = new_algo;
 
-  gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->bt_clone), (p->algorithm == DT_IOP_RETOUCH_CLONE));
-  gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->bt_heal), (p->algorithm == DT_IOP_RETOUCH_HEAL));
-  gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->bt_blur), (p->algorithm == DT_IOP_RETOUCH_BLUR));
-  gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->bt_fill), (p->algorithm == DT_IOP_RETOUCH_FILL));
+  rt_update_algorithm_buttons(g, p);
 
   rt_show_hide_controls(self);
 
@@ -1896,7 +2410,7 @@ static gboolean rt_select_algorithm_callback(GtkToggleButton *togglebutton, GdkE
     return FALSE;
   }
 
-  const gboolean armed = self->dev->form_gui->creation && (self->dev->form_gui->creation_module == self);
+  const gboolean armed = rt_shape_tool_armed(self);
   if(index >= 0 && dt_modifier_is(e->state, DT_PRIMARY_MASK))
   {
     if(p->algorithm != p->rt_forms[index].algorithm)
@@ -1920,7 +2434,7 @@ static gboolean rt_select_algorithm_callback(GtkToggleButton *togglebutton, GdkE
       type = DT_MASKS_BRUSH;
 
     dt_masks_type_t masks_type = DT_MASKS_NONE;
-    if(p->algorithm == DT_IOP_RETOUCH_CLONE || p->algorithm == DT_IOP_RETOUCH_HEAL)
+    if(rt_algo_needs_source(p->algorithm))
       masks_type = (type | DT_MASKS_CLONE);
     else
       masks_type = (type | DT_MASKS_NON_CLONE);
@@ -1948,7 +2462,7 @@ static gboolean rt_select_algorithm_callback(GtkToggleButton *togglebutton, GdkE
     // and we show a toat msg to confirm
     if(p->algorithm == DT_IOP_RETOUCH_CLONE)
       dt_control_log(N_("default tool changed to %s"), N_("cloning"));
-    else if(p->algorithm == DT_IOP_RETOUCH_HEAL)
+    else if(p->algorithm == DT_IOP_RETOUCH_HEAL || p->algorithm == DT_IOP_RETOUCH_DUST)
       dt_control_log(N_("default tool changed to %s"), N_("healing"));
     else if(p->algorithm == DT_IOP_RETOUCH_FILL)
       dt_control_log(N_("default tool changed to %s"), N_("blur"));
@@ -2102,6 +2616,10 @@ void cleanup_global(dt_iop_module_so_t *module)
 
 void gui_focus(struct dt_iop_module_t *self, gboolean in)
 {
+  // the brush is put down with the focus, and a stroke waiting for the pipe with it, the module on
+  // or not: it holds the masks' pointer events
+  if(!in) rt_dust_brush_stop(self);
+
   if(self->enabled)
   {
     dt_iop_retouch_gui_data_t *g = (dt_iop_retouch_gui_data_t *)dt_iop_gui_data(self);
@@ -2220,10 +2738,8 @@ void gui_update(dt_iop_module_t *self)
   rt_show_forms_for_current_scale(self);
 
   // enable/disable algorithm toolbar
-  gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->bt_clone), p->algorithm == DT_IOP_RETOUCH_CLONE);
-  gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->bt_blur), p->algorithm == DT_IOP_RETOUCH_BLUR);
-  gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->bt_heal), p->algorithm == DT_IOP_RETOUCH_HEAL);
-  gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->bt_fill), p->algorithm == DT_IOP_RETOUCH_FILL);
+  rt_update_algorithm_buttons(g, p);
+  gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->bt_dust), g->dust_brush);
 
   // enable/disable shapes toolbar
   gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->bt_circle), rt_shape_is_being_added(self, DT_MASKS_CIRCLE));
@@ -2340,6 +2856,19 @@ void gui_init(dt_iop_module_t *self)
   g->bt_ellipse = shape_buttons[DT_MASKS_SHAPE_INDEX_ELLIPSE];
   g->bt_polygon = shape_buttons[DT_MASKS_SHAPE_INDEX_POLYGON];
   g->bt_brush = shape_buttons[DT_MASKS_SHAPE_INDEX_BRUSH];
+
+  // beside the shapes it makes, not with the editing button at the far end
+  g->bt_dust = dt_iop_togglebutton_new(self, N_("shapes"), N_("Paint over a speck of dust to remove it"), NULL,
+                                       G_CALLBACK(rt_dust_brush_callback), TRUE, 0, 0, dtgtk_cairo_paint_tool_dust,
+                                       NULL);
+  gtk_box_pack_start(GTK_BOX(hbox_shapes), g->bt_dust, FALSE, FALSE, 0);
+  gtk_widget_set_tooltip_text(g->bt_dust, _("Paint over a speck of dust, or along a scratch, to remove it: it is "
+                                            "found in the painted area and outlined with a shape, which the "
+                                            "algorithm selected repairs. Heal and clone take a clean area nearby; "
+                                            "the brush checks \"Dust mode\" for heal.\n"
+                                            "The mouse wheel sizes the brush as it sizes a shape."));
+  g->dust_stroke = g_array_new(FALSE, FALSE, sizeof(float));
+  g->dust_radius = RT_DUST_RADIUS_DEFAULT;
 
   // algorithm toolbar
   GtkWidget *hbox_algo = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_BOX_SPACING);
@@ -2527,6 +3056,31 @@ void gui_init(dt_iop_module_t *self)
   gtk_widget_set_tooltip_text(g->sl_fill_brightness,
                               _("Adjusts color brightness to fine-tune it. Works with erase as well"));
 
+  // heal properties
+  g->vbox_heal = self->gui->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
+
+  g->cmb_heal_algorithm = dt_bauhaus_combobox_from_params(self, "heal_algorithm");
+  gtk_widget_set_tooltip_text(g->cmb_heal_algorithm,
+                              _("- Linear: the source keeps its own noise and texture amplitude,\n"
+                                "          a source brighter than the target makes it noisier\n"
+                                "- Square root: the source noise is scaled to the brightness of the target\n"
+                                "It applies to all the heal shapes of the module."));
+  g_object_set_data(G_OBJECT(g->cmb_heal_algorithm), "dt-masks-tool-setting", GINT_TO_POINTER(TRUE));
+
+  // a check box as dt_bauhaus_toggle_from_params() makes them: Dust is no parameter of its own
+  GtkWidget *lbl_heal_grain = gtk_label_new(_("Dust mode"));
+  gtk_label_set_ellipsize(GTK_LABEL(lbl_heal_grain), PANGO_ELLIPSIZE_END);
+  g->cb_heal_grain = gtk_check_button_new();
+  gtk_container_add(GTK_CONTAINER(g->cb_heal_grain), lbl_heal_grain);
+  gtk_widget_set_tooltip_text(g->cb_heal_grain,
+                              _("Heal takes only the grain of the source, its detail finer than two pixels: "
+                                "the rest comes from the edge of the shape, and no detail of the source is "
+                                "brought in. Meant for specks of dust rather than wide areas.\n"
+                                "It applies to the selected heal shape, or to the next ones. The dust brush "
+                                "checks it while in hand."));
+  g_signal_connect(G_OBJECT(g->cb_heal_grain), "toggled", G_CALLBACK(rt_heal_grain_callback), self);
+  gtk_box_pack_start(GTK_BOX(g->vbox_heal), g->cb_heal_grain, FALSE, FALSE, 0);
+
   // blur properties
   g->vbox_blur = self->gui->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_GUI_BOX_SPACING);
 
@@ -2555,12 +3109,19 @@ void gui_init(dt_iop_module_t *self)
   // algorithms toolbar
   gtk_box_pack_start(GTK_BOX(self->gui->widget), hbox_algo, TRUE, TRUE, 0);
 
-  g->cmb_heal_algorithm = dt_bauhaus_combobox_from_params(self, "heal_algorithm");
-  gtk_widget_set_tooltip_text(g->cmb_heal_algorithm,
-                              _("- Linear: the source keeps its own noise and texture amplitude,\n"
-                                "          a source brighter than the target makes it noisier\n"
-                                "- Square root: the source noise is scaled to the brightness of the target"));
-  g_object_set_data(G_OBJECT(g->cmb_heal_algorithm), "dt-masks-tool-setting", GINT_TO_POINTER(TRUE));
+  g->sl_dust_smoothing = dt_bauhaus_slider_new_with_range(dt_bauhaus_get_global(), DT_GUI_MODULE(self),
+                                                          RT_DUST_SMOOTHING_MIN, RT_DUST_SMOOTHING_MAX, 0.25f,
+                                                          RT_DUST_SMOOTHING_DEFAULT, 2);
+  dt_bauhaus_widget_set_label(g->sl_dust_smoothing, N_("Dust outline smoothing"));
+  dt_bauhaus_slider_set_format(g->sl_dust_smoothing, " px");
+  dt_bauhaus_slider_set(g->sl_dust_smoothing, CLAMPF(dt_conf_get_float(RT_DUST_SMOOTHING_CONF),
+                                                     RT_DUST_SMOOTHING_MIN, RT_DUST_SMOOTHING_MAX));
+  gtk_widget_set_tooltip_text(g->sl_dust_smoothing,
+                              _("How far the outline of the shapes the dust brush makes may stray from the "
+                                "speck, in image pixels. More makes shapes of fewer nodes, which may leave "
+                                "the edge of the speck out. It applies to the next shapes."));
+  g_signal_connect(G_OBJECT(g->sl_dust_smoothing), "value-changed", G_CALLBACK(rt_dust_smoothing_callback), self);
+  gtk_box_pack_start(GTK_BOX(self->gui->widget), g->sl_dust_smoothing, TRUE, TRUE, 0);
 
   // wavelet decompose
   GtkWidget *lbl_wd = dt_ui_section_label_new(_("wavelet decompose"));
@@ -2582,6 +3143,8 @@ void gui_init(dt_iop_module_t *self)
 
   // shape selected
   gtk_box_pack_start(GTK_BOX(self->gui->widget), hbox_shape_sel, TRUE, TRUE, 0);
+  // heal algorithm and grain
+  gtk_box_pack_start(GTK_BOX(self->gui->widget), g->vbox_heal, TRUE, TRUE, 0);
   // blur radius
   gtk_box_pack_start(GTK_BOX(self->gui->widget), g->vbox_blur, TRUE, TRUE, 0);
   // fill color
@@ -2613,6 +3176,12 @@ void reload_defaults(dt_iop_module_t *self)
 void gui_cleanup(dt_iop_module_t *self)
 {
   DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(dt_control_signal_get_global(), G_CALLBACK(rt_develop_ui_pipe_finished_callback), self);
+
+  dt_iop_retouch_gui_data_t *g = (dt_iop_retouch_gui_data_t *)dt_iop_gui_data(self);
+  dt_dev_pixelpipe_cache_wait_cleanup(&g->dust_wait, "retouch-dust-gui-cleanup");
+  g_array_free(g->dust_stroke, TRUE);
+  // a brush still in hand leaves the masks their pointer events
+  if(g->dust_brush) self->dev->darkroom_skip_mouse_events = FALSE;
 
   IOP_GUI_FREE;
 }
@@ -2661,11 +3230,6 @@ static dt_masks_form_t *rt_pipe_member_form(const dt_dev_pixelpipe_t *pipe, cons
   *index = rt_get_index_from_formid(p, *formid);
   if(*index < 0) return NULL;
   return dt_masks_get_from_id_in_pipe(pipe, *formid);
-}
-
-static gboolean rt_algo_needs_source(const dt_iop_retouch_algo_type_t algo)
-{
-  return algo == DT_IOP_RETOUCH_HEAL || algo == DT_IOP_RETOUCH_CLONE;
 }
 
 // Grow the bounds to cover an area shifted by (dx, dy).
@@ -2832,7 +3396,8 @@ static void rt_compute_roi_in(const rt_masks_ctx_t *const ctx, const dt_iop_roi_
     const dt_iop_retouch_form_data_t *data = &p->rt_forms[index];
 
     // heal needs the entire area
-    if(data->algorithm == DT_IOP_RETOUCH_HEAL) rt_roi_bounds_include_area(bounds, &area, 0.f, 0.f);
+    if(data->algorithm == DT_IOP_RETOUCH_HEAL || data->algorithm == DT_IOP_RETOUCH_DUST)
+      rt_roi_bounds_include_area(bounds, &area, 0.f, 0.f);
 
     // blur needs an overlap of 4 * radius (scaled)
     if(data->algorithm == DT_IOP_RETOUCH_BLUR)
@@ -3168,7 +3733,9 @@ static void rt_copy_in_to_out(const float *const in, const struct dt_iop_roi_t *
 static void rt_scaled_mask_roi(const dt_masks_area_t *const area, const dt_iop_roi_t *const roi_in, const int dx,
                                const int dy, const int algo, dt_iop_roi_t *roi_mask_scaled)
 {
-  const int padding = (algo == DT_IOP_RETOUCH_HEAL) ? 1 : 0;
+  // a heal reads the border around its mask; a dust shape also the source's box mean around it
+  // (rt_heal_solver())
+  const int padding = (algo == DT_IOP_RETOUCH_HEAL) ? 1 : (algo == DT_IOP_RETOUCH_DUST) ? 3 : 0;
 
   dt_iop_roi_t roi_mask = { .x = area->x, .y = area->y, .width = area->width, .height = area->height, .scale = 1.f };
 
@@ -3384,18 +3951,28 @@ static int _retouch_blur(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, 
   return 0;
 }
 
+// How a heal or a dust shape is solved at this wavelet scale.
 // Only the image itself (scale 0) and the wavelet residual carry a light level. Detail scales are
 // signed, zero-mean differences, which the square-root domain cannot represent: they heal linearly
 // whatever the algorithm.
-static dt_heal_domain_t rt_heal_domain(const dt_iop_retouch_params_t *const p, const int scale, const int scales)
+// A dust shape carries only the source's detail finer than a 5 × 5 box at full resolution, the
+// box measured best (doc/iop-notes.md), narrowed with the layer's scale down to 3 × 3.
+static dt_heal_solver_t rt_heal_solver(const dt_iop_retouch_params_t *const p,
+                                       const dt_iop_retouch_algo_type_t algo, const int scale, const int scales,
+                                       const float roi_scale)
 {
   const gboolean has_level = (scale == 0 || scale == scales + 1);
-  return (p->heal_algorithm == DT_IOP_RETOUCH_HEAL_SQRT && has_level) ? DT_HEAL_DOMAIN_SQRT : DT_HEAL_DOMAIN_LINEAR;
+  return (dt_heal_solver_t){
+    .max_iter = p->max_heal_iter,
+    .domain = (p->heal_algorithm == DT_IOP_RETOUCH_HEAL_SQRT && has_level) ? DT_HEAL_DOMAIN_SQRT
+                                                                             : DT_HEAL_DOMAIN_LINEAR,
+    .texture_radius = (algo == DT_IOP_RETOUCH_DUST) ? MAX(1, (int)lrintf(2.0f * roi_scale)) : 0,
+  };
 }
 
 static int _retouch_heal(float *const in, dt_iop_roi_t *const roi_in, float *const mask_scaled,
                          dt_iop_roi_t *const roi_mask_scaled, const int dx, const int dy, const float opacity,
-                         const int max_iter, const dt_heal_domain_t domain)
+                         const dt_heal_solver_t solver)
 {
   float *img_src = NULL;
   float *img_dest = NULL;
@@ -3416,8 +3993,7 @@ static int _retouch_heal(float *const in, dt_iop_roi_t *const roi_in, float *con
   rt_copy_in_to_out(in, roi_in, img_dest, roi_mask_scaled, 4, 0, 0);
 
   // heal it
-  dt_heal(img_src, img_dest, mask_scaled, roi_mask_scaled->width, roi_mask_scaled->height, 4,
-          (dt_heal_solver_t){ .max_iter = max_iter, .domain = domain });
+  dt_heal(img_src, img_dest, mask_scaled, roi_mask_scaled->width, roi_mask_scaled->height, 4, solver);
 
   // copy healed (temp) image to destination image
   rt_copy_image_masked(img_dest, in, roi_in, mask_scaled, roi_mask_scaled, opacity);
@@ -3859,10 +4435,10 @@ static int rt_process_forms(float *layer, dwt_params_t *const wt_p, const int sc
         return 1;
       }
     }
-    else if(algo == DT_IOP_RETOUCH_HEAL)
+    else if(algo == DT_IOP_RETOUCH_HEAL || algo == DT_IOP_RETOUCH_DUST)
     {
-      if(_retouch_heal(layer, roi_layer, mask_scaled, &roi_mask_scaled, dx, dy, form_opacity, p->max_heal_iter,
-                       rt_heal_domain(p, scale1, wt_p->scales)) != 0)
+      if(_retouch_heal(layer, roi_layer, mask_scaled, &roi_mask_scaled, dx, dy, form_opacity,
+                       rt_heal_solver(p, algo, scale1, wt_p->scales, roi_layer->scale)) != 0)
       {
         rt_release_shape(&shape);
         return 1;
@@ -4489,7 +5065,7 @@ cleanup:
 static cl_int _retouch_heal_cl(const int devid, cl_mem dev_layer, dt_iop_roi_t *const roi_layer, float *mask_scaled,
                                cl_mem dev_mask_scaled, dt_iop_roi_t *const roi_mask_scaled, const int dx,
                                const int dy, const float opacity, const dt_iop_retouch_global_data_t *const gd,
-                               const int max_iter, const dt_heal_domain_t domain)
+                               const dt_heal_solver_t solver)
 {
   cl_int err = CL_SUCCESS;
 
@@ -4534,8 +5110,7 @@ static cl_int _retouch_heal_cl(const int devid, cl_mem dev_layer, dt_iop_roi_t *
   heal_params_cl_t *hp = dt_heal_init_cl(devid);
   if(hp)
   {
-    err = dt_heal_cl(hp, dev_src, dev_dest, mask_scaled, roi_mask_scaled->width, roi_mask_scaled->height,
-                     (dt_heal_solver_t){ .max_iter = max_iter, .domain = domain });
+    err = dt_heal_cl(hp, dev_src, dev_dest, mask_scaled, roi_mask_scaled->width, roi_mask_scaled->height, solver);
     dt_heal_free_cl(hp);
 
     dt_opencl_release_mem_object(dev_src);
@@ -4635,10 +5210,11 @@ static cl_int rt_process_forms_cl(cl_mem dev_layer, dwt_params_cl_t *const wt_p,
           err = _retouch_clone_cl(devid, dev_layer, roi_layer, dev_mask_scaled, &roi_mask_scaled, dx, dy,
                                   form_opacity, gd);
         }
-        else if(algo == DT_IOP_RETOUCH_HEAL)
+        else if(algo == DT_IOP_RETOUCH_HEAL || algo == DT_IOP_RETOUCH_DUST)
         {
           err = _retouch_heal_cl(devid, dev_layer, roi_layer, mask_scaled, dev_mask_scaled, &roi_mask_scaled, dx,
-                                  dy, form_opacity, gd, p->max_heal_iter, rt_heal_domain(p, scale1, wt_p->scales));
+                                 dy, form_opacity, gd,
+                                 rt_heal_solver(p, algo, scale1, wt_p->scales, roi_layer->scale));
         }
         else if(algo == DT_IOP_RETOUCH_BLUR)
         {
@@ -4870,7 +5446,7 @@ static void rt_menu_select_algorithm_callback(GtkWidget *widget, gpointer user_d
   const int algo = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(widget), "algo"));
   const int index = rt_get_index_from_formid(p, formid);
   if(index < 0) return;
-  if(algo < DT_IOP_RETOUCH_CLONE || algo > DT_IOP_RETOUCH_FILL) return;
+  if(algo < DT_IOP_RETOUCH_CLONE || algo > DT_IOP_RETOUCH_DUST) return;
   if(p->rt_forms[index].algorithm == algo) return;
   dt_masks_form_t *form = dt_masks_get_from_id(self->dev, formid);
   if(IS_NULL_PTR(form)) return;
@@ -4880,7 +5456,7 @@ static void rt_menu_select_algorithm_callback(GtkWidget *widget, gpointer user_d
 
   // Switch the clone type of the form
   dt_masks_type_t masks_type = form->type;
-  if(algo == DT_IOP_RETOUCH_CLONE || algo == DT_IOP_RETOUCH_HEAL)
+  if(rt_algo_needs_source(algo))
   {
     masks_type |= DT_MASKS_CLONE;
     masks_type &= ~DT_MASKS_NON_CLONE;
@@ -4912,6 +5488,7 @@ int populate_masks_context_menu(struct dt_iop_module_t *self, GtkWidget *menu, c
   GtkWidget *sub_menu = gtk_menu_new();
   gtk_menu_item_set_submenu(GTK_MENU_ITEM(menu_item), sub_menu);
 
+  // Dust is heal keeping only the grain: no entry of its own, its shapes show as Heal
   static const struct
   {
     dt_iop_retouch_algo_type_t algo;
@@ -4920,10 +5497,13 @@ int populate_masks_context_menu(struct dt_iop_module_t *self, GtkWidget *menu, c
                       { DT_IOP_RETOUCH_HEAL, N_("Heal") },
                       { DT_IOP_RETOUCH_BLUR, N_("Blur") },
                       { DT_IOP_RETOUCH_FILL, N_("Fill") },};
+  const dt_iop_retouch_algo_type_t algo = p->rt_forms[index].algorithm == DT_IOP_RETOUCH_DUST
+                                              ? DT_IOP_RETOUCH_HEAL
+                                              : p->rt_forms[index].algorithm;
 
   for(size_t i = 0; i < G_N_ELEMENTS(algo_entries); i++)
   {
-    const gboolean is_selected = (p->rt_forms[index].algorithm == algo_entries[i].algo);
+    const gboolean is_selected = (algo == algo_entries[i].algo);
     const char *const label = _(algo_entries[i].name);
     GtkWidget *algo_item = ctx_gtk_check_menu_item_new_with_markup(label, sub_menu,
                                                           is_selected ? NULL : rt_menu_select_algorithm_callback, self,

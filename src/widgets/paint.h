@@ -29,6 +29,7 @@
     Copyright (C) 2022 Martin Bařinka.
     Copyright (C) 2022 Nicolas Auffray.
     Copyright (C) 2025 Alynx Zhou.
+    Copyright (C) 2026 Guillaume Stutin.
     
     darktable is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -331,6 +332,8 @@ void dtgtk_cairo_paint_masks_used(cairo_t *cr, gint x, gint y, gint w, gint h, g
 void dtgtk_cairo_paint_tool_clone(cairo_t *cr, gint x, gint y, gint w, gint h, gint flags, void *data);
 /** Paint a heal tool for retouch */
 void dtgtk_cairo_paint_tool_heal(cairo_t *cr, gint x, gint y, gint w, gint h,  gint flags, void *data);
+/** Paint a dust removal tool for retouch */
+void dtgtk_cairo_paint_tool_dust(cairo_t *cr, gint x, gint y, gint w, gint h, gint flags, void *data);
 /** Paint a fill tool for retouch */
 void dtgtk_cairo_paint_tool_fill(cairo_t *cr, gint x, gint y, gint w, gint h,  gint flags, void *data);
 /** Paint a blur tool for retouch */

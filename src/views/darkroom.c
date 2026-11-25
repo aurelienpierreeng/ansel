@@ -2641,8 +2641,10 @@ static gboolean _darkroom_edge_pan_enable_check(dt_develop_t *dev)
   dt_masks_form_gui_t *form_gui = dev->form_gui;
   const gboolean mouse_action = gui->mouse.is_dragging && !gui->mouse.is_painting;
   const gboolean creating_shape_mode = !IS_NULL_PTR(form_gui) && form_gui->creation && !gui->mouse.is_painting;
+  // a module's own tool in hand, the masks letting the pointer go to it (retouch's dust brush)
+  const gboolean module_tool = dev->darkroom_skip_mouse_events && !gui->mouse.is_painting;
 
-  return  creating_shape_mode || mouse_action;
+  return  creating_shape_mode || module_tool || mouse_action;
 }
 
 /**

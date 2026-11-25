@@ -34,6 +34,7 @@
     Copyright (C) 2021 Harald.
     Copyright (C) 2021-2022 Nicolas Auffray.
     Copyright (C) 2022 Martin Bařinka.
+    Copyright (C) 2026 Guillaume Stutin.
     
     darktable is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -3177,6 +3178,28 @@ void dtgtk_cairo_paint_tool_heal(cairo_t *cr, gint x, gint y, gint w, gint h, gi
   cairo_set_fill_rule(cr, CAIRO_FILL_RULE_EVEN_ODD);
   cairo_fill(cr);
   cairo_stroke(cr);
+
+  FINISH
+}
+
+void dtgtk_cairo_paint_tool_dust(cairo_t *cr, gint x, gint y, gint w, gint h, gint flags, void *data)
+{
+  PREAMBLE(1, 1, 0, 0)
+
+  // an irregular speck, closed through four curves
+  cairo_move_to(cr, 0.30, 0.45);
+  cairo_curve_to(cr, 0.25, 0.25, 0.50, 0.20, 0.60, 0.30);
+  cairo_curve_to(cr, 0.75, 0.40, 0.75, 0.60, 0.60, 0.70);
+  cairo_curve_to(cr, 0.45, 0.80, 0.35, 0.70, 0.40, 0.60);
+  cairo_curve_to(cr, 0.42, 0.55, 0.32, 0.55, 0.30, 0.45);
+  cairo_close_path(cr);
+  cairo_fill(cr);
+
+  // and two smaller ones
+  cairo_arc(cr, 0.82, 0.18, 0.07, 0, 2 * M_PI);
+  cairo_fill(cr);
+  cairo_arc(cr, 0.18, 0.82, 0.05, 0, 2 * M_PI);
+  cairo_fill(cr);
 
   FINISH
 }

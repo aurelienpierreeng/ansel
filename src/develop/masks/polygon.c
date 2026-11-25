@@ -1600,6 +1600,40 @@ static int _polygon_creation_closing_form(dt_masks_form_t *mask_form, dt_masks_f
   return 1;
 }
 
+int dt_masks_polygon_add(dt_develop_t *dev, struct dt_iop_module_t *module, const float *points, const int count,
+                         const float border, const float *source_offset)
+{
+  // create_ext registers the form in dev->allforms, the creator's claim released at teardown;
+  // dt_masks_gui_form_save_creation() takes dev->forms's own reference
+  const dt_masks_type_t source_type = IS_NULL_PTR(source_offset) ? DT_MASKS_NON_CLONE : DT_MASKS_CLONE;
+  dt_masks_form_t *mask_form = dt_masks_create_ext(dev, DT_MASKS_POLYGON | source_type);
+  if(IS_NULL_PTR(mask_form)) return 0;
+
+  // smooth nodes, as a click places them: control points left to _polygon_init_ctrl_points()
+  for(int k = 0; k < count; k++)
+  {
+    dt_masks_node_polygon_t *node = (dt_masks_node_polygon_t *)malloc(sizeof(dt_masks_node_polygon_t));
+    if(IS_NULL_PTR(node)) return 0;
+    node->node[0] = points[2 * k];
+    node->node[1] = points[2 * k + 1];
+    node->ctrl1[0] = node->ctrl1[1] = node->ctrl2[0] = node->ctrl2[1] = -1.0f;
+    node->border[0] = node->border[1] = CLAMPF(border, FADING_MIN, FADING_MAX);
+    node->state = DT_MASKS_POINT_STATE_NORMAL;
+    mask_form->points = g_list_append(mask_form->points, node);
+  }
+  _polygon_init_ctrl_points(mask_form);
+
+  // a polygon's source is where its first node is copied from
+  if(!IS_NULL_PTR(source_offset))
+  {
+    mask_form->source[0] = points[0] + source_offset[0];
+    mask_form->source[1] = points[1] + source_offset[1];
+  }
+
+  dt_masks_gui_form_save_creation(dev, module, mask_form, NULL);
+  return mask_form->formid;
+}
+
 static int _polygon_events_button_pressed(struct dt_iop_module_t *module, double x, double y,
                                        double pressure, int which, int type, uint32_t state,
                                        dt_masks_form_t *mask_form, int parent_id,

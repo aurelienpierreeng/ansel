@@ -232,6 +232,7 @@ FILE(GLOB SOURCE_FILES
   "develop/blends/blendif_rgb_jzczhz.c"
   "develop/tiling.c"
   "common/colorchecker.c"
+  "pixel/dust.c"
   "pixel/dwt.c"
   "pixel/heal.c"
   "common/iop-autoset.c"
