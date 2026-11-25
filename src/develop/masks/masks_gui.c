@@ -1599,6 +1599,23 @@ static dt_masks_form_t *_dt_masks_events_get_dispatch_form(dt_masks_form_t *visi
   return selected_form;
 }
 
+/* The cursor is inside a form and off its border once its reach is set aside: the shape's own hit
+ * test at a radius of 0. A polygon's border is wherever its outline is in reach, so inside one
+ * narrower than twice the reach the border is everywhere; a circle's and an ellipse's answer the
+ * same as with the reach. */
+static gboolean _dt_masks_cursor_within_form(const dt_masks_form_t *form, dt_masks_form_gui_t *mask_gui,
+                                             const int index, const float cursor_x, const float cursor_y)
+{
+  int inside = 0;
+  int inside_border = 0;
+  int near_handle = -1;
+  int inside_source = 0;
+  float dist = FLT_MAX;
+  form->functions->get_distance(cursor_x, cursor_y, 0.0f, mask_gui, index, g_list_length(form->points), &inside,
+                                &inside_border, &near_handle, &inside_source, &dist);
+  return inside && !inside_border && near_handle < 0;
+}
+
 /**
  * @brief Update group selection from the current cached cursor before leaf dispatch.
  *
@@ -1677,8 +1694,10 @@ static gboolean _dt_masks_events_group_update_selection(dt_masks_form_t *group_f
     const gboolean is_selected_form = (prev_group_selected == index);
     const gboolean hit_border = (inside_border || near_handle >= 0);
     const gboolean is_open_shape = (form->type & DT_MASKS_IS_OPEN_SHAPE) != 0;
-    // Only open shapes can be selected via their border when unselected.
-    if(!is_selected_form && hit_border && !is_open_shape)
+    // Only open shapes can be selected via their border when unselected: a closed one, from within.
+    // Within a small polygon, the border is in reach everywhere: within is asked without the reach.
+    if(!is_selected_form && hit_border && !is_open_shape
+       && !_dt_masks_cursor_within_form(form, mask_gui, index, cursor_x, cursor_y))
       continue;
 
     if(inside || hit_border || inside_source)
@@ -1708,12 +1727,14 @@ static gboolean _dt_masks_events_group_update_selection(dt_masks_form_t *group_f
   return mask_gui->group_selected >= 0;
 }
 
-static gboolean _dt_masks_events_should_update_hover_on_move(dt_masks_form_gui_t *mask_gui)
+/* Every move tests the hover again: it was tested only once the cursor had gone half its reach from
+ * the last test, which left a node shown hovered where the cursor stopped short of that, out of the
+ * node's reach. The test walks the one shape the events go to. */
+static gboolean _dt_masks_events_should_update_hover_on_move(const dt_masks_form_gui_t *mask_gui)
 {
   if(IS_NULL_PTR(mask_gui) || mask_gui->creation) return FALSE;
   if(mask_gui->form_rotating || mask_gui->border_toggling || mask_gui->gradient_toggling) return FALSE;
-  if(dt_masks_gui_is_dragging(mask_gui)) return FALSE;
-  return dt_masks_gui_should_hit_test(mask_gui);
+  return !dt_masks_gui_is_dragging(mask_gui);
 }
 
 static int _dt_masks_events_update_hover(dt_masks_form_t *dispatch_form, dt_masks_form_gui_t *mask_gui,
@@ -1884,7 +1905,6 @@ void dt_masks_init_form_gui(dt_develop_t *dev, dt_masks_form_gui_t *mask_gui)
   mask_gui->last_rebuild_ts = 0.0;
   mask_gui->last_rebuild_pos[0] = mask_gui->last_rebuild_pos[1] = 0.0f;
   mask_gui->rebuild_pending = FALSE;
-  mask_gui->last_hit_test_pos[0] = mask_gui->last_hit_test_pos[1] = -1.0f;
 }
 
 void dt_masks_soft_reset_form_gui(dt_masks_form_gui_t *mask_gui)
@@ -1908,7 +1928,6 @@ void dt_masks_soft_reset_form_gui(dt_masks_form_gui_t *mask_gui)
   mask_gui->last_rebuild_ts = 0.0;
   mask_gui->last_rebuild_pos[0] = mask_gui->last_rebuild_pos[1] = 0.0f;
   mask_gui->rebuild_pending = FALSE;
-  mask_gui->last_hit_test_pos[0] = mask_gui->last_hit_test_pos[1] = -1.0f;
 }
 
 void dt_masks_gui_set_outline_density(dt_masks_form_gui_t *mask_gui, const double image_px_per_device_px)
@@ -2778,7 +2797,8 @@ static void _apply_gui_button_pressed_state(dt_masks_form_gui_t *mask_gui, const
    * one consumer reading both families at once, is where the split shows. */
   // Drag is only allowed when this click happens on a shape that was already selected.
   // We still rebuild the fine-grained selection from the current hover target first, so the
-  // pressed node/handle/segment becomes the active drag target when dragging is allowed.
+  // pressed node/handle/segment becomes the active drag target when dragging is allowed --
+  // except on the left click that selects the shape, below.
   const gboolean prev_node_selected = mask_gui->node_selected;
   const int prev_node_selected_idx = mask_gui->node_selected_idx;
   const gboolean prev_form_selected = mask_gui->form_selected;
@@ -2793,6 +2813,20 @@ static void _apply_gui_button_pressed_state(dt_masks_form_gui_t *mask_gui, const
   mask_gui->form_selected = FALSE;
   mask_gui->border_selected = FALSE;
   mask_gui->source_selected = FALSE;
+
+  /* The left click that selects a shape selects the shape alone: a node, a handle or a segment of
+   * it is the next click's, as a drag is. On a shape narrower than twice the cursor's reach a node
+   * is in reach from all of its inside, and the click meant to select the shape took a node, which
+   * the wheel then edited alone. */
+  if(button == 1 && !shape_was_selected)
+  {
+    const gboolean on_part = mask_gui->node_hovered >= 0 || mask_gui->handle_hovered >= 0
+                             || mask_gui->handle_border_hovered >= 0 || mask_gui->seg_hovered >= 0;
+    mask_gui->form_selected = prev_form_selected || on_part;
+    mask_gui->border_selected = prev_border_selected;
+    mask_gui->source_selected = prev_source_selected;
+    return;
+  }
 
   if(mask_gui->node_hovered >= 0)
   {
@@ -4874,7 +4908,6 @@ void dt_masks_clear_form_gui(dt_develop_t *develop)
   develop->form_gui->last_rebuild_ts = 0.0;
   develop->form_gui->last_rebuild_pos[0] = develop->form_gui->last_rebuild_pos[1] = 0.0f;
   develop->form_gui->rebuild_pending = FALSE;
-  develop->form_gui->last_hit_test_pos[0] = develop->form_gui->last_hit_test_pos[1] = -1.0f;
   // allow to select a shape inside an iop
   dt_masks_select_form(develop, NULL, NULL);
 }

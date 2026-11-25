@@ -186,9 +186,6 @@ typedef struct dt_masks_form_gui_t
   float last_rebuild_pos[2];
   gboolean rebuild_pending;
 
-  // Throttle handle hit-testing when cursor barely moves.
-  float last_hit_test_pos[2];
-
   gboolean creation;
   gboolean creation_closing_form;
   dt_iop_module_t *creation_module;
@@ -297,20 +294,6 @@ static inline float dt_masks_get_form_size_from_nodes(const GList *points)
   }
 
   return fmaxf(max_x - min_x, max_y - min_y);
-}
-
-static inline gboolean dt_masks_gui_should_hit_test(dt_masks_form_gui_t *gui)
-{
-  const float hit_thresh = DT_GUI_MOUSE_EFFECT_RADIUS * 0.5f;
-  const float dx = gui->pos[0] - gui->last_hit_test_pos[0];
-  const float dy = gui->pos[1] - gui->last_hit_test_pos[1];
-  if(gui->last_hit_test_pos[0] < 0.0f || (dx * dx + dy * dy) > (hit_thresh * hit_thresh))
-  {
-    gui->last_hit_test_pos[0] = gui->pos[0];
-    gui->last_hit_test_pos[1] = gui->pos[1];
-    return TRUE;
-  }
-  return FALSE;
 }
 
 // High-level mask event dispatchers cache the current cursor in raw absolute coordinates.
