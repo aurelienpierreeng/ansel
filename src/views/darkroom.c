@@ -2482,14 +2482,27 @@ static void _darkroom_set_default_cursor(dt_view_t *self, double x, double y)
 }
 
 /* The picking modifier went down or came up: swap the cursor now, where the pointer is,
- * instead of at the next motion -- the user is holding still, aiming. */
+ * instead of at the next motion -- the user is holding still, aiming.
+ *
+ * The position is asked of the pointer, not taken from the last motion: that is the last one
+ * the centre saw, which with the pointer over a panel is the margin it left through. The cursor
+ * is set on the main window too, so the cross of that margin would go up over the panel. Outside
+ * the centre the cursor is left alone. */
 static void _darkroom_picking_modifier_changed(dt_view_t *self, const gboolean down)
 {
-  dt_control_pointer_input_t pointer = { 0 };
-  dt_control_get_pointer_input(&pointer);
-  if(!isfinite(pointer.x) || !isfinite(pointer.y)) return;
+  GtkWidget *center = dt_gui_center_widget();
+  GdkWindow *window = IS_NULL_PTR(center) ? NULL : gtk_widget_get_window(center);
+  GdkDisplay *display = IS_NULL_PTR(window) ? NULL : gdk_window_get_display(window);
+  GdkSeat *seat = IS_NULL_PTR(display) ? NULL : gdk_display_get_default_seat(display);
+  GdkDevice *pointer = IS_NULL_PTR(seat) ? NULL : gdk_seat_get_pointer(seat);
+  if(IS_NULL_PTR(window) || IS_NULL_PTR(pointer)) return;
 
-  _darkroom_set_cursor_for(self, pointer.x, pointer.y, down);
+  double x = 0.0;
+  double y = 0.0;
+  gdk_window_get_device_position_double(window, pointer, &x, &y, NULL);
+  if(!mouse_in_actionarea(self, x, y)) return;
+
+  _darkroom_set_cursor_for(self, x, y, down);
   dt_control_commit_cursor();
 }
 

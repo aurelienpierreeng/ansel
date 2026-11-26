@@ -190,6 +190,13 @@ Three decisions that are easy to get wrong:
 - **The modifier going down turns nothing on.** The same key begins half the shortcuts there
   are, and turning a picker on makes its module act on a sample. Only the cursor changes; the
   click does the rest.
+- **The cursor changes only while the pointer is over the centre.** The key event asks the
+  pointer where it is (`gdk_window_get_device_position()` on the centre's window) instead of
+  taking the last motion the centre saw: with the pointer over a panel, that is the margin it
+  left through, which always shows a cross, and the cursor is set on the main window as well,
+  so the cross would go up over the panel. Outside the centre the cursor is left alone.
+  *Checked in the GUI on Windows, 2026-11-26, on top of `ade7f4ba74`; committed on
+  `21d72698da`.*
 - **It is last in line.** `views/darkroom.c:button_pressed()` offers the click to the masks, then
   to the focused module, and only then to the modifier, so it cannot take a Ctrl+click away from
   either. The cursor that promises the pick and the click that makes it read one predicate
