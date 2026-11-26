@@ -65,6 +65,8 @@
 #include "pixel/illuminants.h"
 #include "common/imagebuf.h"
 #include "develop/dev_roi_request.h"
+#include "develop/dev_pixelpipe.h"
+#include "caches/pixelpipe_cache.h"
 #include "develop/iop_profile.h"
 #include "common/opencl.h"
 #include "control/control.h"
@@ -210,9 +212,9 @@ typedef struct dt_iop_channelmixer_rgb_gui_data_t
   GtkWidget *normalize_R, *normalize_G, *normalize_B, *normalize_sat, *normalize_light, *normalize_grey;
   GtkWidget *color_picker;
   float xy[2];
-  float XYZ[4];
+  dt_dev_pixelpipe_cache_wait_t detect_wait; // the preview input awaited by an illuminant detection
 
-  point_t box[4];           // the current coordinates, possibly non rectangle, of the bounding box for the color checker
+  point_t box[4];          // the current coordinates, possibly non rectangle, of the bounding box for the color checker
   point_t ideal_box[4];     // the desired coordinates of the perfect rectangle bounding box for the color checker
   point_t center_box;       // the barycenter of both boxes
   gboolean active_node[4];  // true if the cursor is close to a node (node = corner of the bounding box)
@@ -2057,43 +2059,17 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
   const float *const restrict in = (const float *const restrict)ivoid;
   float *const restrict out = (float *const restrict)ovoid;
 
-  // auto-detect WB upon request
-  if(self->dev->gui_attached && g)
+  // profile the color checker upon request
+  if(self->dev->gui_attached && g && g->run_profile && pipe->type == DT_DEV_PIXELPIPE_PREVIEW)
   {
-    gboolean exit = FALSE;
-
-    if(g->run_profile && pipe->type == DT_DEV_PIXELPIPE_PREVIEW)
-    {
-      dt_iop_gui_enter_critical_section(self);
-      const dt_iop_channelmixer_rgb_box_map_t box_map = _box_map(pipe, roi_in);
-      const int err = extract_color_checker(in, out, roi_in, g, &box_map,
-                                            RGB_to_XYZ, XYZ_to_RGB, XYZ_to_CAM, data->adaptation);
-      g->run_profile = FALSE;
-      dt_iop_set_cache_bypass(self, FALSE);
-      dt_iop_gui_leave_critical_section(self);
-      if(err) return 1;
-    }
-
-    if(data->illuminant_type == DT_ILLUMINANT_DETECT_EDGES || data->illuminant_type == DT_ILLUMINANT_DETECT_SURFACES)
-    {
-      if(pipe->type == DT_DEV_PIXELPIPE_FULL)
-      {
-        // detection on full image only
-        dt_iop_gui_enter_critical_section(self);
-        const int err = auto_detect_WB(in, data->illuminant_type, roi_in->width, roi_in->height, ch, RGB_to_XYZ, g->XYZ);
-        dt_iop_gui_leave_critical_section(self);
-        if(err) return 1;
-      }
-
-      // passthrough pixels
-      dt_iop_image_copy_by_size(out, in, roi_in->width, roi_in->height, ch);
-
-      dt_control_log(_("auto-detection of white balance completed"));
-
-      exit = TRUE;
-    }
-
-    if(exit) return 0;
+    dt_iop_gui_enter_critical_section(self);
+    const dt_iop_channelmixer_rgb_box_map_t box_map = _box_map(pipe, roi_in);
+    const int err = extract_color_checker(in, out, roi_in, g, &box_map,
+                                          RGB_to_XYZ, XYZ_to_RGB, XYZ_to_CAM, data->adaptation);
+    g->run_profile = FALSE;
+    dt_iop_set_cache_bypass(self, FALSE);
+    dt_iop_gui_leave_critical_section(self);
+    if(err) return 1;
   }
 
   if(data->illuminant_type == DT_ILLUMINANT_CAMERA)
@@ -3066,45 +3042,87 @@ static gboolean commit_profile_callback(GtkWidget *widget __attribute__((unused)
   return TRUE;
 }
 
-static void _develop_ui_pipe_finished_callback(gpointer instance, gpointer user_data)
+static void _detect_illuminant_restart(gpointer user_data);
+
+/**
+ * @brief Replace a detection request in the illuminant by the illuminant detected in the image.
+ *
+ * The two "(AI) detect" illuminants are requests the GUI answers, not states the pipeline renders.
+ * The detection reads the module input in the preview pipe, which always holds the whole frame:
+ * zoomed in, the main pipe holds only the visible part, and at zoom == fit it does not run the
+ * module at all, since it finds the outputs of the preview pipe under the same hashes.
+ *
+ * @return 0 once the parameters hold the detected illuminant, 1 while the input is awaited (the
+ * restart callback comes back here) or when nothing could be detected.
+ */
+static int _detect_illuminant(dt_iop_module_t *self)
 {
-  dt_iop_module_t *self = (dt_iop_module_t *)user_data;
-  dt_iop_channelmixer_rgb_gui_data_t *g = (dt_iop_channelmixer_rgb_gui_data_t *)dt_iop_gui_data(self);
   dt_iop_channelmixer_rgb_params_t *p = (dt_iop_channelmixer_rgb_params_t *)self->params;
+  dt_iop_channelmixer_rgb_gui_data_t *g = (dt_iop_channelmixer_rgb_gui_data_t *)dt_iop_gui_data(self);
+  dt_dev_pixelpipe_t *pipe = self->dev->preview_pipe;
 
-  if(IS_NULL_PTR(g)) return;
-  if(p->illuminant != DT_ILLUMINANT_DETECT_EDGES && p->illuminant != DT_ILLUMINANT_DETECT_SURFACES)
-    return;
+  const dt_dev_pixelpipe_iop_t *const piece = dt_dev_pixelpipe_get_module_piece(pipe, self);
+  const dt_dev_pixelpipe_iop_t *const input_piece
+      = IS_NULL_PTR(piece) ? NULL : dt_dev_pixelpipe_get_prev_enabled_piece(pipe, piece);
+  const dt_iop_order_iccprofile_info_t *const work_profile = dt_ioppr_get_pipe_current_profile_info(self, pipe);
+  if(IS_NULL_PTR(input_piece) || IS_NULL_PTR(work_profile)) return 1;
 
-  dt_iop_gui_enter_critical_section(self);
-  p->x = g->XYZ[0];
-  p->y = g->XYZ[1];
-  dt_iop_gui_leave_critical_section(self);
+  void *input = NULL;
+  dt_pixel_cache_entry_t *entry = NULL;
+  dt_dev_pixelpipe_cache_wait_set_owner(&g->detect_wait, "channelmixerrgb-detect", self);
+  /* Retained: this is an intermediate module cacheline, at refcount 0 between renders, so the
+   * reference has to be taken with the lookup and not after it. */
+  if(!dt_dev_pixelpipe_cache_peek_gui_retained(pipe, input_piece, &input, &entry, &g->detect_wait,
+                                               _detect_illuminant_restart, self))
+  {
+    dt_control_log(_("auto-detection of white balance started..."));
+    return 1;
+  }
 
+  dt_aligned_pixel_t xy = { NAN, NAN, 0.f, 0.f };
+  dt_dev_pixelpipe_cache_rdlock_entry(TRUE, entry);
+  const int err = auto_detect_WB((const float *)input, p->illuminant, input_piece->roi_out.width,
+                                 input_piece->roi_out.height, 4, work_profile->matrix_in, xy);
+  dt_dev_pixelpipe_cache_rdlock_entry(FALSE, entry);
+  dt_dev_pixelpipe_cache_ref_count_entry(FALSE, entry);
+
+  dt_print(DT_DEBUG_DEV, "[channelmixerrgb] illuminant detected on the %ix%i preview input: x=%f y=%f\n",
+           input_piece->roi_out.width, input_piece->roi_out.height, xy[0], xy[1]);
+
+  if(err || !isfinite(xy[0]) || !isfinite(xy[1]))
+  {
+    gchar *item = g_strdup_printf(_("`%s` on %s"), self->op, self->dev->image_storage.fullpath);
+    dt_control_alert(_("Module failed"), _("no illuminant could be detected in the image"), item);
+    dt_free(item);
+    return 1;
+  }
+
+  p->x = xy[0];
+  p->y = xy[1];
   check_if_close_to_daylight(p->x, p->y, &p->temperature, &p->illuminant, &p->adaptation);
 
   dt_gui_freeze_begin();
-
-  dt_bauhaus_slider_set(g->temperature, p->temperature);
   dt_bauhaus_combobox_set(g->illuminant, p->illuminant);
   dt_bauhaus_combobox_set(g->adaptation, p->adaptation);
-
-  const dt_aligned_pixel_t xyY = { p->x, p->y, 1.f };
-  dt_aligned_pixel_t Lch;
-  dt_xyY_to_Lch(xyY, Lch);
-  dt_bauhaus_slider_set(g->illum_x, Lch[2] / M_PI * 180.f);
-  dt_bauhaus_slider_set(g->illum_y, Lch[1]);
-
-  update_illuminants(self);
-  update_approx_cct(self);
-  update_illuminant_color(self);
-  dt_iop_channelmixer_shared_paint_temperature_slider(g->temperature, TEMP_MIN, TEMP_MAX);
-
   dt_gui_freeze_end();
 
-  gui_changed(self, NULL, NULL);
+  dt_control_log(_("auto-detection of white balance completed"));
+  return 0;
+}
 
-  dt_print(DT_DEBUG_DEV, "[picker/channelmixerrgb] history commit source=ui_pipe_finished\n");
+static void _detect_illuminant_restart(gpointer user_data)
+{
+  dt_iop_module_t *self = (dt_iop_module_t *)user_data;
+  dt_iop_channelmixer_rgb_params_t *p = (dt_iop_channelmixer_rgb_params_t *)self->params;
+  dt_iop_channelmixer_rgb_gui_data_t *g = (dt_iop_channelmixer_rgb_gui_data_t *)dt_iop_gui_data(self);
+
+  // Another illuminant may have been chosen while the input was awaited.
+  if(p->illuminant != DT_ILLUMINANT_DETECT_EDGES && p->illuminant != DT_ILLUMINANT_DETECT_SURFACES) return;
+  if(_detect_illuminant(self)) return;
+
+  gui_changed(self, g->illuminant, NULL);
+
+  dt_print(DT_DEBUG_DEV, "[picker/channelmixerrgb] history commit source=detect_illuminant\n");
   dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
 }
 
@@ -3214,20 +3232,16 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
   if(self->dev->gui_attached && g)
   {
     if( (g->run_profile && pipe->type == DT_DEV_PIXELPIPE_PREVIEW) || // color checker extraction mode
-        (g->run_validation && pipe->type == DT_DEV_PIXELPIPE_PREVIEW) || // delta E validation
-        ( (d->illuminant_type == DT_ILLUMINANT_DETECT_EDGES ||
-           d->illuminant_type == DT_ILLUMINANT_DETECT_SURFACES ) && // WB extraction mode
-           pipe->type == DT_DEV_PIXELPIPE_FULL ) )
+        (g->run_validation && pipe->type == DT_DEV_PIXELPIPE_PREVIEW) ) // delta E validation
     {
       piece->process_cl_ready = 0;
 
-      // Same reason, and the one nobody wrote down: all three modes consume the WHOLE frame in a
-      // single call -- the two colour-checker paths address it with chart-box coordinates, and
-      // auto_detect_WB() averages it. Tiling calls process() once per tile with a tile-local
-      // roi_in, so the chart box would be applied to a fragment and whichever tile ran last would
-      // win. Whether that happens is a runtime memory decision (dt_tiling_piece_fits_host_memory(),
-      // which reads dt_dev_pixelpipe_cache_get_available() and the pixelpipe cache's largest free
-      // run), so it shows up on one machine and not another.
+      // Same reason, and the one nobody wrote down: both modes consume the WHOLE frame in a
+      // single call, addressing it with chart-box coordinates. Tiling calls process() once per
+      // tile with a tile-local roi_in, so the chart box would be applied to a fragment and
+      // whichever tile ran last would win. Whether that happens is a runtime memory decision
+      // (dt_tiling_piece_fits_host_memory(), which reads dt_dev_pixelpipe_cache_get_available()
+      // and the pixelpipe cache's largest free run), so it shows up on one machine and not another.
       piece->process_tiling_ready = 0;
     }
   }
@@ -4644,8 +4658,10 @@ void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
     else if(p->illuminant == DT_ILLUMINANT_DETECT_EDGES
             || p->illuminant == DT_ILLUMINANT_DETECT_SURFACES)
     {
-      // We need to recompute only the full preview
-      dt_control_log(_("auto-detection of white balance started..."));
+      // Replaces the request by the detected illuminant now if the input is cached, which the
+      // history item this change commits then holds. Otherwise _detect_illuminant_restart()
+      // does it, and commits, once the preview pipe has published the input.
+      _detect_illuminant(self);
     }
   }
 
@@ -5224,10 +5240,6 @@ void gui_init(struct dt_iop_module_t *self)
   g->delta_E_label_text = NULL;
   g->colorcheckers = NULL;
 
-  g->XYZ[0] = NAN;
-
-  DT_DEBUG_CONTROL_SIGNAL_CONNECT(dt_control_signal_get_global(), DT_SIGNAL_DEVELOP_UI_PIPE_FINISHED,
-                            G_CALLBACK(_develop_ui_pipe_finished_callback), self);
   DT_DEBUG_CONTROL_SIGNAL_CONNECT(dt_control_signal_get_global(), DT_SIGNAL_DEVELOP_PREVIEW_PIPE_FINISHED,
                                   G_CALLBACK(_preview_pipe_finished_callback), self);
 
@@ -5784,11 +5796,10 @@ void gui_init(struct dt_iop_module_t *self)
 void gui_cleanup(struct dt_iop_module_t *self)
 {
   self->request_color_pick = DT_REQUEST_COLORPICK_OFF;
-  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(dt_control_signal_get_global(),
-                                     G_CALLBACK(_develop_ui_pipe_finished_callback), self);
   DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(dt_control_signal_get_global(), G_CALLBACK(_preview_pipe_finished_callback), self);
 
   dt_iop_channelmixer_rgb_gui_data_t *g = (dt_iop_channelmixer_rgb_gui_data_t *)dt_iop_gui_data(self);
+  dt_dev_pixelpipe_cache_wait_cleanup(&g->detect_wait, "channelmixerrgb-detect-cleanup");
   dt_conf_set_int("plugins/darkroom/channelmixerrgb/gui_page", gtk_notebook_get_current_page (g->notebook));
 
   if(g->delta_E_in)

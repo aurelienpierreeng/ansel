@@ -41,6 +41,33 @@ pipe.
 are post-flip portrait. The guard must also accept the swapped match
 (`width==preview_height && height==preview_width`).
 
+## channelmixerrgb: the illuminant detection is a GUI request, answered from the preview input
+
+*Found `9e9b1fc76a`, 2026-11-26.*
+
+The two "(AI) detect from image surfaces/edges" illuminants are not a state the pipeline renders.
+Choosing one asks the GUI to detect the illuminant: `_detect_illuminant()` reads the module input
+in the preview pipe with `dt_dev_pixelpipe_cache_peek_gui_retained()`, as `autoset()` does, runs
+`auto_detect_WB()` on it, and writes the result into `x`, `y` and the illuminant (daylight, black
+body or custom). When the input is not in cache yet, the request waits on `detect_wait` and
+`_detect_illuminant_restart()` finishes it, unless another illuminant was chosen meanwhile. A
+detection state still in a history renders as a custom illuminant at its stored `x`, `y`.
+
+The preview pipe is the one that always holds the whole frame. The detection used to run in
+`process()` on the main pipe only, and a `DT_SIGNAL_DEVELOP_UI_PIPE_FINISHED` handler copied the
+result into the parameters. That broke in two ways, measured in the darkroom on `9e9b1fc76a` with
+`-d dev -d pipe -d perf`, on a Sony raw:
+
+- at zoom == fit, the main pipe has the preview's ROI, so it computes the same hashes and takes the
+  preview's outputs from cache without running the module (no `processed 'color calibration'` line
+  for it). The handler still fired and committed the result field as initialised, `xy=[nan 0]`:
+  the image went black;
+- zoomed in, the module ran on the visible part only (602×709 at 100 %) and gave `x=0.4806
+  y=0.3618`, where the whole frame gives `x=0.3458 y=0.3587`.
+
+Read from the preview input (1198×797 here), the detection gives `x=0.3458 y=0.3587` at fit and at
+100 % alike, and one undo takes it back.
+
 ## colorbalancergb: an alignment promised to the compiler must be one the struct guarantees
 
 *Found `0baeb88ed8`, 2026-10-16.*
