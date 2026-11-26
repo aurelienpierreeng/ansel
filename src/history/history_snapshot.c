@@ -24,6 +24,7 @@
 */
 
 #include "database/database.h"
+#include "database/image_repository.h"
 #include "history/history_snapshot.h"
 #include "history/notify.h"
 #include "system/mem_alloc.h"
@@ -49,36 +50,41 @@ void dt_history_snapshot_undo_create(const int32_t imgid, int *snap_id, int *his
 
 static void _history_snapshot_undo_restore(const int32_t imgid, const int snap_id, const int history_end)
 {
-  // restore the given snapshot for imgid
+  dt_image_t *image = dt_image_cache_get(imgid, 'w');
+  if(IS_NULL_PTR(image)) return;
+
+  const int original_flags = image->flags;
+  const uint64_t original_history_hash = image->history_hash;
   gboolean all_ok = TRUE;
 
-  dt_database_start_transaction();
+  if(!dt_database_start_transaction())
+  {
+    dt_image_cache_write_release(image, DT_IMAGE_CACHE_RELAXED);
+    return;
+  }
 
-  dt_history_delete_on_image_ext(imgid, FALSE);
-  dt_history_changed(DT_HISTORY_CHANGE_TAGS);
+  all_ok = dt_history_delete_on_image_ext(image, FALSE);
+  if(all_ok) all_ok = dt_image_repository_set_flags_masked(imgid, DT_IMAGE_AUTO_PRESETS_APPLIED, 0);
 
   // if no history end it means the image history was discarded, nothing more to restore
-  if(history_end != 0)
+  if(all_ok && history_end != 0)
     all_ok = dt_history_snapshot_repository_restore(snap_id, imgid);
 
-  // set history end
-  all_ok &= dt_history_repository_set_end(imgid, history_end);
+  if(all_ok) all_ok = dt_history_repository_set_end(imgid, history_end);
 
-  if(all_ok)
-    dt_database_release_transaction();
-  else
+  image->history_hash = UINT64_MAX;
+
+  if(all_ok) all_ok = dt_database_release_transaction();
+  if(!all_ok)
   {
-    dt_database_rollback_transaction();
+    if(dt_database_transaction_is_owned_by_current_thread()) dt_database_rollback_transaction();
+    image->flags = original_flags;
+    image->history_hash = original_history_hash;
     fprintf(stderr, "[_history_snapshot_undo_restore] fails to restore a snapshot for %d\n", imgid);
   }
 
-  dt_image_t *image = dt_image_cache_get(imgid, 'w');
-  if(image)
-  {
-    // FIXME: this might be wrong or need more accurate handling
-    image->history_hash = UINT64_MAX;
-    dt_image_cache_write_release(image, DT_IMAGE_CACHE_RELAXED);
-  }
+  dt_image_cache_write_release(image, DT_IMAGE_CACHE_RELAXED);
+  if(all_ok) dt_history_changed(DT_HISTORY_CHANGE_TAGS);
 }
 
 static void _clear_undo_snapshot(const int32_t imgid, const int snap_id)

@@ -28,34 +28,17 @@
 #include "database/sql_debug.h"
 #include "common/image.h"
 #include "common/logging.h"
-#include "system/dtpthread.h"
 #include "system/macros.h"
 
 #include <inttypes.h>
 #include <sqlite3.h>
 
-/* One statement cache for the whole process, guarded by one mutex, exactly as the image cache
- * held it before the split: these statements are reused on every image load and every write,
- * and re-preparing them per call was measurable. The mutex is what makes reuse safe, and it
- * is why the calls below serialise against each other. */
 static sqlite3_stmt *_image_load_stmt = NULL;
 static sqlite3_stmt *_image_write_history_hash_stmt = NULL;
 static sqlite3_stmt *_image_write_timestamp_select_stmt = NULL;
 static sqlite3_stmt *_image_write_timestamp_update_stmt = NULL;
 static sqlite3_stmt *_image_set_flags_stmt = NULL;
 static sqlite3_stmt *_image_set_flags_masked_stmt = NULL;
-static dt_pthread_mutex_t _image_stmt_mutex;
-static gsize _image_stmt_mutex_inited = 0;
-
-static inline void _image_stmt_mutex_ensure(void)
-{
-  if(g_once_init_enter(&_image_stmt_mutex_inited))
-  {
-    dt_pthread_mutex_init(&_image_stmt_mutex, NULL);
-    g_once_init_leave(&_image_stmt_mutex_inited, 1);
-  }
-}
-
 static sqlite3_stmt *_image_get_stmt(void)
 {
   if(IS_NULL_PTR(_image_load_stmt))
@@ -190,8 +173,7 @@ static void _image_write_history_hash(const dt_image_t *img)
 {
   if(IS_NULL_PTR(img) || img->id <= 0) return;
 
-  _image_stmt_mutex_ensure();
-  dt_pthread_mutex_lock(&_image_stmt_mutex);
+  dt_database_lock();
   if(!_image_write_history_hash_stmt)
   {
     // clang-format off
@@ -211,7 +193,7 @@ static void _image_write_history_hash(const dt_image_t *img)
   DT_DEBUG_SQLITE3_BIND_INT64(stmt, 2, (sqlite3_int64)img->history_hash);
   DT_DEBUG_SQLITE3_BIND_INT64(stmt, 3, (sqlite3_int64)img->mipmap_hash);
   sqlite3_step(stmt);
-  dt_pthread_mutex_unlock(&_image_stmt_mutex);
+  dt_database_unlock();
 }
 
 
@@ -220,8 +202,7 @@ gboolean dt_image_repository_load(const int32_t imgid, dt_image_t *img)
   if(IS_NULL_PTR(img)) return FALSE;
 
   gboolean found = FALSE;
-  _image_stmt_mutex_ensure();
-  dt_pthread_mutex_lock(&_image_stmt_mutex);
+  dt_database_lock();
 
   sqlite3_stmt *stmt = _image_get_stmt();
   sqlite3_reset(stmt);
@@ -248,7 +229,7 @@ gboolean dt_image_repository_load(const int32_t imgid, dt_image_t *img)
             imgid, sqlite3_errstr(rc));
   }
 
-  dt_pthread_mutex_unlock(&_image_stmt_mutex);
+  dt_database_unlock();
   return found;
 }
 
@@ -739,8 +720,7 @@ gboolean dt_image_repository_set_flags(const int32_t imgid, const int flags)
 {
   if(imgid <= 0) return FALSE;
 
-  _image_stmt_mutex_ensure();
-  dt_pthread_mutex_lock(&_image_stmt_mutex);
+  dt_database_lock();
   if(IS_NULL_PTR(_image_set_flags_stmt))
   {
     DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
@@ -749,7 +729,7 @@ gboolean dt_image_repository_set_flags(const int32_t imgid, const int flags)
   }
   if(IS_NULL_PTR(_image_set_flags_stmt))
   {
-    dt_pthread_mutex_unlock(&_image_stmt_mutex);
+    dt_database_unlock();
     return FALSE;
   }
 
@@ -758,7 +738,7 @@ gboolean dt_image_repository_set_flags(const int32_t imgid, const int flags)
   const gboolean ok = (sqlite3_step(_image_set_flags_stmt) == SQLITE_DONE);
   sqlite3_reset(_image_set_flags_stmt);
   sqlite3_clear_bindings(_image_set_flags_stmt);
-  dt_pthread_mutex_unlock(&_image_stmt_mutex);
+  dt_database_unlock();
 
   return ok;
 }
@@ -767,8 +747,7 @@ gboolean dt_image_repository_set_flags_masked(const int32_t imgid, const int mas
 {
   if(imgid <= 0 || mask == 0) return FALSE;
 
-  _image_stmt_mutex_ensure();
-  dt_pthread_mutex_lock(&_image_stmt_mutex);
+  dt_database_lock();
   if(IS_NULL_PTR(_image_set_flags_masked_stmt))
   {
     // The row supplies the bits outside the mask, so nothing this caller read earlier can be
@@ -781,7 +760,7 @@ gboolean dt_image_repository_set_flags_masked(const int32_t imgid, const int mas
   }
   if(IS_NULL_PTR(_image_set_flags_masked_stmt))
   {
-    dt_pthread_mutex_unlock(&_image_stmt_mutex);
+    dt_database_unlock();
     return FALSE;
   }
 
@@ -791,7 +770,7 @@ gboolean dt_image_repository_set_flags_masked(const int32_t imgid, const int mas
   const gboolean ok = (sqlite3_step(_image_set_flags_masked_stmt) == SQLITE_DONE);
   sqlite3_reset(_image_set_flags_masked_stmt);
   sqlite3_clear_bindings(_image_set_flags_masked_stmt);
-  dt_pthread_mutex_unlock(&_image_stmt_mutex);
+  dt_database_unlock();
 
   return ok;
 }
@@ -817,6 +796,7 @@ void dt_image_repository_foreach_with_path(dt_image_repository_path_row_cb cb, v
     // No lock is held here on purpose: cb() writes back through this repository.
     if(!cb(sqlite3_column_int(stmt, 0),
            sqlite3_column_int64(stmt, 1),
+           sqlite3_column_type(stmt, 1) != SQLITE_NULL,
            sqlite3_column_int(stmt, 2),
            (const char *)sqlite3_column_text(stmt, 3),
            sqlite3_column_int(stmt, 4),
@@ -986,8 +966,7 @@ int64_t dt_image_repository_get_write_timestamp(const int32_t imgid)
 {
   if(imgid <= 0) return 0;
 
-  _image_stmt_mutex_ensure();
-  dt_pthread_mutex_lock(&_image_stmt_mutex);
+  dt_database_lock();
   if(IS_NULL_PTR(_image_write_timestamp_select_stmt))
   {
     DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get_sqlite3_global(),
@@ -996,7 +975,7 @@ int64_t dt_image_repository_get_write_timestamp(const int32_t imgid)
   }
   if(IS_NULL_PTR(_image_write_timestamp_select_stmt))
   {
-    dt_pthread_mutex_unlock(&_image_stmt_mutex);
+    dt_database_unlock();
     return 0;
   }
 
@@ -1006,7 +985,7 @@ int64_t dt_image_repository_get_write_timestamp(const int32_t imgid)
     write_timestamp = sqlite3_column_int64(_image_write_timestamp_select_stmt, 0);
   sqlite3_reset(_image_write_timestamp_select_stmt);
   sqlite3_clear_bindings(_image_write_timestamp_select_stmt);
-  dt_pthread_mutex_unlock(&_image_stmt_mutex);
+  dt_database_unlock();
 
   return write_timestamp;
 }
@@ -1015,8 +994,7 @@ void dt_image_repository_touch_write_timestamp(const int32_t imgid)
 {
   if(imgid <= 0) return;
 
-  _image_stmt_mutex_ensure();
-  dt_pthread_mutex_lock(&_image_stmt_mutex);
+  dt_database_lock();
   if(!_image_write_timestamp_update_stmt)
   {
     DT_DEBUG_SQLITE3_PREPARE_V2
@@ -1031,7 +1009,7 @@ void dt_image_repository_touch_write_timestamp(const int32_t imgid)
     sqlite3_reset(_image_write_timestamp_update_stmt);
     sqlite3_clear_bindings(_image_write_timestamp_update_stmt);
   }
-  dt_pthread_mutex_unlock(&_image_stmt_mutex);
+  dt_database_unlock();
 }
 
 gboolean dt_image_repository_set_write_timestamp(const int32_t imgid, const int64_t timestamp)
@@ -1655,6 +1633,7 @@ gboolean dt_image_repository_get_timestamps(const int32_t imgid, dt_image_timest
 
 void dt_image_repository_cleanup(void)
 {
+  dt_database_lock();
   if(_image_load_stmt)
   {
     sqlite3_finalize(_image_load_stmt);
@@ -1685,12 +1664,7 @@ void dt_image_repository_cleanup(void)
     sqlite3_finalize(_image_set_flags_masked_stmt);
     _image_set_flags_masked_stmt = NULL;
   }
-
-  if(_image_stmt_mutex_inited)
-  {
-    dt_pthread_mutex_destroy(&_image_stmt_mutex);
-    _image_stmt_mutex_inited = 0;
-  }
+  dt_database_unlock();
 }
 
 // clang-format off

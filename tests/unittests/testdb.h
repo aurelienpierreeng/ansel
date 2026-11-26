@@ -40,6 +40,7 @@
 #include <stdint.h>
 #include <cmocka.h>
 
+#include "common/file_location.h"
 #include "database/collection_query.h"
 #include "database/colorlabel_repository.h"
 #include "database/database.h"
@@ -55,6 +56,8 @@
 static inline int testdb_setup(void **state)
 {
   (void)state;
+  if(IS_NULL_PTR(dt_loc_configdir())) dt_loc_init_user_config_dir(g_get_tmp_dir());
+  if(IS_NULL_PTR(dt_loc_cachedir())) dt_loc_init_user_cache_dir(g_get_tmp_dir());
   const dt_database_params_t params = { .alternative = NULL,
                                         .library = ":memory:",
                                         .load_data = FALSE,

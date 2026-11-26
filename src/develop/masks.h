@@ -447,13 +447,20 @@ dt_masks_form_t *dt_masks_create(dt_masks_type_t type);
 /** we create a completely new form and add it to dev->allforms. */
 dt_masks_form_t *dt_masks_create_ext(dt_develop_t *dev, dt_masks_type_t type);
 /** returns a form with formid == id from a list of forms */
-dt_masks_form_t *dt_masks_get_from_id_ext(GList *forms, int id);
+dt_masks_form_t *dt_masks_get_from_id_ext(const GList *forms, int id);
 /** returns a form with formid == id from dev->forms */
 dt_masks_form_t *dt_masks_get_from_id(dt_develop_t *dev, int id);
 /** returns a form with formid == id from pipe->forms, the refcounted snapshot the pipe renders from.
  *  This is the resolver of the pipeline thread (modify_roi_in(), process()): dt_masks_get_from_id()
  *  reads the GUI-owned dev->forms, which the GUI thread replaces and frees mid-edit. */
 dt_masks_form_t *dt_masks_get_from_id_in_pipe(const dt_dev_pixelpipe_t *pipe, int id);
+/**
+ * @brief Return whether a form root resolves to at least one usable leaf in @p forms.
+ *
+ * Groups with only missing members, recursive groups, and groups deeper than the supported
+ * mask nesting limit are unusable. The caller supplies one coherent snapshot and needs no lock.
+ */
+gboolean dt_masks_form_is_usable_ext(const GList *forms, int id);
 /** copy forms used by a module from dev_src to dev_dest */
 int dt_masks_copy_used_forms_for_module(dt_develop_t *dev_dest, dt_develop_t *dev_src,
                                         const struct dt_iop_module_t *mod_src);
@@ -511,7 +518,7 @@ uint64_t dt_masks_group_get_hash_ext(uint64_t hash, GList *masks, dt_masks_form_
 /** Same as dt_masks_group_get_hash_ext(), but hashes only the form's own content: for a group,
  * member references (id/state/opacity) instead of recursing into each member's content.
  * Meant for walking a flat list where every member already gets its own top-level call. */
-uint64_t dt_masks_form_get_own_hash(uint64_t hash, GList *masks, const dt_masks_form_t *form);
+uint64_t dt_masks_form_get_own_hash(uint64_t hash, const GList *masks, const dt_masks_form_t *form);
 
 void dt_masks_form_delete(dt_develop_t *dev, struct dt_iop_module_t *module, dt_masks_form_t *grp, dt_masks_form_t *form);
 int dt_masks_form_change_opacity(dt_develop_t *dev, dt_masks_form_t *form, int parentid, int up, const int flow);
