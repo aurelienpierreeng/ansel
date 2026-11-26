@@ -3061,7 +3061,9 @@ static int _detect_illuminant(dt_iop_module_t *self)
   dt_iop_channelmixer_rgb_gui_data_t *g = (dt_iop_channelmixer_rgb_gui_data_t *)dt_iop_gui_data(self);
   dt_dev_pixelpipe_t *pipe = self->dev->preview_pipe;
 
-  const dt_dev_pixelpipe_iop_t *const piece = dt_dev_pixelpipe_get_module_piece(pipe, self);
+  // The node whether enabled or not: choosing the illuminant on a module still off enables it only
+  // with the history item committed after this, and its input does not depend on it anyway.
+  const dt_dev_pixelpipe_iop_t *const piece = dt_dev_distort_get_iop_pipe(pipe, self);
   const dt_dev_pixelpipe_iop_t *const input_piece
       = IS_NULL_PTR(piece) ? NULL : dt_dev_pixelpipe_get_prev_enabled_piece(pipe, piece);
   const dt_iop_order_iccprofile_info_t *const work_profile = dt_ioppr_get_pipe_current_profile_info(self, pipe);
