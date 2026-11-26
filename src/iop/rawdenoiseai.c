@@ -859,7 +859,8 @@ void tiling_callback(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe
  * that is not a multiple of the lattice period re-phases every lattice and
  * changes the denoising over the whole frame. Start the input on the multiple
  * of the period at or before the requested output; process() drops the margin. */
-void modify_roi_in(struct dt_iop_module_t *self, const struct dt_dev_pixelpipe_t *pipe,
+void modify_roi_in(struct dt_iop_module_t *self __attribute__((unused)),
+                   const struct dt_dev_pixelpipe_t *pipe __attribute__((unused)),
                    struct dt_dev_pixelpipe_iop_t *piece, const dt_iop_roi_t *roi_out, dt_iop_roi_t *roi_in)
 {
   const int align = (int)_lattice_period(piece);
@@ -991,15 +992,20 @@ static void _k_residual(const float *const in, const float *const head, float *c
 
 /* mirrors nn_blend_crop: strength is the opacity of the correction, so the
  * output lerps between the original mosaic and the denoised one. Only the
- * ow x oh output window at (ox, oy) of the iw-wide input is written: that drops
- * the alignment padding and the margin modify_roi_in() added. */
+ * roi_out window of the roi_in-sized input is written: that drops the alignment
+ * padding and the margin modify_roi_in() added. The kernel takes the same
+ * values as scalars (iw, ox, oy, ow, oh), as nn_assemble does for _k_assemble. */
 __DT_CLONE_TARGETS__
-static void _k_blend_crop(const float *const in, const float *const den, float *const out, const int iw,
-                          const int pw, const int ox, const int oy, const int ow, const int oh,
+static void _k_blend_crop(const float *const in, const float *const den, float *const out,
+                          const dt_iop_roi_t *const roi_in, const int pw, const dt_iop_roi_t *const roi_out,
                           const float strength)
 {
+  const int iw = roi_in->width;
+  const int ox = roi_out->x - roi_in->x;
+  const int oy = roi_out->y - roi_in->y;
+  const int ow = roi_out->width;
   __OMP_PARALLEL_FOR__()
-  for(int y = 0; y < oh; y++)
+  for(int y = 0; y < roi_out->height; y++)
   {
     const float *const src_in = in + (size_t)(y + oy) * iw + ox;
     const float *const src_nn = den + (size_t)(y + oy) * pw + ox;
@@ -1326,14 +1332,13 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
   const int width = roi->width, height = roi->height;
   // the output window inside the input, past the margin modify_roi_in() added
   const dt_iop_roi_t *const roi_out = &piece->roi_out;
-  const int ox = roi_out->x - roi->x, oy = roi_out->y - roi->y;
   const float *const in = (const float *)ivoid;
   float *const out = (float *)ovoid;
 
   if(!model || !(d->strength > 0.0f))
   {
     // a blend at strength 0 against the input itself: a plain copy of the window
-    _k_blend_crop(in, in, out, width, width, ox, oy, roi_out->width, roi_out->height, 0.0f);
+    _k_blend_crop(in, in, out, roi, width, roi_out, 0.0f);
     return 0;
   }
 
@@ -1366,7 +1371,7 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
   {
     dt_print(DT_DEBUG_ALWAYS, "[rawdenoiseai] region alloc failed for %dx%d tile (%.1f MB)\n", pw, ph,
              region.size / 1048576.0);
-    _k_blend_crop(in, in, out, width, width, ox, oy, roi_out->width, roi_out->height, 0.0f);
+    _k_blend_crop(in, in, out, roi, width, roi_out, 0.0f);
     return 1;
   }
   _nn_region = &region;
@@ -1415,11 +1420,11 @@ int process(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, const 
   {
     dt_print(DT_DEBUG_ALWAYS, "[rawdenoiseai] inference failed (%d) on %dx%d tile, scratch %.1f MB\n", rc, pw, ph,
              dt_nn_unet_scratch_bytes(model, pw, ph) / 1048576.0);
-    _k_blend_crop(in, in, out, width, width, ox, oy, roi_out->width, roi_out->height, 0.0f);
+    _k_blend_crop(in, in, out, roi, width, roi_out, 0.0f);
   }
   else if(!rc)
   {
-    _k_blend_crop(in, nn_out, out, width, pw, ox, oy, roi_out->width, roi_out->height, d->strength);
+    _k_blend_crop(in, nn_out, out, roi, pw, roi_out, d->strength);
   }
 
   _nn_region = NULL;
@@ -1450,8 +1455,10 @@ int process_cl(struct dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, con
   const int width = roi->width, height = roi->height;
   // the output window inside the input, past the margin modify_roi_in() added
   const dt_iop_roi_t *const roi_out = &piece->roi_out;
-  const int ox = roi_out->x - roi->x, oy = roi_out->y - roi->y;
-  const int ow = roi_out->width, oh = roi_out->height;
+  const int ox = roi_out->x - roi->x;
+  const int oy = roi_out->y - roi->y;
+  const int ow = roi_out->width;
+  const int oh = roi_out->height;
   // pre-shifted for the kernel's tile-local Bayer branch, exactly as in process()
   const uint32_t filters = dt_dev_get_roi_filters(piece, roi);
   const int is_xtrans = filters == 9u;
