@@ -267,6 +267,17 @@ void dt_iop_color_picker_gesture_end(void);
 /** @brief Is the picker that is on one the modifier turned on? */
 gboolean dt_iop_color_picker_gesture_is_active(void);
 
+/**
+ * @brief Was it begun by the focused module, naming its picker to
+ * dt_iop_color_picker_gesture_begin(), rather than by the view?
+ *
+ * @details Such a module claims every click on the image and draws its own cursor in place of
+ * the system one (drawlayer, its brush; while the modifier is held, its cross). The view goes
+ * on calling its gui_post_expose() while the picker owns the image, so that cross stays the
+ * cursor for the whole gesture instead of disappearing at the press.
+ */
+gboolean dt_iop_color_picker_gesture_is_by_module(void);
+
 /** @} */
 
 /* mark that the active picker geometry or selection changed and resample from cache if possible */

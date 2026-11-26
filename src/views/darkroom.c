@@ -1255,6 +1255,12 @@ void expose(
   {
     GSList samples = { .data = dt_dev_get_global()->color_picker.primary_sample, .next = NULL };
     _darkroom_pickers_draw(self, cri, width, height, pointerx, pointery, &samples, TRUE);
+
+    /* A module that began the gesture itself draws its own cursor in place of the system one,
+     * and must go on drawing it, or the pointer vanishes at the press. */
+    if(dt_iop_color_picker_gesture_is_by_module()
+       && dev->gui_module && dev->gui_module->enabled && dev->gui_module->gui_post_expose)
+      dev->gui_module->gui_post_expose(dev->gui_module, cri, width, height, pointerx, pointery);
   }
   else
   {
@@ -2835,6 +2841,10 @@ void mouse_moved(dt_view_t *self, double x, double y, double pressure, int which
 
   // change cursor appearance by default
   _darkroom_set_default_cursor(self, x, y);
+
+  // The cursor of a module that began the gesture is drawn, not the system's: it moves by redraw.
+  if(picker_active && dt_iop_color_picker_gesture_is_by_module()) dt_control_queue_redraw_center();
+
   gboolean handled = FALSE;
   gboolean masks_handled = FALSE;
 

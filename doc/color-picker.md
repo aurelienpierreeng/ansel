@@ -206,6 +206,15 @@ A module that claims every click (drawlayer, to paint) never lets the view reach
 begins the gesture itself with `dt_iop_color_picker_gesture_begin(its_picker, …)`. From the next
 event the picker is on and the view gives it the pointer before asking the module.
 
+Such a module also draws its own cursor in place of the system one, which it hides (drawlayer's
+brush, and its cross while the modifier is held). While a picker owns the image the view draws
+the picker's overlay *instead of* the module's, so at the press that cross went and nothing was
+left on screen. `dt_iop_color_picker_gesture_is_by_module()` says the gesture was begun this way,
+and for it the view goes on calling the module's `gui_post_expose()` after the picker's overlay,
+and redraws on every motion so the cross follows the pointer: the cross the modifier showed is
+the cursor for the whole gesture. A gesture begun by the view keeps the system cross.
+*Checked in the GUI on Windows, 2026-11-26, on top of `ade7f4ba74`.*
+
 ## The modifier comes up before the sample does
 
 A sample is taken from the pipeline's cache and often has to wait for a recompute. Measured from

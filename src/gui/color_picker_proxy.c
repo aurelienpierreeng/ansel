@@ -96,6 +96,7 @@ static void _gesture_clear(dt_develop_t *dev)
   dev->color_picker.pointer.phase = DT_COLOR_PICKER_POINTER_IDLE;
   dev->color_picker.gesture_armed = FALSE;
   dev->color_picker.gesture_ending = FALSE;
+  dev->color_picker.gesture_by_module = FALSE;
   if(dev->color_picker.gesture_timeout_source)
   {
     g_source_remove(dev->color_picker.gesture_timeout_source);
@@ -1169,6 +1170,12 @@ gboolean dt_iop_color_picker_gesture_is_active(void)
   return dev && dev->color_picker.gesture_armed;
 }
 
+gboolean dt_iop_color_picker_gesture_is_by_module(void)
+{
+  const dt_develop_t *const dev = dt_dev_get_global();
+  return dev && dev->color_picker.gesture_armed && dev->color_picker.gesture_by_module;
+}
+
 gboolean dt_iop_color_picker_gesture_begin(GtkWidget *picker_widget, const float image_point[2], const float slop[2])
 {
   if(IS_NULL_PTR(image_point) || IS_NULL_PTR(slop)) return FALSE;
@@ -1192,6 +1199,7 @@ gboolean dt_iop_color_picker_gesture_begin(GtkWidget *picker_widget, const float
   _picker_take_over(self, dev);
   _gesture_clear(dev);
   dev->color_picker.gesture_armed = !was_the_users;
+  dev->color_picker.gesture_by_module = !was_the_users && !IS_NULL_PTR(picker_widget);
 
   /* Nothing the picker remembered is sampled, which is the difference with its button. The
    * button shows the previous point or area at once and the module acts on it; here that would

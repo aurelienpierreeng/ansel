@@ -422,6 +422,10 @@ typedef struct dt_develop_t
      * waiting for its sample: it no longer shows on the image nor takes its clicks. */
     gboolean gesture_armed;
     gboolean gesture_ending;
+    /* The gesture was begun by the focused module, which claims every click on the image and
+     * named its picker itself, rather than by the view. Such a module draws its own cursor and
+     * goes on drawing it while the picker owns the image. */
+    gboolean gesture_by_module;
     /* Bounds the wait for that sample: a sample that never comes back must not leave the
      * picker on for good. */
     guint gesture_timeout_source;
