@@ -88,9 +88,12 @@ typedef struct dt_dust_speck_t
   /** distance from the mask's long axis to its farthest pixel, plus one pixel: the radius of a round
    * speck, half the width of a scratch */
   float half_width;
-  /** 1 for a speck darker than the zone's background, a density above it; -1 for a lighter one */
+  /** 1 for a speck darker than the zone's background, a density above it; -1 for a lighter one. A
+   * scratch found in a difference of two channels: in the upper of their two layers */
   int polarity;
-  float peak;      /**< the speck's largest density difference from the zone's background, in D */
+  /** the speck's largest density difference from the zone's background, in D; a scratch's along its
+   * segment, in the colour it was followed in */
+  float peak;
   float contrast;  /**< that difference over the grain, in standard deviations */
 } dt_dust_speck_t;
 
@@ -108,20 +111,24 @@ typedef struct dt_dust_speck_t
  * zone.
  *
  * A zone painted as a stroke, three times longer than wide or more, may be over a scratch: a line a
- * few pixels wide, often no more than twice the grain on one pixel, that only its length brings out.
- * It is looked for at angles within 22.5 degrees of the stroke, along segments of 33 pixels, as the
- * excess less its value 4 pixels away on the nearer side, where each third of the segment holds half
- * of the mean or more, so that a speck the segment crosses is no line; then measured along 65 pixels
- * at the angle found, against seven times the grain at least. From its peak it is followed each way
- * along the stroke's points, smoothed over 4 pixels, or along that angle without them: along the path
- * that stands out most, by steps of 8 pixels, each a pixel across at most from the last, darker or
- * lighter, as a scratch turns from one to the other along a film, its segments bending as the
- * stroke does. A step counts for how far its segment stands out beyond once the grain, up to four
- * times, less once per pixel moved across and three times where it turns darker or lighter. A way
- * ends where going on would leave the stroke, at the end that scores best: where the scratch leaves
- * the stroke, or at the stroke's end.
- * The scratch is 3 pixels each side of that path, a pixel wider. Of a speck and a scratch, the stroke
- * was painted over the one that stands out farther along it.
+ * few pixels wide, often no more than twice the grain on one pixel, that only its length brings out. A
+ * scratch in the emulsion of a colour film takes off its upper layers first, the blue one most, and
+ * may darken the red one: it is looked for in the channels' mean, in each channel, and in blue less
+ * green, blue less red and green less red, each against its own grain. In each, it is looked for at
+ * angles within 22.5 degrees of the stroke, along segments of 33 pixels, as the excess less its value
+ * 4 pixels away on the nearer side, where each third of the segment holds half of the mean or more, so
+ * that a speck the segment crosses is no line; then measured along 65 pixels at the angle found,
+ * against seven times the grain at least. From its peak it is followed each way along the stroke's
+ * points, smoothed over 4 pixels, or along that angle without them: along the path that stands out
+ * most, by steps of 8 pixels, each a pixel across at most from the last, darker or lighter, as a
+ * scratch turns from one to the other along a film, its segments bending as the stroke does. A step
+ * counts for how far its segment stands out beyond once the grain, up to four times, less once per
+ * pixel moved across and three times where it turns darker or lighter. A way ends where going on would
+ * leave the stroke, at the end that scores best: where the scratch leaves the stroke, or at the
+ * stroke's end. Of the colours it stands out in, the path that scores best is kept. The scratch lies
+ * between its sides across that path, where the median along it of its profile in that colour falls
+ * to 15 % of its extremum; 3 pixels each side of the path at the least, and a pixel wider. Of a speck
+ * and a scratch, the stroke was painted over the one that stands out farther along it.
  *
  * A zone over grain alone may still find a speck in a slow variation of the image, as strong as a
  * faint speck is: the zone is the user's word that there is one to find.

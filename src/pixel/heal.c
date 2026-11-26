@@ -31,7 +31,6 @@
 #include "system/mem_alloc.h"
 #include "system/simd.h"
 #include "caches/pixelpipe_cache_alloc.h"
-#include "pixel/box_filters.h"
 #include "develop/imageop.h"
 #include "math/openmp_maths.h"
 #include "heal.h"
@@ -404,66 +403,27 @@ cleanup:
 }
 
 
-/* The source's detail alone (dt_heal_solver_t.texture_radius). Both buffers are encoded in the
- * solver's domain first, and the source is stripped of its box mean there; the ordinary solver
- * then runs on those encoded values as on linear ones, so the result is the source's detail plus
- * the harmonic interpolation of the destination's border, seamless as any heal. Only the pixels of
- * the mask are decoded back: outside it, the destination is left exactly as it came. */
-static void _heal_texture(const float *const src_buffer, float *dest_buffer, const float *const mask_buffer,
-                          const int width, const int height, const dt_heal_solver_t solver)
+void dt_heal_encode(const float *const in, float *const out, const size_t pixels, const dt_heal_domain_t domain)
 {
-  const size_t n = (size_t)width * height;
-  const size_t subwidth = 4 * ((width + 1) / 2);
-  float *detail = dt_pixelpipe_cache_alloc_align_float_cache(4 * n, 0);
-  float *mean = dt_pixelpipe_cache_alloc_align_float_cache(4 * n, 0);
-  float *encoded = dt_pixelpipe_cache_alloc_align_float_cache(4 * n, 0);
-  float *red_buffer = dt_pixelpipe_cache_alloc_align_float_cache(subwidth * (height + 2), 0);
-  float *black_buffer = dt_pixelpipe_cache_alloc_align_float_cache(subwidth * (height + 2), 0);
-  if(IS_NULL_PTR(detail) || IS_NULL_PTR(mean) || IS_NULL_PTR(encoded) || IS_NULL_PTR(red_buffer)
-     || IS_NULL_PTR(black_buffer))
-  {
-    fprintf(stderr, "dt_heal: error allocating memory for healing\n");
-    goto cleanup;
-  }
-
   __OMP_PARALLEL_FOR__()
-  for(size_t k = 0; k < 4 * n; k++)
-  {
-    detail[k] = _heal_encode(src_buffer[k], k & 3, solver.domain);
-    encoded[k] = _heal_encode(dest_buffer[k], k & 3, solver.domain);
-  }
-  memcpy(mean, detail, 4 * n * sizeof(float));
-  if(dt_box_mean(mean, height, width, 4, solver.texture_radius, 1))
-  {
-    fprintf(stderr, "dt_heal: error allocating memory for healing\n");
-    goto cleanup;
-  }
-  __OMP_PARALLEL_FOR_SIMD__(aligned(detail, mean:64))
-  for(size_t k = 0; k < 4 * n; k++) detail[k] -= mean[k];
+  for(size_t k = 0; k < 4 * pixels; k++) out[k] = _heal_encode(in[k], k & 3, domain);
+}
 
-  _heal_sub(encoded, detail, red_buffer, black_buffer, width, height, DT_HEAL_DOMAIN_LINEAR);
-  _heal_laplace_loop(red_buffer, black_buffer, width, height, mask_buffer, solver.max_iter);
-  _heal_add(red_buffer, black_buffer, detail, encoded, width, height, DT_HEAL_DOMAIN_LINEAR);
-
-  // decode the healed pixels; a square root's negative part has no meaning and is dropped
-  const gboolean squared = solver.domain == DT_HEAL_DOMAIN_SQRT;
+void dt_heal_decode_masked(const float *const encoded, float *const dest, const float *const mask,
+                           const size_t pixels, const dt_heal_domain_t domain)
+{
+  // a square root's negative part has no meaning and is dropped
+  const gboolean squared = domain == DT_HEAL_DOMAIN_SQRT;
   __OMP_PARALLEL_FOR__()
-  for(size_t i = 0; i < n; i++)
+  for(size_t i = 0; i < pixels; i++)
   {
-    if(mask_buffer[i] == 0.0f) continue;
+    if(mask[i] == 0.0f) continue;
     for(size_t c = 0; c < 4; c++)
     {
       const float e = encoded[4 * i + c];
-      dest_buffer[4 * i + c] = (squared && c < 3) ? fmaxf(e, 0.0f) * fmaxf(e, 0.0f) - DT_HEAL_SQRT_OFFSET : e;
+      dest[4 * i + c] = (squared && c < 3) ? fmaxf(e, 0.0f) * fmaxf(e, 0.0f) - DT_HEAL_SQRT_OFFSET : e;
     }
   }
-
-cleanup:
-  dt_pixelpipe_cache_free_align(detail);
-  dt_pixelpipe_cache_free_align(mean);
-  dt_pixelpipe_cache_free_align(encoded);
-  dt_pixelpipe_cache_free_align(red_buffer);
-  dt_pixelpipe_cache_free_align(black_buffer);
 }
 
 /* Original Algorithm Design:
@@ -477,11 +437,6 @@ void dt_heal(const float *const src_buffer, float *dest_buffer, const float *con
   if(ch != 4)
   {
     fprintf(stderr,"dt_heal: full-color image required\n");
-    return;
-  }
-  if(solver.texture_radius > 0)
-  {
-    _heal_texture(src_buffer, dest_buffer, mask_buffer, width, height, solver);
     return;
   }
   const size_t subwidth = 4 * ((width+1)/2);  // round up to be able to handle odd widths

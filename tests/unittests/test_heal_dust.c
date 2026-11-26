@@ -16,7 +16,7 @@
     along with Ansel.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-/** A heal that carries only the source's detail (dt_heal_solver_t.texture_radius).
+/** The repair of a speck of dust or a scratch (dt_heal_dust()).
  *
  * Its result is the harmonic interpolation of the destination's border plus the source's detail
  * finer than the box. On a ramp, which is harmonic, the interpolation is the ramp itself; a
@@ -26,7 +26,7 @@
 
 #include "caches/pixelpipe_cache.h"
 #include "darktable.h"
-#include "pixel/heal.h"
+#include "pixel/heal_dust.h"
 #include "system/mem_alloc.h"
 #include "system/openmp.h"
 
@@ -91,8 +91,8 @@ static float *_heal_ramp(const gboolean checkered, const dt_heal_domain_t domain
       }
       mask[i] = _in_hole(x, y) ? 1.0f : 0.0f;
     }
-  dt_heal(src, dest, mask, W, H, 4,
-          (dt_heal_solver_t){ .max_iter = 2000, .domain = domain, .texture_radius = 2 });
+  const dt_heal_dust_t repair = { .solver = { .max_iter = 2000, .domain = domain }, .texture_radius = 2 };
+  dt_heal_dust(src, dest, mask, W, H, &repair);
   dt_free_align(src);
   dt_free_align(mask);
   return dest;

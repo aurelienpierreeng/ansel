@@ -23,6 +23,8 @@
 #ifndef DT_PIXEL_HEAL_H
 #define DT_PIXEL_HEAL_H
 
+#include <stddef.h>
+
 /** The domain the source-to-destination difference is interpolated in.
  *
  * LINEAR adds a harmonic correction to the source pixels as they are, so a source brighter than
@@ -38,22 +40,26 @@ typedef enum dt_heal_domain_t
   DT_HEAL_DOMAIN_SQRT = 1
 } dt_heal_domain_t;
 
-/** How the fill is solved; every setting comes from the calling module. */
+/** How the fill is solved; both settings come from the calling module. */
 typedef struct dt_heal_solver_t
 {
   int max_iter;            /**< cap on the relaxation iterations */
   dt_heal_domain_t domain; /**< space the source-to-destination difference is interpolated in */
-  /** 0 carries the whole source over. A radius carries only the source's detail finer than a box of
-   * that radius, in the domain above: the rest is the harmonic interpolation of the destination's
-   * border. That keeps the grain of the source without its shapes, which is what repairs a speck
-   * of dust best in a texture (doc/iop-notes.md, the dust measurements). */
-  int texture_radius;
 } dt_heal_solver_t;
 
 /** Heal dest_buffer using src_buffer as a reference and mask_buffer to define the area to be healed.
  *  The 3 buffers must have the same size, but mask_buffer is 1 channel and is tested for != 0.f. */
 void dt_heal(const float *const src_buffer, float *dest_buffer, const float *const mask_buffer, const int width,
              const int height, const int ch, const dt_heal_solver_t solver);
+
+/** Encode `pixels` four-channel pixels in `domain`, as dt_heal() does before it solves: a repair that
+ * builds its own source there (pixel/heal_dust.h) heals the encoded buffers in the linear domain. */
+void dt_heal_encode(const float *in, float *out, size_t pixels, dt_heal_domain_t domain);
+
+/** The inverse of dt_heal_encode(), into `dest` where `mask` is not 0 only: the rest of `dest` is
+ * left exactly as it came. */
+void dt_heal_decode_masked(const float *encoded, float *dest, const float *mask, size_t pixels,
+                           dt_heal_domain_t domain);
 
 #ifdef HAVE_OPENCL
 #include <CL/cl.h>   // cl_mem, cl_int: used below, so declared here rather than left to includers

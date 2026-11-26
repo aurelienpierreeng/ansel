@@ -70,7 +70,7 @@ set(LIB_ANSEL_UNIT_TESTS
   test_drawlayer_batch_raster
   test_interpolation_resample_window
   test_dust
-  test_heal_texture
+  test_heal_dust
   test_import_jobs
 )
 

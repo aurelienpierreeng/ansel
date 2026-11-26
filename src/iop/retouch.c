@@ -65,6 +65,7 @@
 #include "pixel/dwt.h"
 #include "pixel/gaussian.h"
 #include "pixel/heal.h"
+#include "pixel/heal_dust.h"
 #include "common/imagebuf.h"
 #include "common/opencl.h"
 #include "develop/blend.h"
@@ -125,9 +126,9 @@ typedef enum dt_iop_retouch_algo_type_t {
   DT_IOP_RETOUCH_BLUR = 3,  // $DESCRIPTION: "Blur"
   DT_IOP_RETOUCH_FILL = 4,  // $DESCRIPTION: "Fill"
   // A heal that carries only the source's grain over the interpolation of the shape's border
-  // (dt_heal_solver_t.texture_radius), for specks of dust. It has no button nor menu entry of its
-  // own: its shapes show as Heal, with "Dust mode" checked under it, which the dust brush
-  // checks while in hand.
+  // (dt_heal_dust()), for specks of dust and scratches. It has no button nor menu entry of its own:
+  // its shapes show as Heal, with "Dust mode" checked under it, which the dust brush checks while in
+  // hand.
   DT_IOP_RETOUCH_DUST = 5   // $DESCRIPTION: "Dust"
 } dt_iop_retouch_algo_type_t;
 
@@ -3734,7 +3735,7 @@ static void rt_scaled_mask_roi(const dt_masks_area_t *const area, const dt_iop_r
                                const int dy, const int algo, dt_iop_roi_t *roi_mask_scaled)
 {
   // a heal reads the border around its mask; a dust shape also the source's box mean around it
-  // (rt_heal_solver())
+  // (rt_heal_repair())
   const int padding = (algo == DT_IOP_RETOUCH_HEAL) ? 1 : (algo == DT_IOP_RETOUCH_DUST) ? 3 : 0;
 
   dt_iop_roi_t roi_mask = { .x = area->x, .y = area->y, .width = area->width, .height = area->height, .scale = 1.f };
@@ -3956,23 +3957,23 @@ static int _retouch_blur(dt_iop_module_t *self, const dt_dev_pixelpipe_t *pipe, 
 // signed, zero-mean differences, which the square-root domain cannot represent: they heal linearly
 // whatever the algorithm.
 // A dust shape carries only the source's detail finer than a 5 × 5 box at full resolution, the
-// box measured best (doc/iop-notes.md), narrowed with the layer's scale down to 3 × 3.
-static dt_heal_solver_t rt_heal_solver(const dt_iop_retouch_params_t *const p,
-                                       const dt_iop_retouch_algo_type_t algo, const int scale, const int scales,
-                                       const float roi_scale)
+// box measured best (doc/iop-notes.md), narrowed with the layer's scale down to 3 × 3. A heal shape
+// reads the solver alone.
+static dt_heal_dust_t rt_heal_repair(const dt_iop_retouch_params_t *const p, const int scale, const int scales,
+                                     const float roi_scale)
 {
   const gboolean has_level = (scale == 0 || scale == scales + 1);
-  return (dt_heal_solver_t){
-    .max_iter = p->max_heal_iter,
-    .domain = (p->heal_algorithm == DT_IOP_RETOUCH_HEAL_SQRT && has_level) ? DT_HEAL_DOMAIN_SQRT
-                                                                             : DT_HEAL_DOMAIN_LINEAR,
-    .texture_radius = (algo == DT_IOP_RETOUCH_DUST) ? MAX(1, (int)lrintf(2.0f * roi_scale)) : 0,
+  return (dt_heal_dust_t){
+    .solver = { .max_iter = p->max_heal_iter,
+                .domain = (p->heal_algorithm == DT_IOP_RETOUCH_HEAL_SQRT && has_level) ? DT_HEAL_DOMAIN_SQRT
+                                                                                         : DT_HEAL_DOMAIN_LINEAR },
+    .texture_radius = MAX(1, (int)lrintf(2.0f * roi_scale)),
   };
 }
 
 static int _retouch_heal(float *const in, dt_iop_roi_t *const roi_in, float *const mask_scaled,
                          dt_iop_roi_t *const roi_mask_scaled, const int dx, const int dy, const float opacity,
-                         const dt_heal_solver_t solver)
+                         const dt_iop_retouch_algo_type_t algo, const dt_heal_dust_t *const repair)
 {
   float *img_src = NULL;
   float *img_dest = NULL;
@@ -3993,7 +3994,11 @@ static int _retouch_heal(float *const in, dt_iop_roi_t *const roi_in, float *con
   rt_copy_in_to_out(in, roi_in, img_dest, roi_mask_scaled, 4, 0, 0);
 
   // heal it
-  dt_heal(img_src, img_dest, mask_scaled, roi_mask_scaled->width, roi_mask_scaled->height, 4, solver);
+  if(algo == DT_IOP_RETOUCH_DUST)
+    err = dt_heal_dust(img_src, img_dest, mask_scaled, roi_mask_scaled->width, roi_mask_scaled->height, repair);
+  else
+    dt_heal(img_src, img_dest, mask_scaled, roi_mask_scaled->width, roi_mask_scaled->height, 4, repair->solver);
+  if(err) goto cleanup;
 
   // copy healed (temp) image to destination image
   rt_copy_image_masked(img_dest, in, roi_in, mask_scaled, roi_mask_scaled, opacity);
@@ -4437,8 +4442,8 @@ static int rt_process_forms(float *layer, dwt_params_t *const wt_p, const int sc
     }
     else if(algo == DT_IOP_RETOUCH_HEAL || algo == DT_IOP_RETOUCH_DUST)
     {
-      if(_retouch_heal(layer, roi_layer, mask_scaled, &roi_mask_scaled, dx, dy, form_opacity,
-                       rt_heal_solver(p, algo, scale1, wt_p->scales, roi_layer->scale)) != 0)
+      const dt_heal_dust_t repair = rt_heal_repair(p, scale1, wt_p->scales, roi_layer->scale);
+      if(_retouch_heal(layer, roi_layer, mask_scaled, &roi_mask_scaled, dx, dy, form_opacity, algo, &repair) != 0)
       {
         rt_release_shape(&shape);
         return 1;
@@ -5065,7 +5070,7 @@ cleanup:
 static cl_int _retouch_heal_cl(const int devid, cl_mem dev_layer, dt_iop_roi_t *const roi_layer, float *mask_scaled,
                                cl_mem dev_mask_scaled, dt_iop_roi_t *const roi_mask_scaled, const int dx,
                                const int dy, const float opacity, const dt_iop_retouch_global_data_t *const gd,
-                               const dt_heal_solver_t solver)
+                               const dt_iop_retouch_algo_type_t algo, const dt_heal_dust_t *const repair)
 {
   cl_int err = CL_SUCCESS;
 
@@ -5107,16 +5112,26 @@ static cl_int _retouch_heal_cl(const int devid, cl_mem dev_layer, dt_iop_roi_t *
   }
 
   // heal it
-  heal_params_cl_t *hp = dt_heal_init_cl(devid);
-  if(hp)
+  if(algo == DT_IOP_RETOUCH_DUST)
   {
-    err = dt_heal_cl(hp, dev_src, dev_dest, mask_scaled, roi_mask_scaled->width, roi_mask_scaled->height, solver);
-    dt_heal_free_cl(hp);
-
-    dt_opencl_release_mem_object(dev_src);
-    dev_src = NULL;
-
+    err = dt_heal_dust_cl(devid, dev_src, dev_dest, mask_scaled, roi_mask_scaled->width, roi_mask_scaled->height,
+                          repair);
     if(err != CL_SUCCESS) goto cleanup;
+  }
+  else
+  {
+    heal_params_cl_t *hp = dt_heal_init_cl(devid);
+    if(hp)
+    {
+      err = dt_heal_cl(hp, dev_src, dev_dest, mask_scaled, roi_mask_scaled->width, roi_mask_scaled->height,
+                       repair->solver);
+      dt_heal_free_cl(hp);
+
+      dt_opencl_release_mem_object(dev_src);
+      dev_src = NULL;
+
+      if(err != CL_SUCCESS) goto cleanup;
+    }
   }
 
   // copy healed (temp) image to destination image
@@ -5212,9 +5227,9 @@ static cl_int rt_process_forms_cl(cl_mem dev_layer, dwt_params_cl_t *const wt_p,
         }
         else if(algo == DT_IOP_RETOUCH_HEAL || algo == DT_IOP_RETOUCH_DUST)
         {
+          const dt_heal_dust_t repair = rt_heal_repair(p, scale1, wt_p->scales, roi_layer->scale);
           err = _retouch_heal_cl(devid, dev_layer, roi_layer, mask_scaled, dev_mask_scaled, &roi_mask_scaled, dx,
-                                 dy, form_opacity, gd,
-                                 rt_heal_solver(p, algo, scale1, wt_p->scales, roi_layer->scale));
+                                 dy, form_opacity, gd, algo, &repair);
         }
         else if(algo == DT_IOP_RETOUCH_BLUR)
         {

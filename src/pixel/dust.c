@@ -104,7 +104,19 @@ static const float _dust_scales[] = { 0.0f, 1.0f, 2.0f, 3.0f, 5.0f, 8.0f };
  * the stroke rebuilt from that zone's mask, the path runs to the hook's end; allowed two pixels per
  * step instead of one, it is the same within a pixel. A zone given without its stroke is followed
  * along the straight line at the angle found.
- * The scratch is DUST_LINE_BAND pixels each side of that path. */
+ * The scratch lies between its sides across that path, where the median along it of its colour's
+ * profile across it falls to DUST_LINE_FOOT of its extremum; DUST_LINE_BAND pixels each side of the
+ * path at the least. Measured on the seven strokes the GUI dumped over the scratches of that scan,
+ * against the scratch's centre and half width read across the stroke in blue - green, per block of
+ * 16 px: the scratch is 3.8 to 4.8 px from its centre to where it falls to half (median of each
+ * stroke), up to 8. With a fixed band of 3 pixels each side, a pixel wider, the shape held 62 to 87 %
+ * of it, its centre out of the shape in 0 to 4 blocks of 5 to 35 and its sides in half of them or
+ * more; between its sides at a quarter of the median's extremum, 85 to 100 %; at 15 %, 93 to 100 %,
+ * the band 6 to 10 px each side of its middle. The mean instead of the median held 94 to 100 % at a
+ * quarter, but a speck 9 px beside a synthetic scratch drew its sides 9 px off it; the median of how
+ * far it departs either way, 77 to 100 %, the grain's own departure flattening the scratch in it.
+ * What is left out at 15 % is where the path leaves the scratch, at the hook's corner and an end, by
+ * 5 to 13 px. */
 #define DUST_LINE_HALF 16.0f
 #define DUST_LINE_HALF_LONG 32.0f
 #define DUST_LINE_ANGLES 8
@@ -124,7 +136,35 @@ static const float _dust_scales[] = { 0.0f, 1.0f, 2.0f, 3.0f, 5.0f, 8.0f };
 #define DUST_FOLLOW_FLIP 3.0f
 #define DUST_LINE_FOLLOW 2.5f // a step of the path standing out this much is where the scratch was seen
 #define DUST_LINE_BAND 3.0f
+#define DUST_LINE_REACH 18.0f // the scratch's profile is read this far from its path each way
+#define DUST_LINE_FLANK 0.67f // beyond this share of DUST_LINE_REACH, its level away from the scratch
+#define DUST_LINE_FOOT 0.15f  // a scratch's side, where its profile falls to this share of its extremum
 #define DUST_STROKE_ELONGATION 3.0f
+
+/** The colours a scratch is looked for in, as weights of the channels' densities. A speck blocks light
+ * in the three channels alike enough for their mean to find it (doc/iop-notes.md: red 0.61 and blue
+ * 1.09 of green). A scratch in the emulsion takes off the layers it cuts, and on a colour negative the
+ * top one first, the yellow dye. Measured on the two hooked scratches of a 35 mm scan, across the path
+ * the GUI followed, the density within a pixel of it less that 5 to 10 px away, averaged over blocks
+ * of 32 px of its length: blue 15 to 51 mD lighter than its sides, red 15 to 31 mD denser along the
+ * lower half and flat at the top, so that their mean changes sign along them and falls to 0.5
+ * deviations on some blocks, against the same measure 30 to 50 px aside. Blue less green stood 4 to 12
+ * deviations out on every block, of one sign, the two channels' grain being partly shared: 3.4 mD for
+ * the difference against 4.3 to 6.1 for blue alone. In it the hook's corner, which the mean does not
+ * show, is plain. Each colour is tried, its line measured against its own grain, and the scratch is
+ * followed in the one its path stands out most in. A difference adds the upper of its two layers,
+ * blue over green over red, which a scratch takes off first: the polarity a scratch is found with in
+ * it is that layer's. */
+static const float _dust_line_colours[][3] = {
+  { 1.0f / 3.0f, 1.0f / 3.0f, 1.0f / 3.0f }, // the mean, as a speck is looked for in
+  { 1.0f, 0.0f, 0.0f },
+  { 0.0f, 1.0f, 0.0f },
+  { 0.0f, 0.0f, 1.0f },
+  { 0.0f, -1.0f, 1.0f }, // blue less green
+  { -1.0f, 0.0f, 1.0f }, // blue less red
+  { -1.0f, 1.0f, 0.0f }, // green less red
+};
+#define DUST_LINE_COLOURS ((int)(sizeof(_dust_line_colours) / sizeof(_dust_line_colours[0])))
 
 /** A rectangle of the buffer with the densities of its pixels, and what is computed over them. */
 typedef struct _dust_window_t
@@ -459,6 +499,27 @@ static void _smooth(const double *sum, const double *count, const uint8_t *insid
     }
 }
 
+/** The excess over the background in one of _dust_line_colours, averaged across the box of `radius`
+ * around each zone pixel into `across`, through the integral image `sum`, whose first row and column
+ * stay 0. */
+static void _colour_across(const _dust_window_t *w, const float *background, const uint8_t *inside,
+                           const float weights[3], double *sum, const double *count, float *across,
+                           const int radius)
+{
+  const size_t n = (size_t)w->width * w->height;
+  const int stride = w->width + 1;
+  for(int y = 0; y < w->height; y++)
+    for(int x = 0; x < w->width; x++)
+    {
+      const size_t i = (size_t)y * w->width + x;
+      float e = 0.0f;
+      for(int c = 0; c < 3 && inside[i]; c++) e += weights[c] * (w->density[c * n + i] - background[c * n + i]);
+      const size_t o = (size_t)(y + 1) * stride + x + 1;
+      sum[o] = sum[o - 1] + sum[o - stride] - sum[o - stride - 1] + e;
+    }
+  _smooth(sum, count, inside, across, w->width, w->height, radius);
+}
+
 /** A line through each zone pixel, against its sides: along the segment of `half` pixels each way at
  * angle `theta`, the mean of `across` (an excess already averaged across a small box) less its value
  * `side` pixels away on whichever side of the segment is nearer to it, where all of that lies in the
@@ -711,6 +772,16 @@ static void _unit(float *x, float *y)
   *y /= length;
 }
 
+/** How many points a pixel apart a stroke of `count` points, x, y pairs, is resampled to: 1 without a
+ * stroke a pixel long. */
+static int _stroke_samples(const float *stroke, const int count)
+{
+  float length = 0.0f;
+  for(int k = 0; stroke && k + 1 < count; k++)
+    length += hypotf(stroke[2 * k + 2] - stroke[2 * k], stroke[2 * k + 3] - stroke[2 * k + 1]);
+  return length >= 1.0f ? (int)length + 1 : 1;
+}
+
 /** The frame of a stroke through `count` points, x, y pairs in the window's pixels: resampled a pixel
  * apart, each point the mean of those `smooth` pixels each way along it, which the pointer's steps and
  * the hand's tremor vary by, and extended straight by `extend` pixels at both ends, where the brush
@@ -719,10 +790,7 @@ static void _unit(float *x, float *y)
 static gboolean _frame_new(const float *stroke, const int count, const float x0, const float y0, const float theta,
                            const int smooth, const int extend, _dust_frame_t *frame)
 {
-  float length = 0.0f;
-  for(int k = 0; stroke && k + 1 < count; k++)
-    length += hypotf(stroke[2 * k + 2] - stroke[2 * k], stroke[2 * k + 3] - stroke[2 * k + 1]);
-  const int along = length >= 1.0f ? (int)length + 1 : 1;
+  const int along = _stroke_samples(stroke, count);
   frame->count = along + 2 * extend;
   frame->point = dt_alloc_align_float((size_t)2 * frame->count);
   frame->normal = dt_alloc_align_float((size_t)2 * frame->count);
@@ -735,7 +803,7 @@ static gboolean _frame_new(const float *stroke, const int count, const float x0,
   }
 
   float *const middle = frame->point + 2 * extend;
-  if(length < 1.0f)
+  if(along == 1)
   {
     middle[0] = x0;
     middle[1] = y0;
@@ -884,12 +952,13 @@ static gboolean _in_zone(const uint8_t *inside, const int width, const int heigh
  *
  * The path, from one end to the other, goes to `path` as x, y pairs, at most `room` points each way
  * and the start; returns how many. `seen` gets how far apart along the frame lie the steps whose
- * segment stands out by DUST_LINE_FOLLOW deviations, of their polarity, the start included. `score`
- * holds 4 × (2 `room` + 1) floats, `back` `room` × 2 × (2 `room` + 1) bytes. */
+ * segment stands out by DUST_LINE_FOLLOW deviations, of their polarity, the start included, and
+ * `strength` what the path scores, both ways together. `score` holds 4 × (2 `room` + 1) floats, `back`
+ * `room` × 2 × (2 `room` + 1) bytes. */
 static int _follow_line(const float *across, const uint8_t *inside, const int width, const int height,
                         const _dust_frame_t *frame, const float x0, const float y0, const int polarity,
                         const int half, const int side, const int step, const float sigma, const int room,
-                        float *score, uint8_t *back, float *path, float *seen)
+                        float *score, uint8_t *back, float *path, float *seen, float *strength)
 {
   // where the path starts: the frame's nearest point, and the offset from it
   int start = 0;
@@ -909,6 +978,7 @@ static int _follow_line(const float *across, const uint8_t *inside, const int wi
   float lowest = 0.0f, highest = 0.0f;
   // the way back is written from the middle of the path down, the way on from it up
   int first = room, last = room;
+  float path_score = 0.0f;
   _frame_point(frame, start, (float)offset0, &path[2 * room], &path[2 * room + 1]);
   for(int direction = -1; direction <= 1; direction += 2)
   {
@@ -981,6 +1051,7 @@ static int _follow_line(const float *across, const uint8_t *inside, const int wi
       now = swap;
     }
     // back from the end the way scored best
+    path_score += end_score;
     int v = end_offset, light = end_light;
     for(int k = end_step; k >= 1; k--)
     {
@@ -999,6 +1070,7 @@ static int _follow_line(const float *across, const uint8_t *inside, const int wi
     else last = room + end_step;
   }
   *seen = highest - lowest;
+  *strength = path_score;
   // moved to the start of the buffer
   const int points = last - first + 1;
   memmove(path, path + 2 * first, sizeof(float) * 2 * points);
@@ -1031,6 +1103,94 @@ static void _band(const float *path, const int points, const float radius, const
     }
   _dilate(scratch_region, region, width, height, 1);
   for(size_t i = 0; i < (size_t)width * height; i++) region[i] = region[i] && inside[i];
+}
+
+/** Where a scratch's sides lie across its path: the profile across the path, in steps of half a pixel
+ * out to `reach` each way, of the median over the path's length of `excess` (its colour's, unsmoothed)
+ * in the scratch's `polarity`: a speck beside the path, on a short part of it, does not move it. Less
+ * its level away from the scratch (beyond DUST_LINE_FLANK of `reach`), from its extremum
+ * within `centre` of the path, the sides are where it falls under DUST_LINE_FOOT of it each way.
+ * `shift` gets how far their middle lies along the path's normal (-dy, dx), `half` half their
+ * distance, kept at its own value at the least; both stay as they came when nothing stands out, or
+ * out of memory. */
+static void _line_sides(const float *excess, const uint8_t *inside, const int width, const int height,
+                        const float *path, const int points, const int polarity, const float centre,
+                        const float reach, float *shift, float *half)
+{
+  const int bins = 2 * (int)ceilf(2.0f * reach) + 1, middle = bins / 2;
+  size_t samples = 0;
+  for(int k = 0; k + 1 < points; k++)
+    samples += (size_t)ceilf(hypotf(path[2 * k + 2] - path[2 * k], path[2 * k + 3] - path[2 * k + 1]));
+  float *values = dt_alloc_align_float(samples * bins);
+  float *profile = dt_calloc_align_float(bins);
+  int *taken = dt_calloc_align((size_t)bins * sizeof(int));
+  if(IS_NULL_PTR(values) || IS_NULL_PTR(profile) || IS_NULL_PTR(taken)) goto cleanup;
+  for(int k = 0; k + 1 < points; k++)
+  {
+    const float ax = path[2 * k], ay = path[2 * k + 1];
+    const float ex = path[2 * k + 2] - ax, ey = path[2 * k + 3] - ay;
+    const float length = hypotf(ex, ey);
+    if(length <= 0.0f) continue;
+    const float nx = -ey / length, ny = ex / length;
+    for(int s = 0; s < (int)ceilf(length); s++)
+      for(int b = 0; b < bins; b++)
+      {
+        const float t = 0.5f * (b - middle);
+        const int x = (int)floorf(ax + ex * s / length + nx * t), y = (int)floorf(ay + ey * s / length + ny * t);
+        if(x < 0 || y < 0 || x >= width || y >= height || !inside[(size_t)y * width + x]) continue;
+        values[(size_t)b * samples + taken[b]++] = polarity * excess[(size_t)y * width + x];
+      }
+  }
+  float level = 0.0f, flank = 0.0f;
+  for(int b = 0; b < bins; b++)
+  {
+    if(taken[b] == 0) continue;
+    float *const bin = values + (size_t)b * samples;
+    qsort(bin, taken[b], sizeof(float), _compare_floats);
+    profile[b] = bin[taken[b] / 2];
+    if(fabsf(0.5f * (b - middle)) < DUST_LINE_FLANK * reach) continue;
+    level += profile[b];
+    flank++;
+  }
+  if(flank > 0.0f) level /= flank;
+  int peak = middle;
+  for(int b = 0; b < bins; b++)
+    if(fabsf(0.5f * (b - middle)) <= centre && taken[b] > 0 && profile[b] > profile[peak]) peak = b;
+  if(profile[peak] > level)
+  {
+    const float foot = level + DUST_LINE_FOOT * (profile[peak] - level);
+    int low = peak, high = peak;
+    while(low > 0 && taken[low - 1] > 0 && profile[low - 1] > foot) low--;
+    while(high + 1 < bins && taken[high + 1] > 0 && profile[high + 1] > foot) high++;
+    *shift = 0.25f * (low + high - 2 * middle);
+    *half = fmaxf(*half, 0.25f * (high - low + 1));
+  }
+
+cleanup:
+  dt_free_align(values);
+  dt_free_align(profile);
+  dt_free_align(taken);
+}
+
+/** `path` moved by `shift` along its normal (-dy, dx), at each point the mean of its segments' normals,
+ * into `moved`. */
+static void _shift_path(const float *path, const int points, const float shift, float *moved)
+{
+  for(int k = 0; k < points; k++)
+  {
+    float nx = 0.0f, ny = 0.0f;
+    for(int j = MAX(0, k - 1); j < MIN(points - 1, k + 1); j++)
+    {
+      const float ex = path[2 * j + 2] - path[2 * j], ey = path[2 * j + 3] - path[2 * j + 1];
+      const float length = hypotf(ex, ey);
+      if(length <= 0.0f) continue;
+      nx -= ey / length;
+      ny += ex / length;
+    }
+    const float norm = hypotf(nx, ny);
+    moved[2 * k] = path[2 * k] + (norm > 0.0f ? shift * nx / norm : 0.0f);
+    moved[2 * k + 1] = path[2 * k + 1] + (norm > 0.0f ? shift * ny / norm : 0.0f);
+  }
 }
 
 dt_dust_status_t dt_dust_find_in_zone(const dt_dust_image_t *image, const dt_dust_zone_t *zone,
@@ -1074,10 +1234,12 @@ dt_dust_status_t dt_dust_find_in_zone(const dt_dust_image_t *image, const dt_dus
   uint8_t *line_valid = dt_alloc_align(n);
   const int line_step = _scaled(DUST_LINE_STEP, image->scale, 2);
   const float line_band = (float)_scaled(DUST_LINE_BAND, image->scale, 1);
+  float line_half_band = line_band;
   // what a scratch is followed along, once found: the stroke, the path and the Viterbi's states
   _dust_frame_t frame = { 0 };
   float *stroke_points = NULL;
   float *path = NULL;
+  float *colour_path = NULL;
   float *follow_score = NULL;
   uint8_t *follow_back = NULL;
   dt_dust_status_t status = DT_DUST_NO_MEMORY;
@@ -1161,86 +1323,112 @@ dt_dust_status_t dt_dust_find_in_zone(const dt_dust_image_t *image, const dt_dus
   float axis = 0.0f;
   const gboolean stroke = _zone_is_stroke(inside, w.width, w.height, &axis);
 
-  // the scratch: the excess averaged across a small box, then along segments within a few steps of
-  // the stroke, against their sides, where all of that fits in the zone; then measured at the best
-  // angle along the long segment, or the short one where the long one does not fit
+  // the scratch, in each colour: the excess averaged across a small box, then along segments within a
+  // few steps of the stroke, against their sides, where all of that fits in the zone; at the angle it
+  // stands out most at, measured again along the long segment, or the short one where the long one
+  // does not fit, and where that stands out enough, followed from its peak. The colour whose path
+  // stands out most is kept: a step of it counts for DUST_FOLLOW_CEILING deviations at most, so that a
+  // speck on the scratch, standing out in every colour, does not choose for it
   _dust_best_t line = { .polarity = 1 };
-  float line_angle = axis;
+  int line_points = 0, line_colour = 0;
+  float line_score = -FLT_MAX, line_reach = -1.0f;
   const int band = line_side + 2 * line_radius + 1;
   if(stroke)
   {
-    _smooth(sum, count, inside, across, w.width, w.height, line_radius);
-    for(int a = -DUST_LINE_ANGLES; a <= DUST_LINE_ANGLES; a++)
-    {
-      const float theta = axis + a * DUST_LINE_ANGLE_STEP;
-      if(_smooth_line(across, inside, line_dark, line_light, NULL, fits, offsets, line_response, line_valid,
-                      w.width, w.height, line_half, line_side, theta)
-         < DUST_MIN_BLOCKS * (2 * line_half + 1) * (2 * line_radius + 1))
-        continue;
-      const float before = line.contrast;
-      _consider(line_dark, line_light, fits, n, w.width, scratch, line_field, &line);
-      if(line.contrast > before) line_angle = theta;
-    }
-    if(line.contrast > 0.0f)
-    {
-      const int long_fits
-          = _smooth_line(across, inside, line_dark, line_light, line_mean, fits, offsets, line_response,
-                         line_valid, w.width, w.height, line_half_long, line_side, line_angle);
-      if(long_fits < DUST_MIN_BLOCKS * (2 * line_half_long + 1) * (2 * line_radius + 1))
-        _smooth_line(across, inside, line_dark, line_light, line_mean, fits, offsets, line_response, line_valid,
-                     w.width, w.height, line_half, line_side, line_angle);
-      _measure_line(line.polarity > 0 ? line_dark : line_light, line_mean, fits, n, w.width, line.polarity,
-                    line_angle, band, scratch, line_field, &line);
-    }
-  }
-
-  // the speck grown from its peak, the scratch followed from its own; along a stroke, the one that
-  // stands out farther along it is what the stroke was painted over
-  status = DT_DUST_NOT_FOUND;
-  const gboolean has_speck = found.contrast >= DUST_MIN_CONTRAST;
-  const gboolean has_line = line.contrast >= DUST_MIN_LINE_CONTRAST;
-  if(!has_speck && !has_line) goto cleanup;
-  float speck_reach = -1.0f, line_reach = -1.0f;
-  if(has_speck)
-  {
-    _grow(best, &found, inside, allowed, region, stack, w.width, w.height);
-    speck_reach = _reach(region, w.width, w.height, axis);
-  }
-  if(has_line)
-  {
-    // the noise of a short segment, which the scratch is followed along
-    _dust_best_t short_line = { 0 };
-    _smooth_line(across, inside, line_dark, line_light, line_mean, fits, offsets, line_response, line_valid,
-                 w.width, w.height, line_half, line_side, line_angle);
-    _measure_line(line.polarity > 0 ? line_dark : line_light, line_mean, fits, n, w.width, line.polarity,
-                  line_angle, band, scratch, line_field, &short_line);
     // the stroke, in the window, or the line at the angle found without it; the path, its start and
-    // each way as many steps as the frame holds
+    // each way as many steps as the frame holds, which is as long in every colour
     const int stroke_count = zone->stroke ? zone->stroke_count : 0;
-    stroke_points = dt_alloc_align_float((size_t)2 * MAX(1, stroke_count));
     status = DT_DUST_NO_MEMORY;
+    stroke_points = dt_alloc_align_float((size_t)2 * MAX(1, stroke_count));
     if(IS_NULL_PTR(stroke_points)) goto cleanup;
     for(int k = 0; k < stroke_count; k++)
     {
       stroke_points[2 * k] = zone->stroke[2 * k] - w.x0;
       stroke_points[2 * k + 1] = zone->stroke[2 * k + 1] - w.y0;
     }
-    if(!_frame_new(stroke_points, stroke_count, (float)line.seed_x, (float)line.seed_y, line_angle,
-                   _scaled(DUST_STROKE_SMOOTH, image->scale, 1), w.width + w.height, &frame))
-      goto cleanup;
-    const int room = frame.count / line_step + 2;
+    const int extend = w.width + w.height;
+    const int room = (_stroke_samples(stroke_points, stroke_count) + 2 * extend) / line_step + 2;
     path = dt_alloc_align_float((size_t)2 * (2 * room + 1));
+    colour_path = dt_alloc_align_float((size_t)2 * (2 * room + 1));
     follow_score = dt_alloc_align_float((size_t)4 * (2 * room + 1));
     follow_back = dt_alloc_align((size_t)room * 2 * (2 * room + 1));
-    if(IS_NULL_PTR(path) || IS_NULL_PTR(follow_score) || IS_NULL_PTR(follow_back)) goto cleanup;
-    status = DT_DUST_NOT_FOUND;
-    const int points = short_line.sigma > 0.0f
-                           ? _follow_line(across, inside, w.width, w.height, &frame, (float)line.seed_x,
-                                          (float)line.seed_y, line.polarity, line_half, line_side, line_step,
-                                          short_line.sigma, room, follow_score, follow_back, path, &line_reach)
-                           : 0;
-    if(points > 0) _band(path, points, line_band, inside, allowed, line_region, w.width, w.height);
-    else line_reach = -1.0f;
+    if(IS_NULL_PTR(path) || IS_NULL_PTR(colour_path) || IS_NULL_PTR(follow_score) || IS_NULL_PTR(follow_back))
+      goto cleanup;
+    for(int k = 0; k < DUST_LINE_COLOURS; k++)
+    {
+      _dust_best_t in_colour = { .polarity = 1 };
+      float colour_angle = axis;
+      _colour_across(&w, background, inside, _dust_line_colours[k], sum, count, across, line_radius);
+      for(int a = -DUST_LINE_ANGLES; a <= DUST_LINE_ANGLES; a++)
+      {
+        const float theta = axis + a * DUST_LINE_ANGLE_STEP;
+        if(_smooth_line(across, inside, line_dark, line_light, NULL, fits, offsets, line_response, line_valid,
+                        w.width, w.height, line_half, line_side, theta)
+           < DUST_MIN_BLOCKS * (2 * line_half + 1) * (2 * line_radius + 1))
+          continue;
+        const float before = in_colour.contrast;
+        _consider(line_dark, line_light, fits, n, w.width, scratch, line_field, &in_colour);
+        if(in_colour.contrast > before) colour_angle = theta;
+      }
+      if(in_colour.contrast <= 0.0f) continue;
+      const int long_fits
+          = _smooth_line(across, inside, line_dark, line_light, line_mean, fits, offsets, line_response,
+                         line_valid, w.width, w.height, line_half_long, line_side, colour_angle);
+      if(long_fits < DUST_MIN_BLOCKS * (2 * line_half_long + 1) * (2 * line_radius + 1))
+        _smooth_line(across, inside, line_dark, line_light, line_mean, fits, offsets, line_response, line_valid,
+                     w.width, w.height, line_half, line_side, colour_angle);
+      _measure_line(in_colour.polarity > 0 ? line_dark : line_light, line_mean, fits, n, w.width,
+                    in_colour.polarity, colour_angle, band, scratch, line_field, &in_colour);
+      if(in_colour.contrast < DUST_MIN_LINE_CONTRAST) continue;
+
+      // the noise of a short segment, which the scratch is followed along
+      _dust_best_t short_line = { 0 };
+      _smooth_line(across, inside, line_dark, line_light, line_mean, fits, offsets, line_response, line_valid,
+                   w.width, w.height, line_half, line_side, colour_angle);
+      _measure_line(in_colour.polarity > 0 ? line_dark : line_light, line_mean, fits, n, w.width,
+                    in_colour.polarity, colour_angle, band, scratch, line_field, &short_line);
+      if(short_line.sigma <= 0.0f) continue;
+      if(!_frame_new(stroke_points, stroke_count, (float)in_colour.seed_x, (float)in_colour.seed_y, colour_angle,
+                     _scaled(DUST_STROKE_SMOOTH, image->scale, 1), extend, &frame))
+        goto cleanup;
+      float reach = -1.0f, score = -FLT_MAX;
+      const int points = _follow_line(across, inside, w.width, w.height, &frame, (float)in_colour.seed_x,
+                                      (float)in_colour.seed_y, in_colour.polarity, line_half, line_side,
+                                      line_step, short_line.sigma, room, follow_score, follow_back, colour_path,
+                                      &reach, &score);
+      _frame_cleanup(&frame);
+      if(points == 0 || score <= line_score) continue;
+      line = in_colour;
+      line_points = points;
+      line_score = score;
+      line_reach = reach;
+      line_colour = k;
+      float *const swap = path;
+      path = colour_path;
+      colour_path = swap;
+    }
+    // the scratch: between its sides across its path, DUST_LINE_BAND pixels each side of it at the least
+    if(line_points > 0)
+    {
+      _colour_across(&w, background, inside, _dust_line_colours[line_colour], sum, count, across, 0);
+      float shift = 0.0f;
+      _line_sides(across, inside, w.width, w.height, path, line_points, line.polarity, 2.0f * line_band,
+                  (float)_scaled(DUST_LINE_REACH, image->scale, 1), &shift, &line_half_band);
+      _shift_path(path, line_points, shift, colour_path);
+      _band(colour_path, line_points, line_half_band, inside, allowed, line_region, w.width, w.height);
+    }
+  }
+
+  // the speck grown from its peak; along a stroke, of the speck and the scratch, the one that stands
+  // out farther along it is what the stroke was painted over
+  status = DT_DUST_NOT_FOUND;
+  const gboolean has_speck = found.contrast >= DUST_MIN_CONTRAST;
+  if(!has_speck && line_points == 0) goto cleanup;
+  float speck_reach = -1.0f;
+  if(has_speck)
+  {
+    _grow(best, &found, inside, allowed, region, stack, w.width, w.height);
+    speck_reach = _reach(region, w.width, w.height, axis);
   }
   const gboolean take_line = line_reach > speck_reach;
 
@@ -1250,7 +1438,7 @@ dt_dust_status_t dt_dust_find_in_zone(const dt_dust_image_t *image, const dt_dus
   speck->peak = taken->peak;
   speck->contrast = taken->contrast;
   // a scratch bends, which its long axis does not: its half width is its band's, a pixel wider, plus one
-  if(take_line && status == DT_DUST_OK) speck->half_width = fminf(speck->half_width, line_band + 2.0f);
+  if(take_line && status == DT_DUST_OK) speck->half_width = fminf(speck->half_width, line_half_band + 2.0f);
 
 cleanup:
   _window_cleanup(&w);
@@ -1271,6 +1459,7 @@ cleanup:
   _frame_cleanup(&frame);
   dt_free_align(stroke_points);
   dt_free_align(path);
+  dt_free_align(colour_path);
   dt_free_align(follow_score);
   dt_free_align(follow_back);
   dt_free_align(line_response);

@@ -235,6 +235,7 @@ FILE(GLOB SOURCE_FILES
   "pixel/dust.c"
   "pixel/dwt.c"
   "pixel/heal.c"
+  "pixel/heal_dust.c"
   "common/iop-autoset.c"
   "develop/masks/brush.c"
   "develop/masks/circle.c"
