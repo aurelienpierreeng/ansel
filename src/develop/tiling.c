@@ -635,6 +635,12 @@ static int _default_process_tiling_roi(struct dt_iop_module_t *self, const struc
   const int tile_ht = _align_up(
       roi_out->height % tiles_y == 0 ? roi_out->height / tiles_y : roi_out->height / tiles_y + 1, xyalign);
 
+  /* Rounding the good part up to the alignment can make fewer tiles cover the output. Count them
+     again, as the ptp path does: a tile starting past the output's edge has a negative size, which
+     wraps around once unsigned and copies far past the buffers. */
+  tiles_x = (roi_out->width + tile_wd - 1) / tile_wd;
+  tiles_y = (roi_out->height + tile_ht - 1) / tile_ht;
+
   dt_print(DT_DEBUG_TILING, "[default_process_tiling_roi] (%dx%d) tiles with max dimensions %dx%d, good %dx%d, overlap %d->%d\n",
            tiles_x, tiles_y, width, height, tile_wd, tile_ht, overlap_in, overlap_out);
 
@@ -1216,6 +1222,10 @@ static int _default_process_tiling_cl_roi(struct dt_iop_module_t *self, const st
       roi_out->width % tiles_x == 0 ? roi_out->width / tiles_x : roi_out->width / tiles_x + 1, xyalign);
   const int tile_ht = _align_up(
       roi_out->height % tiles_y == 0 ? roi_out->height / tiles_y : roi_out->height / tiles_y + 1, xyalign);
+
+  // fewer tiles may cover the output once their size is rounded up: see default_process_tiling_roi
+  tiles_x = (roi_out->width + tile_wd - 1) / tile_wd;
+  tiles_y = (roi_out->height + tile_ht - 1) / tile_ht;
 
   dt_print(DT_DEBUG_TILING,
            "[default_process_tiling_cl_roi] (%dx%d) tiles with max input dimensions %dx%d, good %ix%i\n",
