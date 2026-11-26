@@ -40,6 +40,7 @@
 
 #include <float.h>
 #include <math.h>
+#include <stddef.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -230,10 +231,13 @@ static dt_dust_status_t _window_top_hats(const dt_dust_image_t *image, _dust_win
     return DT_DUST_NO_MEMORY;
   }
 
-  for(size_t i = 0; i < n; i++) w->excess[i] = w->light[i] = -FLT_MAX;
+  // the planes held apart from the window, which the loops would otherwise read again on every write
+  float *const restrict excess = w->excess;
+  float *const restrict light = w->light;
+  for(size_t i = 0; i < n; i++) excess[i] = light[i] = -FLT_MAX;
   for(int c = 0; c < 3 && status == DT_DUST_OK; c++)
   {
-    const float *const plane = w->density + c * n;
+    const float *const restrict plane = w->density + c * n;
     memcpy(open, plane, n * sizeof(float));
     memcpy(close, plane, n * sizeof(float));
     if(dt_box_min(open, w->height, w->width, 1, opening) || dt_box_max(open, w->height, w->width, 1, opening)
@@ -245,8 +249,8 @@ static dt_dust_status_t _window_top_hats(const dt_dust_image_t *image, _dust_win
     __OMP_PARALLEL_FOR_SIMD__(aligned(open, close:64))
     for(size_t i = 0; i < n; i++)
     {
-      w->excess[i] = fmaxf(w->excess[i], plane[i] - open[i]);
-      w->light[i] = fmaxf(w->light[i], close[i] - plane[i]);
+      excess[i] = fmaxf(excess[i], plane[i] - open[i]);
+      light[i] = fmaxf(light[i], close[i] - plane[i]);
     }
   }
   dt_free_align(open);
@@ -254,11 +258,35 @@ static dt_dust_status_t _window_top_hats(const dt_dust_image_t *image, _dust_win
   return status;
 }
 
-static int _compare_floats(const void *a, const void *b)
+/** The `k`-th smallest of `n` values, 0 the smallest: what `values[k]` would be once sorted, `values`
+ * reordered around it. A quickselect, its pivot the median of the ends and the middle: a sort of the
+ * whole zone for its median, 17 angles in 7 colours, was most of the time a scratch was looked for in. */
+static float _kth_smallest(float *values, const size_t n, const size_t k)
 {
-  const float x = *(const float *)a;
-  const float y = *(const float *)b;
-  return (x > y) - (x < y);
+  ptrdiff_t low = 0, high = (ptrdiff_t)n - 1;
+  while(low < high)
+  {
+    const float a = values[low], b = values[low + (high - low) / 2], c = values[high];
+    const float pivot = fmaxf(fminf(a, b), fminf(fmaxf(a, b), c));
+    ptrdiff_t i = low, j = high;
+    while(i <= j)
+    {
+      while(values[i] < pivot) i++;
+      while(values[j] > pivot) j--;
+      if(i > j) break;
+      const float swap = values[i];
+      values[i++] = values[j];
+      values[j--] = swap;
+    }
+    // below j, all are at most the pivot, from i up at least, and between them they are the pivot
+    if((ptrdiff_t)k <= j)
+      high = j;
+    else if((ptrdiff_t)k >= i)
+      low = i;
+    else
+      break;
+  }
+  return values[k];
 }
 
 /** Median and robust standard deviation (1.4826 × the median absolute deviation) of `n` values, so
@@ -266,11 +294,9 @@ static int _compare_floats(const void *a, const void *b)
 static float _noise(const float *values, const size_t n, float *scratch, float *median)
 {
   memcpy(scratch, values, n * sizeof(float));
-  qsort(scratch, n, sizeof(float), _compare_floats);
-  *median = scratch[n / 2];
+  *median = _kth_smallest(scratch, n, n / 2);
   for(size_t i = 0; i < n; i++) scratch[i] = fabsf(values[i] - *median);
-  qsort(scratch, n, sizeof(float), _compare_floats);
-  return 1.4826f * scratch[n / 2];
+  return 1.4826f * _kth_smallest(scratch, n, n / 2);
 }
 
 /** The pixels of `allowed` 8-connected to the seed and within `limit` of it, written to `out`.
@@ -528,7 +554,7 @@ static void _colour_across(const _dust_window_t *w, const float *background, con
  * holds DUST_LINE_EVEN of it, and one below 0 in `light` likewise; elsewhere on its own side, 0. On
  * the other side each holds the mean as it is, the grain that side's noise is measured on. `mean`,
  * when given, gets the mean everywhere, which a region is grown on: along a line it does not dip
- * where a third of the segment does. `offsets` holds 2 × (2 × half + 1) ints, `response` and `valid`
+ * where a third of the segment does. `offsets` holds 2 × half + 1 ints, `response` and `valid`
  * width × height floats and bytes. Returns how many pixels fit. */
 static int _smooth_line(const float *across, const uint8_t *inside, float *dark, float *light, float *mean,
                         uint8_t *fits, int *offsets, float *response, uint8_t *valid, const int width,
@@ -552,13 +578,21 @@ static int _smooth_line(const float *across, const uint8_t *inside, float *dark,
       const float left = across[(size_t)ly * width + lx], right = across[(size_t)ry * width + rx];
       response[i] = across[i] - (fabsf(left - across[i]) < fabsf(right - across[i]) ? left : right);
     }
-  // each sample along the segment
+  // each sample along the segment, as an offset in the buffer; the segment's frame, which holds them
+  // all; where each third of it starts
+  int low_x = 0, low_y = 0, high_x = 0, high_y = 0;
   for(int j = 0; j < samples; j++)
   {
     const float t = (float)(j - half);
-    offsets[2 * j] = (int)lrintf(t * c);
-    offsets[2 * j + 1] = (int)lrintf(t * s);
+    const int ox = (int)lrintf(t * c), oy = (int)lrintf(t * s);
+    offsets[j] = oy * width + ox;
+    low_x = MIN(low_x, ox);
+    low_y = MIN(low_y, oy);
+    high_x = MAX(high_x, ox);
+    high_y = MAX(high_y, oy);
   }
+  int starts[4] = { 0, 0, 0, samples };
+  for(int j = samples - 1; j >= 0; j--) starts[3 * j / samples] = j;
   __OMP_PARALLEL_FOR__()
   for(int y = 0; y < height; y++)
     for(int x = 0; x < width; x++)
@@ -567,22 +601,21 @@ static int _smooth_line(const float *across, const uint8_t *inside, float *dark,
       dark[i] = light[i] = 0.0f;
       if(mean) mean[i] = 0.0f;
       fits[i] = 0;
-      if(!inside[i]) continue;
+      // a segment out of the buffer has a sample out of it, at an end of its frame
+      if(!inside[i] || x + low_x < 0 || y + low_y < 0 || x + high_x >= width || y + high_y >= height) continue;
       float thirds[3] = { 0.0f, 0.0f, 0.0f };
-      int counts[3] = { 0, 0, 0 };
       gboolean all_in = TRUE;
-      for(int j = 0; j < samples && all_in; j++)
-      {
-        const int sx = x + offsets[2 * j], sy = y + offsets[2 * j + 1];
-        all_in = sx >= 0 && sy >= 0 && sx < width && sy < height && valid[(size_t)sy * width + sx];
-        if(!all_in) break;
-        const int third = 3 * j / samples;
-        counts[third]++;
-        thirds[third] += response[(size_t)sy * width + sx];
-      }
+      for(int third = 0; third < 3 && all_in; third++)
+        for(int j = starts[third]; j < starts[third + 1]; j++)
+        {
+          const size_t o = (size_t)((ptrdiff_t)i + offsets[j]);
+          all_in = valid[o];
+          if(!all_in) break;
+          thirds[third] += response[o];
+        }
       if(!all_in) continue;
       const float m = (thirds[0] + thirds[1] + thirds[2]) / samples;
-      for(int t = 0; t < 3; t++) thirds[t] /= counts[t];
+      for(int t = 0; t < 3; t++) thirds[t] /= starts[t + 1] - starts[t];
       const float lowest = fminf(thirds[0], fminf(thirds[1], thirds[2]));
       const float highest = fmaxf(thirds[0], fmaxf(thirds[1], thirds[2]));
       dark[i] = m <= 0.0f || lowest >= DUST_LINE_EVEN * m ? m : 0.0f;
@@ -606,8 +639,7 @@ static float _opposite_noise(const float *excess, const uint8_t *inside, const s
   for(size_t i = 0; i < n; i++)
     if(inside[i] && polarity * excess[i] < 0.0f) scratch[count++] = -polarity * excess[i];
   if(count < DUST_MIN_BLOCKS) return 0.0f;
-  qsort(scratch, count, sizeof(float), _compare_floats);
-  return scratch[count / 2] / 0.6745f;
+  return _kth_smallest(scratch, count, count / 2) / 0.6745f;
 }
 
 /** Whether the zone is a stroke, DUST_STROKE_ELONGATION times longer than wide or more, from the
@@ -736,8 +768,7 @@ static void _measure_line(const float *field, const float *mean, const uint8_t *
     if(fabsf(across) > band) scratch[m++] = -polarity * field[i];
   }
   if(m < DUST_MIN_BLOCKS) return;
-  qsort(scratch, m, sizeof(float), _compare_floats);
-  const float noise = scratch[m / 2] / 0.6745f;
+  const float noise = _kth_smallest(scratch, m, m / 2) / 0.6745f;
   if(noise <= 0.0f) return;
 
   best->peak = polarity * field[top];
@@ -1146,8 +1177,7 @@ static void _line_sides(const float *excess, const uint8_t *inside, const int wi
   {
     if(taken[b] == 0) continue;
     float *const bin = values + (size_t)b * samples;
-    qsort(bin, taken[b], sizeof(float), _compare_floats);
-    profile[b] = bin[taken[b] / 2];
+    profile[b] = _kth_smallest(bin, taken[b], taken[b] / 2);
     if(fabsf(0.5f * (b - middle)) < DUST_LINE_FLANK * reach) continue;
     level += profile[b];
     flank++;
@@ -1229,7 +1259,7 @@ dt_dust_status_t dt_dust_find_in_zone(const dt_dust_image_t *image, const dt_dus
   const int line_side = _scaled(DUST_LINE_SIDE, image->scale, 2);
   const int line_half = _scaled(DUST_LINE_HALF, image->scale, 1);
   const int line_half_long = _scaled(DUST_LINE_HALF_LONG, image->scale, 1);
-  int *offsets = dt_alloc_align((size_t)2 * (2 * line_half_long + 1) * sizeof(int));
+  int *offsets = dt_alloc_align((size_t)(2 * line_half_long + 1) * sizeof(int));
   float *line_response = dt_alloc_align_float(n);
   uint8_t *line_valid = dt_alloc_align(n);
   const int line_step = _scaled(DUST_LINE_STEP, image->scale, 2);
