@@ -288,6 +288,61 @@ channel → green or, after clamping, black output (issue #729's second face). T
 - `channelmixerrgb.c` — `get_white_balance_coeff()` forces the bogus matrix-derived 4th
   coefficient to the green reference instead of propagating it.
 
+## DNG colorimetry: the D65 matrix and the linear-DNG black level
+
+> **Established against `225fe27657` on 2026-11-26**, on two user files: a Sigma sd Quattro DNG
+> and a Fujifilm X-Pro2 raw converted to a linear DNG by Adobe DNG Converter.
+
+### The D65 matrix is never chromatically adapted
+
+The rest of the tree wants one XYZ(D65) → camera matrix, `img->d65_color_matrix`. It takes
+priority over the camera's generic matrix in colorin, in the "camera reference" white balance of
+temperature (the default one in the modern chromatic adaptation workflow) and in
+channelmixerrgb's illuminant estimate. `_exif_decode_exif_data()` builds it from the DNG's
+`ColorMatrixN` / `CalibrationIlluminantN` pairs.
+
+A DNG ColorMatrix is **not** adapted to its calibration illuminant: it is the XYZ → camera fit
+measured under that light, and the camera neutral under any white is that matrix times the
+white's XYZ. The D65 matrix is therefore built from the calibrations as they are, as the DNG SDK
+does: the nearest calibration at or below 6500 K and the nearest above are interpolated in
+inverse temperature; when only one side exists, its nearest matrix is taken unchanged. A matrix
+whose illuminant is Unknown is taken as D65 when no illuminant is usable.
+
+Applying a Bradford adaptation to the nearest matrix looks tempting and is wrong. Measured on the
+X-Pro2 DNG, which carries both an A and a D65 matrix, by predicting its D65 matrix from its A
+matrix (matrices normalised on the D65 green; largest coefficient difference; the D65 white
+balance R / G / B each gives, against the truth 2.293 / 1 / 1.612):
+
+| D65 matrix built from the A matrix | max difference | D65 white balance |
+|---|---|---|
+| taken unchanged | **0.218** | 1.884 / 1 / 1.417 |
+| `CAT(A→D65) × CM` | 1.171 | 1.843 / 1 / 0.520 |
+| `CM × CAT(D65→A)` | 0.718 | 1.126 / 1 / 2.996 — the white balance *of illuminant A* |
+| `CM × CAT(A→D65)` | 0.720 | 2.206 / 1 / 0.744 |
+| `CAT(D65→A) × CM` | 0.479 | 1.478 / 1 / 3.902 |
+
+Every adaptation is further from the calibrated D65 matrix than none. The first row of
+adaptations is what a "found illuminant → D65" Bradford table applied on the left produces: on
+the Sigma, whose two calibrations are A and F3 (no D65), it gives a D65 white balance of
+1.074 / 1 / 0.431 against 0.940 / 1 / 1.053 as shot — blue divided by 2.4, a yellow-green
+image. F3 taken unchanged gives 1.090 / 1 / 0.902. `AnalogBalance` and `CameraCalibrationN` are
+not applied (2 to 5 % on these files).
+
+`d65_color_matrix` is stored in the library: an image keeps the matrix it was imported with until
+its EXIF is refreshed.
+
+### rawspeed leaves a multi-sample DNG's black at 0
+
+`DngDecoder::decodeBlackLevels()` returns early when `getCpp() != 1`: rawspeed keeps the black as
+a 2×2 grid indexed by CFA position, meaningless for a 3-sample Linear Raw. The X-Pro2 linear DNG
+declares `BlackLevel = 4088 4088 4088` of 65535; left at 0, the white balance (×2 red, ×1.9 blue)
+turns that 6 % pedestal into a magenta veil with lifted blacks. `_check_dng_black_level()` in
+`exif.cc`, run by `dt_exif_img_check_additional_tags()` right after the rawspeed decode, reads
+`BlackLevel` from the primary-image IFD when it has more than one sample per pixel, and writes the
+mean into `raw_black_level` and `raw_black_level_separate[]` — rawprepare subtracts a single
+black for a raw without CFA. `BlackLevelDeltaH/V` are not read, and a lossy DNG (compression
+34892) with an `OpcodeList2` is left alone, since rawspeed has already rescaled it to black 0.
+
 ## Roadmap (staged)
 
 - **A (done)** — the canonical API, the provisional→resolved lifecycle, the persisted

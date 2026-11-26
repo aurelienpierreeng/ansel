@@ -823,6 +823,49 @@ static gboolean _check_dng_opcodes(Exiv2::ExifData &exifData, dt_image_t *img)
   return has_opcodes;
 }
 
+/* rawspeed reads a DNG's BlackLevel for single-sample raws only (CFA or monochrome): it stores
+ * the black as a 2x2 grid indexed by CFA position, which means nothing for a 3-sample Linear
+ * Raw, so there it leaves the black at 0 (DngDecoder::decodeBlackLevels()). A linear DNG from
+ * Adobe DNG Converter carries a real pedestal -- 4088 of 65535 for a Fujifilm X-Pro2 -- that,
+ * left in, the white balance multiplies into a coloured veil over the whole image. Read it here
+ * for those files. rawprepare subtracts one black for a raw without CFA, so the per-sample
+ * values are averaged; BlackLevelDeltaH/V are not read. */
+static void _check_dng_black_level(Exiv2::ExifData &exifData, dt_image_t *img)
+{
+  // the raw IFD is the one flagged as primary image: a sub-IFD when IFD0 holds a preview
+  static const char *const groups[] = { "Exif.Image.", "Exif.SubImage1.", "Exif.SubImage2." };
+  std::string g;
+  for(const char *group : groups)
+  {
+    Exiv2::ExifData::const_iterator pos = exifData.findKey(Exiv2::ExifKey(std::string(group) + "NewSubfileType"));
+    if(pos != exifData.end() && pos->toLong() == 0)
+    {
+      g = group;
+      break;
+    }
+  }
+  if(g.empty()) return;
+
+  const Exiv2::ExifData::const_iterator spp = exifData.findKey(Exiv2::ExifKey(g + "SamplesPerPixel"));
+  const Exiv2::ExifData::const_iterator black = exifData.findKey(Exiv2::ExifKey(g + "BlackLevel"));
+  const Exiv2::ExifData::const_iterator comp = exifData.findKey(Exiv2::ExifKey(g + "Compression"));
+  // a lossy DNG (compression 34892) with an OpcodeList2 is already rescaled to black 0 by rawspeed
+  const gboolean rescaled = comp != exifData.end() && comp->toLong() == 34892
+                            && exifData.findKey(Exiv2::ExifKey(g + "OpcodeList2")) != exifData.end();
+  if(spp == exifData.end() || spp->toLong() < 2 || black == exifData.end() || black->count() == 0
+     || rescaled)
+    return;
+
+  float sum = 0.0f;
+  for(long i = 0; i < (long)black->count(); i++) sum += black->toFloat(i);
+  const uint16_t level = (uint16_t)CLAMP(roundf(sum / black->count()), 0.0f, (float)UINT16_MAX);
+
+  img->raw_black_level = level;
+  for(int i = 0; i < 4; i++) img->raw_black_level_separate[i] = level;
+  dt_vprint(DT_DEBUG_IMAGEIO, "[exif] `%s` linear DNG black level %u read from %sBlackLevel\n",
+            img->filename, (unsigned)level, g.c_str());
+}
+
 static void _check_lens_correction_dng(Exiv2::ExifData &exifData, dt_image_t *img)
 {
   Exiv2::ExifData::const_iterator pos = exifData.findKey(Exiv2::ExifKey("Exif.SubImage1.OpcodeList3"));
@@ -1064,6 +1107,7 @@ void dt_exif_img_check_additional_tags(dt_image_t *img, const char *filename)
     {
       _check_usercrop(exifData, img);
       _check_dng_opcodes(exifData, img);
+      _check_dng_black_level(exifData, img);
       /* Yes, _exif_decode_exif_data() also calls this, and no, it is not redundant. That
        * one may be handed an EXIF BLOB -- dt_exif_read_from_blob() -- and a blob routinely
        * arrives without the maker notes these readers need. This call opens the file, so it
@@ -1640,42 +1684,6 @@ static bool _exif_decode_exif_data(dt_image_t *img, Exiv2::ExifData &exifData)
       dt_dng_illuminant_t illu[3] = { DT_LS_Unknown, DT_LS_Unknown, DT_LS_Unknown };
       img->d65_color_matrix[0] = NAN; // make sure for later testing
 
-      // fallback later via `find_temperature_from_raw_coeffs` if there is no valid illuminant
-
-      // The correction matrices are taken from
-      // http://www.brucelindbloom.com - chromatic Adaption.
-      // using Bradford method: found Illuminant -> D65
-      const float correctmat[13][9] = {
-        { 0.9555766, -0.0230393, 0.0631636, -0.0282895, 1.0099416, 0.0210077, 0.0122982, -0.0204830,
-          1.3299098 }, // D50
-        { 0.9726856, -0.0135482, 0.0361731, -0.0167463, 1.0049102, 0.0120598, 0.0070026, -0.0116372,
-          1.1869548 }, // D55
-        { 1.0206905, 0.0091588, -0.0228796, 0.0115005, 0.9984917, -0.0076762, -0.0043619, 0.0072053,
-          0.8853432 }, // D75
-        { 0.8446965, -0.1179225, 0.3948108, -0.1366303, 1.1041226, 0.1291718, 0.0798489, -0.1348999,
-          3.1924009 }, // Standard light A
-        { 0.9415037, -0.0321240, 0.0584672, -0.0428238, 1.0250998, 0.0203309, 0.0101511, -0.0161170,
-          1.2847354 }, // Standard light B
-        { 0.9904476, -0.0071683, -0.0116156, -0.0123712, 1.0155950, -0.0029282, -0.0035635, 0.0067697,
-          0.9181569 }, //  Standard light C
-        { 0.9212269, -0.0449128, 0.1211620, -0.0553723, 1.0277243, 0.0403563, 0.0235086, -0.0391019,
-          1.6390644 }, // Fluorescent (F2)
-        // The following are calculated using the same Bradford method,
-        // with xy coord from DNG SDK as reference -> XYZ -> D65
-        { 0.8663030, -0.0913083, 0.2771784, -0.1090504, 1.0746895, 0.0913841, 0.0550856, -0.0924636,
-          2.5119387 }, // ISO Studio Tungsten (3200K first converted to xy as DNG SDK does)
-        { 1.0096114, 0.0061501, 0.0068113, 0.0102539, 0.9888663, 0.0015575, 0.0023119, -0.0044823,
-          1.0525915 }, // DaylightFluorescent (F1)
-        { 0.9554129, -0.0231280, 0.0637169, -0.0283629, 1.0099053, 0.0211824, 0.0124188, -0.0206922,
-          1.3330592 }, // DayWhiteFluorescent (F8)
-        { 0.9147843, -0.0492842, 0.1202810, -0.0622085, 1.034984, 0.0404480, 0.0228014, -0.0375807,
-          1.6259804 }, // CoolWhiteFluorescent (F9)
-        { 0.8805388, -0.0774890, 0.2293784, -0.0932136, 1.0589267, 0.0757827, 0.0453660, -0.0760107,
-          2.2417979 }, // WhiteFluorescent (F3)
-        { 0.8488316, -0.1107439, 0.3471428, -0.1310107, 1.0986874, 0.1141548, 0.0694025, -0.1167541,
-          2.9109462 }  // WarmWhiteFluorescent (F4)
-      };
-
       Exiv2::ExifData::const_iterator cm1_pos = exifData.findKey(Exiv2::ExifKey("Exif.Image.ColorMatrix1"));
       if((cm1_pos != exifData.end()) && (cm1_pos->count() == 9))
       {
@@ -1703,108 +1711,56 @@ static bool _exif_decode_exif_data(dt_image_t *img, Exiv2::ExifData &exifData)
       }
 #endif
 
-      int sel_illu = -1;
-      int sel_temp = 0;
+      /* Build the XYZ(D65) -> camera matrix the rest of the tree expects from the ColorMatrixN
+       * found above. A DNG ColorMatrix is not adapted to its calibration illuminant: it is the
+       * XYZ -> camera fit measured under that light, and the camera neutral under any white is
+       * that matrix times the white's XYZ. So the D65 matrix is never chromatically adapted: like
+       * the DNG SDK, take the calibration nearest to D65 as it is, and interpolate in inverse
+       * temperature between the nearest one below and the nearest one above when both exist.
+       * Bradford-adapting the nearest matrix to D65 gets further from the calibrated D65 matrix
+       * than leaving it alone: measured in doc/image-type-detection.md, "DNG colorimetry". */
       const int D65temp = _illu_to_temp(DT_LS_D65);
-      int delta_min = D65temp;
-      // Which illuminant will be used for the color matrix?
-      // We first try to find D65 or take the next higher
+      int below = -1; // nearest calibration at or below 6500 K
+      int above = -1; // nearest calibration above 6500 K
       for(int i = 0; i < 3; ++i)
       {
-        int temp_cur = _illu_to_temp(illu[i]);
-        int delta_cur = abs(temp_cur - D65temp);
-        if((temp_cur > sel_temp) && (delta_cur <= delta_min))
-        {
-          sel_illu = i;
-          sel_temp = temp_cur;
-          delta_min = delta_cur;
-        }
+        // an illuminant is only recorded with its matrix; "Unknown" and "Other" have no temperature
+        const int temp = _illu_to_temp(illu[i]);
+        if(temp == 0) continue;
+        if(temp <= D65temp && (below < 0 || temp > _illu_to_temp(illu[below]))) below = i;
+        if(temp > D65temp && (above < 0 || temp < _illu_to_temp(illu[above]))) above = i;
       }
-      // If there is none defined we'll use the first valid color matrix
-      // without correction, i.e. assume D65 (keep dt < 3.8 behaviour)
-      // TODO: "Other" illuminant is currently unsupported
-      if(sel_illu == -1)
-        for(int i = 0; i < 3; ++i)
-        {
-          if((illu[i] == DT_LS_Unknown) && !isnan(colmatrix[i][0]))
-          {
-            sel_illu = i;
-            sel_temp = D65temp;
-            break;
-          }
-        }
 
-      if((sel_illu > -1) && (dt_get_debug_flags() & DT_DEBUG_IMAGEIO))
+      // weight of `below` in the mix: 1 when only it exists, 0 when only `above` does
+      float w = (below >= 0) ? 1.0f : 0.0f;
+      if(below >= 0 && above >= 0)
       {
-        fprintf(stderr, "[exif] `%s` dng illuminant %i (%iK) selected from ", img->filename, illu[sel_illu], sel_temp);
+        const float inv_below = 1.0f / _illu_to_temp(illu[below]);
+        const float inv_above = 1.0f / _illu_to_temp(illu[above]);
+        w = (1.0f / D65temp - inv_above) / (inv_below - inv_above);
+      }
+      const int lo = (below >= 0) ? below : above;
+      const int hi = (above >= 0) ? above : below;
+
+      // No usable illuminant: take the first matrix of unknown illuminant as D65 (dt < 3.8
+      // behaviour). Without any, d65_color_matrix stays NAN and colorin falls back on its own.
+      int unknown = -1;
+      for(int i = 0; i < 3 && lo < 0 && unknown < 0; ++i)
+        if(illu[i] == DT_LS_Unknown && !isnan(colmatrix[i][0])) unknown = i;
+
+      if(lo >= 0)
+        for(int i = 0; i < 9; i++)
+          img->d65_color_matrix[i] = w * colmatrix[lo][i] + (1.0f - w) * colmatrix[hi][i];
+      else if(unknown >= 0)
+        for(int i = 0; i < 9; i++) img->d65_color_matrix[i] = colmatrix[unknown][i];
+
+      if(dt_get_debug_flags() & DT_DEBUG_IMAGEIO)
+      {
+        fprintf(stderr, "[exif] `%s` dng D65 matrix from", img->filename);
         for(int i = 0; i < 3; i++)
-          fprintf(stderr," -- [%i] %i (%iK)", i + 1, illu[i], _illu_to_temp(illu[i]));
-        fprintf(stderr, "\n");
-      }
-
-      // Take the found CalibrationIlluminant / ColorMatrix pair.
-      // D65: just copy. Otherwise multiply by the specific correction matrix.
-      if(sel_illu > -1)
-      {
-       // If no supported Illuminant is found/assumed it's better NOT to use any matrix.
-       // The colorin module will write an error message and use a fallback matrix
-       // instead of showing wrong colors.
-        switch(illu[sel_illu])
-        {
-          case DT_LS_D50:
-            mat3mul(img->d65_color_matrix, correctmat[0], colmatrix[sel_illu]);
-            break;
-          case DT_LS_D55:
-          case DT_LS_Daylight:
-          case DT_LS_FineWeather:
-          case DT_LS_Flash:
-            mat3mul(img->d65_color_matrix, correctmat[1], colmatrix[sel_illu]);
-            break;
-          case DT_LS_D75:
-          case DT_LS_Shade:
-            mat3mul(img->d65_color_matrix, correctmat[2], colmatrix[sel_illu]);
-            break;
-          case DT_LS_Tungsten:
-          case DT_LS_StandardLightA:
-            mat3mul(img->d65_color_matrix, correctmat[3], colmatrix[sel_illu]);
-            break;
-          case DT_LS_StandardLightB:
-            mat3mul(img->d65_color_matrix, correctmat[4], colmatrix[sel_illu]);
-            break;
-          case DT_LS_StandardLightC:
-            mat3mul(img->d65_color_matrix, correctmat[5], colmatrix[sel_illu]);
-            break;
-          case DT_LS_Fluorescent:
-            mat3mul(img->d65_color_matrix, correctmat[6], colmatrix[sel_illu]);
-            break;
-          case DT_LS_ISOStudioTungsten:
-            mat3mul(img->d65_color_matrix, correctmat[7], colmatrix[sel_illu]);
-            break;
-          case DT_LS_DaylightFluorescent:
-            mat3mul(img->d65_color_matrix, correctmat[8], colmatrix[sel_illu]);
-            break;
-          case DT_LS_DayWhiteFluorescent:
-            mat3mul(img->d65_color_matrix, correctmat[9], colmatrix[sel_illu]);
-            break;
-          case DT_LS_CoolWhiteFluorescent:
-            mat3mul(img->d65_color_matrix, correctmat[10], colmatrix[sel_illu]);
-            break;
-          case DT_LS_WhiteFluorescent:
-            mat3mul(img->d65_color_matrix, correctmat[11], colmatrix[sel_illu]);
-            break;
-          case DT_LS_WarmWhiteFluorescent:
-            mat3mul(img->d65_color_matrix, correctmat[12], colmatrix[sel_illu]);
-            break;
-          case DT_LS_D65:
-          case DT_LS_CloudyWeather:
-          case DT_LS_Unknown: // exceptional fallback to keep dt < 3.8 behaviour
-            for(int i = 0; i < 9; i++) img->d65_color_matrix[i] = colmatrix[sel_illu][i];
-            break;
-
-          default:
-            fprintf(stderr,"[exif] did not find a proper dng correction matrix for illuminant %i\n", illu[sel_illu]);
-            break;
-        }
+          fprintf(stderr, " -- [%i] illuminant %i (%iK)%s", i + 1, illu[i], _illu_to_temp(illu[i]),
+                  (i == lo || i == hi || i == unknown) ? " used" : "");
+        fprintf(stderr, " -- weight of the lower one %.3f\n", w);
       }
     }
 
