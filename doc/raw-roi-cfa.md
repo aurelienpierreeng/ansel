@@ -140,6 +140,23 @@ to two tiles, the CPU `_roi` path (`host_memory_limit=1500`) and the OpenCL one 
 tiles by itself) match the untiled CPU export within 1/65535 and 45/65535 (16-bit PPM, 256 px from
 the edges). The cost is at most `align - 1` extra columns and rows of input.
 
+### The `_roi` tiling paths counted their tiles before rounding them up
+
+*Found on `3d12c7791f`, 2026-11-26.*
+
+`_default_process_tiling_roi()` and its OpenCL twin chose the number of tiles first, then rounded
+the good part up to the alignment: `tile_ht = _align_up(ceil(roi_out->height / tiles_y), xyalign)`.
+With an alignment that is large next to the tiles, that covers the output in fewer tiles than were
+counted. The last ones start past the output's edge, their size
+`roi_out->height - ty * tile_ht` is negative, and once unsigned it wraps around: the copy of the
+good part then runs past the buffers. `rawdenoiseai` reached it as soon as it took the `_roi` path:
+with little free RAM the pipe planned 7 x 20 tiles of 192 good rows for a 3459-row output, 20 x 192
+being 3840, and tile (0, 19) started at row 3648. The export wrote through the cache arena for ten
+minutes, then crashed. Reproduced by forcing the same tile dimensions (1536 x 960), it hangs at
+that tile every time. Both paths now count the tiles again from the rounded size, as the ptp path
+always did. The same forced plan becomes 7 x 19 tiles, completes, and matches the untiled export
+within 3.95 8-bit levels, 20 samples in 41 million at 1 level or more.
+
 ### RCD's own tiles need a 10-pixel border, the image edge included
 
 *Found `119b6c8cd1`, 2026-09-30.*
