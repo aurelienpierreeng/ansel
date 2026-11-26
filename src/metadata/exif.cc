@@ -833,9 +833,8 @@ static gboolean _check_dng_opcodes(Exiv2::ExifData &exifData, dt_image_t *img)
 static void _check_dng_black_level(Exiv2::ExifData &exifData, dt_image_t *img)
 {
   // the raw IFD is the one flagged as primary image: a sub-IFD when IFD0 holds a preview
-  static const char *const groups[] = { "Exif.Image.", "Exif.SubImage1.", "Exif.SubImage2." };
   std::string g;
-  for(const char *group : groups)
+  for(const char *group : { "Exif.Image.", "Exif.SubImage1.", "Exif.SubImage2." })
   {
     Exiv2::ExifData::const_iterator pos = exifData.findKey(Exiv2::ExifKey(std::string(group) + "NewSubfileType"));
     if(pos != exifData.end() && pos->toLong() == 0)
@@ -856,14 +855,16 @@ static void _check_dng_black_level(Exiv2::ExifData &exifData, dt_image_t *img)
      || rescaled)
     return;
 
+  // one value per sample (and per repeat cell): `long`, since count() is a size_t from Exiv2 0.28
+  const long n = black->count();
   float sum = 0.0f;
-  for(long i = 0; i < (long)black->count(); i++) sum += black->toFloat(i);
-  const uint16_t level = (uint16_t)CLAMP(roundf(sum / black->count()), 0.0f, (float)UINT16_MAX);
+  for(long i = 0; i < n; i++) sum += black->toFloat(i);
+  const uint16_t level = CLAMP(roundf(sum / n), 0.0f, (float)UINT16_MAX);
 
   img->raw_black_level = level;
-  for(int i = 0; i < 4; i++) img->raw_black_level_separate[i] = level;
-  dt_vprint(DT_DEBUG_IMAGEIO, "[exif] `%s` linear DNG black level %u read from %sBlackLevel\n",
-            img->filename, (unsigned)level, g.c_str());
+  for(uint16_t &separate : img->raw_black_level_separate) separate = level;
+  dt_print(DT_DEBUG_IMAGEIO, "[exif] `%s` linear DNG black level %u read from %sBlackLevel\n",
+           img->filename, (unsigned)level, g.c_str());
 }
 
 static void _check_lens_correction_dng(Exiv2::ExifData &exifData, dt_image_t *img)
@@ -1745,8 +1746,13 @@ static bool _exif_decode_exif_data(dt_image_t *img, Exiv2::ExifData &exifData)
       // No usable illuminant: take the first matrix of unknown illuminant as D65 (dt < 3.8
       // behaviour). Without any, d65_color_matrix stays NAN and colorin falls back on its own.
       int unknown = -1;
-      for(int i = 0; i < 3 && lo < 0 && unknown < 0; ++i)
-        if(illu[i] == DT_LS_Unknown && !isnan(colmatrix[i][0])) unknown = i;
+      if(lo < 0)
+        for(int i = 0; i < 3; ++i)
+          if(illu[i] == DT_LS_Unknown && !isnan(colmatrix[i][0]))
+          {
+            unknown = i;
+            break;
+          }
 
       if(lo >= 0)
         for(int i = 0; i < 9; i++)
@@ -1754,14 +1760,12 @@ static bool _exif_decode_exif_data(dt_image_t *img, Exiv2::ExifData &exifData)
       else if(unknown >= 0)
         for(int i = 0; i < 9; i++) img->d65_color_matrix[i] = colmatrix[unknown][i];
 
-      if(dt_get_debug_flags() & DT_DEBUG_IMAGEIO)
-      {
-        fprintf(stderr, "[exif] `%s` dng D65 matrix from", img->filename);
-        for(int i = 0; i < 3; i++)
-          fprintf(stderr, " -- [%i] illuminant %i (%iK)%s", i + 1, illu[i], _illu_to_temp(illu[i]),
-                  (i == lo || i == hi || i == unknown) ? " used" : "");
-        fprintf(stderr, " -- weight of the lower one %.3f\n", w);
-      }
+      // matrices numbered from 1 as in the tags, 0 for none
+      dt_print(DT_DEBUG_IMAGEIO,
+               "[exif] `%s` dng illuminants [1] %i (%iK) [2] %i (%iK) [3] %i (%iK): D65 matrix = "
+               "%.3f x [%i] + %.3f x [%i], unknown illuminant taken as D65 [%i]\n",
+               img->filename, illu[0], _illu_to_temp(illu[0]), illu[1], _illu_to_temp(illu[1]), illu[2],
+               _illu_to_temp(illu[2]), w, lo + 1, 1.0f - w, hi + 1, unknown + 1);
     }
 
     // Finding out about DNG hdr and monochrome images can be done here while reading exif data.
