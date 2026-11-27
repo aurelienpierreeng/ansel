@@ -45,6 +45,7 @@
 
 
 #include "gui/dtgtk/thumbnail.h"
+#include "common/collection.h"
 #include "common/debug.h"
 #include "common/logging.h"
 
@@ -182,6 +183,8 @@ typedef struct dt_thumbtable_t
   // Set to TRUE to only display the group leader image
   gboolean collapse_groups;
 
+  int32_t expanded_group_id; /**< The one group temporarily expanded in the Light Table, or UNKNOWN_IMAGE. */
+
   // Thumbnails inner zoom level
   dt_thumbtable_zoom_t zoom;
 
@@ -283,6 +286,35 @@ gboolean dt_thumbtable_get_focus_peaking(dt_thumbtable_t *table);
 
 void dt_thumbtable_set_draw_group_borders(dt_thumbtable_t *table, gboolean enable);
 gboolean dt_thumbtable_get_draw_group_borders(dt_thumbtable_t *table);
+
+/**
+ * @brief Toggle one temporarily expanded Light Table group.
+ * @param table The Light Table thumbtable.
+ * @param group_id The group representative ID.
+ * @return TRUE when @p group_id is expanded after the call.
+ *
+ * A second call for the same group clears the expansion; a different group replaces it. A populated
+ * table rebuilds its LUT and layout before this function returns.
+ * Filmstrip tables do not own expansion state and return FALSE without changing state.
+ */
+gboolean dt_thumbtable_toggle_expanded_group(dt_thumbtable_t *table, int32_t group_id);
+
+/**
+ * @brief Clear the temporarily expanded Light Table group and rebuild its populated LUT.
+ * @param table The Light Table thumbtable.
+ */
+void dt_thumbtable_clear_expanded_group(dt_thumbtable_t *table);
+
+/**
+ * @brief Clear Light Table expansion when a collection change invalidates its membership.
+ * @details Representative-only reloads preserve expansion; the initiating GUI updates its group ID before reloading.
+ * @return TRUE when an expanded group was cleared.
+ */
+gboolean dt_thumbtable_update_expanded_group_for_collection_change(dt_thumbtable_t *table,
+                                                                    dt_collection_change_t query_change,
+                                                                    dt_collection_properties_t changed_property,
+                                                                    gboolean hash_changed,
+                                                                    gboolean collapse_groups);
 
 // signal that the current collection needs to be flushed entirely before being reloaded
 void dt_thumbtable_reset_collection(dt_thumbtable_t *table);
