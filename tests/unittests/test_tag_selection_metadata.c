@@ -1,6 +1,7 @@
 /*
     This file is part of Ansel,
     Copyright (C) 2026 Aurélien PIERRE.
+    Copyright (C) 2026 BlueBlock.
 
     Ansel is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -111,6 +112,33 @@ static void test_tag_agreement(void **state)
   g_list_free(both);
 }
 
+static void test_tag_attach_refuses_nonpositive_id(void **state)
+{
+  (void)state;
+  const int32_t film = testdb_make_film("/testdb/attach");
+  const int32_t image = testdb_make_image(film, "one.raw");
+  assert_true(image > 0);
+
+  guint tagid = 0;
+  assert_true(dt_tag_new("preview-keyword", &tagid));
+  assert_true(tagid > 0);
+
+  assert_false(dt_tag_attach(tagid, UNKNOWN_IMAGE, FALSE, FALSE));
+  assert_false(dt_tag_attach(tagid, 0, FALSE, FALSE));
+  GList *none = dt_tag_get_images(tagid);
+  assert_null(none);
+
+  assert_true(dt_tag_attach(tagid, image, FALSE, FALSE));
+  GList *attached = dt_tag_get_images(tagid);
+  assert_non_null(attached);
+  assert_int_equal(GPOINTER_TO_INT(attached->data), image);
+  assert_null(attached->next);
+  g_list_free(attached);
+
+  assert_false(dt_tag_attach(tagid, image, FALSE, FALSE));
+  g_list_free(dt_tag_get_images(tagid));
+}
+
 typedef struct _meta_collect_t
 {
   int rows;
@@ -160,6 +188,7 @@ int main(int argc, char *argv[])
   const struct CMUnitTest tests[] = {
     cmocka_unit_test(test_selection_lowest_id),
     cmocka_unit_test(test_tag_agreement),
+    cmocka_unit_test(test_tag_attach_refuses_nonpositive_id),
     cmocka_unit_test(test_metadata_foreach_selected),
   };
   return cmocka_run_group_tests(tests, testdb_setup, testdb_teardown);
