@@ -128,6 +128,21 @@ iop-order text format, as `dt_history_operation_name` already does for module na
 would let the document half descend to layer 1. That is a design decision about who owns the
 XMP/XML format, not a mechanical split, and it is worth taking deliberately.
 
+## `styles.c` sits in `develop/`; its header stays in `common/`
+
+*Found `5f44949386`, 2026-10-21.*
+
+Storing the shapes a style uses made `styles.c` call the masks module
+(`develop/masks/masks_history.h`), one more inversion from layer 1, and `check_layering` rose from
+182 to 183. The file moved to `develop/` instead, where the conclusion above already put it: its
+includes of `develop/` stop being inversions, and the count fell to 179.
+
+`styles.h` stays in `common/`. Four of its includers sit below layer 5 (`common/history_actions.c`,
+`control/jobs/import_jobs.c`, `gui/actions/styles.c`, `gui/styles_dialog.c`); moved, the header
+would make all four reach up, against only its own three `develop/` includes (`history_merge.h`,
+`blend.h`, `imageop.h`) that would stop counting. Measured 180 against 179 for the `.c` alone. It
+can follow once its includers sit at layer 5, `history_actions.c` first.
+
 ## Do not re-derive
 
 `doc/exif-split.md` records the three ways an intra-file call graph lies — function

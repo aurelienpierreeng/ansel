@@ -129,7 +129,7 @@ src/colorprofiles/printprof.c
 src/common/pwstorage/pwstorage.c
 src/common/ratings.c
 src/common/sentry.c
-src/common/styles.c
+src/develop/styles.c
 src/common/utility.c
 src/common/variables.c
 src/control/control.c

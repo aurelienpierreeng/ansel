@@ -164,7 +164,7 @@ The families still to extract, by where their SQL lives today:
 | `tag_repository` (extend) | `data.tags`, `main.tagged_images`, `memory.taglist` | `common/tags.c` (258) |
 | `preset_repository` (extend) | `data.presets` | `gui/presets.c` (281) |
 | `history_repository` | `main.history`, `main.masks_history`, `main.module_order` | `common/history.c` (217) |
-| `style_repository` | `data.styles`, `data.style_items` | `common/styles.c` (187) |
+| `style_repository` | `data.styles`, `data.style_items` | `develop/styles.c` (187) |
 | `film_repository` | `main.film_rolls`, `memory.film_folder` | `common/film.c` (103) |
 | `collection_repository` | `memory.collected_images` and the query builder | `common/collection.c` (95) |
 

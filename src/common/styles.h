@@ -18,6 +18,7 @@
     Copyright (C) 2022 Diederik Ter Rahe.
     Copyright (C) 2022 Martin Bařinka.
     Copyright (C) 2025-2026 Aurélien PIERRE.
+    Copyright (C) 2026 Guillaume Stutin.
     
     darktable is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -76,8 +77,8 @@ typedef struct dt_style_item_t
 void dt_style_free(gpointer data);
 void dt_style_item_free(gpointer data);
 
-/** creates a new style from specified image, items are the history stack number of items to include in style
- */
+/** creates a new style from specified image, items are the history stack number of items to include in style.
+    The style stores the shapes its items' masks are drawn with, as copy and paste carries them. */
 gboolean dt_styles_create_from_image(const char *name, const char *description,
                                      const int32_t imgid, GList *items, gboolean copy_iop_order);
 
@@ -91,13 +92,40 @@ void dt_styles_update(const char *name, const char *newname, const char *descrip
                       const int32_t imgid, GList *update,
                       const gboolean copy_iop_order, const gboolean update_iop_order);
 
+/** a module instance of a style, and whether applying the style brings the shapes of its drawn mask */
+typedef struct dt_style_shapes_module_t
+{
+  gchar *operation, *multi_name; // the instance
+  gboolean apply;                // applying the style brings the shapes of its drawn mask
+} dt_style_shapes_module_t;
+
+/** helper that frees a dt_style_shapes_module_t, can be used in g_list_free_full() */
+void dt_style_shapes_module_free(gpointer data);
+
+/** the module instances of the style whose drawn mask has shapes stored, in item order. A module that
+    draws its own (retouch) is not listed: applying the style always brings its shapes. */
+GList *dt_styles_get_shapes_modules(const char *name);
+
+/** set, for each dt_style_shapes_module_t of `modules`, whether applying the style brings the shapes
+    of the drawn mask of that module instance */
+void dt_styles_set_shapes_modules(const char *name, GList *modules);
+
+/** the nums of the style's items whose drawn mask has shapes stored, as a set. A module that draws its
+    own (retouch) is left out. */
+GHashTable *dt_styles_get_items_with_shapes(const char *name);
+
+/** the history nums of the image's items whose drawn mask has shapes, as a set. A module that draws
+    its own (retouch) is left out. */
+GHashTable *dt_styles_get_image_items_with_shapes(const int32_t imgid);
+
 /** applies the style to selection of images */
 
 /** applies list of styles to selection of images */
 void dt_multiple_styles_apply_to_list(GList *styles, const GList *list, gboolean duplicate);
 
-/** applies the item style to dev->history */
-void dt_styles_apply_style_item(dt_develop_t *dev, dt_style_item_t *style_item);
+/** applies the items of the named style to dev->history, with the shapes the style stores but those
+    of the drawn masks set to come without them */
+void dt_styles_apply_style_items(dt_develop_t *dev, const char *name, GList *style_items);
 
 /** applies the style to image by imgid, takes care of overwrite and duplicate modes */
 void dt_styles_apply_to_image(const char *name, const gboolean duplicate, const int32_t imgid);

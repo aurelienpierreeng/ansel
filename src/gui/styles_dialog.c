@@ -18,6 +18,7 @@
     Copyright (C) 2021 Hubert Kowalski.
     Copyright (C) 2021 Ralf Brown.
     Copyright (C) 2022 Martin Bařinka.
+    Copyright (C) 2026 Guillaume Stutin.
     
     darktable is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -73,6 +74,11 @@ typedef enum _style_items_columns_t
   DT_STYLE_ITEMS_COL_NAME,
   DT_STYLE_ITEMS_COL_NUM,
   DT_STYLE_ITEMS_COL_UPDATE_NUM,
+  DT_STYLE_ITEMS_COL_OPERATION,    // the item's module instance, which the shapes box is for
+  DT_STYLE_ITEMS_COL_MULTI_NAME,
+  DT_STYLE_ITEMS_COL_SHAPES,       // applying the style brings the shapes of the instance's drawn mask
+  DT_STYLE_ITEMS_COL_STYLE_SHAPES, // the style stores shapes for the item's drawn mask
+  DT_STYLE_ITEMS_COL_IMAGE_SHAPES, // the image's item has shapes on its drawn mask
   DT_STYLE_ITEMS_NUM_COLS
 } _styles_columns_t;
 
@@ -168,6 +174,145 @@ void _gui_styles_get_active_items(dt_gui_styles_dialog_t *sd, GList **enabled, G
       }
     } while(gtk_tree_model_iter_next(model, &iter));
   }
+}
+
+/* A row has a shapes box when its item has shapes where the row takes it from: the image when the row
+ * updates the item or the style lacks it, the style otherwise. */
+static gboolean _gui_styles_row_has_shapes(GtkTreeModel *model, GtkTreeIter *iter)
+{
+  gboolean update = FALSE, style_shapes = FALSE, image_shapes = FALSE;
+  gint num = -1;
+  gtk_tree_model_get(model, iter,
+                     DT_STYLE_ITEMS_COL_UPDATE,       &update,
+                     DT_STYLE_ITEMS_COL_NUM,          &num,
+                     DT_STYLE_ITEMS_COL_STYLE_SHAPES, &style_shapes,
+                     DT_STYLE_ITEMS_COL_IMAGE_SHAPES, &image_shapes,
+                     -1);
+  return (update || num == -1) ? image_shapes : style_shapes;
+}
+
+static gboolean _gui_styles_row_included(GtkTreeModel *model, GtkTreeIter *iter)
+{
+  gboolean active = FALSE, update = FALSE;
+  gtk_tree_model_get(model, iter, DT_STYLE_ITEMS_COL_ENABLED, &active, DT_STYLE_ITEMS_COL_UPDATE, &update, -1);
+  return active || update;
+}
+
+static void _gui_styles_shapes_cell_data(GtkTreeViewColumn *column, GtkCellRenderer *renderer,
+                                         GtkTreeModel *model, GtkTreeIter *iter, gpointer data)
+{
+  gboolean apply = FALSE;
+  gtk_tree_model_get(model, iter, DT_STYLE_ITEMS_COL_SHAPES, &apply, -1);
+  const gboolean included = _gui_styles_row_included(model, iter);
+  g_object_set(renderer,
+               "visible",     _gui_styles_row_has_shapes(model, iter),
+               "active",      apply,
+               "activatable", included,
+               "sensitive",   included,
+               NULL);
+}
+
+/* The choice is the module instance's: every row of the instance, in both lists, follows the box. */
+static void _gui_styles_set_instance_shapes(GtkTreeView *view, const gchar *operation, const gchar *multi_name,
+                                            const gboolean apply)
+{
+  GtkTreeModel *model = gtk_tree_view_get_model(view);
+  GtkTreeIter iter;
+  if(!gtk_tree_model_get_iter_first(model, &iter)) return;
+  do
+  {
+    gchar *row_operation = NULL, *row_multi_name = NULL;
+    gtk_tree_model_get(model, &iter,
+                       DT_STYLE_ITEMS_COL_OPERATION,  &row_operation,
+                       DT_STYLE_ITEMS_COL_MULTI_NAME, &row_multi_name,
+                       -1);
+    if(!g_strcmp0(row_operation, operation) && !g_strcmp0(row_multi_name, multi_name))
+      gtk_list_store_set(GTK_LIST_STORE(model), &iter, DT_STYLE_ITEMS_COL_SHAPES, apply, -1);
+    dt_free(row_operation);
+    dt_free(row_multi_name);
+  } while(gtk_tree_model_iter_next(model, &iter));
+}
+
+static void _gui_styles_shapes_toggled(GtkCellRendererToggle *cell, gchar *path_str, gpointer data)
+{
+  dt_gui_styles_dialog_t *sd = (dt_gui_styles_dialog_t *)data;
+  GtkTreeModel *model = gtk_tree_view_get_model(GTK_TREE_VIEW(g_object_get_data(G_OBJECT(cell), "view")));
+  GtkTreeIter iter;
+  if(!gtk_tree_model_get_iter_from_string(model, &iter, path_str)) return;
+
+  gchar *operation = NULL, *multi_name = NULL;
+  gboolean apply = FALSE;
+  gtk_tree_model_get(model, &iter,
+                     DT_STYLE_ITEMS_COL_OPERATION,  &operation,
+                     DT_STYLE_ITEMS_COL_MULTI_NAME, &multi_name,
+                     DT_STYLE_ITEMS_COL_SHAPES,     &apply,
+                     -1);
+  _gui_styles_set_instance_shapes(sd->items, operation, multi_name, !apply);
+  _gui_styles_set_instance_shapes(sd->items_new, operation, multi_name, !apply);
+  dt_free(operation);
+  dt_free(multi_name);
+}
+
+static GtkTreeViewColumn *_gui_styles_add_shapes_column(dt_gui_styles_dialog_t *sd, GtkTreeView *view)
+{
+  GtkCellRenderer *renderer = gtk_cell_renderer_toggle_new();
+  g_object_set_data(G_OBJECT(renderer), "view", view);
+  g_signal_connect(renderer, "toggled", G_CALLBACK(_gui_styles_shapes_toggled), sd);
+
+  GtkWidget *header = gtk_label_new(_("shapes"));
+  gtk_widget_set_tooltip_text(header, _("applying the style brings the shapes of the module's drawn mask.\n"
+                                        "unchecked, its drawn mask comes without shapes, to be drawn on "
+                                        "each image."));
+  gtk_widget_show(header);
+
+  GtkTreeViewColumn *column = gtk_tree_view_column_new();
+  gtk_tree_view_column_set_widget(column, header);
+  gtk_tree_view_column_pack_start(column, renderer, FALSE);
+  gtk_tree_view_column_set_cell_data_func(column, renderer, _gui_styles_shapes_cell_data, NULL, NULL);
+  gtk_tree_view_append_column(view, column);
+  return column;
+}
+
+/* Add to `*modules` the choice of each module instance with a shapes box on an included row of `view`. */
+static void _gui_styles_get_shapes_modules(GtkTreeView *view, GList **modules)
+{
+  GtkTreeModel *model = gtk_tree_view_get_model(view);
+  GtkTreeIter iter;
+  if(!gtk_tree_model_get_iter_first(model, &iter)) return;
+  do
+  {
+    if(!_gui_styles_row_included(model, &iter) || !_gui_styles_row_has_shapes(model, &iter)) continue;
+
+    dt_style_shapes_module_t *module = g_new0(dt_style_shapes_module_t, 1);
+    gtk_tree_model_get(model, &iter,
+                       DT_STYLE_ITEMS_COL_OPERATION,  &module->operation,
+                       DT_STYLE_ITEMS_COL_MULTI_NAME, &module->multi_name,
+                       DT_STYLE_ITEMS_COL_SHAPES,     &module->apply,
+                       -1);
+    // rows of one instance share the box: the first one says it
+    gboolean listed = FALSE;
+    for(GList *m = *modules; m && !listed; m = g_list_next(m))
+    {
+      const dt_style_shapes_module_t *other = (const dt_style_shapes_module_t *)m->data;
+      listed = !g_strcmp0(other->operation, module->operation) && !g_strcmp0(other->multi_name, module->multi_name);
+    }
+    if(listed)
+      dt_style_shapes_module_free(module);
+    else
+      *modules = g_list_append(*modules, module);
+  } while(gtk_tree_model_iter_next(model, &iter));
+}
+
+/* The box of a module instance starts where the style has it, checked for one the style lacks. */
+static gboolean _gui_styles_instance_apply(GList *modules, const char *operation, const char *multi_name)
+{
+  for(GList *m = modules; m; m = g_list_next(m))
+  {
+    const dt_style_shapes_module_t *module = (const dt_style_shapes_module_t *)m->data;
+    if(!g_strcmp0(module->operation, operation) && !g_strcmp0(module->multi_name, multi_name))
+      return module->apply;
+  }
+  return TRUE;
 }
 
 static void _gui_styles_select_all_items(dt_gui_styles_dialog_t *d, gboolean active)
@@ -285,6 +430,10 @@ static void _gui_styles_edit_style_response(GtkDialog *dialog, gint response_id,
     const gchar *name = gtk_entry_get_text(GTK_ENTRY(g->name));
     if(name && *name)
     {
+      GList *shapes_modules = NULL;
+      _gui_styles_get_shapes_modules(g->items, &shapes_modules);
+      _gui_styles_get_shapes_modules(g->items_new, &shapes_modules);
+
       if(gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(g->duplicate)))
       {
         dt_styles_create_from_style(g->nameorig, name, gtk_entry_get_text(GTK_ENTRY(g->description)),
@@ -299,6 +448,8 @@ static void _gui_styles_edit_style_response(GtkDialog *dialog, gint response_id,
                          _gui_styles_is_copy_module_order_set(g),
                          _gui_styles_is_update_module_order_set(g));
       }
+      dt_styles_set_shapes_modules(name, shapes_modules);
+      g_list_free_full(shapes_modules, dt_style_shapes_module_free);
       dt_control_log(_("style %s was successfully saved"), name);
     }
     else
@@ -485,11 +636,15 @@ static void _gui_styles_dialog_run(gboolean edit, const char *name, int32_t imgi
   /* create the list of items */
   sd->items = GTK_TREE_VIEW(gtk_tree_view_new());
   GtkListStore *liststore = gtk_list_store_new(DT_STYLE_ITEMS_NUM_COLS, G_TYPE_BOOLEAN, G_TYPE_BOOLEAN,
-                                               GDK_TYPE_PIXBUF, G_TYPE_STRING, G_TYPE_INT, G_TYPE_INT);
+                                               GDK_TYPE_PIXBUF, G_TYPE_STRING, G_TYPE_INT, G_TYPE_INT,
+                                               G_TYPE_STRING, G_TYPE_STRING, G_TYPE_BOOLEAN, G_TYPE_BOOLEAN,
+                                               G_TYPE_BOOLEAN);
 
   sd->items_new = GTK_TREE_VIEW(gtk_tree_view_new());
-  GtkListStore *liststore_new = gtk_list_store_new(DT_STYLE_ITEMS_NUM_COLS, G_TYPE_BOOLEAN, G_TYPE_STRING,
-                                                   GDK_TYPE_PIXBUF, G_TYPE_STRING, G_TYPE_INT, G_TYPE_INT);
+  GtkListStore *liststore_new = gtk_list_store_new(DT_STYLE_ITEMS_NUM_COLS, G_TYPE_BOOLEAN, G_TYPE_BOOLEAN,
+                                                   GDK_TYPE_PIXBUF, G_TYPE_STRING, G_TYPE_INT, G_TYPE_INT,
+                                                   G_TYPE_STRING, G_TYPE_STRING, G_TYPE_BOOLEAN, G_TYPE_BOOLEAN,
+                                                   G_TYPE_BOOLEAN);
 
   /* enabled */
   GtkCellRenderer *renderer = gtk_cell_renderer_toggle_new();
@@ -520,6 +675,14 @@ static void _gui_styles_dialog_run(gboolean edit, const char *name, int32_t imgi
 
     gtk_tree_view_insert_column_with_attributes(GTK_TREE_VIEW(sd->items), -1, _("update"), renderer, "active",
                                                 DT_STYLE_ITEMS_COL_UPDATE, NULL);
+  }
+
+  /* shapes */
+  GtkTreeViewColumn *shapes_column = NULL, *shapes_column_new = NULL;
+  if(edit)
+  {
+    shapes_column = _gui_styles_add_shapes_column(sd, sd->items);
+    shapes_column_new = _gui_styles_add_shapes_column(sd, sd->items_new);
   }
 
   /* active */
@@ -580,11 +743,22 @@ static void _gui_styles_dialog_run(gboolean edit, const char *name, int32_t imgi
                        -1);
     /* get history items for named style and populate the items list */
     GList *items = dt_styles_get_item_list(name, FALSE, imgid);
+    GList *shapes_modules = dt_styles_get_shapes_modules(name);
+    GHashTable *style_shapes = dt_styles_get_items_with_shapes(name);
+    GHashTable *image_shapes = dt_styles_get_image_items_with_shapes(imgid);
+    gboolean has_shapes = FALSE;
     if(items)
     {
       for(const GList *items_iter = items; items_iter; items_iter = g_list_next(items_iter))
       {
         dt_style_item_t *item = (dt_style_item_t *)items_iter->data;
+        const char *multi_name = item->multi_name ? item->multi_name : "";
+        const gboolean apply = _gui_styles_instance_apply(shapes_modules, item->operation, multi_name);
+        const gboolean item_style_shapes
+            = item->num != -1 && g_hash_table_contains(style_shapes, GINT_TO_POINTER(item->num));
+        const gboolean item_image_shapes
+            = item->selimg_num != -1 && g_hash_table_contains(image_shapes, GINT_TO_POINTER(item->selimg_num));
+        has_shapes |= item_style_shapes || item_image_shapes;
 
         if(item->num != -1 && item->selimg_num != -1) // defined in style and image
         {
@@ -596,6 +770,11 @@ static void _gui_styles_dialog_run(gboolean edit, const char *name, int32_t imgi
                              DT_STYLE_ITEMS_COL_NAME,       item->name,
                              DT_STYLE_ITEMS_COL_NUM,        item->num,
                              DT_STYLE_ITEMS_COL_UPDATE_NUM, item->selimg_num,
+                             DT_STYLE_ITEMS_COL_OPERATION,    item->operation,
+                             DT_STYLE_ITEMS_COL_MULTI_NAME,   multi_name,
+                             DT_STYLE_ITEMS_COL_SHAPES,       apply,
+                             DT_STYLE_ITEMS_COL_STYLE_SHAPES, item_style_shapes,
+                             DT_STYLE_ITEMS_COL_IMAGE_SHAPES, item_image_shapes,
                              -1);
           has_item = TRUE;
         }
@@ -609,6 +788,11 @@ static void _gui_styles_dialog_run(gboolean edit, const char *name, int32_t imgi
                              DT_STYLE_ITEMS_COL_NAME,       item->name,
                              DT_STYLE_ITEMS_COL_NUM,        item->num,
                              DT_STYLE_ITEMS_COL_UPDATE_NUM, item->selimg_num,
+                             DT_STYLE_ITEMS_COL_OPERATION,    item->operation,
+                             DT_STYLE_ITEMS_COL_MULTI_NAME,   multi_name,
+                             DT_STYLE_ITEMS_COL_SHAPES,       apply,
+                             DT_STYLE_ITEMS_COL_STYLE_SHAPES, item_style_shapes,
+                             DT_STYLE_ITEMS_COL_IMAGE_SHAPES, item_image_shapes,
                              -1);
           has_new_item = TRUE;
         }
@@ -616,6 +800,11 @@ static void _gui_styles_dialog_run(gboolean edit, const char *name, int32_t imgi
       g_list_free_full(items, dt_style_item_free);
       items = NULL;
     }
+    g_list_free_full(shapes_modules, dt_style_shapes_module_free);
+    g_hash_table_destroy(style_shapes);
+    g_hash_table_destroy(image_shapes);
+    gtk_tree_view_column_set_visible(shapes_column, has_shapes);
+    gtk_tree_view_column_set_visible(shapes_column_new, has_shapes);
   }
   else
   {
