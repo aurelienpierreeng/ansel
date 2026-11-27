@@ -19,6 +19,12 @@
 #ifndef DT_GUI_DTGTK_PREVIEW_WINDOW_H
 #define DT_GUI_DTGTK_PREVIEW_WINDOW_H
 
+#include <stdint.h>
+
+/**
+ * @brief Open a preview window for an image.
+ * @param imgid Database ID of the image to preview.
+ */
 void dt_preview_window_spawn(const int32_t imgid);
 
 #endif // DT_GUI_DTGTK_PREVIEW_WINDOW_H
