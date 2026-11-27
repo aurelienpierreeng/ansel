@@ -28,6 +28,7 @@
     Copyright (C) 2021 Ralf Brown.
     Copyright (C) 2022, 2025-2026 Aurélien PIERRE.
     Copyright (C) 2022 Martin Bařinka.
+    Copyright (C) 2026 Guillaume Stutin.
     
     darktable is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -533,7 +534,7 @@ static int _styles_init_source_dev(dt_develop_t *dev_src, const char *name, cons
                                    gboolean *has_iop_list)
 {
   dt_dev_init(dev_src, FALSE);
-  if(dt_dev_ensure_image_storage(dev_src, imgid)) return 1;
+  if(dt_dev_ensure_image_storage(dev_src, imgid, NULL)) return 1;
 
   *has_iop_list = FALSE;
   dt_ioppr_set_default_iop_order(dev_src, imgid);
