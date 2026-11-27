@@ -195,6 +195,25 @@ rawprepare_4f(read_only image2d_t in, write_only image2d_t out,
   write_imagef(out, (int2)(x, y), pixel);
 }
 
+/* Flat field: `map` is the module's whole gain map, with the dark frame stacked under it from row
+ * `dark_row` on, or no dark frame when `dark_row` is 0. The ROI is a window into it at (rx, ry).
+ * See iop/flatfield.c. */
+kernel void
+flatfield(read_only image2d_t in, write_only image2d_t out, const int width, const int height,
+          read_only image2d_t map, const int rx, const int ry, const int dark_row, const float strength)
+{
+  const int x = get_global_id(0);
+  const int y = get_global_id(1);
+
+  if(x >= width || y >= height) return;
+
+  const int2 sensel = (int2)(x + rx, y + ry);
+  const float offset = dark_row > 0 ? read_imagef(map, sampleri, sensel + (int2)(0, dark_row)).x : 0.0f;
+  const float value = read_imagef(in, sampleri, (int2)(x, y)).x - offset;
+  const float gain = read_imagef(map, sampleri, sensel).x;
+  write_imagef(out, (int2)(x, y), value * (1.0f + strength * (gain - 1.0f)));
+}
+
 kernel void
 invert_1f(read_only image2d_t in, write_only image2d_t out, const int width, const int height, global float *color,
           const unsigned int filters, const int rx, const int ry)

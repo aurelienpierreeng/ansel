@@ -104,6 +104,10 @@ titles ("Module failed", "Export failed", "Not enough memory", …) before inven
 A failure that repeats as long as its cause lasts — memory running short, where every new request
 fails again — is `dt_control_alert_once()`: the same window and list, but once it is closed it does
 not open again this session for that title and message.
+What an action of the user makes untrue again — the file a module could not find, chosen again — is
+taken back with `dt_control_alert_withdraw(title, message, item)`, with the same three strings: its
+line goes, and the window closes with its last line. An item meant to be withdrawn names everything
+it is true of — the file *and* the image — or fixing one image would take back the line of all.
 A window that needs
 more than OK — other buttons, a list of its own, a question — is a `dt_gui_alert_t` object
 (`dt_gui_alert_new()` with a kind, then `_add_text/_add_widget/_add_button/_show/_destroy`), as
@@ -162,6 +166,7 @@ remain right for what is fine to miss: progress, confirmation, a passing state.
 | [`doc/color-picker.md`](doc/color-picker.md) | what a module picker's min/max are, and where the global picker's lie on the image and the scope; click = point, drag = area; the picking modifier |
 | [`doc/drawlayer.md`](doc/drawlayer.md) | the drawlayer module in full |
 | [`doc/retouch-result-memo.md`](doc/retouch-result-memo.md) | retouch's per-shape memo |
+| [`doc/flatfield.md`](doc/flatfield.md) | the flat field module: the reference and how it is found again once moved, the gain map, how pipes share it |
 | [`doc/gtk-patterns.md`](doc/gtk-patterns.md) | layout, focus, repaint and threading patterns |
 | [`doc/shutdown.md`](doc/shutdown.md) | what a quit waits for, and the window that says so |
 | [`doc/darkroom-redraw.md`](doc/darkroom-redraw.md) | the centre repaint path, priced |

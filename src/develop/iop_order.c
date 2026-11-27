@@ -18,7 +18,7 @@
     Copyright (C) 2021 Hubert Kowalski.
     Copyright (C) 2021 Ralf Brown.
     Copyright (C) 2022 Martin Bařinka.
-    Copyright (C) 2025 Guillaume Stutin.
+    Copyright (C) 2025-2026 Guillaume Stutin.
     
     darktable is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -97,6 +97,7 @@ const char *dt_iop_order_string(const dt_iop_order_t order)
 const dt_iop_order_entry_t legacy_order[] = {
   { { 0.5f }, "basebuffer", 0},
   { { 1.0f }, "rawprepare", 0},
+  { { 1.5f }, "flatfield", 0},
   { { 2.0f }, "invert", 0},
   { { 2.5f }, "rawdenoiseai", 0},
   { { 3.0f }, "temperature", 0},
@@ -194,6 +195,7 @@ const dt_iop_order_entry_t legacy_order[] = {
 const dt_iop_order_entry_t v30_order[] = {
   { { 0.5 }, "basebuffer", 0},
   { { 1.0 }, "rawprepare", 0},
+  { { 1.5f }, "flatfield", 0},
   { { 2.0 }, "invert", 0},
   { { 2.5f }, "rawdenoiseai", 0},
   { { 3.0f }, "temperature", 0},
@@ -307,6 +309,7 @@ const dt_iop_order_entry_t v30_jpg_order[] = {
   // the following modules are not used anyway for non-RAW images :
   { { 0.5 }, "basebuffer", 0 },
   { { 1.0 }, "rawprepare", 0 },
+  { { 1.5f }, "flatfield", 0 },
   { { 2.0 }, "invert", 0 },
   { { 2.5f }, "rawdenoiseai", 0 },
   { { 3.0f }, "temperature", 0 },
@@ -420,6 +423,7 @@ const dt_iop_order_entry_t ansel_jpg_order[] = {
   // RAW modules. Not used on JPG anyway
   { { 0.5f}, "basebuffer", 0 },
   { { 1.0f }, "rawprepare", 0 },
+  { { 1.5f }, "flatfield", 0 },
   { { 2.0f }, "invert", 0 },
   { { 2.5f }, "rawdenoiseai", 0 },
   { { 3.0f }, "highlights", 0 },
@@ -566,6 +570,7 @@ const dt_iop_order_entry_t ansel_raw_order[] = {
   // RAW stuff
   { { 0.0f }, "basebuffer", 0 },
   { { 1.0f }, "rawprepare", 0},
+  { { 1.5f }, "flatfield", 0},
   { { 2.0f }, "invert", 0},
   { { 2.5f }, "rawdenoiseai", 0},
   { { 3.0f }, "temperature", 0},
@@ -788,6 +793,7 @@ GList *dt_ioppr_insert_missing_modules(GList *iop_order_list)
   iop_order_list = _insert_before(iop_order_list, "filmicrgb", "crystgrain");
   iop_order_list = _insert_before(iop_order_list, "mask_manager", "detailmask");
   iop_order_list = _insert_before(iop_order_list, "rawprepare", "basebuffer");
+  iop_order_list = _insert_before(iop_order_list, "invert", "flatfield");
   // rawdenoiseai denoises pre-WB CFA data: it must run before temperature
   // AND demosaic, so insert it before whichever comes first in this order
   // (temperature sits after demosaic in JPG-style orders)
@@ -840,6 +846,8 @@ GList *dt_ioppr_get_iop_order_rules()
   const dt_iop_order_rule_t rule_entry[] = {
     { .op_prev = "basebuffer",  .op_next = "rawprepare"  },
     { .op_prev = "rawprepare",  .op_next = "invert"      },
+    { .op_prev = "rawprepare",  .op_next = "flatfield"   },
+    { .op_prev = "flatfield",   .op_next = "invert"      },
     { .op_prev = "invert",      .op_next = "temperature" },
     { .op_prev = "highlights",  .op_next = "cacorrect"   },
     { .op_prev = "cacorrect",   .op_next = "hotpixels"   },

@@ -867,10 +867,22 @@ void dt_control_log(const char *msg, ...)
 // Installed by dt_gui_gtk_init() before any worker runs, and never changed after: read without
 // a lock, like the other handlers the orchestrator installs.
 static dt_control_alert_handler_t _alert_handler = NULL;
+static dt_control_alert_withdraw_handler_t _alert_withdraw_handler = NULL;
 
 void dt_control_set_alert_handler(dt_control_alert_handler_t handler)
 {
   _alert_handler = handler;
+}
+
+void dt_control_set_alert_withdraw_handler(dt_control_alert_withdraw_handler_t handler)
+{
+  _alert_withdraw_handler = handler;
+}
+
+// Without a GUI, what was printed stays printed.
+void dt_control_alert_withdraw(const char *title, const char *message, const char *item)
+{
+  if(!IS_NULL_PTR(_alert_withdraw_handler)) _alert_withdraw_handler(title, message, item);
 }
 
 // Without a GUI, stderr: a dt_control_log() there goes to a log no view ever draws.

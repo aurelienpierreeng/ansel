@@ -1435,6 +1435,7 @@ int dt_gui_gtk_init(dt_gui_gtk_t *gui)
   dt_startup_progress_set_handler(_gui_startup_progress);
   dt_control_set_shutdown_wait_handler(dt_gui_closing_wait);
   dt_control_set_alert_handler(dt_gui_alert);
+  dt_control_set_alert_withdraw_handler(dt_gui_alert_withdraw);
   dt_dev_pixelpipe_cache_set_alert_handler(_pixelpipe_cache_alert);
   dt_film_gui_register_handlers();
   dt_collection_gui_register_handlers();

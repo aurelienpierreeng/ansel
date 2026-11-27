@@ -650,6 +650,21 @@ carries its final history. Any future caller of `dt_image_duplicate()` that will
 image's history afterward (a style, a batch edit, ...) should do the same rather than let the
 default immediate reload race its own follow-up write.
 
+## A decode outside the cache reads its pixels from the buffer it passed
+
+*On top of `fa3c2765ab`, 2026-11-18.*
+
+`dt_imageio_open_standalone()` decodes a file into a detached cache entry
+(`dt_cache_entry_new_detached()`) and gives back the `dt_mipmap_buffer_t` the decoder allocated
+through. The decoder allocates with `dt_mipmap_cache_alloc()`, which writes the descriptor at the
+head of `entry->data` and then syncs the buffer from it (`_sync_dsc_to_buf()`): `buf->buf`,
+`width` and `height` describe the decoded pixels as soon as the decoder returns. That sync is the
+only way a decode outside the cache learns where its pixels are, since the descriptor is private to
+`caches/`; its two callers, `iop/flatfield.c` and the raster preview of `gui/import.c`, read
+`buf->buf`. A load through the cache syncs the same fields again afterwards, in
+`_validate_buffer()`, so for it the early sync changes nothing. The ASan unpoisoning of the pixel
+region that follows the sync reads that same, now current, `buf->buf`.
+
 ## A cache entry that cannot be allocated
 
 *Measured 2026-10-28 on top of `0ba2521c6f`, by an `LD_PRELOAD` shim that fails `posix_memalign()`

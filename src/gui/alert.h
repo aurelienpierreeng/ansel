@@ -112,6 +112,16 @@ void dt_gui_alert_destroy(dt_gui_alert_t *alert);
  */
 void dt_gui_alert(const char *title, const char *message, const char *item, const gboolean once);
 
+/** Take @p item back from the window dt_gui_alert() opened for @p title and @p message: what it said
+ * of that item is no longer true. Its line goes; the window goes with its last line, and is then no
+ * longer closed for a message raised `once`. Nothing happens when no window lists @p item.
+ *
+ * Any thread, and deferred like dt_gui_alert(), in the same queue: it comes after the alerts raised
+ * before it, whose windows may not be built yet.
+ *
+ * @param item not NULL */
+void dt_gui_alert_withdraw(const char *title, const char *message, const char *item);
+
 #endif // DT_GUI_ALERT_H
 
 // clang-format off

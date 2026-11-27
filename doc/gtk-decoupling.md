@@ -222,8 +222,12 @@ X-macro headers with the same `FULL_API_H` discipline, so Phase 2's split applie
 watermark's.
 
 Baseline: `toolkit_imageio` 13 → ~1. (It reads **12** today, so one has already gone; the
-other two live counters are `toolkit_develop_baseline=20` and `toolkit_iop_baseline=97`,
+other two live counters are `toolkit_develop_baseline=20` and `toolkit_iop_baseline=98`,
 unmoved — Phases 3 and 5 have not started.)
+
+> **Raised to 98 on top of `fa3c2765ab`, 2026-11-18**, by `iop/flatfield.c`. Before Phase 2 a new
+> module cannot keep its panel out of `src/iop`: a `flatfield_gui.c` beside it would be counted
+> just the same. Every module added before the API split raises this baseline by one.
 
 ### Phase 6 — the stragglers (1 PR)
 

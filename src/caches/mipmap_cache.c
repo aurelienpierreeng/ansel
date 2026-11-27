@@ -549,6 +549,11 @@ void *dt_mipmap_cache_alloc(dt_mipmap_buffer_t *buf, const dt_image_t *img)
   struct dt_mipmap_buffer_dsc *dsc = NULL;
   dt_mipmap_cache_update_buffer_addresses(entry, &dsc, wd, ht, buffer_size);
 
+  /* The buffer handed in now describes the new allocation. A load through the cache resyncs it
+   * from the descriptor afterwards anyway (_validate_buffer()); a decode outside the cache
+   * (dt_imageio_open_standalone()) has nothing else to read the pixels' address and size from. */
+  _sync_dsc_to_buf(buf, dsc, buf->imgid, buf->size);
+
   // Unpoison the pixel buffer region
   ASAN_UNPOISON_MEMORY_REGION(buf->buf, dsc->size - dt_mipmap_buffer_dsc_size);
 
