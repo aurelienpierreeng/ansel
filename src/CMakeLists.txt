@@ -749,6 +749,61 @@ if(USE_COLORD)
   endif(Colord_FOUND)
 endif(USE_COLORD)
 
+# Colour management with a Wayland compositor (wp_color_management_v1): gui/wayland_color.c.
+#
+# The protocol description is vendored, so nothing here depends on which wayland-protocols the
+# system has. What is needed from it: libwayland-client, wayland-scanner to turn the description
+# into C, and a GTK built with its Wayland backend. Whether a compositor that speaks the
+# protocol is there is found out at run time.
+if(WIN32 OR APPLE)
+  # no Wayland there, and nothing to report about its absence
+  set(USE_WAYLAND_COLOR OFF)
+endif()
+
+if(USE_WAYLAND_COLOR)
+  pkg_check_modules(WaylandClient IMPORTED_TARGET wayland-client)
+  pkg_check_modules(GdkWayland gdk-wayland-3.0)
+  find_program(WAYLAND_SCANNER wayland-scanner)
+  if(WaylandClient_FOUND AND GdkWayland_FOUND AND WAYLAND_SCANNER)
+    set(WAYLAND_COLOR_XML ${CMAKE_CURRENT_SOURCE_DIR}/external/wayland-protocols/color-management-v1.xml)
+    set(WAYLAND_COLOR_HEADER ${CMAKE_CURRENT_BINARY_DIR}/color-management-v1-client-protocol.h)
+    set(WAYLAND_COLOR_CODE ${CMAKE_CURRENT_BINARY_DIR}/color-management-v1-protocol.c)
+
+    add_custom_command(
+      OUTPUT ${WAYLAND_COLOR_HEADER}
+      COMMAND ${WAYLAND_SCANNER} client-header ${WAYLAND_COLOR_XML} ${WAYLAND_COLOR_HEADER}
+      DEPENDS ${WAYLAND_COLOR_XML}
+      COMMENT "Generating the Wayland colour management protocol header"
+      VERBATIM
+    )
+    # private-code: the interface tables stay out of libansel's exported symbols
+    add_custom_command(
+      OUTPUT ${WAYLAND_COLOR_CODE}
+      COMMAND ${WAYLAND_SCANNER} private-code ${WAYLAND_COLOR_XML} ${WAYLAND_COLOR_CODE}
+      DEPENDS ${WAYLAND_COLOR_XML}
+      COMMENT "Generating the Wayland colour management protocol code"
+      VERBATIM
+    )
+
+    # Listing the header among the sources is what makes it exist before anything is compiled.
+    list(APPEND SOURCES "gui/wayland_color.c" ${WAYLAND_COLOR_CODE} ${WAYLAND_COLOR_HEADER})
+
+    # A target in another directory cannot name these two files as its own sources' rule: it
+    # hangs on this target instead, as with generate_version (ansel-cmstest does).
+    add_custom_target(generate_wayland_color_protocol DEPENDS ${WAYLAND_COLOR_HEADER} ${WAYLAND_COLOR_CODE})
+
+    # libgdk-3 links libwayland-client too, but a library that calls wl_* itself has to say so.
+    target_link_libraries(ansel_deps INTERFACE PkgConfig::WaylandClient)
+    add_definitions("-DHAVE_WAYLAND_COLOR")
+    message(STATUS "Wayland colour management: enabled")
+  else()
+    message(STATUS "No wayland-client, wayland-scanner or GTK Wayland backend found, this build will lack colour management with Wayland compositors")
+    set(USE_WAYLAND_COLOR OFF)
+  endif()
+elseif(NOT WIN32 AND NOT APPLE)
+  message(STATUS "Wayland colour management: disabled")
+endif()
+
 if(BUILD_PRINT)
   find_package(Cups)
   if(CUPS_FOUND)
@@ -848,6 +903,9 @@ add_dependencies(lib_ansel generate_conf)
 add_dependencies(lib_ansel generate_version)
 add_dependencies(lib_ansel generate_preferences)
 add_dependencies(lib_ansel generate_authors_h)
+if(USE_WAYLAND_COLOR)
+  add_dependencies(lib_ansel generate_wayland_color_protocol)
+endif()
 
 if(APPLE)
   set_target_properties(lib_ansel PROPERTIES MACOSX_RPATH TRUE)

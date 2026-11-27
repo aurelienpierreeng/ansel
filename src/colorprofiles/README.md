@@ -87,6 +87,14 @@ Only three things mutate after init:
 - the seven-field settings group (display triple, soft-proof pair, colour mode), under a
   separate lock private to the file.
 
+The `DT_COLORSPACE_DISPLAY` entry has three possible sources, and `display_source` records which
+one handed over the installed bytes: the platform's profile store (`system/display_profile.c`),
+colord, or the description a Wayland compositor prefers. The last one is *offered* by the GUI
+(`dt_colorspaces_offer_compositor_display_profile()`) and installed here or not: under the default
+`ui_last/display_profile_source`, colord wins whenever it has a profile for the monitor. Only while
+`dt_colorspaces_display_follows_compositor()` is true may the GUI declare the windows to the
+compositor. See [`doc/wayland-color.md`](../../doc/wayland-color.md).
+
 Read the settings with `dt_colorprofiles_get_settings()`, which copies all seven under one lock,
 and write them through the setters. Reading the fields one at a time lets a reader pair a new
 profile type with the previous filename, and a 512-byte filename read while `g_strlcpy()` is

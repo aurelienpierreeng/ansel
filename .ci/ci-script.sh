@@ -111,6 +111,7 @@ case "$TARGET" in
       -DBUILD_PRINT=OFF \
       -DBUILD_RS_IDENTIFY=OFF \
       -DUSE_SENTRY=OFF \
+      -DUSE_WAYLAND_COLOR=OFF \
       $ECO "$SRC_DIR" || (cat "$BUILD_DIR"/CMakeFiles/CMakeOutput.log; cat "$BUILD_DIR"/CMakeFiles/CMakeError.log)
     target_notest
     ;;
@@ -129,6 +130,7 @@ case "$TARGET" in
       -DBUILD_PRINT=OFF \
       -DBUILD_RS_IDENTIFY=OFF \
       -DUSE_SENTRY=OFF \
+      -DUSE_WAYLAND_COLOR=OFF \
       $ECO "$SRC_DIR" || (cat "$BUILD_DIR"/CMakeFiles/CMakeOutput.log; cat "$BUILD_DIR"/CMakeFiles/CMakeError.log)
     target_notest
     ;;

@@ -64,6 +64,10 @@ inversion. Two mechanisms replace it, and which one applies depends on **who sta
 * **The GUI starts** → relocate the function here, or pass what it needs as a parameter.
   `colorprofiles/`'s `dt_colorspaces_set_display_profile()` takes the `GtkWidget *` whose
   monitor it should read, rather than calling `dt_gui_center_widget()` itself.
+* **The GUI starts, later and more than once** → the GUI keeps what the windowing system tells it
+  and hands it down when it changes. `wayland_color.c` follows the colour description a Wayland
+  compositor prefers for the main window and *offers* the matching profile to `colorprofiles/`,
+  which decides whether to use it (`dt_colorspaces_offer_compositor_display_profile()`).
 * **The backend starts** → the backend declares a handler type and owns the slot; the GUI
   registers itself in `dt_gui_gtk_init()`. See `common/thumbnail_notify.h`,
   `common/startup_progress.h`, `dt_film_set_confirm_rmdir_handler()` and
