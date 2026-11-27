@@ -331,6 +331,36 @@ static inline void _darkroom_sample_raw_box_to_image_norm(const dt_colorpicker_s
 }
 
 /**
+ * @brief Stroke a cross centred on (x, y) of half-size `arm`: a + when `upright`, an x otherwise, in `rgba`
+ * over a dark halo twice as wide as its `width`, so that it reads on any image.
+ */
+static void _darkroom_picker_cross_draw(cairo_t *cri, const double x, const double y, const double arm,
+                                        const gboolean upright, const double width, const double rgba[4])
+{
+  if(upright)
+  {
+    cairo_move_to(cri, x - arm, y);
+    cairo_line_to(cri, x + arm, y);
+    cairo_move_to(cri, x, y - arm);
+    cairo_line_to(cri, x, y + arm);
+  }
+  else
+  {
+    cairo_move_to(cri, x - arm, y - arm);
+    cairo_line_to(cri, x + arm, y + arm);
+    cairo_move_to(cri, x - arm, y + arm);
+    cairo_line_to(cri, x + arm, y - arm);
+  }
+  cairo_set_dash(cri, NULL, 0, 0.0);
+  cairo_set_line_width(cri, 2.0 * width);
+  cairo_set_source_rgba(cri, 0.0, 0.0, 0.0, 0.7);
+  cairo_stroke_preserve(cri);
+  cairo_set_line_width(cri, width);
+  cairo_set_source_rgba(cri, rgba[0], rgba[1], rgba[2], rgba[3]);
+  cairo_stroke(cri);
+}
+
+/**
  * @brief Mark, with a cross in each RGB channel's colour, the pixels holding the per-channel
  * extremes the active picker reads: a module's input, or the scope stage the global picker shows.
  *
@@ -366,32 +396,21 @@ static void _darkroom_picker_extremes_draw(cairo_t *cri, const dt_develop_t *dev
       const double x = point[0] * wd;
       const double y = point[1] * ht;
       const gboolean kept = (c == dev->color_picker.extremes_channel);
-      const double alpha = kept ? 1.0 : other_alpha;
-
+      const double rgba[4] = { channel_rgb[c][0], channel_rgb[c][1], channel_rgb[c][2], kept ? 1.0 : other_alpha };
       if(kept)
-      {
-        const double arm = 10.0 / scale;
-        cairo_move_to(cri, x - arm, y);
-        cairo_line_to(cri, x + arm, y);
-        cairo_move_to(cri, x, y - arm);
-        cairo_line_to(cri, x, y + arm);
-      }
+        _darkroom_picker_cross_draw(cri, x, y, 10.0 / scale, TRUE, 2.0 * lw, rgba);
       else
-      {
-        const double arm = (other_arm - other_arm_step * c) / scale;
-        cairo_move_to(cri, x - arm, y - arm);
-        cairo_line_to(cri, x + arm, y + arm);
-        cairo_move_to(cri, x - arm, y + arm);
-        cairo_line_to(cri, x + arm, y - arm);
-      }
-      cairo_set_dash(cri, NULL, 0, 0.0);
-      cairo_set_line_width(cri, lw * (kept ? 4.0 : 3.0));
-      cairo_set_source_rgba(cri, 0.0, 0.0, 0.0, 0.7);
-      cairo_stroke_preserve(cri);
-      cairo_set_line_width(cri, lw * (kept ? 2.0 : 1.5));
-      cairo_set_source_rgba(cri, channel_rgb[c][0], channel_rgb[c][1], channel_rgb[c][2], alpha);
-      cairo_stroke(cri);
+        _darkroom_picker_cross_draw(cri, x, y, (other_arm - other_arm_step * c) / scale, FALSE, 1.5 * lw, rgba);
     }
+  }
+
+  // The pixel bright in all channels decides alone, as a white +.
+  if(dev->color_picker.extremes_valid & DT_COLOR_PICKER_EXTREMES_MAX_OF_MIN)
+  {
+    float point[2] = { dev->color_picker.max_of_min_point[0], dev->color_picker.max_of_min_point[1] };
+    dt_dev_coordinates_raw_norm_to_image_norm(dt_dev_get_global(), point, 1);
+    static const double white[4] = { 1.0, 1.0, 1.0, 1.0 };
+    _darkroom_picker_cross_draw(cri, point[0] * wd, point[1] * ht, 10.0 / scale, TRUE, 2.0 * lw, white);
   }
 }
 

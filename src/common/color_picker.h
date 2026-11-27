@@ -44,13 +44,23 @@ enum dt_iop_colorspace_type_t;
  * the picker's denoising, converted to the picker colorspace when it differs. `min_pixel[c]` and
  * `max_pixel[c]` hold all the channels of those pixels. `valid` is FALSE when the input was mosaiced,
  * which the helper does not locate.
+ *
+ * When the caller sets `locate_max_of_min`, `max_of_min` is the first pixel whose lowest score over
+ * R, G and B is the highest, a channel's score being `gain[c] · log10(pixel[c]) + bias[c]`: the pixel
+ * high in all three channels at once on the caller's scale, which a pixel high in one channel only is
+ * not. `max_of_min_pixel` holds all its channels.
  */
 typedef struct dt_color_picker_extremes_t
 {
+  int locate_max_of_min;   // input
+  dt_aligned_pixel_t gain; // input
+  dt_aligned_pixel_t bias; // input
   int min[4][2];
   int max[4][2];
+  int max_of_min[2];
   dt_aligned_pixel_t min_pixel[4];
   dt_aligned_pixel_t max_pixel[4];
+  dt_aligned_pixel_t max_of_min_pixel;
   int valid;
 } dt_color_picker_extremes_t;
 

@@ -117,6 +117,310 @@ undo/DB churn. History is written only at the real commit. Crop/ashift use `resy
 two must NOT be mixed — routing crop's geometry through `_sync_focused_in_place` (partial)
 mishandles the warm cropped→uncropped geometry change.
 
+## negadoctor: the shadows color cast scales the bias in v1; v2 has one black point per channel
+
+*Found on top of `6a9005ef9c`, 2026-11-13; v2's black points on top of the same commit, 2026-11-14; the black point picker's pixel on top of `8e77b45cff`, 2026-11-14; what the black points and the illuminant gain do to each tone on top of `8e77b45cff`, 2026-11-15; v2's saturation, the layer contrast pickers and the split of the black points' color and level on top of `b13472e7f4`, 2026-11-16; the labels by the neutral and black point pickers, and the pair setting the gains alone, on top of `218e6d865f`, 2026-11-17; the wand on a white, on top of `cdfa91b84f`, 2026-11-18; the saturation from the gloss alone on top of `44bb51da9f`, 2026-11-18; the wand's paper black on top of `ca95c58d7e`, 2026-11-18.*
+
+`process()` prints `exposure · (1 + black) − exposure · 10^(wb_high[c] · (B[c] − D[c] / D_max))`,
+`D[c]` being the density above the film base. The density printed at the paper black
+(`exposure · black`) is therefore `B[c] · D_max` in each channel, `B[c]` being `_black_point()`:
+`offset · wb_low[c]` in v1, `black_point[c]` in v2. The `version` param selects it.
+
+The pickers solve against the coefficients `process()` applies: `_data_from_params()` derives them
+from the params, `commit_params()` and the seven pickers that read the film's densities call it, and the
+paper black and print exposure pickers evaluate the density through `_corrected_density()`, the same
+expression as `process()`. A picker that rebuilds the formula from the params by itself drifts from
+the render. The exposure picker used to leave `wb_high` out of the black point term, an error of
+`(wb_high[c] − 1) · B[c]` in corrected density, nil only with `wb_high` at 1: replayed on the module
+input of 20250921_0007 (v2, bias 0.135) with `wb_high` 1/1.1/1.25, its densest pixel printed at 0.953
+instead of 0.96, and at 0.96 once the term is in. On black and white film,
+every picker used the three `Dmin` components that the Dmin picker stores, while the render uses only
+the first. Measured on 2026-11-12, on top of `6a9005ef9c`, by replaying both versions in Python on a
+black and white pick with `Dmin` stored as (1, 0.45, 0.25): with the D max picker built from the
+params, the densest pick landed at 1.25 × D max instead of 1; with the exposure picker built the same
+way, its print reached 1.012 instead of the 0.96 target.
+
+In v1 a shadows offset moves the black point by `(wb_low[c] − 1) · offset`: nothing at zero bias, and
+the other way with a negative bias, such as −0.05 (−0.10 D), the bias default of params v1 and v2.
+The default is now 0, Cineon's reference black: code value 95 is the film base, 0.000 D above D-min
+in Kodak's recorder aims (H-387). The bias corrects how the film was exposed when shooting, not the scan:
+a scan exposure scales D min and the pixel alike and cancels in `log10(D min / pixel)` once the base is
+picked on the same scan (measured on 20250921_0007: +1 EV gives the same render). Measured by replaying
+`process()` in Python on a grey ramp, with image 18364's D min, D max and gamma, paper black and print
+exposure picked once per bias and then kept: a red shadows offset of 1.2 changes the red output at
+0.4 D above the base by −0.62 EV at bias +0.134 D, 0 at bias 0 and +0.41 EV at −0.102 D.
+
+In v2 the bias and the cast are one parameter, `black_point[c]`, the density of the blacks above the
+film base in each channel, so the cast is a difference between channels rather than a multiplier
+that needs a bias. v2 first kept the bias and added a dye density per channel,
+`B[c] = offset − shadows_density[c]`: dye in the layer channel c mostly sees, as a color filter in the
+enlarger, which the same replay showed to match 0.027 D really added to the film's red density, to
+7e-20. A black point slider acts the other way from such a dye: raising it darkens that channel of
+the print, so the blacks get the complementary color.
+
+A black point moves the shadows and hardly the rest, so it does not correct the tint of the image: the
+print curve `(1 + black − E)^grade` turns a density offset into a large change near the blacks only.
+Measured by replaying `process()` in Python (D max 2.05, paper black 0.0755, grade 4, gloss 0.75), a black
+point lowered by 0.05 D in one channel raises that channel of the print by 1.93 EV at 0.05 D above the
+blacks, 0.59 EV at 0.30 D, 0.21 EV at 0.75 D (Cineon's mid grey) and 0.03 EV at 2.05 D. Under an enlarger
+the same filter moves the mid-tones as well, the paper's curve being an S in log exposure.
+
+The illuminant gain `wb_high[c]` is neither a paper tint nor a preflash: it multiplies the slope of the
+paper's log exposure against the film's density in one channel, about the black point, so it is a contrast
+per layer, which corrects crossed curves and which an enlarger has no control for. Measured by replaying
+`process()` in Python (D max 2.05, paper black 0.0755, grade 4, gloss 0.75), gain 1.46 against 1: the print
+is the same at the black point and at the paper white (10 D above the blacks), and 2.71, 2.18 and 1.27 times
+higher at 0.30, 0.75 and 2.05 D. A tint would scale every value alike, white included; a preflash, a uniform
+exposure, is in this model a paper black per channel.
+
+So the gain belongs to the film, its development and the scan, and the light of the scene to the black
+points: a cast multiplies the exposure of a layer, which on the straight part of the film's curve adds the same
+density to every tone of that channel, and `wb_high[c] · (B[c] − (D[c] + ΔD) / D_max)` is exactly the image of
+a black point lowered by `ΔD / D_max`. The gain sliders ("red layer contrast", …) are on the film properties page, under "layer
+calibration". In v2 two pickers, "darker neutral" and "lighter neutral", measure them between two neutrals
+of different tones: `wb_high[c] ∝ 1 / (D_dense[c] − D_clear[c])`, the two sorted by density whichever picker took
+them, normalized so that the smallest is 1, in which a cast cancels. The pair fits a straight line through two
+points of each layer's curve, and the line that keeps a whole range closest to a curved one goes through two points
+inside it, not through its ends; the tooltips ask for two greys well apart, clear of the black and the white, as
+the measurement below found. They set the gains and nothing
+else: the gains pivot on the black points, so the frame then shows the cast of its light, which the "white
+balance" picker of the corrections page takes out. They first set, in the same gesture, the black points that
+print both neutral, `black_point[c] = D_clear[c] / D_max + K / wb_high[c]` with `K` the mean corrected density
+of the clearer neutral: the same black points as the white balance picker on it, but it put a property of the frame
+into the calibration of the film and did twice what the corrections page does. The first pick is
+kept in the GUI data until the second, and forgotten by `gui_update()`. A line under the two pickers says which
+one is still to pick, then how far apart the two are in each channel; under 0.05 D in one channel the pair
+measures no slope, the parameters stay, and the line names that channel instead. v1 keeps the picker that neutralizes
+one area against the black points, `wb_high[c] ∝ 1 / (D[c] − B[c] · D_max)`; it is the same measurement with
+the black point as the lower neutral, right only when the black points come from a neutral of the same frame.
+
+Replayed in Python on a synthetic film (layer slopes 0.55 / 0.62 / 0.70, D75 against D55, D max 2.05, paper
+black 0.0755, grade 4), on top of `b13472e7f4`, 2026-11-16: on a straight-line film, grey at 18 % and white
+at 90 % give gains 1.2727 / 1.129 / 1, the slopes' ratios to four digits, and every neutral from 1 % to 90 %
+prints neutral. With a toe (a softplus 0.4 log exposure wide), the gains are off by 0.3 % and the neutrals
+from 9 % up within 0.006 EV, the 3 % one 0.08 EV off; the v1 picker, with the black points on the 1 % neutral
+in the toe, gives 1.2961 / 1.1437 / 1 and a grey 0.03 EV blue, because the toe takes less of the cast.
+
+In v2 the black points hold two things, which two pickers on the corrections page set apart, each keeping
+what the other and the pair of neutrals set, the pair keeping the black points in turn: their color (two degrees of freedom, the cast of the light) and
+their level (one). The "white balance" picker sets the color from one neutral area, any tone, with the gains kept:
+`black_point[c] = D[c] / D_max + K / wb_high[c]`, `K` the mean over the channels of the
+corrected density the area printed with. Every black point moves by `δ[c]`, every pixel's corrected density
+in channel c by `wb_high[c] · δ[c]`, whose mean over the channels is 0, so the mean corrected density of every
+pixel, the level of the blacks, stays. The black point picker sets the level: all three black points move by
+`−K / wb_high[c]`, the same corrected density in every channel, so a neutral stays neutral, `K` being the mean
+over the channels of the corrected density of the pixel the print makes dark in all three channels
+(`DT_COLOR_PICKER_EXTREMES_MAX_OF_MIN` on the corrected density, see [`color-picker.md`](color-picker.md)),
+which then prints at the paper black in the mean of its channels; the label after it gives that pixel's
+densities above the film base, in the unit of the black points, from the film base current when it is drawn.
+Taking the mean rather than its darkest
+channel is what makes the two commute; the paper black picker keeps that channel above the paper.
+
+The black point picker used to give the pixel's three densities to the three black points, so that it
+printed neutral at the paper black: the color and the level at once, from a black. Picked after the pair of
+neutrals, it undid their color. Measured on top of `b13472e7f4`, 2026-11-16, by replaying `process()` on the
+grey ramp of a SpyderCheckr on Portra 400 (image 20261113_0007, D max 1.545, module input exported by
+`ansel-cli` with negadoctor off): the pair on the 4th grey and the white gave black points 0.160 / 0.018 /
+−0.006 D and the ramp neutral within 0.012 EV between them; the black point picker then set 0.034 / 0.036 /
+0.016 D, and the ramp printed red, R/G +0.20 EV on the white, +0.46 on the 4th grey, +0.90 on the black.
+A black lies in the toe, where the red layer is flatter than the line through the two neutrals predicts.
+With the split, on the same ramp, the black point picker after the pair keeps the white and the 4th grey
+neutral to 0.000 EV, and "white balance" then black point gives the same black points as the reverse order to
+1e-6 D. With the pair's gains on default black points, "white balance" on the 4th grey gives back the
+result of the pair when it set the black points too, which is why it no longer does, and on the black patch +0.08 to +0.19 EV of red over the ramp: a mid grey is the safer neutral.
+
+Which pair calibrates matters on a real film, because its curve is not straight below the mid tones.
+Measured on top of `218e6d865f`, 2026-11-17, on the same chart in the GUI (D max 2.046, paper black +22 %,
+grade 7.49), the black point picker on the room's shadows (0.021 / 0.035 / 0.017 D), then the print replayed
+in Python on the right-hand grey ramp, saturation left out. Gains between the 4th grey and the white,
+1.10 / 1.12 / 1, with the white balance on the 4th grey: white to 4th grey within 0.03 EV, then the 5th grey
+R/G −0.28 and B/G −0.21 EV, the black −0.91 / −0.77 EV, green; with the white balance on the 5th grey
+instead, the error moves into the light tones, +0.10 to +0.19 EV magenta, the black still −0.43 / −0.41 EV.
+Gains between the 5th and the 2nd grey, 1.07 / 1.17 / 1 (the GUI line read 0.531 / 0.484 / 0.567 D apart,
+the replay 0.531 / 0.484 / 0.568), with the white balance on the 5th grey: the whole ramp from the white
+to the 5th grey within 0.09 EV, the black −0.16 / −0.26 EV, and the room's shadows still at the paper black
+(mean corrected density −0.0015 D), the pair having left the black points alone. Two neutrals inside the ramp, both clear of its
+ends, make the safer pair.
+
+It first took the clearest pixel of the clearest channel, the channel the bias picker keeps, which is
+wrong on a saturated color: a red object is clear on the film in blue and green but dense in red.
+Measured on top of `8e77b45cff`, 2026-11-14, by dumping the module input of image 51159 (Agfa HDC 200,
+D max 2.050) on a box holding a red glass and replaying both rules in Python: the old one took a pixel
+of the glass, black points 0.811 / 0.190 / −0.031 D, with 94.8 % of the box printing below the red black
+point; the pixel clear in all channels gives 0.016 / 0.033 / 0.033 D, 0.56 % of the box below it in
+blue at most. On 20250921_0007 (D max 1.429), on a box of blacks, both rules land within 3 px of each
+other and within 0.01 D (0.198 / 0.211 / 0.220 D against 0.192 / 0.207 / 0.228 D). Keeping the rule
+but choosing among the three per-channel clearest pixels the one clear in all channels is not enough:
+on 300 random boxes of 51159 it differed from the scan of every pixel by more than 0.05 D in 34, by
+0.26 D at most.
+
+The paper black picker has the same flaw and the same fix. It takes `black` as the highest, over the
+channels, of `0.1 − (1 − 10^corrected density)`; it used to evaluate it on each channel's clearest value,
+so a saturated color lifted the blacks to keep its darkest channel above the paper. It now takes the
+pixel the print makes dark in all three channels, `DT_COLOR_PICKER_EXTREMES_MAX_OF_MIN` on the corrected
+density `_corrected_density()` gives, and evaluates the three channels of that pixel. Measured on top of
+`8e77b45cff`, 2026-11-14, on 300 random boxes of the module input of 51159 with the black points picked
+as above (`wb_high` 1.461 / 1.085 / 1): the old rule set `black` higher by 0.013 in median, 0.092 at the
+95th percentile and 0.214 at most. The black point picker's scale was then `1 / Dmin` alone, not the print's:
+`wb_high` and the black points differ between channels, and that pixel's `black` was off from the exact
+one by 0.037 at the 95th percentile and 0.136 at most. Both pickers now look on the print's scale, and ask
+negadoctor for it
+(`_picker_channel_scale()`) at each sample. The helper's C finds the same pixel as the exact rule in
+float64 Python on all 1,200 boxes tried (300 per picker, on 51159 and 20250921_0007).
+
+`legacy_params()` maps params v1 and v2 to `DT_NEGADOCTOR_V1`, so older edits render as before, and
+fills `black_point[c] = offset · wb_low[c]`; new instances and the built-in presets are v2. Switching
+in the GUI converts with the same product one way, which keeps the image. The other way takes the
+black point farthest from the base as the bias and divides the others by it, which keeps the image
+except where v1 cannot hold it: black points of opposite signs, all at zero but one, or ratios outside
+`wb_low`'s 0.05–2. v1 keeps its own sliders, swatch, normalize and shadows picker, hidden in v2.
+
+The paper grade raises the colors with the contrast: `process()` used to raise each channel of the print to
+`gamma`, so the ratios between channels, the saturation, grew as fast as the tones. Replayed on the module
+input of 20261114_0007_01 (51150, the Agfa HDC 200 tree, with its own input profile) with the wall kept at
+the same print value, the 95th percentile of the reds' chroma went from 103 to 110 and 121 at grades 4.5, 6
+and 8.47, and the reds outside sRGB from 30 % to 42 % and 56 %. v2 prints `Y^gamma · (RGB / Y)^color_gamma`
+instead, `Y` being the luminance of the print in the working RGB (`_working_luminance()`), and
+`color_gamma = gamma · (1 + saturation)`. A neutral has `RGB = Y` and prints as before at any saturation; at
+0 the expression is each channel raised to `gamma`, and `process()` takes that path, so that a v2 edit at 0
+renders bit for bit as before (measured with `ansel-cli` on 51150, both builds). At grade 8.47 with the colors
+kept at grade 4.5 (saturation −47 %), the replay gave a chroma of 55 and 31 % of the reds outside sRGB, and
+the same tones as grade 8.47 (L 0 / 72 at the 10th and 90th percentiles). A saturation of −100 % is not a
+neutral rendering of the scene but a grey print: at an exponent of 1, the reds fell to a chroma of 9, since
+the grade is what gives the negative its colors.
+
+The saturation is stored in `offset`, which v2 does not use: params keep their size, and v2 edits, all at
+`offset` 0 when this was written (24 of them in the library this was measured on), keep their render. The
+field keeps its name and description, so whatever shows params by their introspection names shows a change of
+the v2 saturation as one of "film exposure bias". Switching from v1 to v2 sets it to 0 after building the
+black points from it; switching back rebuilds it from the black points. Its slider is a second
+`dt_bauhaus_slider_from_params()` on the same field, relabelled and shown in v2 only.
+
+In v2 the wand sets the saturation too, from the same aims: the colors keep the scene's ratio between
+grey and white, 0.90 / 0.18, one to one, as the tones do, so `color_gamma = log(0.90 / 0.18) / (print_white −
+print_grey)`, the grade the wand would take without the paper gloss. Since the wand's grade is
+`log(unglossed 0.90 / unglossed 0.18) / (print_white − print_grey)`, the saturation, their quotient less one, depends
+on the gloss alone (`_saturation_without_gloss()`): −4.97 % at 0.75, −18.75 % at 0.5, −34.34 % at 0, 0 from
+0.9 up, where the gloss leaves 90 % alone. The wand button at the right of the saturation slider sets it alone,
+for the gloss as it stands, so after a grade set by hand; the wand of the grade calls the same function, and
+when it clamps the grade, the saturation keeps the gloss's rule rather than the clamped grade's. Grade 4, the module's default, comes with
+no source and was not used. The aims say nothing about the colors themselves, so the rule
+is an extension of them, not a quote: what it takes away is only the gloss's share of the grade. With the
+gloss at 0.75 that is about −5 %; on 51150 with the gloss at 0 and the paper black at 0.1017, the wand's grade
+is 12.92 and the saturation −34 %, replayed in Python on top of `b13472e7f4`, 2026-11-16. It does not remove
+what makes saturated reds stand out on 51150: their green and blue sit 0.26 and 0.15 D above the blacks, where
+the print curve's log slope times the grade is 8.8 and 14.4 per D, against 2.3 at Cineon's absolute grey (0.75 D) and 2.4 for
+their red. That is the shape of the print curve in the shadows, which no single exponent corrects.
+
+Units: a density is the log10 of a transmission ratio, so 1 D = 10 dB = 3.32 EV; D max and the bias
+used to be labelled " dB", ten times off. `offset` and `black_point` are stored as fractions of
+D max and shown as densities through the bauhaus factor, in D or in printer points (0.025 log exposure, so
+40 to the density unit), as `plugins/darkroom/negadoctor/density_unit` says. Both are true units of what the
+sliders hold: `process()` takes `10^corrected = (10^(B[c] · D_max) · 10^(−D[c]))^(wb_high[c] / D_max)`, so the
+black point multiplies the light through the negative as a printer's lamp does, and in D it is that
+printing log exposure. CC (Kodak color compensating filters, 0.01 D) was offered too and was removed: it
+counts the density of a colored filter, whereas the bias is the same in all channels (a neutral filter is
+counted in D, as ND) and a black point reads with the sign opposite to the filter it stands for, raising it
+being removing filtration. The channels are those of the working RGB, which negadoctor processes in after
+the input profile, not Kodak printing density: a value in points is a lab printer's only as far as these
+channels are the print stock's sensitivities. Neither the factor nor the unit is a param: whatever sets D max
+without its slider callback (its picker, under `dt_gui_freeze_begin()`) calls
+`_density_sliders_update()` itself.
+
+The wand of print properties is an area picker ("Auto tune print"). It first sets the paper black as the paper
+black picker would, in that picker's area, the one it last had or the image less a 64 px border until it had
+one, which is not shown (`dt_iop_color_picker_measure_max_of_min()`, see
+[`color-picker.md`](color-picker.md)); if that area cannot be read, the black stays as it is. The black comes
+first because the white and the grey print on it, and it does not depend on what the wand sets next, so a
+second pick of a white finds the same black. Measured in the GUI on top of `ca95c58d7e`, 2026-11-18, with
+`-d dev`: once the paper black picker had sampled a 7 × 8 px area of the preview, maximum 0.402525 / 0.16448 /
+0.205041, each of the wand's next three picks found that same pixel there; before that picker had an area,
+every pick took the default box and found one same pixel. Then it sets print exposure and grade from the film
+settings and that black: the brightest point of the area, a white that keeps its detail, prints at 90 %, and a
+density 0.43 D clearer at 18 %, Cineon's diffuse white (code 685) and mid grey (code 470) 215 codes of 0.002 D
+apart: two equations linear in grade and `log(exposure)`. The brightest point is each channel's densest value
+on the film, `DT_COLOR_PICKER_EXTREMES_MIN`, as the print exposure picker takes it, so the area must hold no
+light source, specular reflection or dust. The channel that prints it lightest sets both aims, so that no
+channel of the white passes 90 %, and the darkroom marks it with the +; a geometric mean over RGB, which the
+wand used before, put the lightest channel above 90 %. When the grade is clamped, the white keeps its aim and
+the grey misses it. A paper black low enough to print the grey at zero or below in that channel leaves its log
+infinite or NaN, and the wand then keeps exposure and grade. Like every area picker, it starts on the whole
+image less a 64 px border (`_picker_initialize_geometry_raw()` in `gui/color_picker_proxy.c`), so its first
+result takes the image's brightest point, which is right when that point is a white with detail and not a
+light source or a reflection.
+
+It used to anchor the grey and white at Cineon's absolute densities, 0.75 and 1.18 D above the blacks, and
+printed underexposed frames dark. Measured on two Agfa HDC 200 frames, 51150 and 51154, replayed in Python
+from `ansel-cli` float exports with negadoctor off: their integrated densities are 0.41 and 0.26 D and their
+diffuse white (a white dog) about 0.6 D, while the roll's fogged leader reads 1.96 D above the base on the
+D max picker, against 1.86 D for Cineon's code 1023: the film fills Cineon's scale, so the frames sit 0.35
+to 0.6 D under a normal exposure. The absolute aims gave grades 8.99 and 9.86, the dog at L* 45 and 32 and
+12 % and 36 % of black pixels; with the grey on the frame's integrated density instead, which the wand did
+before it took a white, they give 4.31 and 3.58, the dog at L* 87 and 93 with the shadows open. In the GUI on
+51150, with D max 1.99 and the paper black at 0.10, that picker gave grade 4.29 and +0.39 EV, the dog at L* 90
+on the screenshot. Anchoring the grey on D max instead (D max − 1.106 D, Cineon's
+1023 − 470) puts it at 0.85 D with the leader's value, grades 11.3 and 12.2, the dog at L* 32 and 20: a roll
+constant cannot follow the exposure of each frame, which is what the printer's exposure is for. Measured on
+top of `b13472e7f4`, 2026-11-16.
+
+The aims crush the shadows wherever they sit: the print curve, `log(output)` against density, is concave
+whatever its parameters, so no grade, exposure and black fit grey, white and a shadow point of Cineon's
+line together. With the absolute aims, 0.30 D above the blacks printed at 0.001 to 0.003 against 0.033 on
+that line.
+
+## negadoctor: how far a scan reads densities, measured on a step wedge
+
+*Measured on top of `908083de2b`, 2026-11-18 and 2026-11-19: three shots of the same wedge, the last with
+a mask around it.*
+
+The D min, D max and black point pickers take densities from the scan, so they are only as good as the
+chain that made it. That chain (a Nikon Z6 over an LED backlight, with an input profile built for that
+light) was measured on a Stouffer T2115, a 21-step silver wedge from 0.07 to 2.98 D, against the
+densities a lab measured on it. Method: `ansel-cli` float exports (`--icc-type LIN_REC2020
+--apply-custom-presets false --core`) with the input profile and negadoctor, crop and exposure off; each
+step's central 60 % divided by a shot of the bare light at the same pixels (a flat field); density
+`−log10` of that ratio against step 1's; slopes fitted through the origin on steps 2–13, against the lab's
+densities above step 1.
+
+- **Green and blue read the lab's densities to about 2 %, up to 2.9 D above the base.** Slopes 1.024 and
+  1.015 on the masked shot; green within 0.011 D of that slope up to step 20 (2.75 D above step 1), and
+  −0.019 D at step 21. The two unmasked shots gave 1.004 / 0.999 and 1.014 / 1.007: shots differ by 1–2 %,
+  in part through the rows measured (below).
+- **The mask is what makes the dense steps right.** Unmasked, stray light cost −0.03 D at 2.31 D above
+  step 1, −0.10 at 2.61 and −0.28 at 2.91; it reached 0.10–0.12 % of step 1's light at step 21, and 56 % of
+  the light in the frame came from the wedge's clear numbers and edges, next to the dense steps, not from
+  the printed masks the first analysis had blamed without measuring. Masked: 0.005 % at step 21.
+- **The exposure module's default black, −0.000244, flattens the dense end.** It removes a constant
+  from every pixel before negadoctor, which costs −0.011 D at 1.89 D above step 1, −0.019 at 2.16 and
+  −0.060 at 2.91 on one shot, −0.116 at step 21 on another: a constant weighs more where the raw
+  signal is smaller. Without it, Ansel's green and the raw agree within 0.005 D. Scans of negatives
+  should set that black to 0.
+- **Without the flat field**, the unevenness of the light and the vignetting cost up to −0.05 D in the
+  middle of the wedge.
+- **Near the edges of the slit, the wedge reads denser, in proportion to its density**: +0.01 D at step 2
+  and +0.06–0.07 D at steps 14–20, 70–110 px from the centre of a 260 px band, so the slope goes from
+  1.024 at the centre to 1.06–1.07 near the edges. The bare light is flat across the slit to 0.001 D, so
+  it is the wedge, not the light: most likely the silver scatters light, and a point near an edge has
+  fewer lit neighbours to receive it from. Not verified by a separate shot. Measure in the centre of a
+  wide slit.
+- **Red reads 3.1–4.1 % denser than green on every shot**, slope 1.061 on the masked one, and in the raw
+  as much (1.031–1.041 R/G across the shots), so not Ansel. Inside each step the red excess does not
+  move with position (+0.000 ± 0.001 D per 1000 px, against −0.016 to −0.020 from one step to the next),
+  so it follows density, not light; a linear chain cannot make a neutral absorber denser in one channel,
+  so the wedge's silver is denser at 665 nm than at 525 and 455 nm, which a lab sheet giving one density
+  per step cannot show. It does not carry over to a colour negative, which holds dyes, not silver, and
+  the layer calibration absorbs any per-channel density factor.
+- **Step 1 reads 0.066–0.091 D from the bare light**, against 0.07 on the lab sheet. Not explained.
+
+What this does not establish: the wedge is neutral silver, so it shows that the chain measures light
+correctly in each channel, not that the camera's channels see a negative's dyes as a densitometer's
+Status M filters do. D max values published in Status M, or Cineon's limits, therefore do not land
+exactly on what the picker reads. Manufacturers publish curves, not a D max per stock, and Cineon's
+figures are encoding limits: 1.856 D above the base (code 1023 − 95) and 2.046 D with the base, the
+default of `D_max`, while the D max picker measures above the base. The only list of D max values that
+holds is one measured on one's own chain, roll by roll, which a preset of the module already keeps with
+D min and the layer calibration.
+
 ## retouch: what a shape costs per frame is its geometry, and most of it is ROI planning
 
 *Found `1019fcd2e0`, 2026-09-24.*

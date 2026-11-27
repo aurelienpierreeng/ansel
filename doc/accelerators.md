@@ -374,4 +374,19 @@ The 56 sliders whose `top` is exactly 100, and "%" sliders on round internal ran
 compiled alone and run in `float` over these ranges, not from the GUI; the same program checked
 that each of 1, 2 and 5 × 10ⁿ for n from −6 to 6, given as `raw`, comes back unchanged.
 
+## A tooltip set after the first hover shows, with the shortcut under it
+
+*Established on top of `cdfa91b84f`, 2026-11-18.*
+
+`_accels_tooltip_query_hook()` (`widgets/accelerators.c`) runs on every `query-tooltip` and appends the
+widget's shortcut to its tooltip, which it does by setting the tooltip itself. It must therefore tell the
+tooltip it set from one the widget's owner set since. It keeps the widget's own tooltip as the base and what it
+set last as `dt-accel-tooltip-shown`: a tooltip that differs from that one is the owner's, and becomes the base.
+GTK 3 stores a tooltip set as text as escaped markup, so the hook reads and writes markup only.
+
+The hook used to read the base once, at the first query, and set it back at every query after: a tooltip
+changed after the first hover never showed. Measured with negadoctor's wand, whose tooltip mentions the paper
+saturation only while its slider shows: a trace in `gui_changed()` showed the tooltip rebuilt without the
+saturation when the module went to v1, and the hover still showed it.
+
 ---

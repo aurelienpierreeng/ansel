@@ -325,11 +325,11 @@ static void _picker_initialize_geometry_raw(dt_iop_color_picker_t *picker, dt_de
   picker->geometry_is_raw = TRUE;
 }
 
-static int _picker_sample_box(const dt_iop_module_t *module, const dt_iop_roi_t *roi,
-                              const dt_pixelpipe_picker_source_t picker_source, int *box)
+// The point or area of `sample`, in the pixels of the module's input or output buffer at `roi`.
+static int _picker_sample_box(const dt_iop_module_t *module, const dt_colorpicker_sample_t *sample,
+                              const dt_iop_roi_t *roi, const dt_pixelpipe_picker_source_t picker_source, int *box)
 {
   dt_develop_t *const dev = dt_dev_get_global();
-  const dt_colorpicker_sample_t *const sample = dev ? dev->color_picker.primary_sample : NULL;
   if(IS_NULL_PTR(dev) || IS_NULL_PTR(module) || IS_NULL_PTR(roi) || IS_NULL_PTR(sample)) return 1;
 
   dt_boundingbox_t fbox = { 0.0f };
@@ -429,6 +429,13 @@ static void _picker_store_extremes(dt_develop_t *dev, const dt_iop_module_t *mod
       _picker_buffer_to_raw_norm(dev, module, roi, PIXELPIPE_PICKER_INPUT, extremes->max[c],
                                  dev->color_picker.extreme_points[1][c]);
   }
+  // The pixel high in all channels: its values for the module, its position for the darkroom's +.
+  if(picker->extremes & DT_COLOR_PICKER_EXTREMES_MAX_OF_MIN)
+  {
+    for(int k = 0; k < 4; k++) dev->color_picker.max_of_min_pixel[k] = extremes->max_of_min_pixel[k];
+    _picker_buffer_to_raw_norm(dev, module, roi, PIXELPIPE_PICKER_INPUT, extremes->max_of_min,
+                               dev->color_picker.max_of_min_point);
+  }
   dev->color_picker.extremes_valid = picker->extremes;
 }
 
@@ -441,13 +448,28 @@ static gboolean _sample_picker_buffer(dt_dev_pixelpipe_t *pipe, dt_iop_module_t 
   // Only the input sample feeds the module's picker callbacks, so only it is located. A sample
   // that fails leaves no cross behind.
   dt_develop_t *const dev = dt_dev_get_global();
-  const gboolean locate = picker_source == PIXELPIPE_PICKER_INPUT && dev && dev->color_picker.picker
+  if(IS_NULL_PTR(dev)) return FALSE;
+
+  const gboolean locate = picker_source == PIXELPIPE_PICKER_INPUT && dev->color_picker.picker
                           && dev->color_picker.picker->extremes != DT_COLOR_PICKER_EXTREMES_NONE;
-  if(picker_source == PIXELPIPE_PICKER_INPUT && dev) dev->color_picker.extremes_valid = DT_COLOR_PICKER_EXTREMES_NONE;
+  if(picker_source == PIXELPIPE_PICKER_INPUT) dev->color_picker.extremes_valid = DT_COLOR_PICKER_EXTREMES_NONE;
   dt_color_picker_extremes_t extremes = { .valid = FALSE };
+  // The pixel high in all channels is compared on the module's scale, asked for now so that it follows
+  // the module's current params: for negadoctor, the density above the film base or the printed one.
+  if(locate && (dev->color_picker.picker->extremes & DT_COLOR_PICKER_EXTREMES_MAX_OF_MIN))
+  {
+    const dt_iop_color_picker_t *const picker = dev->color_picker.picker;
+    extremes.locate_max_of_min = TRUE;
+    for(int k = 0; k < 4; k++)
+    {
+      extremes.gain[k] = 1.0f;
+      extremes.bias[k] = 0.0f;
+    }
+    if(!IS_NULL_PTR(picker->channel_scale)) picker->channel_scale(module, picker->colorpick, extremes.gain, extremes.bias);
+  }
 
   int box[4];
-  if(_picker_sample_box(module, roi, picker_source, box)) return FALSE;
+  if(_picker_sample_box(module, dev->color_picker.primary_sample, roi, picker_source, box)) return FALSE;
 
   dt_aligned_pixel_t avg = { 0.0f };
   dt_aligned_pixel_t min = { INFINITY, INFINITY, INFINITY, INFINITY };
@@ -856,6 +878,7 @@ static void _init_picker(dt_iop_color_picker_t *picker, dt_iop_module_t *module,
   // What it shows the first time it is turned on, before the user has drawn anything.
   picker->pick_is_box = (kind == DT_COLOR_PICKER_AREA || kind == DT_COLOR_PICKER_AREA_POINT);
   picker->excluded_from_gesture = FALSE;
+  picker->channel_scale = NULL;
 
   // default values
   const float middle = 0.5f;
@@ -1608,18 +1631,83 @@ void dt_color_picker_set_extremes(GtkWidget *picker, const dt_iop_color_picker_e
   if(color_picker) color_picker->extremes = extremes;
 }
 
+void dt_color_picker_set_channel_scale(GtkWidget *picker, const dt_color_picker_channel_scale_t scale)
+{
+  dt_iop_color_picker_t *const color_picker = !IS_NULL_PTR(picker) ? g_object_get_data(G_OBJECT(picker), "dt-iop-color-picker") : NULL;
+  if(!IS_NULL_PTR(color_picker)) color_picker->channel_scale = scale;
+}
+
 int dt_iop_color_picker_get_extreme_pixel(const dt_iop_module_t *module, const dt_iop_color_picker_extremes_t which,
                                           const int channel, dt_aligned_pixel_t pixel)
 {
   const dt_develop_t *const dev = dt_dev_get_global();
-  if(IS_NULL_PTR(dev) || IS_NULL_PTR(module) || dev->color_picker.module != module || channel < 0 || channel > 2
+  // The pixel high in all channels is one pixel, not one per channel, so its channel is not checked.
+  const gboolean max_of_min = (which == DT_COLOR_PICKER_EXTREMES_MAX_OF_MIN);
+  // Only the current sample of the module's active picker, and only an extreme that picker declared.
+  if(IS_NULL_PTR(dev) || IS_NULL_PTR(module) || dev->color_picker.module != module
+     || (!max_of_min && (channel < 0 || channel > 2))
      || dev->color_picker.extremes_picker != dev->color_picker.picker
-     || (which != DT_COLOR_PICKER_EXTREMES_MIN && which != DT_COLOR_PICKER_EXTREMES_MAX)
+     || (which != DT_COLOR_PICKER_EXTREMES_MIN && which != DT_COLOR_PICKER_EXTREMES_MAX && !max_of_min)
      || !(dev->color_picker.extremes_valid & which))
     return 1;
 
+  // extreme_pixels[0] holds the per-channel minima, extreme_pixels[1] the maxima.
   const int side = (which == DT_COLOR_PICKER_EXTREMES_MAX) ? 1 : 0;
-  for(int k = 0; k < 4; k++) pixel[k] = dev->color_picker.extreme_pixels[side][channel][k];
+  for(int k = 0; k < 4; k++)
+    pixel[k] = max_of_min ? dev->color_picker.max_of_min_pixel[k] : dev->color_picker.extreme_pixels[side][channel][k];
+  return 0;
+}
+
+int dt_iop_color_picker_measure_max_of_min(GtkWidget *picker, dt_aligned_pixel_t pixel)
+{
+  dt_develop_t *const dev = dt_dev_get_global();
+  const dt_iop_color_picker_t *const self
+      = !IS_NULL_PTR(picker) ? g_object_get_data(G_OBJECT(picker), "dt-iop-color-picker") : NULL;
+  if(IS_NULL_PTR(dev) || IS_NULL_PTR(dev->preview_pipe) || IS_NULL_PTR(self) || IS_NULL_PTR(self->module)
+     || !(self->extremes & DT_COLOR_PICKER_EXTREMES_MAX_OF_MIN))
+    return 1;
+
+  dt_dev_pixelpipe_t *const pipe = dev->preview_pipe;
+  const dt_dev_pixelpipe_iop_t *const piece = dt_dev_pixelpipe_get_module_piece(pipe, self->module);
+  const dt_dev_pixelpipe_iop_t *const previous_piece
+      = !IS_NULL_PTR(piece) ? dt_dev_pixelpipe_get_prev_enabled_piece(pipe, piece) : NULL;
+
+  // The area the picker last had, or the one it starts with, on a copy: the picker itself stays as it is.
+  dt_iop_color_picker_t area = *self;
+  _picker_initialize_geometry_raw(&area, dev);
+  const gboolean as_box = dt_iop_color_picker_kind_takes_area(area.kind)
+                          && (area.pick_is_box || !dt_iop_color_picker_kind_takes_point(area.kind));
+  dt_colorpicker_sample_t sample = { .size = as_box ? DT_LIB_COLORPICKER_SIZE_BOX : DT_LIB_COLORPICKER_SIZE_POINT };
+  memcpy(sample.point, area.pick_pos, sizeof(sample.point));
+  memcpy(sample.box, area.pick_box, sizeof(sample.box));
+
+  int box[4];
+  if(IS_NULL_PTR(previous_piece) || previous_piece->dsc_out.datatype != TYPE_FLOAT || !area.geometry_is_raw
+     || _picker_sample_box(self->module, &sample, &previous_piece->roi_out, PIXELPIPE_PICKER_INPUT, box))
+    return 1;
+
+  // Retained with the lookup, as the active picker's input is: an intermediate cacheline, at refcount 0.
+  void *input = NULL;
+  dt_pixel_cache_entry_t *input_entry = NULL;
+  if(!dt_dev_pixelpipe_cache_peek_gui_retained(pipe, previous_piece, &input, &input_entry, NULL, NULL, NULL)) return 1;
+
+  dt_color_picker_extremes_t extremes = { .locate_max_of_min = TRUE, .gain = { 1.0f, 1.0f, 1.0f, 1.0f } };
+  if(!IS_NULL_PTR(self->channel_scale)) self->channel_scale(self->module, self->colorpick, extremes.gain, extremes.bias);
+  dt_aligned_pixel_t avg = { 0.0f };
+  dt_aligned_pixel_t min = { INFINITY, INFINITY, INFINITY, INFINITY };
+  dt_aligned_pixel_t max = { -INFINITY, -INFINITY, -INFINITY, -INFINITY };
+  dt_dev_pixelpipe_cache_rdlock_entry(TRUE, input_entry);
+  dt_color_picker_helper(&previous_piece->dsc_out, input, &previous_piece->roi_out, box, avg, min, max,
+                         previous_piece->dsc_out.cst, self->picker_cst,
+                         dt_ioppr_get_pipe_current_profile_info(self->module, pipe), &extremes);
+  dt_dev_pixelpipe_cache_rdlock_entry(FALSE, input_entry);
+  dt_dev_pixelpipe_cache_ref_count_entry(FALSE, input_entry);
+  if(!extremes.valid) return 1;
+
+  for(int k = 0; k < 4; k++) pixel[k] = extremes.max_of_min_pixel[k];
+  dt_print(DT_DEBUG_DEV, "[picker] measured module=%s box=(%d,%d,%d,%d) of %dx%d max-of-min=(%g,%g,%g)\n",
+           self->module->op, box[0], box[1], box[2], box[3], previous_piece->roi_out.width,
+           previous_piece->roi_out.height, pixel[0], pixel[1], pixel[2]);
   return 0;
 }
 

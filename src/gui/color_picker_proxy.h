@@ -92,13 +92,24 @@ typedef enum dt_iop_color_picker_pointer_t
   DT_COLOR_PICKER_POINTER_BOX
 } dt_iop_color_picker_pointer_t;
 
-/** Which per-channel extremes of an area a module reads, so the darkroom marks where they lie. */
+/** Which extremes of an area a module reads, so the darkroom marks where they lie. */
 typedef enum dt_iop_color_picker_extremes_t
 {
   DT_COLOR_PICKER_EXTREMES_NONE = 0,
-  DT_COLOR_PICKER_EXTREMES_MIN = 1 << 0,
-  DT_COLOR_PICKER_EXTREMES_MAX = 1 << 1,
+  DT_COLOR_PICKER_EXTREMES_MIN = 1 << 0, // each channel's minimum
+  DT_COLOR_PICKER_EXTREMES_MAX = 1 << 1, // each channel's maximum
+  // the pixel whose lowest channel, on the scale dt_color_picker_set_channel_scale() gives, is the highest
+  DT_COLOR_PICKER_EXTREMES_MAX_OF_MIN = 1 << 2,
 } dt_iop_color_picker_extremes_t;
+
+/**
+ * Called on the GUI thread before each input sample of a picker that declared
+ * DT_COLOR_PICKER_EXTREMES_MAX_OF_MIN: fills the scale its channels are compared on, a channel's score
+ * being `gain[c] · log10(pixel[c]) + bias[c]`. `picker` is the widget dt_color_picker_new() returned.
+ * `gain` and `bias` come filled with 1 and 0.
+ */
+typedef void (*dt_color_picker_channel_scale_t)(const dt_iop_module_t *module, GtkWidget *picker,
+                                                dt_aligned_pixel_t gain, dt_aligned_pixel_t bias);
 
 typedef struct dt_iop_color_picker_t
 {
@@ -126,6 +137,8 @@ typedef struct dt_iop_color_picker_t
   gboolean excluded_from_gesture;
   /** the extremes the module reads from this picker's input sample */
   dt_iop_color_picker_extremes_t extremes;
+  /** the scale DT_COLOR_PICKER_EXTREMES_MAX_OF_MIN compares the channels on, NULL for log10 of the values */
+  dt_color_picker_channel_scale_t channel_scale;
   /** One-shot request for the next signal emission after activation or colorspace change. */
   gboolean update_pending;
 } dt_iop_color_picker_t;
@@ -347,21 +360,56 @@ void dt_color_picker_exclude_from_gesture(GtkWidget *picker);
 void dt_color_picker_set_extremes(GtkWidget *picker, dt_iop_color_picker_extremes_t extremes);
 
 /**
- * @brief Read all the channels of the pixel holding one channel's extreme over the current sample.
+ * @brief Give the scale on which the picker compares the channels to find the pixel whose lowest
+ * channel is the highest (DT_COLOR_PICKER_EXTREMES_MAX_OF_MIN).
  *
  * @details
- * The pixel is the one the darkroom marks for that channel, in the module input the statistics were
- * taken from, so its @p channel equals `picked_color_min` or `picked_color_max` there.
+ * The scale puts the channels where the module compares them, as a density above the film base or
+ * the density a negative prints at, so that the pixel found is high in all three channels there. The
+ * picker asks for it at each sample, so it always follows the module's current params.
+ *
+ * @param picker Widget returned by dt_color_picker_new() or dt_color_picker_new_with_cst().
+ * @param scale Fills the gain and bias of each channel; NULL compares log10 of the values.
+ */
+void dt_color_picker_set_channel_scale(GtkWidget *picker, dt_color_picker_channel_scale_t scale);
+
+/**
+ * @brief Read all the channels of the pixel holding one extreme over the current sample.
+ *
+ * @details
+ * The pixel is the one the darkroom marks for that extreme, in the module input the statistics were
+ * taken from, so for DT_COLOR_PICKER_EXTREMES_MIN or DT_COLOR_PICKER_EXTREMES_MAX its @p channel
+ * equals `picked_color_min` or `picked_color_max` there.
  *
  * @param module Module owning the active picker.
- * @param which DT_COLOR_PICKER_EXTREMES_MIN or DT_COLOR_PICKER_EXTREMES_MAX, which the picker must declare.
- * @param channel 0, 1 or 2.
+ * @param which DT_COLOR_PICKER_EXTREMES_MIN, DT_COLOR_PICKER_EXTREMES_MAX or
+ *        DT_COLOR_PICKER_EXTREMES_MAX_OF_MIN, which the picker must declare.
+ * @param channel 0, 1 or 2; ignored for DT_COLOR_PICKER_EXTREMES_MAX_OF_MIN.
  * @param pixel Receives the pixel's four channels.
  *
  * @return 0 when the pixel was located on the current sample, 1 otherwise.
  */
 int dt_iop_color_picker_get_extreme_pixel(const dt_iop_module_t *module, dt_iop_color_picker_extremes_t which,
                                           int channel, dt_aligned_pixel_t pixel);
+
+/**
+ * @brief Locate the pixel high in all channels in the area of a picker that is not on.
+ *
+ * @details
+ * The pixel dt_iop_color_picker_get_extreme_pixel() gives for DT_COLOR_PICKER_EXTREMES_MAX_OF_MIN once
+ * @p picker's own sample has landed, located now on the module's input in the preview pipe, on the
+ * picker's scale, for a module that sets several values at once, each from the area its own picker has.
+ * The area is the one @p picker last had or, until it had one, the one it starts with: the image less
+ * a 64 px border. Nothing is drawn, and neither @p picker nor the active picker's sample is touched.
+ *
+ * @param picker Widget returned by dt_color_picker_new() or dt_color_picker_new_with_cst(), which
+ *        declared DT_COLOR_PICKER_EXTREMES_MAX_OF_MIN.
+ * @param pixel Receives the pixel's four channels.
+ *
+ * @return 0 when the pixel was located, 1 otherwise: the area misses the input, or the input is not in
+ *         the cache, which the preview pipe is then asked to compute.
+ */
+int dt_iop_color_picker_measure_max_of_min(GtkWidget *picker, dt_aligned_pixel_t pixel);
 
 /**
  * @brief Name the channel whose extreme decided the value a module derived from the current sample.

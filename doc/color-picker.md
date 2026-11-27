@@ -1,6 +1,6 @@
 # Module color pickers: where the minimum and maximum come from
 
-*Established on top of `fda814dd0c`, 2026-11-14. Measurements on top of `6a9005ef9c`, 2026-11-13.*
+*Established on top of `fda814dd0c`, 2026-11-14; the max-of-min pixel on top of `8e77b45cff`, 2026-11-14; the max-of-min pixel of a picker that is not on, on top of `ca95c58d7e`, 2026-11-18. Measurements on top of `6a9005ef9c`, 2026-11-13.*
 
 ## What a module receives
 
@@ -31,6 +31,25 @@ them.
   kept; the darkroom draws that channel's mark as a +, the others as smaller, dimmed crosses.
 - `dt_iop_color_picker_get_extreme_pixel()` returns all the channels of one extreme's pixel, for a
   module that needs the pixel itself rather than one channel of it.
+- `DT_COLOR_PICKER_EXTREMES_MAX_OF_MIN` asks, in the same pass, for the first pixel whose lowest RGB
+  channel is the highest, a channel's score being `gain[c] · log10(pixel[c]) + bias[c]`: the pixel high
+  in all three channels at once, which the per-channel maxima are not, since each can sit on a
+  saturated color. The module gives `gain` and `bias` through the callback it hands
+  `dt_color_picker_set_channel_scale()` (1 and 0 without one); the proxy calls it on the GUI thread
+  before each input sample, so the scale follows the module's current params with nothing to keep in
+  sync. The darkroom marks the pixel with a white +, and `dt_iop_color_picker_get_extreme_pixel()`
+  returns it, the channel ignored. negadoctor's black point picker scores `log10(pixel / Dmin)`, the
+  pixel clear on the film in all channels, and its paper black picker the corrected density it prints,
+  the pixel dark on the print in all channels (see [`iop-notes.md`](iop-notes.md)). A log per channel
+  and pixel is paid only by a picker that declared it.
+- `dt_iop_color_picker_measure_max_of_min()` locates the same pixel in the area of a picker that is
+  not on, for a module that sets several values at once, each from its own picker's area: negadoctor's
+  wand of print properties reads the paper black there before the grade. It reads the module input from
+  the preview pipe's cache on the GUI thread, retained with the lookup and read-locked for the pass like
+  the active picker's input, in the area that picker last had or, until it had one, the one it starts
+  with, computed on a copy of the picker so that the picker keeps none. It stores nothing in
+  `dev->color_picker`: the darkroom draws nothing, and the active picker's sample and marks stay as
+  they were.
 - The marks are drawn only when `ui_last/colorpicker_display_extremes` is set. Locating does not
   depend on it, since a module may read the pixel.
 
